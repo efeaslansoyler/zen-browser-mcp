@@ -76,11 +76,12 @@ function logError(where, e) {
       return null;
     }
 
+    // yalnız Claude penceresindekiler: kullanıcının sekmesine taşınmış/eski sekmeler sayılmaz
     function liveTabs() {
       const tabs = [];
       for (const id of state.tabs) {
         const tab = findTab(id);
-        if (tab) tabs.push(tab);
+        if (tab?.ownerDocument.documentElement.hasAttribute(WINDOW_ATTR)) tabs.push(tab);
         else state.tabs.delete(id);
       }
       return tabs;
@@ -97,10 +98,36 @@ function logError(where, e) {
       return { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
     }
 
-    function createTab(url = "about:blank") {
-      const win = Services.wm.getMostRecentWindow("navigator:browser");
-      if (!win) throw new Error("Açık Zen penceresi yok.");
-      const tab = win.gBrowser.addTrustedTab(url, { inBackground: false });
+    // Claude'un sekmeleri ayrı, senkronsuz bir Zen penceresinde: olaylar için sekmeyi seçmek
+    // kullanıcının penceresini değiştirmez, senkron kapalı olduğu için sekmeler kullanıcının
+    // pencerelerine kopyalanmaz, Zen bu pencereyi oturumla da geri yüklemez
+    const WINDOW_ATTR = "zen-mcp-window";
+
+    function claudeWindow() {
+      return browserWindows().find(w => w.document.documentElement.hasAttribute(WINDOW_ATTR)) ?? null;
+    }
+
+    async function openClaudeWindow() {
+      const opener = Services.wm.getMostRecentWindow("navigator:browser");
+      if (!opener) throw new Error("Açık Zen penceresi yok.");
+      const win = opener.OpenBrowserWindow({ zenSyncedWindow: false });
+      await new Promise(resolve => {
+        const observer = subject => {
+          if (subject !== win) return;
+          Services.obs.removeObserver(observer, "browser-delayed-startup-finished");
+          resolve();
+        };
+        Services.obs.addObserver(observer, "browser-delayed-startup-finished");
+      });
+      win.document.documentElement.setAttribute(WINDOW_ATTR, "true");
+      return win;
+    }
+
+    async function createTab() {
+      // yeni pencerenin seçili sekmesi Zen'in "boş sekme" yer tutucusu (zen-empty-tab);
+      // Zen onu değiştirdiği için kullanılmaz, her zaman yeni sekme açılır
+      const win = claudeWindow() ?? (await openClaudeWindow());
+      const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: false });
       state.tabs.add(tab.linkedBrowser.browserId);
       return tab;
     }
@@ -326,15 +353,15 @@ function logError(where, e) {
     const text = t => [{ type: "text", text: typeof t === "string" ? t : JSON.stringify(t, null, 2) }];
 
     const tools = {
-      tabs_context_mcp({ createIfEmpty }) {
+      async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs();
-        if (!tabs.length && createIfEmpty) tabs = [createTab()];
+        if (!tabs.length && createIfEmpty) tabs = [await createTab()];
         if (!tabs.length) return text("Claude'un sekmesi yok. createIfEmpty: true ile veya tabs_create_mcp ile aç.");
         return text({ tabs: tabs.map(describeTab) });
       },
 
-      tabs_create_mcp() {
-        return text(describeTab(createTab()));
+      async tabs_create_mcp() {
+        return text(describeTab(await createTab()));
       },
 
       async navigate({ url, tabId }) {
