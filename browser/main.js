@@ -404,7 +404,23 @@ function logError(where, e) {
 
     function throwIfDialog(browser) {
       const win = openDialog(browser);
-      if (win) throw new DialogOpen(describeDialog(win));
+      if (!win) return;
+      const error = new DialogOpen(describeDialog(win));
+      error.browser = browser;
+      throw error;
+    }
+
+    // adada "sayfa onay istiyor"; diyalog kapanınca (Claude ya da kullanıcı cevaplayınca) kalkar
+    async function showDialog(browser) {
+      const dialog = openDialog(browser);
+      if (!dialog || !island) return;
+      const { promptType, text: message } = dialog.Dialog.args;
+      const kind = { alert: "uyarı gösteriyor", prompt: "senden bir metin istiyor" }[promptType.replace(/Check$/, "")] ?? "onay istiyor";
+      let host = "";
+      try { host = browser.currentURI.host; } catch {}
+      island.dialog(browser, `${host} — sayfa ${kind}`, message);
+      while (openDialog(browser) && island?.state === "dialog") await sleep(500);
+      island?.dialogEnded();
     }
 
     // ---- durdurma: kullanıcı adadan (ya da Ctrl+Shift+Esc ile) Claude'u durdurur ----
@@ -443,7 +459,7 @@ function logError(where, e) {
       stopListeners.clear();
       // sayfada bekleyen ask_user çizimini kaldır
       for (const tab of liveTabs()) {
-        try { tab.linkedBrowser.browsingContext.currentWindowGlobal.getActor("ZenMcp").sendAsyncMessage("cancel_ask"); } catch {}
+        cancelAsk(tab.linkedBrowser, "stopped");
       }
       island?.stopped();
     }
@@ -451,6 +467,33 @@ function logError(where, e) {
     function resumeClaude() {
       state.paused = false;
       island?.resumed();
+    }
+
+    // sayfadaki ask_user çizimini kapatır (Vazgeç, durdurma); bekleyen query bu sonuçla döner
+    function cancelAsk(browser, result = "cancelled") {
+      try {
+        browser.browsingContext.currentWindowGlobal.getActor("ZenMcp").sendAsyncMessage("cancel_ask", { result });
+      } catch {}
+    }
+
+    // ask_user gelince Zen odakta değilse masaüstü bildirimi; tıklayınca sekmeye gider
+    const AlertNotification = Components.Constructor("@mozilla.org/alert-notification;1", "nsIAlertNotification", "initWithObject");
+    const alerts = Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService);
+    const ALERT_NAME = "zen-mcp-ask";
+
+    function notifyAsk(browser, message) {
+      const win = browser.ownerDocument.defaultView;
+      if (Services.focus.activeWindow === win) return false;
+      try {
+        const alert = new AlertNotification({ name: ALERT_NAME, title: "Claude senden bir şey istiyor", text: message, textClickable: true });
+        alerts.showAlert(alert, (_subject, topic) => {
+          if (topic === "alertclickcallback") goToTab(browser);
+        });
+        return true;
+      } catch (e) {
+        logError("bildirim", e);
+        return false;
+      }
     }
 
     function goToTab(browser) {
@@ -635,18 +678,24 @@ function logError(where, e) {
       // Claude'un kullanıcıya bırakması gereken adımlar (onay, captcha, giriş...): öğeyi
       // çerçevele, mesajı göster, sekmeyi öne getir (kullanıcının orada bir şey yapması
       // gerekiyor), cevabı bekle
+      // Sekme öne getirilmez: ada genişleyip mesajı ve "Sekmeye git"i gösterir, Zen odakta
+      // değilse masaüstü bildirimi de gider. Sayfadaki çerçeve ve baloncuk sekmede hazır bekler.
       async ask_user({ tabId, ref, coordinate, message, wait = "done", timeout = 300 }) {
         const browser = browserFor(tabId);
-        const win = browser.ownerDocument.defaultView;
-        win.gBrowser.selectedTab = win.gBrowser.getTabForBrowser(browser);
-        win.focus();
         const [x, y] = coordinate ? toPagePoint(browser, coordinate) : [];
+        island?.ask(browser, describeAction("ask_user", {}, browser), message);
+        const notified = notifyAsk(browser, message);
         let result;
         try {
           ({ value: result } = await query(browser, "ask_user", { ref, x, y, message, wait, timeout }, (timeout + 10) * 1000));
         } catch (e) {
           if (!(e instanceof PageGone)) throw e;
           result = "navigated";
+        } finally {
+          island?.askEnded();
+          if (notified) {
+            try { alerts.closeAlert(ALERT_NAME); } catch {}
+          }
         }
         return text({
           clicked: "Kullanıcı işaretlenen öğeye tıkladı.",
@@ -798,9 +847,12 @@ function logError(where, e) {
         }
       } catch (e) {
         // diyalog bir hata değil, Claude'un bilmesi gereken durum
-        message = e instanceof DialogOpen
-          ? { ok: true, content: text(e.message) }
-          : { ok: false, error: String(e?.message ?? e) };
+        if (e instanceof DialogOpen) {
+          message = { ok: true, content: text(e.message) };
+          if (e.browser) showDialog(e.browser);
+        } else {
+          message = { ok: false, error: String(e?.message ?? e) };
+        }
       }
       try { reply(transport, output, message); } catch (e) { logError("cevap", e); }
     }
@@ -833,7 +885,10 @@ function logError(where, e) {
     function start() {
       sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
       const { Island } = ChromeUtils.importESModule(`resource://zenmcp/Island.sys.mjs?v=${version}`);
-      island = new Island({ stop: stopClaude, resume: resumeClaude, goTo: goToTab }, { setTimeout, clearTimeout });
+      island = new Island(
+        { stop: stopClaude, resume: resumeClaude, goTo: goToTab, cancelAsk: browser => cancelAsk(browser) },
+        { setTimeout, clearTimeout }
+      );
       for (const win of browserWindows()) island.attach(win);
       if (state.paused) island.stopped();
       for (const topic of NETWORK_TOPICS) Services.obs.addObserver(networkObserver, topic);

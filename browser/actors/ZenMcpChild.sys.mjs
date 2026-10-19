@@ -7,6 +7,26 @@
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
+// tıklama halkası
+const RIPPLE_CSS = `
+  div {
+    position: absolute;
+    left: -14px;
+    top: -14px;
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 2px solid #d97757;
+    background: rgba(217, 119, 87, 0.18);
+    animation: ripple 0.65s ease-out forwards;
+  }
+  @keyframes ripple {
+    from { scale: 0.4; opacity: 1; }
+    to { scale: 1.6; opacity: 0; }
+  }
+`;
+
 // sistem olay grubu: sayfanın stopPropagation'ı bu dinleyiciyi etkilemez (yalnız ayrıcalıklı kod)
 const SYSTEM_CAPTURE = { capture: true, mozSystemGroup: true };
 
@@ -90,8 +110,8 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "ask_user":
           return { value: await this.#askUser(data) };
         case "cancel_ask":
-          // kullanıcı Claude'u durdurdu (sendAsyncMessage: cevap beklenmez)
-          this.#ask?.finish("stopped");
+          // kullanıcı adadan vazgeçti ya da Claude'u durdurdu (cevap beklenmez)
+          this.#ask?.finish(data?.result ?? "stopped");
           return null;
         case "file_upload":
           return { value: this.#fileUpload(data.ref, data.files) };
@@ -521,6 +541,7 @@ export class ZenMcpChild extends JSWindowActorChild {
           mouse(x, y, { type: "mouseup", button, clickCount: i });
         }
         if (button === 0) this.#focusAt(x, y);
+        this.#ripple(x, y);
         return "tamam";
       case "hover":
         mouse(x, y, { type: "mousemove" });
@@ -549,6 +570,21 @@ export class ZenMcpChild extends JSWindowActorChild {
       default:
         throw new Error(`Bilinmeyen girdi: ${kind}`);
     }
+  }
+
+  // Tıklanan noktada kısa turuncu halka: kullanıcı sekmeye bakınca Claude'un son ne yaptığını
+  // görsün. Kapalı shadow DOM içinde, tıklamaları engellemez, kendini siler.
+  #ripple(x, y) {
+    const doc = this.document;
+    const host = doc.createElement("zen-mcp-ripple");
+    host.setAttribute("style", `all: initial !important; position: fixed !important; left: ${x}px !important; top: ${y}px !important; z-index: 2147483647 !important; pointer-events: none !important;`);
+    const root = host.attachShadow({ mode: "closed" });
+    const style = doc.createElement("style");
+    style.textContent = RIPPLE_CSS;
+    const ring = doc.createElement("div");
+    root.append(style, ring);
+    doc.documentElement.append(host);
+    setTimeout(() => host.remove(), 700);
   }
 
   // Arka plandaki sekmede tıklama odağı taşımıyor; tıklanan noktadaki odaklanabilir öğeyi
