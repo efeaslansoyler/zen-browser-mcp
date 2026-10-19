@@ -126,7 +126,7 @@ register(
   [
     "Hand a step to the user when they must do it themselves (confirming a payment or deletion, solving a captcha, logging in, choosing something only they know).",
     "Shows your message in the Claude island at the top of the user's Zen window (with a desktop notification if Zen is not focused) and outlines the element (ref from read_page/find, or a screenshot coordinate) in orange in the tab; the tab is not switched, the user opens it from the island. Waits for the user.",
-    "wait: \"click\" returns when the user clicks the outlined element; \"done\" (default) shows OK/Cancel and returns which they pressed. The user can always cancel.",
+    "wait: \"click\" returns when the user clicks the outlined element; \"done\" (default) shows OK/Cancel in the island and returns which they pressed. The user can always cancel.",
     "Write the message in the user's language and say exactly what to do.",
   ].join(" "),
   {

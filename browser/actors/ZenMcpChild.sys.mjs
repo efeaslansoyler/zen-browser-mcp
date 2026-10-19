@@ -41,20 +41,6 @@ const ASK_CSS = `
   @keyframes pulse {
     50% { box-shadow: 0 0 0 8px rgba(217, 119, 87, 0.12), 0 0 32px rgba(217, 119, 87, 0.8); }
   }
-  .bubble {
-    position: fixed; box-sizing: border-box; max-width: 360px; pointer-events: auto;
-    padding: 12px 14px; border-radius: 10px; border: 1px solid #d97757;
-    background: #1f1f1f; color: #f2f2f2; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    font: 14px/1.45 system-ui, sans-serif; text-align: left;
-  }
-  .title { color: #d97757; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-  .message { white-space: pre-wrap; }
-  .buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
-  button {
-    font: 13px system-ui, sans-serif; padding: 5px 12px; border-radius: 6px; cursor: pointer;
-    border: 1px solid #555; background: #2a2a2a; color: #eee;
-  }
-  button.primary { background: #d97757; border-color: #d97757; color: #fff; }
 `;
 
 const MAX_TEXT = 100000;
@@ -380,7 +366,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#ask?.finish("navigated");
   }
 
-  #askUser({ ref, x, y, message, wait = "done", timeout = 300 }) {
+  #askUser({ ref, x, y, wait = "done", timeout = 300 }) {
     this.#ask?.finish("replaced");
     const doc = this.document;
     const win = this.contentWindow;
@@ -389,66 +375,40 @@ export class ZenMcpChild extends JSWindowActorChild {
     const target = ref ? this.#element(ref) : x != null ? doc.elementFromPoint(x, y) : null;
     if (target && !this.#fullyInViewport(target)) target.scrollIntoView({ block: "center", behavior: "instant" });
 
+    // Mesaj ve düğmeler adada (Island.sys.mjs); sayfada yalnız öğenin çerçevesi. Öğe yoksa
+    // sayfaya bir şey çizilmez, cevap adadan (cancel_ask ile) gelir.
     const host = doc.createElement("zen-mcp-ask");
     host.setAttribute("style", "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;");
     const root = host.attachShadow({ mode: "closed" });
-    const el = (tag, cls, txt) => {
-      const node = doc.createElement(tag);
-      if (cls) node.className = cls;
-      if (txt) node.textContent = txt;
-      return node;
-    };
-    root.append(el("style", null, ASK_CSS));
-    const box = target ? el("div", "box") : null;
-    if (box) root.append(box);
-    const bubble = el("div", "bubble");
-    bubble.append(el("div", "title", "Claude senden bunu istiyor"), el("div", "message", message));
-    const buttons = el("div", "buttons");
-    const cancel = el("button", null, "Vazgeç");
-    buttons.append(cancel);
-    let ok = null;
-    if (wait !== "click") {
-      ok = el("button", "primary", "Tamam");
-      buttons.append(ok);
+    const style = doc.createElement("style");
+    style.textContent = ASK_CSS;
+    root.append(style);
+    let box = null;
+    if (target) {
+      box = doc.createElement("div");
+      box.className = "box";
+      root.append(box);
+      doc.documentElement.append(host);
     }
-    bubble.append(buttons);
-    root.append(bubble);
-    doc.documentElement.append(host);
 
-    // öğe kayar/boyutu değişirse çerçeve ve baloncuk takip etsin
+    // öğe kayar/boyutu değişirse çerçeve takip etsin
     let frame = 0;
     const place = () => {
-      const bw = bubble.offsetWidth;
-      const bh = bubble.offsetHeight;
-      if (target) {
-        const r = target.getBoundingClientRect();
-        const pad = 6;
-        Object.assign(box.style, {
-          left: `${r.left - pad}px`, top: `${r.top - pad}px`,
-          width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
-        });
-        const below = r.bottom + pad + 12;
-        const top = below + bh < win.innerHeight ? below : Math.max(12, r.top - pad - 12 - bh);
-        const left = Math.min(Math.max(12, r.left), win.innerWidth - bw - 12);
-        Object.assign(bubble.style, { left: `${left}px`, top: `${top}px` });
-      } else {
-        Object.assign(bubble.style, { left: `${(win.innerWidth - bw) / 2}px`, top: "24px" });
-      }
+      const r = target.getBoundingClientRect();
+      const pad = 6;
+      Object.assign(box.style, {
+        left: `${r.left - pad}px`, top: `${r.top - pad}px`,
+        width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
+      });
       frame = win.requestAnimationFrame(place);
     };
-    place();
+    if (target) place();
 
     return new Promise(resolve => {
-      // pencereden bakınca kapalı shadow DOM'un içi görünmez (composedPath'te yok); düğmeler
-      // kendi dinleyicileriyle, işaretlenen öğe pencereden yakalanır
+      // yalnız gerçek tıklama; pencereden yakalanır (sayfa olayı durdursa da)
       const onClick = event => {
         if (event.isTrusted && wait === "click" && target && event.composedPath().includes(target)) finish("clicked");
       };
-      const onButton = result => event => {
-        if (event.isTrusted) finish(result);
-      };
-      cancel.addEventListener("click", onButton("cancelled"), SYSTEM_CAPTURE);
-      ok?.addEventListener("click", onButton("done"), SYSTEM_CAPTURE);
       const timer = setTimeout(() => finish("timeout"), timeout * 1000);
       try {
         win.addEventListener("click", onClick, SYSTEM_CAPTURE);

@@ -469,7 +469,7 @@ function logError(where, e) {
       island?.resumed();
     }
 
-    // sayfadaki ask_user çizimini kapatır (Vazgeç, durdurma); bekleyen query bu sonuçla döner
+    // bekleyen ask_user'ı bu sonuçla bitirir (adadaki Tamam/Vazgeç, durdurma) ve çerçeveyi kaldırır
     function cancelAsk(browser, result = "cancelled") {
       try {
         browser.browsingContext.currentWindowGlobal.getActor("ZenMcp").sendAsyncMessage("cancel_ask", { result });
@@ -683,7 +683,7 @@ function logError(where, e) {
       async ask_user({ tabId, ref, coordinate, message, wait = "done", timeout = 300 }) {
         const browser = browserFor(tabId);
         const [x, y] = coordinate ? toPagePoint(browser, coordinate) : [];
-        island?.ask(browser, describeAction("ask_user", {}, browser), message);
+        island?.ask(browser, describeAction("ask_user", {}, browser), message, wait !== "click");
         const notified = notifyAsk(browser, message);
         let result;
         try {
@@ -886,7 +886,7 @@ function logError(where, e) {
       sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
       const { Island } = ChromeUtils.importESModule(`resource://zenmcp/Island.sys.mjs?v=${version}`);
       island = new Island(
-        { stop: stopClaude, resume: resumeClaude, goTo: goToTab, cancelAsk: browser => cancelAsk(browser) },
+        { stop: stopClaude, resume: resumeClaude, goTo: goToTab, answer: (browser, result) => cancelAsk(browser, result) },
         { setTimeout, clearTimeout }
       );
       for (const win of browserWindows()) island.attach(win);

@@ -170,7 +170,7 @@ const CSS = `
       justify-content: flex-end;
     }
     &[state="dialog"] .cancel { display: none; }
-    & .goto[hidden] { display: none; }
+    & :is(.goto, .ok)[hidden] { display: none; }
   }
 
   @keyframes zen-mcp-spin {
@@ -190,13 +190,14 @@ export class Island {
   #state = "hidden"; // hidden | working | ask | dialog | stopped
   #text = "";
   #message = "";
+  #askDone = false; // ask_user wait: "done" → adada Tamam
   #browser = null; // son işlem yapılan sekme (WeakRef)
   #hideTimer = null;
   #actions;
   #setTimeout;
   #clearTimeout;
 
-  // actions: { stop(), resume(), goTo(browser), cancelAsk(browser) }
+  // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled") }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
     this.#setTimeout = setTimeout;
@@ -231,8 +232,9 @@ export class Island {
     const message = node("div", "message");
     const buttons = node("div", "buttons");
     const cancel = node("button", "cancel", "Vazgeç");
-    const goto = node("button", "goto primary", "Sekmeye git");
-    buttons.append(cancel, goto);
+    const goto = node("button", "goto", "Sekmeye git");
+    const ok = node("button", "ok primary", "Tamam");
+    buttons.append(cancel, goto, ok);
     detail.append(message, buttons);
     el.append(row, detail);
     doc.documentElement.append(el);
@@ -243,10 +245,12 @@ export class Island {
     };
     info.addEventListener("click", goToTab);
     goto.addEventListener("click", goToTab);
-    cancel.addEventListener("click", () => {
+    const answer = result => () => {
       const browser = this.#browser?.deref();
-      if (browser) this.#actions.cancelAsk(browser);
-    });
+      if (browser) this.#actions.answer(browser, result);
+    };
+    cancel.addEventListener("click", answer("cancelled"));
+    ok.addEventListener("click", answer("done"));
     stop.addEventListener("click", () => {
       if (this.#state === "stopped") this.#actions.resume();
       else this.#actions.stop();
@@ -265,7 +269,7 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, stop, message, goto, onKey, onResize, onTabSelect });
+    this.#windows.set(win, { el, favicon, host, text, stop, message, goto, ok, onKey, onResize, onTabSelect });
     this.#render();
   }
 
@@ -308,13 +312,15 @@ export class Island {
     this.#hideTimer = this.#setTimeout(() => this.#hide(), HIDE_AFTER);
   }
 
-  // Claude kullanıcıdan bir şey istiyor: genişle, mesajı göster; askEnded'e kadar kalır
-  ask(browser, text, message) {
+  // Claude kullanıcıdan bir şey istiyor: genişle, mesajı göster; askEnded'e kadar kalır.
+  // done: Tamam düğmesi (wait: "done"); yoksa kullanıcı sayfadaki öğeye tıklayınca biter.
+  ask(browser, text, message, done) {
     if (this.#state === "stopped") return;
     this.#clearTimeout(this.#hideTimer);
     this.#state = "ask";
     this.#text = text;
     this.#message = message;
+    this.#askDone = done;
     this.#browser = new WeakRef(browser);
     this.#render();
   }
@@ -375,7 +381,7 @@ export class Island {
     let icon = null;
     try { icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser)); } catch {}
     for (const [win, parts] of this.#windows) {
-      const { el, favicon, host, text, stop, message, goto } = parts;
+      const { el, favicon, host, text, stop, message, goto, ok } = parts;
       const visible = stopped || (this.#state !== "hidden" && win === owner);
       el.setAttribute("state", this.#state);
       host.textContent = stopped ? "" : siteName;
@@ -385,7 +391,10 @@ export class Island {
       stop.textContent = stopped ? "Devam et" : "";
       stop.title = stopped ? "" : "Claude'u durdur (Ctrl+Shift+Esc)";
       message.textContent = this.#message;
+      // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
       goto.hidden = win.gBrowser.selectedBrowser === browser;
+      ok.hidden = !(this.#state === "ask" && this.#askDone);
+      goto.classList.toggle("primary", ok.hidden);
       if (visible) this.#place(win);
       el.hidden = !visible;
     }
