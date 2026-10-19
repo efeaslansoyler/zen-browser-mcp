@@ -162,6 +162,8 @@ function logError(where, e) {
     // (zen-tabs/vertical-tabs.css); Firefox'un [usercontextid] kuralının aynısı, Claude rengiyle
     const markSheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(`
       .tabbrowser-tab[${MARK}] > .tab-stack > .tab-background > .tab-context-line {
+        /* container'sız sekmede Firefox bu öğeyi gizler */
+        display: block !important;
         background-color: #d97757 !important;
         height: 2px;
         border-radius: var(--border-radius-xsmall);
