@@ -8,6 +8,7 @@
     <style>
       @font-face { font-family: "Inter"; src: url("assets/InterVariable.ttf"); font-weight: 100 900; }
       @font-face { font-family: "Mono"; src: url("assets/NotoSansMono-Regular.ttf"); }
+      @font-face { font-family: "Bricolage"; src: url("assets/Bricolage.ttf"); font-weight: 200 800; font-stretch: 75% 100%; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0a09; }
       #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: "Inter", sans-serif; color: #f3f3f3; }
@@ -17,14 +18,22 @@
       .glow.b { background: radial-gradient(circle, rgba(255, 170, 120, 0.22) 0%, rgba(255, 170, 120, 0) 60%); }
       #main { perspective: 2200px; }
       .kin { position: absolute; left: 0; top: 0; width: 1920px; text-align: center; opacity: 0; }
-      .kin .lab { display: inline-block; padding: 14px 34px 18px; border-radius: 18px; background: rgba(16, 13, 11, 0.86); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-size: 64px; font-weight: 800; letter-spacing: -2px; color: #fff; }
+      .kin .lab { display: inline-block; padding: 12px 34px 18px; border-radius: 18px; background: rgba(16, 13, 11, 0.88); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-family: "Bricolage", sans-serif; font-size: 68px; font-weight: 800; letter-spacing: -2px; color: #fff; }
+      .kin.solid .lab { background: #d97757; box-shadow: 0 20px 60px rgba(217, 119, 87, 0.45); color: #1a0d07; }
+      .kin.solid b { color: #fff; text-shadow: none; }
+      .kin.bare .lab { background: none; box-shadow: none; font-size: 96px; letter-spacing: -3.5px; text-shadow: 0 8px 40px rgba(0, 0, 0, 0.8); }
+      .kin.light .lab { background: #f6efe9; color: #1d1a17; }
+      .kin.light b { color: #b4502c; text-shadow: none; }
+      .kin.ring .lab { background: rgba(16, 13, 11, 0.8); box-shadow: inset 0 0 0 3px #d97757, 0 20px 60px rgba(0, 0, 0, 0.5); font-weight: 650; letter-spacing: -1px; }
+      .kin.ring .w { margin: 0 14px; }
+      .kin.huge .lab { font-size: 116px; letter-spacing: -4.5px; padding: 6px 44px 18px; border-radius: 26px; }
       .kin .w { display: inline-block; margin: 0 9px; }
       .kin b { color: #ff9a72; text-shadow: 0 0 28px rgba(217, 119, 87, 0.75); }
 
       /* title and end */
       .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
       .spark { width: 64px; height: 64px; }
-      .t-big { font-size: 76px; font-weight: 700; letter-spacing: -2px; }
+      .t-big { font-family: "Bricolage", sans-serif; font-size: 84px; font-weight: 800; letter-spacing: -3px; }
       .t-big em { font-style: normal; color: #d97757; }
       .t-sub { font-size: 28px; color: #b9aea6; font-weight: 500; }
       .code { font-family: "Mono", monospace; font-size: 34px; background: #1b1715; border: 1px solid #3a2e27; padding: 18px 30px; border-radius: 14px; color: #f3e9e2; }
@@ -254,12 +263,12 @@
         </div>
 
         <div class="kin" id="c1"><span class="lab">Claude gets <b>its own tab</b>.</span></div>
-        <div class="kin" id="c2"><span class="lab">Peek <b>live</b>. Jump in anytime.</span></div>
-        <div class="kin" id="c3"><span class="lab"><b>Real</b> clicks. <b>Real</b> typing.</span></div>
-        <div class="kin" id="c4"><span class="lab">You approve <b>what matters</b>.</span></div>
+        <div class="kin solid" id="c2"><span class="lab">Peek <b>live</b>. Jump in anytime.</span></div>
+        <div class="kin bare" id="c3"><span class="lab"><b>Real</b> clicks. <b>Real</b> typing.</span></div>
+        <div class="kin light" id="c4"><span class="lab">You approve <b>what matters</b>.</span></div>
         <div class="kin" id="c4b"><span class="lab">Payment stays <b>yours</b>.</span></div>
-        <div class="kin" id="c5"><span class="lab"><b>Point</b> at it.</span></div>
-        <div class="kin" id="c6"><span class="lab">Claude <b>fixes it</b>. Then <b>checks</b>.</span></div>
+        <div class="kin solid huge" id="c5"><span class="lab"><b>Point</b> at it.</span></div>
+        <div class="kin ring" id="c6"><span class="lab">Claude <b>fixes it</b>. Then <b>checks</b>.</span></div>
         <div class="kin" id="c7"><span class="lab"><b>Stop</b> anytime.</span></div>
       </section>
 
@@ -267,7 +276,7 @@
       <section id="end" class="clip" data-start="29.2" data-duration="3.8" data-track-index="1">
         <div class="card" id="end-in">
           <svg class="spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
-          <div class="t-big">zen-mcp</div>
+          <div class="t-big" style="font-size: 110px">zen-mcp</div>
           <div class="code"><b>$</b> npx zen-mcp install</div>
           <div class="t-sub">Zen · Firefox · Claude Code</div>
         </div>
@@ -281,10 +290,36 @@
       const show = (sel, t, d = 0.25) => tl.to(sel, { opacity: 1, duration: d }, t);
       const hide = (sel, t, d = 0.2) => tl.to(sel, { opacity: 0, duration: d }, t);
       // kinetic headline: tilted label pops in, words flip up one by one
-      const cap = (sel, a, b, y = 64) => {
-        tl.set(sel, { y, rotation: -2.5, opacity: 1 }, a);
-        tl.fromTo(`${sel} .lab`, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2)", immediateRender: false }, a);
-        tl.fromTo(`${sel} .w`, { y: 46, opacity: 0, rotationX: -75 }, { y: 0, opacity: 1, rotationX: 0, duration: 0.42, stagger: 0.07, ease: "back.out(1.8)", immediateRender: false }, a + 0.06);
+      // Kinetic headline. Every headline has its own position, angle and entrance:
+      // flip (words flip up), pop (label bounces in), slide (words slide in from the left),
+      // drop (words fall from above), swipe (label slides in), punch (big to normal), type, bounce
+      const IR = { immediateRender: false };
+      const cap = (sel, a, b, { x = 0, y = 64, rot = -2.5, fx = "flip" } = {}) => {
+        const lab = `${sel} .lab`, w = `${sel} .w`;
+        tl.set(sel, { x, y, rotation: rot, opacity: 1 }, a);
+        if (fx === "flip") {
+          tl.fromTo(lab, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2)", ...IR }, a);
+          tl.fromTo(w, { y: 46, opacity: 0, rotationX: -75 }, { y: 0, opacity: 1, rotationX: 0, duration: 0.42, stagger: 0.07, ease: "back.out(1.8)", ...IR }, a + 0.06);
+        } else if (fx === "pop") {
+          tl.fromTo(lab, { scale: 0, rotation: -12 }, { scale: 1, rotation: 0, duration: 0.6, ease: "elastic.out(1, 0.55)", ...IR }, a);
+        } else if (fx === "slide") {
+          tl.fromTo(w, { x: -120, opacity: 0, skewX: -18 }, { x: 0, opacity: 1, skewX: 0, duration: 0.45, stagger: 0.09, ease: "power4.out", ...IR }, a);
+        } else if (fx === "drop") {
+          tl.fromTo(lab, { opacity: 0 }, { opacity: 1, duration: 0.2, ...IR }, a);
+          tl.fromTo(w, { y: -70, opacity: 0, rotation: -8 }, { y: 0, opacity: 1, rotation: 0, duration: 0.5, stagger: 0.08, ease: "bounce.out", ...IR }, a);
+        } else if (fx === "swipe") {
+          tl.fromTo(lab, { x: -500, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power4.out", ...IR }, a);
+          tl.fromTo(w, { opacity: 0 }, { opacity: 1, duration: 0.2, stagger: 0.06, ...IR }, a + 0.2);
+        } else if (fx === "punch") {
+          tl.fromTo(lab, { scale: 2.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "power4.in", ...IR }, a);
+          tl.fromTo(sel, { rotation: rot - 4 }, { rotation: rot, duration: 0.5, ease: "elastic.out(1.2, 0.4)", ...IR }, a + 0.4);
+        } else if (fx === "type") {
+          tl.fromTo(lab, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: "power3.out", ...IR }, a);
+          tl.fromTo(w, { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.16, ease: "none", ...IR }, a + 0.22);
+        } else if (fx === "bounce") {
+          tl.fromTo(lab, { opacity: 0 }, { opacity: 1, duration: 0.15, ...IR }, a);
+          tl.fromTo(w, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, stagger: 0.12, ease: "back.out(3)", ...IR }, a);
+        }
         tl.to(sel, { opacity: 0, y: y - 24, duration: 0.25 }, b);
       };
       // camera: the window moves in 3D; zooms bring the island or a control to the front
@@ -352,11 +387,11 @@
       tl.fromTo("#tab-shop", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.35 }, 3.6);
       tl.to("#isl", { opacity: 1, duration: 0.3 }, 3.8);
       isl("#i-shop", 3.8, 380);
-      cap("#c1", 3.9, 6.2);
+      cap("#c1", 3.9, 6.2, { rot: -3, fx: "flip" });
       // hover the island: live preview, then go to the tab
       move("#ucur", { x: 950, y: 44 }, 5.2, 0.7);
       tl.to("#isl", { height: 278, duration: 0.4, ease: "back.out(1.3)" }, 5.9);
-      cap("#c2", 6.35, 8.4);
+      cap("#c2", 6.35, 8.4, { x: 420, y: 40, rot: 4, fx: "pop" });
       press("#ucur", 7.2);
       tl.to("#isl", { height: 40, duration: 0.3 }, 7.4);
       tab("shop", 7.4);
@@ -370,7 +405,7 @@
       ripple(C(316, 548), 8.6); show("#ok1", 8.62, 0.15); tl.set("#cart0", { opacity: 0 }, 8.65); tl.set("#cart1", { opacity: 1 }, 8.65);
       move("#ccur", C(1164, 548), 8.9, 0.6);
       ripple(C(1164, 548), 9.55); show("#ok3", 9.57, 0.15); tl.set("#cart1", { opacity: 0 }, 9.6); tl.set("#cart2", { opacity: 1 }, 9.6);
-      cap("#c3", 8.7, 12.3);
+      cap("#c3", 8.7, 12.3, { x: -330, y: 40, rot: 0, fx: "slide" });
       move("#ccur", C(1238, 32), 9.9, 0.45); ripple(C(1238, 32), 10.4);
       page("#p-shop", "#p-checkout", 10.5);
       move("#ccur", C(300, 228), 10.8, 0.5); ripple(C(300, 228), 11.3);
@@ -384,8 +419,8 @@
       // 4. ask mode, then the payment is handed to the user
       move("#ccur", C(428, 627), 13.4, 0.5);
       isl("#i-perm", 13.9, 540, 124);
-      cap("#c4", 14.0, 15.6);
-      cap("#c4b", 16.1, 18.9, 880);
+      cap("#c4", 14.0, 15.6, { y: 60, rot: 2, fx: "drop" });
+      cap("#c4b", 16.1, 18.9, { x: -360, y: 880, rot: -4, fx: "swipe" });
       move("#ucur", { x: 1122, y: 117 }, 14.3, 0.8);
       press("#ucur", 15.3);
       isl("#i-type", 15.5, 380);
@@ -410,7 +445,7 @@
       hide("#keys", 20.9, 0.25);
       tl.to("#isl", { opacity: 1, duration: 0.2 }, 20.1);
       isl("#i-pick", 20.1, 430);
-      cap("#c5", 20.2, 23.6);
+      cap("#c5", 20.2, 23.3, { y: 40, rot: -5, fx: "punch" });
       // hover the paragraph, then the heading
       show("#pf1", 20.5, 0.1);
       move("#ucur", C(400, 334), 20.3, 0.4);
@@ -427,7 +462,7 @@
       hide(["#pf", "#pl"], 23.3, 0.2);
       // terminal: the event lands in Claude Code
       tl.fromTo("#term", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 23.6);
-      cap("#c6", 23.8, 27.3);
+      cap("#c6", 23.8, 27.3, { x: -40, y: 70, rot: 3, fx: "type" });
       ["#tl1", "#tl2", "#tl3", "#tl4", "#tl5", "#tl6"].forEach((s, i) => show(s, 23.95 + i * 0.32, 0.15));
       // Claude goes to the tab itself and reloads
       isl("#i-check", 25.75, 380);
@@ -441,7 +476,7 @@
       // 6. stop
       isl("#i-check", 27.5, 380);
       move("#ucur", { x: 1094, y: 42 }, 27.4, 0.6);
-      cap("#c7", 27.55, 29.1);
+      cap("#c7", 27.55, 29.1, { y: 60, rot: -2, fx: "bounce" });
       press("#ucur", 28.1);
       isl("#i-stopped", 28.2, 300);
       hide("#ccur", 28.25, 0.2);
