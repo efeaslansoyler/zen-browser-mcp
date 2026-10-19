@@ -71,14 +71,22 @@ Mouse coordinates use standard fixed-length arrays (`[x, y]`) for client compati
 The MCP initialization client name selects presentation automatically: **Claude** uses
 orange, **Codex** mint, and other agents blue with their client name. The island, tab
 stripe, cursor, click ring, and handoff outline follow the agent performing the action.
-Tab colors survive browser restart and update when a different agent uses that tab.
+Tab colors follow the owning session. After a browser restart, restored tabs require a new
+explicit handoff; saved colors do not restore access rights.
 For clients that hide their identity behind a proxy, set `ZEN_MCP_AGENT=codex` or
 `ZEN_MCP_AGENT=claude` in the MCP server environment.
 
-Identity is a visual label, not authentication or per-session tab isolation. Tool calls
-share a queue and the global Stop/Resume and auto/ask controls. A user-granted tab still
-requires the existing grant; identity does not grant access. Element-to-chat delivery uses Claude channels or Codex queue as described below; other clients
-can use the clipboard fallback.
+Agent identity is a visual label. Tab access belongs to a particular MCP server session:
+two Codex clients have separate tab lists and cannot read, modify or close each other's tabs.
+Tool calls share a queue and the global Stop/Resume and auto/ask controls.
+Element-to-chat delivery uses Claude channels or Codex queue as described below; other
+clients can use the clipboard fallback.
+
+Ownership uses the MCP server's session ID, which is distinct from a Codex conversation UUID.
+We do not infer a relationship from the agent name or project folder. When a delivery target
+cannot be verified as the tab owner, the pick carries `source_tab` and live access requires
+an explicit `request_tab` grant. Multiple conversations sharing one MCP server process are
+one ownership session; this does not claim isolation between those conversations.
 
 ## Using it
 
@@ -96,8 +104,16 @@ what's happening. Click the island to jump to the tab.
 
 ### Handing over a tab
 
-Right-click a tab → **Give to agent** lets an agent continue where you are. **Take back from
-agent** ends it at any time.
+Right-click a tab → **Give to session…**, then select the agent/project/session suffix.
+Use **Transfer to session…** to change the owner. **Take back from agent** revokes access
+and cancels active work immediately. Old queued requests cannot resume after a transfer,
+even if the tab is given back to the same session.
+
+When an MCP process disconnects, active work stops immediately. A five-second reconnect
+grace preserves ownership for the same process; otherwise its tabs are returned to you and
+remain open. Reconnect the MCP server once after installing this update to enable lifecycle
+tracking. Older running servers remain usable but untracked sessions expire after 24 hours
+of inactivity.
 
 ### Showing an agent an element
 

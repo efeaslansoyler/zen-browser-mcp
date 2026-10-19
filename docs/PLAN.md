@@ -18,7 +18,15 @@ HTTP yönlendirmesi, red sonrasında kalan yazmaların engellenmesi ve aynı hed
 belgede toplu onay doğrulandı. Özgün izin yapılandırması geri yüklendi.
 Detaylar DEVAM.md'nin güncel çalışma bölümünde.
 
-Sıradaki adaylar: çoklu oturum sekme sahipliği, örtülü öğe kontrolü,
+MCP oturumuna özel sekme sahipliği tamamlandı. 19 sahiplik testi ve bir wire testiyle
+soketsiz toplam 55 test ve Efe'nin terminalindeki gerçek iki MCP istemcili canlı test geçti:
+ayrı listeler, yabancı erişim engeli, menüden devir/geri alma, eski kuyruğun reddi ve
+MCP kapanışında açık sekmenin sahipliğinin temizlenmesi doğrulandı. MCP süreç kimliği
+ile Codex sohbet kimliği karıştırılmaz; aynı MCP sürecini paylaşan sohbetler bu katmanda
+ayrılamaz.
+Ayrıntılar DEVAM.md'nin güncel sahiplik bölümünde.
+
+Sıradaki adaylar: örtülü öğe kontrolü,
 çıktı/diff verimliliği, gelişmiş öğe seçimi ve CLI+skill ölçümü.
 Aşağıdaki bölümler önceki planın tarihçesidir.
 

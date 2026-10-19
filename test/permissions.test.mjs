@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { Ownership } from '../browser/Ownership.sys.mjs';
 const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 
@@ -15,7 +16,11 @@ function harness({ mode = 'auto', sensitive = [], site = 'https://ordinary.test'
     browser.browsingContext.currentWindowGlobal = document;
   };
   navigate(site);
+  const ownership = new Ownership();
+  ownership.assign(1, 'test-session');
   const context = vm.createContext({
+    ownership, activeSession: 'test-session',
+    browserFor: id => { ownership.check(id, 'test-session'); return browser; },
     readConfig: () => settings, operation: null, state: { paused: false, tabs: new Set([1]) },
     activeAgent: { name: 'Codex' }, activeCalls: 0,
     findTab: () => ({ linkedBrowser: browser }), paintTab() {}, describeAction: () => '', logActivity() {},

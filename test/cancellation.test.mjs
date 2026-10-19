@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
+import { Ownership } from '../browser/Ownership.sys.mjs';
 import * as agent from '../browser/Agent.sys.mjs';
 const timers = { setTimeout, clearTimeout };
 
@@ -89,6 +90,8 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
   const context = vm.createContext({
     Cancellation, ...timers, state: { paused: false, tabs: new Map() },
     operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
+    ownership: new Ownership(), sessions: new Map([['test-session', {}]]), sessionVersions: new Map(),
+    sessionInfo() { return {}; }, activeSession: null,
     activeAgent: {}, island: null, activeCalls: 0,
     liveTabs: () => [], cancelAsk() {}, logActivity() {},
     findTab() {}, paintTab() {}, describeWrite() {}, requirePermission() {},
@@ -105,11 +108,11 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
     block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
     block('    async function handle(', '    function onConnection(') +
     'tools.browser_batch = ({' + block('      async browser_batch(', '      async navigate(') + '}).browser_batch;', context);
-  const batch = context.handle(JSON.stringify({ tool: 'browser_batch', args: { actions: [
+  const batch = context.handle(JSON.stringify({ session: 'test-session', tool: 'browser_batch', args: { actions: [
     { name: 'wait' }, { name: 'effect' },
   ] } }));
   await first;
-  const queued = context.handle(JSON.stringify({ tool: 'effect' }));
+  const queued = context.handle(JSON.stringify({ session: 'test-session', tool: 'effect' }));
   context.stopClaude();
   context.resumeClaude();
   await Promise.all([batch, queued]);
@@ -118,7 +121,7 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
   assert.match(replies[0].content[0].text, /remaining 1 step/);
   assert.equal(replies[1].ok, false);
   assert.match(replies[1].error, /stopped/);
-  await context.handle(JSON.stringify({ tool: 'effect' }));
+  await context.handle(JSON.stringify({ session: 'test-session', tool: 'effect' }));
   assert.equal(effects.length, 1);
   assert.equal(replies.at(-1).ok, true);
 });

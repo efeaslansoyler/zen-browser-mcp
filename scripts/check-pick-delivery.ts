@@ -37,7 +37,7 @@ try {
   const tree = getText(await tool('read_page', { tabId }));
   const ref = tree.match(/button "Queue test element" \[([^\]]+)\]/)?.[1];
   assert(ref, tree);
-  await evaluate(`(() => {const browser=h.browserFor(${tabId});h.startPick(browser.ownerDocument.defaultView,{browser});return true;})()`);
+  await evaluate(`(() => {const browser=h.findTab(${tabId}).linkedBrowser;h.startPick(browser.ownerDocument.defaultView,{browser});return true;})()`);
   await tool('computer', { tabId, action: 'left_click', ref });
   let ready = false;
   for (let i = 0; i < 40; i++) {
@@ -48,7 +48,7 @@ try {
   assert(ready, 'The browser element picker did not reach compose mode');
   const note = 'ZEN_PICK_QUEUE_TEST_20261020_B: Efe’nin onayladığı gerçek Zen öğe seçimi → Codex queue testidir. Bu mesaj sana sohbet girdisi olarak ulaşınca yalnızca alındığını ve öğe bağlamının geldiğini belirt; yeni mesaj gönderme ve dosya değiştirme.';
   await evaluate(`(async () => {await h.sendPick(${JSON.stringify(note)},${JSON.stringify(target.id)});return true;})()`);
-  const result = await evaluate(`(() => {const i=h.browserFor(${tabId}).ownerDocument.getElementById('zen-mcp-island');return {mode:h.island.pickMode,text:i.textContent,agent:i.getAttribute('data-zen-agent')};})()`);
+  const result = await evaluate(`(() => {const i=h.findTab(${tabId}).linkedBrowser.ownerDocument.getElementById('zen-mcp-island');return {mode:h.island.pickMode,text:i.textContent,agent:i.getAttribute('data-zen-agent')};})()`);
   assert.equal(result.mode, 'sent');
   assert.equal(result.agent, 'codex');
   assert(result.text.includes('Queued for') || result.text.includes('kuyruğa alındı'), result.text);

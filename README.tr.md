@@ -73,14 +73,22 @@ Fare koordinatları istemci uyumluluğu için iki sayılık standart dizilerdir 
 
 MCP bağlantısındaki istemci adı görünümü otomatik seçer: **Claude turuncu**, **Codex mint**,
 diğer ajanlar kendi istemci adıyla mavi. Ada, sekme şeridi, imleç, tıklama halkası ve kullanıcıya
-bırakılan adımın çerçevesi işlemi yapan ajanı izler. Sekme rengi tarayıcı yeniden açılınca korunur;
-başka ajan aynı sekmeyi kullanırsa güncellenir. Aracı yazılım istemci adını gizliyorsa sunucunun
+bırakılan adımın çerçevesi işlemi yapan ajanı izler. Sekme rengi sahibi olan oturumu gösterir.
+Tarayıcı yeniden açılınca geri yüklenen sekmeler yeniden açıkça verilmelidir; kayıtlı renk
+erişim yetkisini geri getirmez. Aracı yazılım istemci adını gizliyorsa sunucunun
 ortamına `ZEN_MCP_AGENT=codex` veya `ZEN_MCP_AGENT=claude` eklenebilir.
 
-Kimlik yalnız görünüm içindir; kimlik doğrulama veya oturuma özel sekme yalıtımı sağlamaz.
-İşlemler ortak kuyrukta yürür; Durdur/Devam ve otomatik/onaylı mod bütün ajanlar için ortaktır.
-Kimlik bilgisi kullanıcının vermediği sekmeye erişim sağlamaz. Öğeyi sohbete gönderme Claude channels veya Codex queue ile çalışır;
-diğer istemcilerde pano kullanılabilir.
+Ajan kimliği görünüm içindir. Sekme erişimi belirli bir MCP sunucu oturumuna aittir:
+iki Codex istemcisinin sekme listeleri ayrıdır; birbirlerinin sekmelerini okuyamaz,
+değiştiremez veya kapatamazlar. İşlemler ortak kuyrukta yürür; Durdur/Devam ve
+otomatik/onaylı mod bütün ajanlar için ortaktır. Öğeyi sohbete gönderme Claude channels
+veya Codex queue ile çalışır; diğer istemcilerde pano kullanılabilir.
+
+Sahiplikteki MCP sunucu oturum kimliği, Codex sohbet UUID'sinden farklıdır. Ajan adı veya
+proje klasöründen aralarında ilişki tahmin edilmez. Gönderim hedefinin sekme sahibi olduğu
+doğrulanamıyorsa seçim `source_tab` taşır; canlı erişim için açık `request_tab` onayı gerekir.
+Aynı MCP sunucu sürecini paylaşan sohbetler tek sahiplik oturumudur; bu sohbetler arasında
+yalıtım sağlandığı iddia edilmez.
 
 ## Kullanım
 
@@ -98,8 +106,15 @@ gösterir. Sekmeye gitmek için adaya tıkla.
 
 ### Sekme vermek
 
-Sekmeye sağ tıkla → **Ajana ver**: ajan kaldığın yerden devam eder. **Ajandan geri
-al** ile istediğin an bitirirsin.
+Sekmeye sağ tıkla → **Oturuma ver…**, ardından ajan/proje/kısa oturum kimliğini seç.
+**Oturuma devret…** sahibini değiştirir. **Ajandan geri al** erişimi ve çalışan işi hemen
+keser. Sekme aynı oturuma geri verilse bile eski kuyruk istekleri yeniden çalışmaz.
+
+MCP süreci kopunca çalışan iş hemen iptal edilir. Aynı sürecin yeniden bağlanabilmesi için
+beş saniye sahiplik korunur; bağlanmazsa sekmeler açık kalarak kullanıcıya döner. Bu
+güncellemeden sonra yaşam döngüsü takibi için MCP sunucusunu bir kez yeniden bağla.
+Eski çalışan sunucular kullanılabilir; bağlantısı izlenemeyen oturumlar 24 saat etkinlik
+olmazsa temizlenir.
 
 ### Ajana bir öğe göstermek
 

@@ -58,7 +58,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000, agent?: 
 // Zen'e kalıcı bağlanır, Zen'in ittiği olayları (satır başına bir JSON) onEvent'e verir. Zen
 // kapalıysa ya da köprü yeniden yüklenirse birkaç saniyede bir yeniden dener.
 export type SubscriptionInfo = {
-  cwd: string; session?: string; agent?: AgentIdentity; label?: string; threadId?: string; ack?: boolean;
+  cwd: string; session?: string; agent?: AgentIdentity; label?: string; threadId?: string; ack?: boolean; toolsOnly?: boolean;
 };
 
 export function subscribe(onEvent: (event: any) => void | Promise<void>, info: SubscriptionInfo) {

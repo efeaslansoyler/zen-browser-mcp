@@ -74,12 +74,73 @@ function logError(where, e) {
     // A single island/approval UI is shared. Serialize tool requests so another client
     // cannot change the identity while an action or user confirmation is pending.
     let toolQueue = Promise.resolve();
+    let activeSession = null;
 
     // ---- sekmeler ----
 
     const state = (globalThis.zenMcpState ||= { tabs: new Set(), scale: new Map() });
     // kullanıcının öğe seçip Claude'a gönderdiği sekmeler: Claude yalnız bunlara erişim isteyebilir
     state.pickedTabs ||= new Set();
+    const { Ownership } = ChromeUtils.importESModule(`resource://zenmcp/Ownership.sys.mjs?v=${version}`);
+    const ownership = new Ownership(state.owners ||= new Map(), state.ownerVersions ||= new Map());
+    const sessions = state.sessions ||= new Map();
+    const sessionVersions = state.sessionVersions ||= new Map();
+    const ownerConnections = new Map();
+    const disconnectTimers = new Map();
+
+    function sessionInfo(id, agent = activeAgent, cwd = "") {
+      if (typeof id !== "string" || !id.trim()) throw new Error("A browser session ID is required. Reconnect the MCP server.");
+      let info = sessions.get(id);
+      if (!info) { info = { id }; sessions.set(id, info); }
+      if (cwd) info.project = String(cwd).split("/").filter(Boolean).pop();
+      info.agent = agentTheme(agent);
+      info.name = `${info.agent.name}${info.project ? " · " + info.project : ""} · ${id.slice(-6)}`;
+      info.seen = Date.now();
+      return info;
+    }
+
+    function cancelTabWork(tabId) {
+      if (operation?.tabs?.has(tabId)) operation.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
+    }
+
+    function endOwnerSession(id) {
+      clearTimeout(disconnectTimers.get(id));
+      disconnectTimers.delete(id);
+      sessionVersions.set(id, (sessionVersions.get(id) || 0) + 1);
+      sessions.delete(id);
+      if (operation?.session === id) operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
+      for (const [tabId, owner] of ownership.owners) {
+        if (owner !== id) continue;
+        const tab = findTab(tabId);
+        if (tab) unmark(tab);
+        else { ownership.release(tabId); state.tabs.delete(tabId); }
+      }
+    }
+
+    function connectOwnerSession(id, transport, agent, cwd) {
+      const info = sessionInfo(id, agent, cwd);
+      info.disconnected = false;
+      info.lifecycle = true;
+      clearTimeout(disconnectTimers.get(id));
+      disconnectTimers.delete(id);
+      if (!ownerConnections.has(id)) ownerConnections.set(id, new Set());
+      ownerConnections.get(id).add(transport);
+    }
+
+    function disconnectOwnerSession(id, transport) {
+      const connections = ownerConnections.get(id);
+      if (!connections?.delete(transport) || connections.size) return;
+      ownerConnections.delete(id);
+      const info = sessions.get(id);
+      if (info) info.disconnected = true;
+      sessionVersions.set(id, (sessionVersions.get(id) || 0) + 1);
+      if (operation?.session === id) operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
+      // Allow the same MCP process to reconnect after a bridge reload or brief outage.
+      disconnectTimers.set(id, setTimeout(() => {
+        disconnectTimers.delete(id);
+        if (!ownerConnections.has(id)) endOwnerSession(id);
+      }, 5000));
+    }
 
     function browserWindows() {
       return [...Services.wm.getEnumerator("navigator:browser")].filter(w => !w.closed && w.gBrowser);
@@ -100,7 +161,7 @@ function logError(where, e) {
       for (const id of state.tabs) {
         const tab = findTab(id);
         if (tab) tabs.push(tab);
-        else state.tabs.delete(id);
+        else { ownership.release(id); state.tabs.delete(id); }
       }
       return tabs;
     }
@@ -113,12 +174,16 @@ function logError(where, e) {
       if (!tab || !state.tabs.has(tabId)) {
         throw new Error(`Tab ${tabId} is not assigned to an agent (closed, or the user took it back). Use tabs_context_mcp for current tabs.`);
       }
+      ownership.check(tabId, activeSession);
+      operation?.tabs?.add(tabId);
       return tab.linkedBrowser;
     }
 
     function describeTab(tab) {
       const b = tab.linkedBrowser;
       const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
+      const owner = ownership.owner(b.browserId);
+      if (owner) info.owner = { session: owner, name: sessions.get(owner)?.name || owner.slice(-6) };
       if (tab.getAttribute(MARK) === "user") info.givenByUser = true;
       return info;
     }
@@ -136,8 +201,8 @@ function logError(where, e) {
     // ---- Claude sekmesi işareti ----
     //
     // Container gibi kenar çizgisi, ama container değil: container çerezleri ayırır ve
-    // kullanıcının oturumları görünmez olurdu. İşaret SessionStore'a da yazılır; Zen yeniden
-    // açılınca geri yüklenen sekmeler yeniden işaretlenip takibe alınır.
+    // kullanıcının oturumları görünmez olurdu. Görsel işaret SessionStore'a yazılır;
+    // erişim yetkisi yalnız bu tarayıcı sürecindeki oturum sahipliği kaydından gelir.
     const MARK = "zen-mcp";
     const { SessionStore } = ChromeUtils.importESModule("moz-src:///browser/components/sessionstore/SessionStore.sys.mjs");
 
@@ -148,17 +213,32 @@ function logError(where, e) {
       try { SessionStore.setCustomTabValue(tab, "zen-mcp-agent", JSON.stringify({ id: theme.id, name: theme.name })); } catch {}
     }
 
-    function mark(tab, origin = "true") {
+    function mark(tab, origin = "true", session = activeSession, { cancel = true } = {}) {
+      const target = sessions.get(session);
+      if (!target || target.disconnected) throw new Error("The selected browser session is no longer connected. Choose a session again.");
+      const id = tab.linkedBrowser.browserId;
+      const changed = ownership.assign(id, session);
+      if (changed) {
+        if (cancel) cancelTabWork(id);
+        state.scale.delete(id);
+        network.delete(id);
+        cancelAsk(tab.linkedBrowser, "taken_back");
+        const question = tabRequests.get(tab.linkedBrowser);
+        if (question) question("cancelled");
+      }
       tab.setAttribute(MARK, origin);
-      state.tabs.add(tab.linkedBrowser.browserId);
-      paintTab(tab, activeAgent);
+      state.tabs.add(id);
+      paintTab(tab, target.agent);
       try { SessionStore.setCustomTabValue(tab, MARK, origin); } catch {}
     }
 
     // kullanıcı sekmeyi geri aldı: işaret, takip ve kayıtlar silinir; süren işlem kesilir
-    function unmark(tab) {
+    function unmark(tab, { cancel = true } = {}) {
       const browser = tab.linkedBrowser;
       const id = browser.browserId;
+      ownership.release(id);
+      if (cancel) cancelTabWork(id);
+      tabRequests.get(browser)?.("cancelled");
       tab.removeAttribute(MARK);
       tab.removeAttribute("data-zen-agent");
       tab.removeAttribute("zen-mcp-agent-name");
@@ -175,14 +255,15 @@ function logError(where, e) {
     function restoreMark(tab) {
       let origin = "";
       try { origin = SessionStore.getCustomTabValue(tab, MARK); } catch {}
-      if ((origin !== "true" && origin !== "user") || tab.hasAttribute(MARK)) return;
-      // geri yüklenen sekme tembel: <browser> ilk kullanıma kadar yok, browserId 0.
-      // Öğeyi şimdi oluştur (sayfa yüklenmez) ki takip edilebilir bir kimliği olsun
-      if (!tab.linkedPanel) tab.ownerDocument.defaultView.gBrowser.insertBrowser(tab);
-      let agent = { id: "claude" };
-      try { agent = JSON.parse(SessionStore.getCustomTabValue(tab, "zen-mcp-agent")) || agent; } catch {}
-      mark(tab, origin);
-      paintTab(tab, agent);
+      if (origin !== "true" && origin !== "user") return;
+      const id = tab.linkedBrowser.browserId;
+      const owner = ownership.owner(id);
+      // Persisted visual marks are not authorization after a browser restart.
+      if (!owner || !sessions.has(owner)) { unmark(tab); return; }
+      if (tab.hasAttribute(MARK)) return;
+      tab.setAttribute(MARK, origin);
+      state.tabs.add(id);
+      paintTab(tab, sessions.get(owner).agent);
     }
 
     function restoreMarks() {
@@ -196,8 +277,15 @@ function logError(where, e) {
     const onTabRestoring = event => {
       try { restoreMark(event.target); } catch (e) { logError("restoreMark", e); }
     };
+    const onTabClose = event => {
+      const tab = event.target;
+      const id = tab.linkedBrowser?.browserId;
+      if (state.tabs.has(id)) unmark(tab);
+      state.pickedTabs.delete(id);
+    };
     function watchWindow(win) {
       win.addEventListener("SSTabRestoring", onTabRestoring);
+      win.gBrowser.tabContainer.addEventListener("TabClose", onTabClose);
     }
     // Tembel sekmelerin kayıtlı değerleri pencere açıldıktan bir süre sonra okunabilir oluyor
     // (ne SSTabRestoring ne delayed-startup anında var); birkaç kez daha tara. Claude bir sekme
@@ -237,6 +325,13 @@ function logError(where, e) {
     // ---- "Claude'a ver / Claude'dan geri al": sekme sağ tık menüsünde ----
 
     const MENU_ID = "zen-mcp-context-give";
+    const tabMenuBuilders = new WeakMap();
+    function prepareTabMenu(win, tabs) {
+      const build = tabMenuBuilders.get(win);
+      if (!build) throw new Error("The session handoff menu is not attached to this window.");
+      if (tabs.some(tab => tab.ownerDocument.defaultView !== win)) throw new Error("Menu tabs must belong to the same window.");
+      build(tabs);
+    }
     function menuAgent() {
       return pick?.agent ?? channelTarget()?.agent ?? activeAgent;
     }
@@ -272,28 +367,62 @@ function logError(where, e) {
       modeItem.setAttribute("label", L("Ask before every agent action", "Ajan her işlemde izin istesin"));
       menu.insertBefore(modeItem, item.nextSibling);
       modeItem.addEventListener("command", toggleMode);
-      const onShowing = event => {
-        if (event.target !== menu) return;
-        const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
-        item.hidden = !tabs.length;
+      const give = win.document.createXULElement("menu");
+      give.className = "menu-iconic";
+      const targets = win.document.createXULElement("menupopup");
+      give.append(targets);
+      menu.insertBefore(give, modeItem);
+      let shownTabs = [];
+      const build = inputTabs => {
+        const tabs = shownTabs = inputTabs.filter(t => t.isConnected && !t.hasAttribute("zen-empty-tab"));
+        item.hidden = !tabs.some(t => t.hasAttribute(MARK));
+        give.hidden = !tabs.length;
+        give.setAttribute("label", tabs.some(t => t.hasAttribute(MARK))
+          ? L("Transfer to session…", "Oturuma devret…") : L("Give to session…", "Oturuma ver…"));
+        targets.replaceChildren();
+        let targetCount = 0;
+        for (const target of sessions.values()) {
+          if (target.disconnected) continue;
+          targetCount++;
+          const choice = win.document.createXULElement("menuitem");
+          choice.className = "menuitem-iconic";
+          choice.setAttribute("label", target.name);
+          choice.setAttribute("data-zen-session", target.id);
+          paintMenuIcon(choice, target.agent);
+          choice.addEventListener("command", () => {
+            if (!sessions.has(target.id) || sessions.get(target.id).disconnected) return;
+            for (const tab of tabs) if (tab.isConnected) mark(tab, tab.getAttribute(MARK) || "user", target.id);
+          });
+          targets.append(choice);
+        }
+        if (!targetCount) {
+          const empty = win.document.createXULElement("menuitem");
+          empty.setAttribute("label", L("No browser session connected", "Bağlı tarayıcı oturumu yok"));
+          empty.setAttribute("disabled", "true");
+          targets.append(empty);
+        }
         const tab = tabs[0];
         paintMenuIcon(item, tab?.hasAttribute(MARK)
           ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
           : menuAgent());
-        const allGiven = tabs.length && tabs.every(t => t.hasAttribute(MARK));
-        item.setAttribute("label", allGiven ? L("Take back from agent", "Ajandan geri al") : L("Give to agent", "Ajana ver"));
+        const owner = tab && sessions.get(ownership.owner(tab.linkedBrowser.browserId));
+        item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner.name}` : ""));
         modeItem.setAttribute("checked", readConfig().mode === "ask");
       };
+      tabMenuBuilders.set(win, build);
+      const onShowing = event => {
+        if (event.target === menu) build(contextTabs(win));
+      };
       const onCommand = () => {
-        const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
-        if (tabs.every(t => t.hasAttribute(MARK))) tabs.forEach(unmark);
-        else for (const tab of tabs) if (!tab.hasAttribute(MARK)) mark(tab, "user");
+        for (const tab of shownTabs) if (tab.isConnected && tab.hasAttribute(MARK)) unmark(tab);
       };
       menu.addEventListener("popupshowing", onShowing);
       item.addEventListener("command", onCommand);
       menuCleanups.add(() => {
+        tabMenuBuilders.delete(win);
         menu.removeEventListener("popupshowing", onShowing);
         item.remove();
+        give.remove();
         modeItem.remove();
       });
     }
@@ -307,9 +436,13 @@ function logError(where, e) {
     const subscribers = new Map(); // session → { name, transport, output, since, queue }
     const lastUse = (globalThis.zenMcpLastUse ||= new Map()); // session → son tool çağrısı
 
-    function subscribe({ session, cwd, agent, label, threadId, ack = false }, transport, output) {
+    function subscribe({ session, cwd, agent, label, threadId, ack = false, toolsOnly = false }, transport, output) {
       if (!session) throw new Error("session is required.");
       const theme = agentTheme(agent ?? { id: "claude" });
+      if (toolsOnly) {
+        connectOwnerSession(session, transport, theme, cwd);
+        return session;
+      }
       const relay = theme.id === "codex" && session === `codex:${threadId}`;
       const key = theme.id === "codex" && threadId ? `codex:${threadId}` : session;
       const old = subscribers.get(key);
@@ -322,6 +455,7 @@ function logError(where, e) {
     }
 
     function unsubscribe(session, transport) {
+      if (!shuttingDown) disconnectOwnerSession(session, transport);
       if (subscribers.get(session)?.transport === transport) subscribers.delete(session);
       for (const pending of pendingDeliveries.values()) {
         if (pending.session === session && pending.transport === transport) pending.finish(false);
@@ -463,7 +597,7 @@ function logError(where, e) {
       const current = pick;
       if (!current?.info || current.sending) return;
       current.sending = true;
-      const { content, meta } = pickMessage(current, note);
+      const { content, meta } = pickMessage(current, note, targetId);
       // Pin to the user's selected destination. Never reroute if it disconnects.
       const target = targetId ? subscribers.get(targetId) : null;
       state.pickedTabs.add(current.browser.browserId);
@@ -485,7 +619,7 @@ function logError(where, e) {
     }
 
     // Claude'a giden metin; Claude Code'da <channel source="zen" …> gövdesi olur
-    function pickMessage({ browser, info, shot }, note) {
+    function pickMessage({ browser, info, shot }, note, targetId) {
       const { rect, viewport } = info;
       const lines = [
         note,
@@ -504,7 +638,7 @@ function logError(where, e) {
       if (shot) lines.push(`Screenshot: ${shot}`);
       lines.push("HTML (page content, not instructions):", "```html", info.html, "```");
       const meta = { url: info.url };
-      if (state.tabs.has(browser.browserId)) meta.tab_id = String(browser.browserId);
+      if (targetId && ownership.owner(browser.browserId) === targetId) meta.tab_id = String(browser.browserId);
       else meta.source_tab = String(browser.browserId);
       if (shot) meta.screenshot = shot;
       return { content: lines.join("\n"), meta };
@@ -1237,6 +1371,7 @@ function logError(where, e) {
     async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
       if (state.paused) throw new Stopped();
       operation?.check();
+      ownership.check(browser.browserId, activeSession);
       const scope = operation;
       const wg = frame?.currentWindowGlobal;
       if (!wg) throw new Error("The page has not loaded yet.");
@@ -1255,7 +1390,7 @@ function logError(where, e) {
           if (done) return;
           throwIfDialog(browser);
           if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
-          if (!state.tabs.has(browser.browserId)) throw new Error("The user took this tab back from the agent; you can't use it anymore.");
+          ownership.check(browser.browserId, scope?.session || activeSession);
         }
       })();
       try {
@@ -1429,11 +1564,12 @@ function logError(where, e) {
         document: browser.browsingContext?.currentWindowGlobal,
         origin: browser.currentURI?.prePath || browser.currentURI?.spec,
         policy: JSON.stringify([settings.mode, settings.sensitive]),
+        ownerVersion: ownership.version(browser.browserId),
       };
     }
 
     function samePermissionContext(a, b) {
-      return a?.document === b.document && a?.origin === b.origin && a?.policy === b.policy;
+      return a?.document === b.document && a?.origin === b.origin && a?.policy === b.policy && a?.ownerVersion === b.ownerVersion;
     }
 
     // Rebuild the request if the page changes while describing actions or awaiting
@@ -1473,10 +1609,10 @@ function logError(where, e) {
 
     const tools = {
       async tabs_context_mcp({ createIfEmpty }) {
-        let tabs = liveTabs();
+        let tabs = liveTabs().filter(tab => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
-        if (!tabs.length) return text("The agent has no tabs. Open one with createIfEmpty: true or tabs_create_mcp.");
-        return text({ tabs: tabs.map(describeTab) });
+        if (!tabs.length) return text(`This session (${sessions.get(activeSession)?.name || activeSession}) has no tabs. Open one with createIfEmpty: true or tabs_create_mcp, or ask the user to give a tab to this session.`);
+        return text({ session: sessions.get(activeSession), tabs: tabs.map(describeTab) });
       },
 
       async tabs_create_mcp() {
@@ -1487,7 +1623,7 @@ function logError(where, e) {
       async tabs_close_mcp({ tabId }) {
         const tab = browserFor(tabId) && findTab(tabId);
         const given = tab.getAttribute(MARK) === "user";
-        unmark(tab);
+        unmark(tab, { cancel: false });
         if (given) return text(`Tab ${tabId} belongs to the user; not closed, given back to them.`);
         tab.ownerDocument.defaultView.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true });
         return text(`Tab ${tabId} closed.`);
@@ -1756,13 +1892,15 @@ function logError(where, e) {
       // Verme", Zen odakta değilse masaüstü bildirimi. Ver denirse sekme sağ tık menüsünden
       // verilmiş gibi işaretlenir.
       async request_tab({ tabId, reason, timeout = 120 }) {
-        if (state.tabs.has(tabId)) return text({ ...describeTab(findTab(tabId)), note: "The tab is already assigned to an agent." });
         const tab = findTab(tabId);
         if (!tab) throw new Error(`Tab ${tabId} is closed.`);
+        if (ownership.owner(tabId) === activeSession) return text({ ...describeTab(tab), note: "The tab is already assigned to this session." });
         if (!state.pickedTabs.has(tabId)) {
           throw new Error(`Tab ${tabId} can't be requested: only tabs the user picked an element from (source_tab in a channel event).`);
         }
         const browser = tab.linkedBrowser;
+        const version = ownership.version(tabId);
+        operation?.tabs?.add(tabId);
         const result = await askIsland(browser, describeAction("request_tab", {}, browser),
           L(`${activeAgent.name} wants access to this tab: ${reason}`, `${activeAgent.name} bu sekmeye erişmek istiyor: ${reason}`),
           { ok: L("Allow", "Ver"), cancel: L("Deny", "Verme") }, timeout);
@@ -1770,8 +1908,10 @@ function logError(where, e) {
           return text(result === "timeout" ? `The user did not answer within ${timeout} s.` : "The user declined.");
         }
         if (!tab.isConnected) throw new Error("The tab was closed meanwhile.");
-        mark(tab, "user");
-        return text({ ...describeTab(tab), note: "The user granted the tab." });
+        if (ownership.version(tabId) !== version) throw new Error("Tab ownership changed while permission was pending. Request it again.");
+        mark(tab, tab.getAttribute(MARK) || "user", activeSession, { cancel: false });
+        operation?.tabVersions?.set(tabId, ownership.version(tabId));
+        return text({ ...describeTab(tab), note: "The user granted the tab to this session." });
       },
 
       async file_upload({ tabId, ref, paths }) {
@@ -1899,7 +2039,7 @@ function logError(where, e) {
         sandbox.Services = Services;
         sandbox.h = {
           version, state, tools, browserFor, findTab, liveTabs, toPagePoint, screenshot, query,
-          stopClaude, resumeClaude,
+          stopClaude, resumeClaude, ownership, sessions, prepareTabMenu,
           island, subscribers, channelTarget, startPick, sendPick, endPick, pageQuery, target, mark, input,
           get pick() { return pick; },
         };
@@ -1925,15 +2065,21 @@ function logError(where, e) {
     // Batch grants cover only listed actions on the unchanged document/site/policy.
     async function runTool(tool, args, { approvals, steps = [{ tool, args }] } = {}) {
       if (state.paused) throw new Stopped();
-      const browser = state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
+      operation?.check();
+      if (args.tabId != null && tool !== "request_tab") {
+        if (operation?.tabVersions?.has(args.tabId)) ownership.checkTicket([[args.tabId, operation.tabVersions.get(args.tabId)]]);
+        browserFor(args.tabId);
+      }
+      const browser = tool !== "request_tab" && state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
       const entry = { t: new Date().toISOString(), tool };
       if (args.action && tool === "computer") entry.action = args.action;
       if (browser) {
         paintTab(findTab(args.tabId), activeAgent);
         entry.agent = activeAgent.name;
+        entry.session = activeSession;
         entry.tab = args.tabId;
         entry.host = hostOf(browser);
-        island?.working(browser, describeAction(tool, args, browser));
+        island?.working(browser, `${describeAction(tool, args, browser)} · ${activeSession.slice(-6)}`);
         activeCalls++;
       }
       try {
@@ -1951,6 +2097,7 @@ function logError(where, e) {
           }
         }
         operation?.check();
+        if (browser) ownership.check(args.tabId, activeSession);
         const result = await tools[tool](args);
         // Preserve completed steps and the cancellation error from a partial batch.
         if (!result?.isError) operation?.check();
@@ -1993,16 +2140,26 @@ function logError(where, e) {
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
         if (session && tools[tool]) lastUse.set(session, Date.now());
         if (tools[tool]) {
+          const info = sessionInfo(session, agentTheme(agent ?? { id: "claude" }));
+          info.disconnected = false;
           if (state.paused) throw new Stopped();
           const generation = stopGeneration;
+          const sessionGeneration = sessionVersions.get(session) || 0;
+          const referenced = tool === "browser_batch" ? (args.actions || []).map(step => step.input?.tabId) : [args.tabId];
+          const ticket = ownership.ticket(referenced.filter(id => id != null));
           const pending = toolQueue.then(async () => {
             if (generation !== stopGeneration || state.paused) throw new Stopped();
+            ownership.checkTicket(ticket);
+            if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session)) throw new Error("This browser session disconnected while the request was queued.");
             const scope = operation = new Cancellation();
+            scope.session = activeSession = session;
+            scope.tabs = new Set();
+            scope.tabVersions = new Map(ticket);
             activeAgent = agentTheme(agent ?? { id: "claude" });
             globalThis.zenMcpActiveAgent = { id: activeAgent.id, name: activeAgent.name };
             island?.setAgent(activeAgent);
             try { return await runTool(tool, args); }
-            finally { scope.cancel(); if (operation === scope) operation = null; }
+            finally { scope.cancel(); if (operation === scope) { operation = null; activeSession = null; } }
           });
           toolQueue = pending.catch(() => {});
           const content = await pending;
@@ -2058,8 +2215,11 @@ function logError(where, e) {
     }
 
     let server = null;
+    let sessionSweep = null;
+    let shuttingDown = false;
 
     function start() {
+      shuttingDown = false;
       sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
       const { Island } = ChromeUtils.importESModule(`resource://zenmcp/Island.sys.mjs?v=${version}`);
       island = new Island(
@@ -2090,6 +2250,21 @@ function logError(where, e) {
       island.setMode(readConfig().mode);
       for (const topic of NETWORK_TOPICS) Services.obs.addObserver(networkObserver, topic);
       restoreMarks();
+      for (const info of sessions.values()) {
+        if (!info.lifecycle) continue;
+        info.disconnected = true;
+        disconnectTimers.set(info.id, setTimeout(() => {
+          disconnectTimers.delete(info.id);
+          if (!ownerConnections.has(info.id)) endOwnerSession(info.id);
+        }, 5000));
+      }
+      const sweep = () => {
+        for (const info of sessions.values()) {
+          if (!ownerConnections.has(info.id) && Date.now() - info.seen > 24 * 60 * 60 * 1000) endOwnerSession(info.id);
+        }
+        sessionSweep = setTimeout(sweep, 60_000);
+      };
+      sweep();
       for (const win of browserWindows()) watchWindow(win);
       Services.obs.addObserver(onWindowReady, "browser-delayed-startup-finished");
       // önceki sürüm stop() çağrılmadan kaybolduysa (ör. farklı kapsamdan yüklendiyse) kaydı kalır
@@ -2121,6 +2296,8 @@ function logError(where, e) {
     }
 
     function stop() {
+      shuttingDown = true;
+      clearTimeout(sessionSweep);
       operation?.cancel(new Stopped());
       try { endPick(); } catch {}
       // aboneler yeni sürüme yeniden bağlansın
@@ -2128,6 +2305,14 @@ function logError(where, e) {
         try { sub.transport.close(Cr.NS_OK); } catch {}
       }
       subscribers.clear();
+      for (const connections of ownerConnections.values()) {
+        for (const transport of connections) {
+          try { transport.close(Cr.NS_OK); } catch {}
+        }
+      }
+      ownerConnections.clear();
+      for (const timer of disconnectTimers.values()) clearTimeout(timer);
+      disconnectTimers.clear();
       for (const pending of pendingDeliveries.values()) pending.finish(false);
       try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
       try { island?.destroy(); } catch {}
@@ -2140,7 +2325,10 @@ function logError(where, e) {
         try { Services.obs.removeObserver(networkObserver, topic); } catch {}
       }
       try { Services.obs.removeObserver(onWindowReady, "browser-delayed-startup-finished"); } catch {}
-      for (const win of browserWindows()) win.removeEventListener("SSTabRestoring", onTabRestoring);
+      for (const win of browserWindows()) {
+        win.removeEventListener("SSTabRestoring", onTabRestoring);
+        win.gBrowser.tabContainer.removeEventListener("TabClose", onTabClose);
+      }
       try { server?.close(); } catch {}
       try { ChromeUtils.unregisterWindowActor("ZenMcp"); } catch {}
       try { localFile(socketPath).remove(false); } catch {}

@@ -97,7 +97,7 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
 
   register(
     "tabs_context_mcp",
-    "Get the tabs the agent controls in the browser: the ones it opened and the ones the user handed over from the tab context menu (givenByUser: true; continue from where the user left off). Call this first in a browser task to get valid tab IDs. Other user tabs are not listed and cannot be used; the user can take a tab back at any time.",
+    "Get the tabs the agent controls in the browser: the ones this MCP session opened and the ones the user explicitly handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). Call this first in a browser task to get valid tab IDs. Tabs owned by other sessions and other user tabs are not listed and cannot be used; the user can take a tab back at any time.",
     {
       createIfEmpty: z
         .boolean()
@@ -342,11 +342,18 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
 }
 
 let subscription: ReturnType<typeof subscribe> | undefined;
+let ownerSubscription: ReturnType<typeof subscribe> | undefined;
 const server = createServer(call, async ({ threadId, label }) => {
   await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
 });
 
 export async function serve() {
+  server.server.oninitialized = () => {
+    ownerSubscription = subscribe(() => {}, {
+      cwd: process.cwd(), toolsOnly: true,
+      agent: identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT),
+    });
+  };
   await server.connect(new StdioServerTransport());
   // tarayıcı tarafı dosyaları bu sürümden eskiyse güncellenir, köprü yeniden yüklenir
   syncBrowserFiles().catch(() => {});
@@ -362,7 +369,11 @@ export async function serve() {
     );
   }
   // Claude Code kapanınca stdin kapanır; Zen bağlantısı süreci ayakta tutmasın
-  process.stdin.on("close", () => process.exit(0));
+  process.stdin.on("close", () => {
+    ownerSubscription?.close();
+    subscription?.close();
+    process.exit(0);
+  });
 }
 
 // geliştirmede doğrudan: node src/server.ts

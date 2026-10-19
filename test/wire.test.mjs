@@ -65,3 +65,29 @@ for (const fail of [false, true]) {
     } finally { sub.close(); }
   });
 }
+
+test('ownership lifecycle subscription and tool requests use the same process session ID', async t => {
+  const { subscribe, session } = await import('../dist/zen.js');
+  const requests = [];
+  t.mock.method(net, 'createConnection', () => {
+    const socket = new EventEmitter();
+    socket.destroyed = false;
+    socket.setTimeout = () => socket;
+    socket.end = () => socket.emit('close');
+    socket.destroy = () => { socket.destroyed = true; socket.emit('close'); };
+    socket.write = packet => {
+      const request = JSON.parse(packet); requests.push(request);
+      if(request.tool !== 'subscribe') queueMicrotask(() => socket.emit('data', Buffer.from('{"ok":true,"content":[]}\n')));
+    };
+    queueMicrotask(() => socket.emit('connect'));
+    return socket;
+  });
+  const sub = subscribe(() => {}, { cwd: '/project', toolsOnly: true, agent: { id: 'codex' } });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    await call('tabs_context_mcp');
+    assert.equal(requests[0].args.toolsOnly, true);
+    assert.equal(requests[0].args.session, session);
+    assert.equal(requests[1].session, session);
+  } finally { sub.close(); }
+});

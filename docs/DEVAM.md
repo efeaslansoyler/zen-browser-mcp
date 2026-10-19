@@ -6,6 +6,67 @@ Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.
 
 Bu bölüm güncel durumdur; aşağıdaki tarihli bölümler geliştirme geçmişidir.
 
+### Güncel çalışma — MCP oturumuna özel sekme sahipliği (2026-10-20)
+
+**Güncel sonuç: canlı sahiplik doğrulaması GEÇTİ.** Efe terminalinde düzeltilen
+`node scripts/check-ownership.ts` betiğini çalıştırdı (v14 → yeni sürüm).
+İki gerçek Codex MCP istemcisinin ayrı listeleri ve yabancı okuma/yazma/kapatma
+engeli doğrulandı. Gerçek devir menüsü çalışan işi iptal etti; sekme eski sahibine
+dönünce eski kuyruk istekleri reddedildi. Yeni sahibi işlem yapabildi, eski sahibi
+engellendi. Geri alma işi iptal etti ve sekmeyi açık bıraktı. Gerçek MCP kapanışında
+yeniden bağlantı payı sonunda sahiplik temizlendi, sekme açık kaldı.
+Test sekmeleri kapatıldı; izin ayarları değişmedi. 55 soketsiz otomatik test geçti.
+Aşağıdaki bekleyen canlı test ve başarısız ilk deneme kayıtları bu sonuçtan öncedir.
+Değişiklikler henüz commit edilmedi. MCP süreci/sohbet UUID'si sınırı hâlâ geçerli.
+
+
+- İlk kullanıcı canlı denemesinde iki gerçek Codex istemcisinin ayrı listeleri ve
+  yabancı okuma/yazma/kapatma engeli geçti. Devir menüsü adımında test başarısız oldu.
+  Yerel Zen kaynaklarında `TabContextMenu.updateContextMenu`'nün yapay popup olayı
+  sonrasında contextTab'i seçili sekmeye çevirdiği görüldü. Test artık native popup
+  başlangıcını taklit etmez; geliştirme yardımcısı `h.prepareTabMenu(win,[testTab])`
+  gerçek menüyü yalnız açıkça verilen fixture için kurar ve XUL `doCommand()` çağırır.
+  Menüde geri alma da hazırlanırken sabitlenen sekmelere bağlıdır. Bu bağlam kayması
+  için regresyon testi geçti; düzeltilen canlı denemenin tekrarı BEKLİYOR.
+
+
+- Önceki izin işi `8010ae7` ile commit edildi; push kullanıcıda. Sahiplik değişiklikleri
+  henüz commit değil.
+- `browser/Ownership.sys.mjs`: sekme → MCP sunucu oturumu, devir nesilleri ve kuyruk
+  biletleri. Ajan adı/rengi yetki vermez. `browserFor`, ortak `runTool` ve actor sorguları
+  sahipliği kontrol eder. `tabs_context_mcp` yalnız çağıran oturumun sekmelerini listeler.
+- Sağ tık menüsünde `Oturuma ver…` / `Oturuma devret…` hedefi açıkça seçilir; listede
+  ajan/proje/MCP kimliğinin son altı karakteri bulunur. Ada ve etkinlik günlüğü de oturumu
+  belirtir. Eski, son kullanılan ajanı sessizce seçen verme davranışı kaldırıldı.
+- Devir/geri alma/TabClose çalışan işi hemen iptal eder. Sekme eski sahibine dönse bile
+  eski kuyruk istekleri ve batch'in gelecekteki adımları nesil kontrolüyle reddedilir.
+  Aynı batch'teki açık request_tab onayı yalnız verilen sekmenin biletini yeniler.
+- MCP server initialize sonrasında `toolsOnly` yaşam döngüsü aboneliği açar; araç çağrıları
+  ile aynı süreç UUID'sini taşır. Bunlar öğe gönderim hedef listesine EKLENMEZ.
+  Son bağlantı kopunca aktif iş kesilir; aynı süreç için 5 saniye yeniden bağlantı payı
+  verilir. Geri dönmezse sekmeler açık kalarak kullanıcıya iade edilir. Bridge reload
+  sahiplik durumunu korur, yaşam döngüsü bağlantılarını kapatıp yeniden bağlatır.
+- Bu güncelleme Node MCP kodunu da değiştirir: normal istemcide yaşam döngüsü takibi için
+  MCP reconnect gerekir; Zen restart gerekmez. Önceden açık eski sunucu süreçleri araç
+  çağrılarıyla kaydolur, yaşam döngüsü izlenemiyorsa 24 saat etkinliksizlikte temizlenir.
+- Browser restart sonrası yalnız SessionStore görsel işareti erişimi geri vermez;
+  oturumu olmayan eski işaretler silinir, kullanıcı sekmeyi yeniden açıkça verir.
+- ÖNEMLİ SINIR: MCP süreç UUID'si ile Codex hook/queue sohbet UUID'si aynı şey değildir.
+  Cwd/ajan adından eşleme tahmin edilmez. Aynı MCP sürecini paylaşan sohbetler tek erişim
+  oturumudur; bunlar arasında sohbet düzeyinde yalıtım sağlandığı iddia edilmez.
+  Gönderim hedefi sekme sahibi olarak doğrulanamıyorsa seçim `source_tab` taşır ve canlı
+  erişim `request_tab` onayı ister. Claude/Codex gönderim yolları korunur.
+- Doğrulama: 19 yeni sahiplik testi + yeni wire yaşam döngüsü testi ile soketsiz 55 test
+  geçti. Derleme, JS/TS sözdizimi ve diff kontrolleri geçti. Relay Unix soketi testleri
+  bu ortamda daha önce EPERM nedeniyle çalışmamıştı; bu sonuç onları kapsamaz.
+- Canlı betik: `node scripts/check-ownership.ts`. Aynı türde iki GERÇEK stdio MCP süreci
+  açar, ayrı listeler/erişim engeli, gerçek sağ tık menüsüyle devir/geri alma, kuyruk
+  geçersizliği ve gerçek MCP kapanışında sahiplik temizliğini test eder. Yalnız kendi
+  geçici sekmelerini kapatır, kullanıcı ayarlarını değiştirmez. Mevcut auto modu gerektirir.
+- Canlı deneme burada tarayıcı soketi EPERM engelinde kaldı. Kullanıcı terminalindeki
+  canlı doğrulama BEKLİYOR; yapılmış gibi raporlama. Önceki canlı betiklerin ayrıcalıklı
+  fixture erişimleri h.findTab(...).linkedBrowser olarak güncellendi.
+
 ### Güncel çalışma — batch/site değişiminde izinler (2026-10-20)
 
 **Güncel sonuç: canlı izin doğrulaması GEÇTİ.** Efe terminalinde

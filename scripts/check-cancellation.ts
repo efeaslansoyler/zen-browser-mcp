@@ -71,7 +71,7 @@ try {
   for (let i = 0; i < 100 && count === 0; i++) {
     await sleep(20);
     count = await chrome(`(async () => {
-      const actor=h.browserFor(${tabId}).browsingContext.currentWindowGlobal.getActor("ZenMcp");
+      const actor=h.findTab(${tabId}).linkedBrowser.browsingContext.currentWindowGlobal.getActor("ZenMcp");
       const result=await actor.sendQuery("eval",{code:'document.getElementById("message").value.length'});
       if(result.error) throw new Error(result.error);
       return Number(result.value);
