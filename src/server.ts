@@ -257,12 +257,14 @@ register(
 
 register(
   "read_network_requests",
-  "List HTTP requests made by a Claude tab (documents, scripts, XHR/fetch, images...) with method, status or error, type and duration, recorded since the tab was opened. Cleared when the page navigates to a different site.",
+  "List HTTP requests made by a Claude tab (documents, scripts, XHR/fetch, images...) with #id, method, status or error, type and duration, recorded since the tab was opened. Cleared when the page navigates to a different site. Pass id for one request's details: request and response headers (cookies and authorization hidden), request body, and the response body for fetch/XHR and documents.",
   {
     tabId,
     urlPattern: z.string().optional().describe("Only requests whose URL contains this text, e.g. \"/api/\"."),
     limit: z.number().optional().describe("Maximum requests, most recent kept (default 100)."),
     clear: z.boolean().optional().describe("Clear the log after reading."),
+    id: z.number().optional().describe("Show details of this request (#id from the list)."),
+    max_chars: z.number().optional().describe("With id: body text limit (default 20000)."),
   },
 );
 

@@ -74,6 +74,23 @@ Davranış notları:
   gider (`deepest`): üst sayfadan gönderilen olay site dışı (ayrı süreçteki) iframe'e ulaşmıyor.
   Tuşlar odaktaki çerçeveye (`focusedFrame`). Ref koordinatı iframe kutuları toplanarak üst
   sayfaya çevrilir (`toTop`). Konsol ve `javascript_tool` yalnız üst çerçevede.
+- **Modlar ve izin (Faz 5, Efe'nin kararı):** `~/.config/zen-mcp/config.json`
+  `{"mode": "auto" | "ask", "sensitive": ["alan.adı", …]}`; hazır hassas site listesi yok.
+  `auto`: sormadan işlem; `ask`: her işlemde adada "İzin ver / Verme". Hassas sitede (alt alan
+  adları dahil) mod ne olursa olsun işlemlerde sorulur, gezinme serbest. İşlem: tıklamalar,
+  sürükleme, yazma, tuş, form_input, file_upload, javascript_tool, handle_dialog; `ask`
+  modunda navigate da. Okuma, kaydırma, hover, bekleme serbest. Soru öğeyi tarif eder
+  (`describe`: 'button "Gönder": tıklamak'). `browser_batch` sekme başına tek soruda listeler.
+  Mod adadaki "otomatik/onaylı" düğmesinden (yalnız çalışırken görünür) ya da sekme sağ tık
+  menüsündeki "Claude her işlemde izin istesin" ile değişir; dosya değişince kendiliğinden okunur.
+- **Etkinlik günlüğü:** `~/.local/state/zen-mcp/activity.jsonl` (5 MB'ta `.1`'e taşınır); her
+  tool çağrısı: zaman, tool, sekme, site, işlemlerde tarif, gezinmede varılan adres, hata.
+  "Claude dün ne yaptı" sorusunda bu dosyayı oku.
+- **Ağ ayrıntıları:** `read_network_requests` listesi `#id` verir; `id` ile istek/cevap
+  başlıkları (cookie, set-cookie, authorization gizli), küçük POST gövdesi ve fetch/XHR/belge
+  cevap gövdesi (istek başına 256 KB, sekme başına 8 MB). Gövde sıkıştırmanın önünde
+  kaydediliyor (`nsITraceableChannel`), gösterirken `DecompressionStream` ile açılıyor
+  (gzip, deflate, br → "brotli", zstd).
 - `wait_for`: metin / seçici (+metin) görünene, `gone` ile kaybolana, `network_idle` ile 0,5 sn
   istek olmayana kadar (10 sn'den uzun istekler sayılmaz). Köprüde yoklamayla, bütün çerçevelerde;
   gezinme boyunca sürer. Zaman aşımı hata (toplu çağrıyı durdurur).
@@ -156,6 +173,8 @@ Davranış notları:
 - `addSystemEventListener` yok → `addEventListener(…, { mozSystemGroup: true })`.
 - Kapalı shadow DOM'un içi pencere dinleyicisinin `composedPath()`'inde görünmez.
 - Autoconfig kapsamında `IOUtils` ve `BrowsingContext` yok → pencerenin `IOUtils`/`BrowsingContext`'i.
+- `nsITraceableChannel` dinleyicisi içerik kodlaması çözülmeden önce: gövde gzip/br gelir.
+- Autoconfig kapsamında `DecompressionStream`, `TextDecoder`, `Blob`, `Response` de pencereden.
 - Üst sayfadan windowUtils ile gönderilen fare/klavye olayı site dışı (Fission, ayrı süreç)
   iframe'e geçmiyor; aynı sitedekine geçiyor. Olay çerçevenin kendi actor'ından gönderilmeli.
 - Actor yok olunca bekleyen `sendQuery` reddedilmiyor → `currentWindowGlobal` değişimini izle.
@@ -187,8 +206,7 @@ Davranış notları:
 
 0. Öğe seçimi: Efe'nin `claude-zen` denemesi, sonra isteğe bağlı birden fazla öğe seçme.
 1. ~~Faz 4~~ ✅ iframe ve `wait_for` (2026-10-19).
-2. **Faz 5:** ağ isteği ayrıntıları (başlıklar, cevap gövdesi), etkinlik günlüğü, hassas
-   siteler listesi.
+2. ~~Faz 5~~ ✅ modlar/izin, hassas siteler, etkinlik günlüğü, ağ ayrıntıları (2026-10-19).
 3. İsteğe bağlı: Quickshell barında Claude göstergesi; açık kaynak için README ve kurulum betiği.
 
 Not: bu oturumdaki MCP sunucusu oturum başında başlar. `src/server.ts` değişince yeni tool'lar

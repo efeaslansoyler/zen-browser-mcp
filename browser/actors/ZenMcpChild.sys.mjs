@@ -180,6 +180,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#frameId(this.document.activeElement) };
         case "check":
           return { value: this.#check(data) };
+        case "describe":
+          return { value: this.#describeTarget(data) };
         case "form_input":
           return { value: this.#formInput(data.ref, data.value) };
         case "locate":
@@ -436,6 +438,15 @@ export class ZenMcpChild extends JSWindowActorChild {
     if (!bcId) return null;
     const o = this.#contentOrigin(el);
     return { bcId, x: x - o.x, y: y - o.y };
+  }
+
+  // izin sorusu ve günlük için öğenin kısa tarifi: 'button "Teklif al"'
+  #describeTarget({ ref, x, y }) {
+    const el = ref ? this.#element(ref) : this.document.elementFromPoint(x, y);
+    if (!el) return "boş bir yer";
+    const role = roleOf(el) || el.localName;
+    const name = accessibleName(el, this.document) || truncate(clean(el.innerText ?? ""), 40);
+    return name ? `${role} "${truncate(name, 60)}"` : role;
   }
 
   // wait_for: metin ve/veya seçici bu çerçevede görünüyor mu

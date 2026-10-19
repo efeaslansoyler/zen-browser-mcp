@@ -34,8 +34,9 @@ kendiliğinden öne getirilmez.
    gösterir.
 4. ✅ (2026-10-19) Güvenilirlik: iframe desteği (read_page/tıklama/yazma alt çerçevelerde), `wait_for`
    (metin/öğe görünene, ağ durulana kadar).
-5. Geliştirici ve güvenlik: ağ isteği ayrıntıları (başlıklar, cevap gövdesi), etkinlik
-   günlüğü, hassas siteler listesi (yalnız okuma, tıklamada ask_user zorunlu).
+5. ✅ (2026-10-19) Geliştirici ve güvenlik: ağ isteği ayrıntıları (başlıklar, gövdeler),
+   etkinlik günlüğü, otomatik/onaylı mod ve hassas siteler (Efe: hazır liste yok, hassas
+   sitede her işlemde izin; onaylı modda her yerde).
 
 İsteğe bağlı, sonra: Quickshell barında Claude göstergesi.
 

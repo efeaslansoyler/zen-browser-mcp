@@ -126,6 +126,19 @@ const CSS = `
       }
     }
 
+    /* mod: "otomatik" / "onaylı"; tıklayınca değişir */
+    & .mode {
+      padding: 0 9px;
+      background: none;
+      font-weight: 500;
+      font-size: 11px;
+      opacity: 0.55;
+
+      &:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
+      &[mode="ask"] { opacity: 0.9; color: #e8a58e; }
+    }
+    &:not([state="working"]) .mode { display: none; }
+
     /* durdurma: küçük yuvarlak ■; durdurulunca turuncu "Devam et" */
     & .stop {
       display: grid;
@@ -273,12 +286,13 @@ export class Island {
   // { mode: "picking" | "compose" | "sent", browser (WeakRef), label, target, text }
   #pick = null;
   #pickTimer = null;
+  #mode = "auto"; // "auto" | "ask"
   #actions;
   #setTimeout;
   #clearTimeout;
 
   // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled"),
-  //            pick(win), send(note), cancelPick() }
+  //            pick(win), send(note), cancelPick(), toggleMode() }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
     this.#setTimeout = setTimeout;
@@ -308,8 +322,10 @@ export class Island {
     const text = node("span", "action");
     const hint = node("span", "hint");
     info.append(favicon, host, text, hint);
+    const mode = node("button", "mode");
+    mode.addEventListener("click", () => this.#actions.toggleMode());
     const stop = node("button", "stop");
-    row.append(spark, info, stop);
+    row.append(spark, info, mode, stop);
     const detail = node("div", "detail");
     const message = node("div", "message");
     const buttons = node("div", "buttons");
@@ -394,7 +410,7 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, hint, stop, message, cancel, goto, ok, note, target, canvas, previewing: false, onKey, onResize, onTabSelect });
+    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, canvas, previewing: false, onKey, onResize, onTabSelect });
     this.#render();
   }
 
@@ -508,6 +524,13 @@ export class Island {
     this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);
   }
 
+  // Claude'un çalışma modu: auto (sormadan işlem yapar) | ask (her işlemde izin ister)
+  setMode(mode) {
+    if (mode === this.#mode) return;
+    this.#mode = mode;
+    this.#render();
+  }
+
   // ---- kullanıcının öğe seçimi ----
 
   get pickMode() {
@@ -579,7 +602,12 @@ export class Island {
     let icon = null;
     try { icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser)); } catch {}
     for (const [win, parts] of this.#windows) {
-      const { el, favicon, host, text, hint, stop, message, cancel, goto, ok, target } = parts;
+      const { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, target } = parts;
+      mode.setAttribute("mode", this.#mode);
+      mode.textContent = this.#mode === "ask" ? "onaylı" : "otomatik";
+      mode.title = this.#mode === "ask"
+        ? "Claude her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)"
+        : "Claude sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)";
       const visible = stopped || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
       host.textContent = stopped ? "" : siteName;

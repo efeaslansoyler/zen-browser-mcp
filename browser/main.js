@@ -228,12 +228,20 @@ function logError(where, e) {
       // Firefox'un yapay zekâ bölümünün sonuna; yoksa menünün sonuna
       const anchor = win.document.getElementById("context_aiSeparator");
       menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
+      // onaylı mod: Claude her işlemde adadan izin ister
+      const modeItem = win.document.createXULElement("menuitem");
+      modeItem.id = MENU_ID + "-mode";
+      modeItem.setAttribute("type", "checkbox");
+      modeItem.setAttribute("label", "Claude her işlemde izin istesin");
+      menu.insertBefore(modeItem, item.nextSibling);
+      modeItem.addEventListener("command", toggleMode);
       const onShowing = event => {
         if (event.target !== menu) return;
         const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
         item.hidden = !tabs.length;
         const allGiven = tabs.length && tabs.every(t => t.hasAttribute(MARK));
         item.setAttribute("label", allGiven ? "Claude'dan geri al" : "Claude'a ver");
+        modeItem.setAttribute("checked", readConfig().mode === "ask");
       };
       const onCommand = () => {
         const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
@@ -245,6 +253,7 @@ function logError(where, e) {
       menuCleanups.add(() => {
         menu.removeEventListener("popupshowing", onShowing);
         item.remove();
+        modeItem.remove();
       });
     }
     const menuCleanups = new Set();
@@ -512,7 +521,12 @@ function logError(where, e) {
         const browserId = bc?.browserId;
         if (!browserId || !state.tabs.has(browserId)) return;
         let log = network.get(browserId);
-        if (!log) network.set(browserId, (log = { list: [], byChannel: new Map(), host: "" }));
+        if (!log) network.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
+        // reload'dan önceki sürümün kaydı: numarasız girdiler
+        if (!log.nextId) {
+          log.nextId = 1;
+          for (const r of log.list) r.id = log.nextId++;
+        }
 
         if (topic === "http-on-modify-request" || (topic === "http-on-failed-opening-request" && !log.byChannel.has(channel.channelId))) {
           const type = CONTENT_TYPES[channel.loadInfo.externalContentPolicyType] ?? "other";
@@ -522,10 +536,13 @@ function logError(where, e) {
             if (log.host && host !== log.host) {
               log.list.length = 0;
               log.byChannel.clear();
+              log.nextId = 1;
             }
             log.host = host;
           }
-          const entry = { method: channel.requestMethod, url: channel.URI.spec, type, status: null, start: Date.now() };
+          const entry = { id: log.nextId++, method: channel.requestMethod, url: channel.URI.spec, type, status: null, start: Date.now() };
+          entry.requestHeaders = headersOf(channel, "visitRequestHeaders");
+          if (BODY_TYPES.has(type)) entry.requestBody = uploadText(channel);
           log.list.push(entry);
           log.byChannel.set(channel.channelId, entry);
           if (log.list.length > MAX_REQUESTS) log.byChannel.delete(log.list.shift().channelId);
@@ -552,9 +569,154 @@ function logError(where, e) {
           entry.status = channel.responseStatus;
           entry.mime = channel.contentType || undefined;
           if (topic === "http-on-examine-cached-response") entry.cached = true;
+          entry.responseHeaders = headersOf(channel, "visitResponseHeaders");
+          // istek başlıkları gönderilirken eklenenler (çerez gibi) burada tamam
+          entry.requestHeaders = headersOf(channel, "visitRequestHeaders");
         } catch {}
+        if (BODY_TYPES.has(entry.type) && entry.body === undefined) captureBody(channel, entry, log);
       },
     };
+
+    // ---- ağ ayrıntıları: başlıklar, istek gövdesi, cevap gövdesi (fetch/XHR/belge) ----
+
+    const BODY_TYPES = new Set(["xmlhttprequest", "fetch", "document"]);
+    const MAX_BODY = 256 * 1024; // istek başına
+    const MAX_TAB_BODIES = 8 * 1048576; // sekme başına, eskiler silinir
+    const MAX_UPLOAD_TEXT = 64 * 1024;
+    // Claude'a gösterilmez: oturum ve kimlik bilgileri
+    const SECRET_HEADERS = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"]);
+
+    function headersOf(channel, visit) {
+      const out = [];
+      try {
+        channel[visit]({
+          visitHeader(name, value) {
+            out.push([name.toLowerCase(), SECRET_HEADERS.has(name.toLowerCase()) ? "[gizli]" : value]);
+          },
+        });
+      } catch {}
+      return out;
+    }
+
+    // POST gövdesi (küçükse); akış okunduktan sonra başa sarılır, istek bozulmaz
+    function uploadText(channel) {
+      try {
+        const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
+        if (!stream || !(stream instanceof Ci.nsISeekableStream)) return undefined;
+        const size = stream.available();
+        if (!size || size > MAX_UPLOAD_TEXT) return size ? `(${size} bayt, gösterilmedi)` : undefined;
+        const pos = stream.tell();
+        stream.seek(Ci.nsISeekableStream.NS_SEEK_SET, 0);
+        const raw = NetUtil.readInputStreamToString(stream, size);
+        stream.seek(Ci.nsISeekableStream.NS_SEEK_SET, pos);
+        return raw;
+      } catch {
+        return undefined;
+      }
+    }
+
+    // Kanalın dinleyicisinin önüne geçip gelen veriyi kopyalar (içerik kodlaması çözülmüş);
+    // sayfa veriyi aynen alır
+    function captureBody(channel, entry, log) {
+      let traceable;
+      try { traceable = channel.QueryInterface(Ci.nsITraceableChannel); } catch { return; }
+      entry.body = "";
+      entry.bodySize = 0;
+      const tee = {
+        QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
+        onStartRequest(request) {
+          original.onStartRequest(request);
+        },
+        onDataAvailable(request, stream, offset, count) {
+          const bin = Cc["@mozilla.org/binaryinputstream;1"].createInstance(Ci.nsIBinaryInputStream);
+          bin.setInputStream(stream);
+          const data = bin.readBytes(count);
+          try {
+            entry.bodySize += count;
+            if (entry.body.length < MAX_BODY) entry.body += data.slice(0, MAX_BODY - entry.body.length);
+          } catch {}
+          const copy = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
+          copy.setByteStringData(data);
+          original.onDataAvailable(request, copy, offset, count);
+        },
+        onStopRequest(request, status) {
+          try { trimBodies(log); } catch {}
+          original.onStopRequest(request, status);
+        },
+      };
+      let original;
+      try {
+        original = traceable.setNewListener(tee);
+      } catch {
+        delete entry.body;
+      }
+    }
+
+    function trimBodies(log) {
+      let total = log.list.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
+      for (const r of log.list) {
+        if (total <= MAX_TAB_BODIES) break;
+        if (!r.body) continue;
+        total -= r.body.length;
+        r.body = null; // silindi
+      }
+    }
+
+    // read_network_requests id ile: tek isteğin ayrıntısı
+    async function requestDetails(browser, r, maxChars) {
+      const win = browser.ownerDocument.defaultView;
+      const lines = [`#${r.id} ${r.method} ${r.error ?? r.status ?? "bekliyor"} ${r.url}`];
+      const extra = [r.type, r.mime, r.cached && "önbellek", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
+      if (extra) lines[0] += `  (${extra})`;
+      const headers = list => list?.length ? list.map(([k, v]) => `  ${k}: ${v}`).join("\n") : "  (yok)";
+      lines.push("", "İstek başlıkları:", headers(r.requestHeaders));
+      if (r.requestBody) lines.push("", "İstek gövdesi:", decode(win, r.requestBody, maxChars));
+      lines.push("", "Cevap başlıkları:", headers(r.responseHeaders));
+      if (r.body === undefined) lines.push("", "Cevap gövdesi: kaydedilmedi (yalnız fetch/XHR ve belge isteklerinde).");
+      else if (r.body === null) lines.push("", "Cevap gövdesi: bellek sınırı yüzünden silindi.");
+      else if (!/json|text|xml|javascript|html|csv|graphql|x-www-form-urlencoded/i.test(r.mime ?? "")) {
+        lines.push("", `Cevap gövdesi: ikili veri (${r.mime ?? "türü bilinmiyor"}, ${r.bodySize} bayt).`);
+      } else {
+        const cut = r.bodySize > r.body.length ? ` (ilk ${r.body.length} bayt kaydedildi)` : "";
+        const encoding = r.responseHeaders?.find(([k]) => k === "content-encoding")?.[1];
+        let raw = r.body;
+        let note = "";
+        if (encoding && encoding !== "identity") {
+          try {
+            raw = await decompress(win, raw, encoding);
+            note = `, ${encoding} açıldı`;
+          } catch (e) {
+            note = `, ${encoding} açılamadı${cut ? " (kesik)" : ""}: ${e?.message ?? e}`;
+          }
+        }
+        lines.push("", `Cevap gövdesi (${r.bodySize} bayt${cut}${note}):`, decode(win, raw, maxChars));
+      }
+      return lines.join("\n");
+    }
+
+    // Kayıt sıkıştırmanın önünde yapılıyor: content-encoding'i burada açılır
+    const DECOMPRESS_FORMATS = { gzip: "gzip", "x-gzip": "gzip", deflate: "deflate", br: "brotli", zstd: "zstd" };
+    async function decompress(win, raw, encoding) {
+      const format = DECOMPRESS_FORMATS[encoding.trim().toLowerCase()];
+      if (!format) throw new Error("bilinmeyen kodlama");
+      const bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
+      const stream = new win.Blob([bytes]).stream().pipeThrough(new win.DecompressionStream(format));
+      const out = new Uint8Array(await new win.Response(stream).arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < out.length; i += 0x8000) binary += String.fromCharCode(...out.subarray(i, i + 0x8000));
+      return binary;
+    }
+
+    // ikili dize → UTF-8 metin, uzunsa kesilir
+    function decode(win, raw, maxChars) {
+      let t;
+      try {
+        t = new win.TextDecoder().decode(Uint8Array.from(raw, c => c.charCodeAt(0)));
+      } catch {
+        t = raw;
+      }
+      return t.length > maxChars ? t.slice(0, maxChars) + `\n…(kesildi, ${t.length} karakter)` : t;
+    }
     const NETWORK_TOPICS = [
       "http-on-modify-request",
       "http-on-examine-response",
@@ -881,7 +1043,24 @@ function logError(where, e) {
       island?.resumed();
     }
 
-    // adadaki Tamam/Vazgeç: bekleyen sekme isteğine ya da ask_user'a
+    // Adada evet/hayır sorusu (sekme isteği, işlem izni); "done", "cancelled" ya da "timeout"
+    async function askIsland(browser, text, message, labels, timeout = 120) {
+      if (tabRequests.has(browser)) throw new Error("Bu sekmede zaten bekleyen bir soru var.");
+      const answered = new Promise(resolve => tabRequests.set(browser, resolve));
+      island?.ask(browser, text, message, true, labels);
+      const notified = notifyAsk(browser, message);
+      try {
+        return await guard(Promise.race([answered, sleep(timeout * 1000).then(() => "timeout")]));
+      } finally {
+        tabRequests.delete(browser);
+        island?.askEnded();
+        if (notified) {
+          try { alerts.closeAlert(ALERT_NAME); } catch {}
+        }
+      }
+    }
+
+    // adadaki Tamam/Vazgeç: bekleyen soruya ya da ask_user'a
     const tabRequests = new Map(); // browser → resolve
     function answerIsland(browser, result) {
       const resolve = tabRequests.get(browser);
@@ -1019,6 +1198,140 @@ function logError(where, e) {
 
     const MAX_PAGE_TEXT = 100000;
 
+    // ---- ayarlar: ~/.config/zen-mcp/config.json ----
+    //
+    // mode: "auto" (Claude sormadan işlem yapar) ya da "ask" (her işlemde adadan izin ister).
+    // sensitive: alan adları; bu sitelerde mod ne olursa olsun her işlemde izin istenir
+    // ("garanti.com.tr" alt alan adlarını da kapsar). Dosya değişince kendiliğinden okunur.
+    const CONFIG_PATH = (Services.env.get("XDG_CONFIG_HOME") || Services.env.get("HOME") + "/.config") + "/zen-mcp/config.json";
+    const DEFAULT_CONFIG = { mode: "auto", sensitive: [] };
+    let config = { ...DEFAULT_CONFIG };
+    let configTime = -1;
+
+    function readConfig() {
+      const file = localFile(CONFIG_PATH);
+      if (!file.exists()) {
+        config = { ...DEFAULT_CONFIG };
+        configTime = 0;
+        return config;
+      }
+      if (file.lastModifiedTime === configTime) return config;
+      configTime = file.lastModifiedTime;
+      try {
+        const stream = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
+        stream.init(file, 0x01, 0, 0);
+        const raw = NetUtil.readInputStreamToString(stream, stream.available(), { charset: "UTF-8" });
+        stream.close();
+        const parsed = JSON.parse(raw);
+        config = {
+          mode: parsed.mode === "ask" ? "ask" : "auto",
+          sensitive: Array.isArray(parsed.sensitive) ? parsed.sensitive.map(s => String(s).toLowerCase().replace(/^\*?\./, "")) : [],
+        };
+        island?.setMode(config.mode);
+      } catch (e) {
+        logError("ayarlar", e);
+      }
+      return config;
+    }
+
+    function writeConfig(changes) {
+      const next = { ...readConfig(), ...changes };
+      const file = localFile(CONFIG_PATH);
+      if (!file.parent.exists()) file.parent.create(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
+      const out = Cc["@mozilla.org/network/file-output-stream;1"].createInstance(Ci.nsIFileOutputStream);
+      out.init(file, 0x02 | 0x08 | 0x20, 0o600, 0); // yaz | oluştur | sıfırla
+      const bytes = unescape(encodeURIComponent(JSON.stringify(next, null, 2) + "\n"));
+      out.write(bytes, bytes.length);
+      out.close();
+      config = next;
+      configTime = file.lastModifiedTime;
+    }
+
+    function toggleMode() {
+      writeConfig({ mode: readConfig().mode === "ask" ? "auto" : "ask" });
+      island?.setMode(config.mode);
+    }
+
+    const hostOf = browser => {
+      try { return browser.currentURI.host; } catch { return ""; }
+    };
+    const isSensitive = host => !!host && readConfig().sensitive.some(d => host === d || host.endsWith("." + d));
+
+    // ---- izin: onaylı modda ya da hassas sitede işlem öncesi adadan sorulur ----
+
+    const ACTION_VERBS = {
+      left_click: "tıklamak", right_click: "sağ tıklamak", double_click: "çift tıklamak",
+      triple_click: "üç kez tıklamak", left_click_drag: "sürüklemek", type: "yazmak", key: "tuşa basmak",
+    };
+
+    // izin gerektiren işlemse kısa tarif ("button "Gönder"'e tıklamak"), değilse null
+    async function describeWrite(tool, args, browser) {
+      const target = async () => {
+        try {
+          if (args.ref) return (await queryRef(browser, "describe", { ref: longRef(args.ref) })).value;
+          if (args.coordinate) {
+            const [x, y] = toPagePoint(browser, args.coordinate);
+            const inner = await deepest(browser, x, y);
+            return (await query(browser, "describe", { x: inner.x, y: inner.y }, 30000, inner.frame)).value;
+          }
+        } catch (e) {
+          if (e instanceof DialogOpen || e instanceof Stopped) throw e;
+        }
+        return args.ref ?? "bir öğe";
+      };
+      const quote = (t, n = 80) => `"${String(t).length > n ? String(t).slice(0, n - 1) + "…" : t}"`;
+      switch (tool) {
+        case "computer": {
+          const verb = ACTION_VERBS[args.action];
+          if (!verb) return null;
+          if (args.action === "type") return `${quote(args.text ?? "")} yazmak`;
+          if (args.action === "key") return `${args.text} tuşuna basmak`;
+          return `${await target()}: ${verb}`;
+        }
+        case "form_input":
+          return `${await target()}: ${typeof args.value === "boolean" ? (args.value ? "işaretlemek" : "işareti kaldırmak") : `${quote(args.value)} yazmak`}`;
+        case "file_upload":
+          return `${await target()}: dosya yüklemek (${args.paths?.map(p => p.split("/").pop()).join(", ")})`;
+        case "javascript_tool":
+          return `sayfada kod çalıştırmak: ${quote(args.text ?? "", 120)}`;
+        case "handle_dialog":
+          return `sayfanın diyaloğunu ${args.accept ? "kabul etmek" : "iptal etmek"}`;
+        case "navigate":
+          if (args.url === "back" || args.url === "forward") return `${args.url === "back" ? "geri" : "ileri"} gitmek`;
+          return `${quote(args.url, 100)} adresine gitmek`;
+      }
+      return null;
+    }
+
+    // Bu çağrı izin ister mi: onaylı modda her işlem, hassas sitede gezinme dışındaki işlemler
+    function needsPermission(tool, browser) {
+      if (readConfig().mode === "ask") return true;
+      return tool !== "navigate" && isSensitive(hostOf(browser));
+    }
+
+    // izin verilmezse hata; steps: [{ tool, args, what? }] (toplu çağrı tek soruda; what
+    // verilmişse yeniden tarif edilmez)
+    async function requirePermission(browser, steps) {
+      const lines = [];
+      for (const { tool, args, what: known } of steps) {
+        if (!needsPermission(tool, browser)) continue;
+        const what = known === undefined ? await describeWrite(tool, args, browser) : known;
+        if (what) lines.push(what);
+      }
+      if (!lines.length) return;
+      const host = hostOf(browser);
+      const why = isSensitive(host) ? " (hassas site)" : "";
+      const message = lines.length === 1
+        ? `Claude şunu yapmak istiyor: ${lines[0]}`
+        : `Claude şunları yapmak istiyor:\n${lines.map(l => `• ${l}`).join("\n")}`;
+      const result = await askIsland(browser, `${host ? host + " — " : ""}izin istiyor${why}`, message, { ok: "İzin ver", cancel: "Verme" });
+      if (result !== "done") {
+        throw new Error(result === "timeout"
+          ? "Kullanıcı izin sorusuna yanıt vermedi; işlem yapılmadı."
+          : "Kullanıcı bu işleme izin vermedi; işlem yapılmadı. Ne yapmak istediğini kullanıcıya sor.");
+      }
+    }
+
     // ---- tool'lar: hepsi MCP içerik dizisi döner ----
 
     // tek satır JSON: girinti her çağrıda boşuna token
@@ -1050,6 +1363,17 @@ function logError(where, e) {
       // birleşir (her biri ayrı içerik olmasın), görüntüler sırasıyla araya girer.
       async browser_batch({ actions }) {
         if (!Array.isArray(actions) || !actions.length) throw new Error("actions boş.");
+        // izin gereken adımlar sekme başına tek soruda
+        const byTab = new Map();
+        for (const { name, input = {} } of actions) {
+          if (!tools[name] || !state.tabs.has(input.tabId)) continue;
+          if (!byTab.has(input.tabId)) byTab.set(input.tabId, []);
+          byTab.get(input.tabId).push({ tool: name, args: input });
+        }
+        for (const [tabId, steps] of byTab) {
+          const browser = findTab(tabId)?.linkedBrowser;
+          if (browser) await requirePermission(browser, steps);
+        }
         const content = [];
         let lines = [];
         const flush = () => {
@@ -1065,7 +1389,7 @@ function logError(where, e) {
             break;
           }
           try {
-            for (const c of await runTool(name, input)) {
+            for (const c of await runTool(name, input, { approved: true })) {
               if (c.type === "text") lines.push(`${label}: ${c.text}`);
               else {
                 lines.push(`${label}:`);
@@ -1304,21 +1628,8 @@ function logError(where, e) {
           throw new Error(`Sekme ${tabId} istenemez: yalnız kullanıcının öğe seçip gönderdiği sekmeler (channel olayındaki source_tab) istenebilir.`);
         }
         const browser = tab.linkedBrowser;
-        if (tabRequests.has(browser)) throw new Error("Bu sekme için zaten bekleyen bir istek var.");
-        const message = `Claude bu sekmeye erişmek istiyor: ${reason}`;
-        let result;
-        const answered = new Promise(resolve => tabRequests.set(browser, resolve));
-        island?.ask(browser, describeAction("request_tab", {}, browser), message, true, { ok: "Ver", cancel: "Verme" });
-        const notified = notifyAsk(browser, message);
-        try {
-          result = await guard(Promise.race([answered, sleep(timeout * 1000).then(() => "timeout")]));
-        } finally {
-          tabRequests.delete(browser);
-          island?.askEnded();
-          if (notified) {
-            try { alerts.closeAlert(ALERT_NAME); } catch {}
-          }
-        }
+        const result = await askIsland(browser, describeAction("request_tab", {}, browser),
+          `Claude bu sekmeye erişmek istiyor: ${reason}`, { ok: "Ver", cancel: "Verme" }, timeout);
         if (result !== "done") {
           return text(result === "timeout" ? `Kullanıcı ${timeout} sn içinde yanıt vermedi.` : "Kullanıcı sekmeyi vermedi.");
         }
@@ -1363,15 +1674,20 @@ function logError(where, e) {
         return text(`${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`);
       },
 
-      read_network_requests({ tabId, urlPattern, limit = 100, clear }) {
+      read_network_requests({ tabId, urlPattern, limit = 100, clear, id, max_chars = 20000 }) {
         const browser = browserFor(tabId);
         const log = network.get(browser.browserId);
+        if (id != null) {
+          const r = log?.list.find(r => r.id === id);
+          if (!r) return text(`#${id} yok (sayfa başka siteye geçince kayıtlar silinir); id'leri listeden al.`);
+          return requestDetails(browser, r, max_chars).then(text);
+        }
         let list = log?.list ?? [];
         if (urlPattern) list = list.filter(r => r.url.includes(urlPattern));
         const lines = list.slice(-limit).map(r => {
           const status = r.error ?? (r.status ?? (r.duration == null ? "bekliyor" : "cevap yok"));
           const extra = [r.type, r.mime, r.cached && "önbellek", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
-          return `${r.method} ${status} ${r.url}${extra ? `  (${extra})` : ""}`;
+          return `#${r.id} ${r.method} ${status} ${r.url}${extra ? `  (${extra})` : ""}`;
         });
         if (clear && log) {
           log.list.length = 0;
@@ -1449,17 +1765,53 @@ function logError(where, e) {
     }
 
     // durdurulmuşsa reddeder, sürerken adada ne yapıldığını gösterir
-    async function runTool(tool, args) {
+    // approved: toplu çağrıda izin baştan alındı
+    async function runTool(tool, args, { approved = false } = {}) {
       if (state.paused) throw new Stopped();
       const browser = state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
+      const entry = { t: new Date().toISOString(), tool };
+      if (args.action && tool === "computer") entry.action = args.action;
       if (browser) {
+        entry.tab = args.tabId;
+        entry.host = hostOf(browser);
         island?.working(browser, describeAction(tool, args, browser));
         activeCalls++;
       }
       try {
-        return await tools[tool](args);
+        if (browser && tool !== "browser_batch") {
+          const what = await describeWrite(tool, args, browser);
+          if (what) entry.what = what;
+          if (!approved) await requirePermission(browser, [{ tool, args, what }]);
+        }
+        const result = await tools[tool](args);
+        if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
+        return result;
+      } catch (e) {
+        entry.error = String(e?.message ?? e).slice(0, 200);
+        throw e;
       } finally {
         if (browser && --activeCalls === 0) island?.idle();
+        if (tool !== "browser_batch") logActivity(entry);
+      }
+    }
+
+    // ---- etkinlik günlüğü: ~/.local/state/zen-mcp/activity.jsonl, satır başına bir çağrı ----
+    // (5 MB'ı geçince activity.1.jsonl'e taşınır)
+    const ACTIVITY_PATH = (Services.env.get("XDG_STATE_HOME") || Services.env.get("HOME") + "/.local/state") + "/zen-mcp/activity.jsonl";
+    const MAX_ACTIVITY = 5 * 1048576;
+
+    function logActivity(entry) {
+      try {
+        const file = localFile(ACTIVITY_PATH);
+        if (!file.parent.exists()) file.parent.create(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
+        if (file.exists() && file.fileSize > MAX_ACTIVITY) file.moveTo(null, "activity.1.jsonl");
+        const out = Cc["@mozilla.org/network/file-output-stream;1"].createInstance(Ci.nsIFileOutputStream);
+        out.init(localFile(ACTIVITY_PATH), 0x02 | 0x08 | 0x10, 0o600, 0); // yaz | oluştur | sona ekle
+        const bytes = unescape(encodeURIComponent(JSON.stringify(entry) + "\n"));
+        out.write(bytes, bytes.length);
+        out.close();
+      } catch (e) {
+        logError("günlük", e);
       }
     }
 
@@ -1535,6 +1887,7 @@ function logError(where, e) {
           pick: startPick,
           send: note => sendPick(note).catch(e => logError("gönderme", e)),
           cancelPick: () => endPick(),
+          toggleMode,
         },
         { setTimeout, clearTimeout }
       );
@@ -1544,6 +1897,7 @@ function logError(where, e) {
         attachPageMenu(win);
       }
       if (state.paused) island.stopped();
+      island.setMode(readConfig().mode);
       for (const topic of NETWORK_TOPICS) Services.obs.addObserver(networkObserver, topic);
       restoreMarks();
       for (const win of browserWindows()) watchWindow(win);
