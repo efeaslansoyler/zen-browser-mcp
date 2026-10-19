@@ -598,11 +598,88 @@ function logError(where, e) {
       return [x / s, y / s];
     }
 
-    // ref verilmişse öğeyi (gerekirse kaydırıp) merkezine, yoksa koordinata
+    // ---- iframe'ler: her çerçevede ayrı actor ----
+
+    // autoconfig kapsamında BrowsingContext yok (IOUtils gibi); pencereninki
+    const bcById = (browser, id) => browser.ownerDocument.defaultView.BrowsingContext.get(id);
+
+    // Actor alt çerçevedeki ref'e browsingContext kimliğini ekler ("ref_3_f150323855361");
+    // Claude'a kısa numarayla ("ref_3_f2") gösterilir, gelen ref geri çevrilir
+    const frameNumbers = (globalThis.zenMcpFrames ||= { byId: new Map(), byNumber: new Map(), next: 1 });
+    function shortRefs(value) {
+      // yalnız uzun kimlikler (kısa numara zaten çevrilmiş)
+      return value.replace(/(ref_\d+)_f(\d{6,})\b/g, (_, ref, id) => {
+        let n = frameNumbers.byId.get(id);
+        if (!n) {
+          n = frameNumbers.next++;
+          frameNumbers.byId.set(id, n);
+          frameNumbers.byNumber.set(n, id);
+        }
+        return `${ref}_f${n}`;
+      });
+    }
+    // actor'a giden ref: kısa numara yerine gerçek kimlik
+    function longRef(ref) {
+      const m = /^(ref_\d+)_f(\d+)$/.exec(ref ?? "");
+      const id = m && frameNumbers.byNumber.get(Number(m[2]));
+      return id ? `${m[1]}_f${id}` : ref;
+    }
+
+    // alt çerçevedeki ref "ref_N_f<n>"; o çerçeve bu sekmenin içinde olmalı
+    function frameOf(browser, ref) {
+      const id = /_f(\d+)$/.exec(longRef(ref) ?? "")?.[1];
+      if (!id) return browser.browsingContext;
+      const bc = bcById(browser, Number(id));
+      if (!bc || bc.top !== browser.browsingContext) throw new Error(`${ref} bulunamadı (çerçeve kapanmış olabilir); read_page veya find ile yeniden al.`);
+      return bc;
+    }
+
+    const queryRef = (browser, name, data, timeout) => query(browser, name, data, timeout, frameOf(browser, data.ref));
+
+    // yüklü bütün çerçeveler, üstten başlayarak
+    const framesOf = browser => browser.browsingContext.getAllBrowsingContextsInSubtree().filter(bc => bc.currentWindowGlobal);
+
+    // çerçevedeki noktayı üst sayfanın görünür alanına çevirir (iframe'ler gerekirse kaydırılır)
+    async function toTop(browser, frame, x, y) {
+      for (let bc = frame; bc.parent; bc = bc.parent) {
+        const o = await query(browser, "frame_rect", { bcId: bc.id }, 30000, bc.parent);
+        x += o.x;
+        y += o.y;
+      }
+      return [x, y];
+    }
+
+    // üst sayfadaki noktanın altındaki en içteki çerçeve ve oradaki koordinat
+    async function deepest(browser, x, y) {
+      let frame = browser.browsingContext;
+      for (let depth = 0; depth < 8; depth++) {
+        const { value: inner } = await query(browser, "frame_at", { x, y }, 30000, frame);
+        const bc = inner && bcById(browser, inner.bcId);
+        if (!bc?.currentWindowGlobal) break;
+        [frame, x, y] = [bc, inner.x, inner.y];
+      }
+      return { frame, x, y };
+    }
+
+    // klavye odağının olduğu en içteki çerçeve
+    async function focusedFrame(browser) {
+      let frame = browser.browsingContext;
+      for (let depth = 0; depth < 8; depth++) {
+        const { value: id } = await query(browser, "active_frame", {}, 30000, frame);
+        const bc = id && bcById(browser, id);
+        if (!bc?.currentWindowGlobal) break;
+        frame = bc;
+      }
+      return frame;
+    }
+
+    // ref verilmişse öğeyi (gerekirse kaydırıp) merkezine, yoksa koordinata; üst sayfanın
+    // görünür alanında CSS px
     async function target(browser, args, key = "coordinate") {
       if (args.ref && key === "coordinate") {
-        const { x, y } = await query(browser, "locate", { ref: args.ref });
-        return [x, y];
+        const frame = frameOf(browser, args.ref);
+        const { x, y } = await query(browser, "locate", { ref: longRef(args.ref) }, 30000, frame);
+        return toTop(browser, frame, x, y);
       }
       if (args[key] == null) throw new Error(`${args.action} için ${key}${key === "coordinate" ? " veya ref" : ""} gerekli.`);
       return toPagePoint(browser, args[key]);
@@ -620,13 +697,21 @@ function logError(where, e) {
       return mods;
     }
 
-    const input = (browser, data) => query(browser, "input", data);
+    // Fare olayı, noktanın altındaki en içteki çerçevenin actor'ından o çerçevenin
+    // koordinatıyla gönderilir: üst sayfadan gönderilen olay farklı süreçteki (site dışı)
+    // iframe'e ulaşmıyor. data.to (sürükleme) de aynı çerçeveye çevrilir.
+    async function input(browser, data) {
+      const inner = await deepest(browser, data.x, data.y);
+      const [dx, dy] = [data.x - inner.x, data.y - inner.y];
+      const to = data.to && [data.to[0] - dx, data.to[1] - dy];
+      return query(browser, "input", { ...data, x: inner.x, y: inner.y, to }, 30000, inner.frame);
+    }
 
     async function click(browser, [x, y], { button = 0, count = 1, modifiers } = {}) {
       await input(browser, { kind: "click", x, y, button, count, modifiers: parseModifiers(modifiers) });
     }
 
-    function scroll(browser, [x, y], direction, amount = 3) {
+    async function scroll(browser, [x, y], direction, amount = 3) {
       // tık başına 100 CSS px; çarpan: tarayıcının tekerlek deltasına uyguladığı (Zen'de 200)
       const multiplier = axis => Services.prefs.getIntPref(`mousewheel.default.delta_multiplier_${axis}`, 100) / 100 || 1;
       const px = amount * 100;
@@ -660,7 +745,12 @@ function logError(where, e) {
         const key = keyName(parts.pop());
         return { key, mods: parseModifiers(parts.join("+")) };
       });
-      return input(browser, { kind: "keys", keys });
+      return typeInFocus(browser, { kind: "keys", keys });
+    }
+
+    // tuşlar odaktaki çerçeveye
+    async function typeInFocus(browser, data) {
+      return query(browser, "input", data, 30000, await focusedFrame(browser));
     }
 
     // ---- ekran görüntüsü ----
@@ -865,12 +955,14 @@ function logError(where, e) {
         ask_user: () => "senden bir şey istiyor",
         request_tab: () => "sekmeye erişmek istiyor",
         tabs_close_mcp: () => "sekmeyi kapatıyor",
+        wait_for: () => "bekliyor",
       }[tool]?.() ?? "çalışıyor";
       return host ? `${host} — ${what}` : what;
     }
 
-    async function query(browser, name, data, timeout = 30000) {
-      const wg = browser.browsingContext?.currentWindowGlobal;
+    // frame: sekmedeki bir alt çerçevenin BrowsingContext'i (varsayılan üst çerçeve)
+    async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
+      const wg = frame?.currentWindowGlobal;
       if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
       throwIfDialog(browser);
       let done = false;
@@ -879,7 +971,7 @@ function logError(where, e) {
           await sleep(250);
           if (done) return;
           throwIfDialog(browser);
-          if (browser.browsingContext?.currentWindowGlobal !== wg) throw new PageGone("Sayfa değişti.");
+          if (frame.currentWindowGlobal !== wg) throw new PageGone("Sayfa değişti.");
           if (!state.tabs.has(browser.browserId)) throw new Error("Kullanıcı bu sekmeyi Claude'dan geri aldı; artık bu sekmede işlem yapamazsın.");
         }
       })();
@@ -889,17 +981,48 @@ function logError(where, e) {
           watchDialog,
           sleep(timeout).then(() => { throw new Error(`Sayfa ${timeout / 1000} sn içinde cevap vermedi.`); }),
         ]));
-        if (result?.error) throw new Error(result.error);
+        if (result?.error) throw new Error(shortRefs(result.error));
         return result;
       } finally {
         done = true;
       }
     }
 
+    // read_page'in "{{frame:<id>}}" satırlarını o çerçevenin ağacıyla değiştirir (iç içe de)
+    async function expandFrames(browser, value, opts, level = 0) {
+      const parts = [];
+      let last = 0;
+      for (const m of value.matchAll(/^( *)\{\{frame:(\d+)\}\}$/gm)) {
+        parts.push(value.slice(last, m.index));
+        last = m.index + m[0].length;
+        const indent = m[1];
+        const bc = bcById(browser, Number(m[2]));
+        const wg = bc?.currentWindowGlobal;
+        if (!wg || bc.top !== browser.browsingContext || level > 6) {
+          parts.push(`${indent}(iframe yüklenmedi)`);
+          continue;
+        }
+        let inner;
+        try {
+          ({ value: inner } = await query(browser, "read_page", { ...opts, bare: true }, 30000, bc));
+          inner = await expandFrames(browser, inner, opts, level + 1);
+        } catch (e) {
+          if (e instanceof DialogOpen) throw e;
+          inner = `(okunamadı: ${e?.message ?? e})`;
+        }
+        const body = inner ? inner.split("\n").map(line => indent + line).join("\n") : `${indent}(görünür öğe yok)`;
+        parts.push(`${indent}[iframe ${wg.documentURI?.spec ?? ""}]\n${body}`);
+      }
+      parts.push(value.slice(last));
+      return parts.join("");
+    }
+
+    const MAX_PAGE_TEXT = 100000;
+
     // ---- tool'lar: hepsi MCP içerik dizisi döner ----
 
     // tek satır JSON: girinti her çağrıda boşuna token
-    const text = t => [{ type: "text", text: typeof t === "string" ? t : JSON.stringify(t) }];
+    const text = t => [{ type: "text", text: shortRefs(typeof t === "string" ? t : JSON.stringify(t)) }];
 
     const tools = {
       async tabs_context_mcp({ createIfEmpty }) {
@@ -1021,10 +1144,10 @@ function logError(where, e) {
             await scroll(browser, await target(browser, args), need("scroll_direction"), args.scroll_amount);
             break;
           case "scroll_to":
-            await query(browser, "locate", { ref: need("ref") });
+            await target(browser, { ...args, ref: need("ref") });
             break;
           case "type":
-            await input(browser, { kind: "text", text: need("text") });
+            await typeInFocus(browser, { kind: "text", text: need("text") });
             break;
           case "key":
             for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
@@ -1040,23 +1163,100 @@ function logError(where, e) {
         return text(`${args.action} tamam.`);
       },
 
+      // iframe'lerin metni sayfanın metninin ardından, kaynağıyla
       async get_page_text({ tabId }) {
-        const page = await query(browserFor(tabId), "text");
-        return text(`${page.title}\n${page.url}\n\n${page.text}`);
+        const browser = browserFor(tabId);
+        const page = await query(browser, "text");
+        let out = `${page.title}\n${page.url}\n\n${page.text}`;
+        for (const bc of framesOf(browser).slice(1)) {
+          if (out.length > MAX_PAGE_TEXT) break;
+          try {
+            const frame = await query(browser, "text", {}, 30000, bc);
+            if (frame.text.trim()) out += `\n\n[iframe ${frame.url}]\n${frame.text}`;
+          } catch (e) {
+            if (e instanceof DialogOpen) throw e;
+          }
+        }
+        if (out.length > MAX_PAGE_TEXT) out = out.slice(0, MAX_PAGE_TEXT) + "\n…(kesildi)";
+        return text(out);
       },
 
-      async read_page({ tabId, filter, depth, ref_id, max_chars }) {
-        const { value } = await query(browserFor(tabId), "read_page", { filter, depth, ref_id, max_chars });
+      async read_page({ tabId, filter, depth, ref_id, max_chars = 50000 }) {
+        const browser = browserFor(tabId);
+        const frame = frameOf(browser, ref_id);
+        const opts = { filter, depth, max_chars };
+        let { value } = await query(browser, "read_page", { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext }, 30000, frame);
+        value = shortRefs(await expandFrames(browser, value, opts));
+        if (value.length > max_chars) {
+          value = value.slice(0, value.lastIndexOf("\n", max_chars)) + `\n…(kesildi: ${max_chars} karakter sınırı; ref_id ile alt ağaca odaklan)`;
+        }
         return text(value);
       },
 
+      // bütün çerçevelerde arar, sonuçları puana göre birleştirir
       async find({ tabId, query: q }) {
-        const { value } = await query(browserFor(tabId), "find", { query: q });
-        return text(value);
+        const browser = browserFor(tabId);
+        const results = [];
+        for (const bc of framesOf(browser)) {
+          try {
+            const { value } = await query(browser, "find", { query: q }, 30000, bc);
+            results.push(...value);
+          } catch (e) {
+            if (e instanceof DialogOpen || bc === browser.browsingContext) throw e;
+          }
+        }
+        if (!results.length) return text(`"${q}" ile eşleşen öğe yok. read_page ile sayfanın yapısına bak.`);
+        results.sort((a, b) => b.score - a.score);
+        return text(shortRefs(results.slice(0, 20).map(r => r.line).join("\n")));
+      },
+
+      // Metin/seçici görünene (gone: kaybolana) ve/veya ağ durulana kadar bekler. Yoklamayla
+      // çalışır: beklerken sayfa değişse (ör. form gönderildi) de sürer. Bütün çerçevelere bakar.
+      async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }) {
+        const browser = browserFor(tabId);
+        if (!wanted && !selector && !network_idle) throw new Error("text, selector ya da network_idle gerekli.");
+        if (selector) {
+          try { browser.ownerDocument.createDocumentFragment().querySelector(selector); } catch {
+            throw new Error(`Geçersiz CSS seçici: ${selector}`);
+          }
+        }
+        const start = Date.now();
+        const limit = Math.min(timeout, 60) * 1000;
+        let quietSince = null;
+        for (;;) {
+          let ok = true;
+          if (wanted || selector) {
+            let found = false;
+            for (const bc of framesOf(browser)) {
+              try {
+                if ((await query(browser, "check", { text: wanted, selector }, 5000, bc)).value) {
+                  found = true;
+                  break;
+                }
+              } catch (e) {
+                // sayfa yüklenirken çerçeve yok ya da değişti: sonraki turda yeniden
+                if (e instanceof DialogOpen || e instanceof Stopped) throw e;
+              }
+            }
+            ok = gone ? !found : found;
+          }
+          if (ok && network_idle) {
+            // 10 sn'den uzun süren istekler (uzun yoklama, akış) sayılmaz
+            const now = Date.now();
+            const busy = (network.get(browser.browserId)?.list ?? []).some(r => r.duration == null && !r.error && now - r.start < 10000);
+            if (busy) quietSince = null;
+            else quietSince ??= now;
+            ok = !busy && now - quietSince >= 500;
+          }
+          const elapsed = Date.now() - start;
+          if (ok) return text(`Tamam (${(elapsed / 1000).toFixed(1)} sn).`);
+          if (elapsed >= limit) throw new Error(`${Math.min(timeout, 60)} sn içinde gerçekleşmedi.`);
+          await guard(sleep(250));
+        }
       },
 
       async form_input({ tabId, ref, value }) {
-        const { value: result } = await query(browserFor(tabId), "form_input", { ref, value });
+        const { value: result } = await queryRef(browserFor(tabId), "form_input", { ref: longRef(ref), value });
         return text(result);
       },
 
@@ -1072,7 +1272,7 @@ function logError(where, e) {
         const notified = notifyAsk(browser, message);
         let result;
         try {
-          ({ value: result } = await query(browser, "ask_user", { ref, x, y, message, wait, timeout }, (timeout + 10) * 1000));
+          ({ value: result } = await query(browser, "ask_user", { ref: longRef(ref), x, y, message, wait, timeout }, (timeout + 10) * 1000, frameOf(browser, ref)));
         } catch (e) {
           if (!(e instanceof PageGone)) throw e;
           result = "navigated";
@@ -1143,7 +1343,7 @@ function logError(where, e) {
           try { type = mime.getTypeFromFile(file); } catch {}
           files.push({ name: file.leafName, type, lastModified: file.lastModifiedTime, bytes: await IOUtils.read(path) });
         }
-        const { value } = await query(browser, "file_upload", { ref, files }, 60000);
+        const { value } = await queryRef(browser, "file_upload", { ref: longRef(ref), files }, 60000);
         return text(value);
       },
 
@@ -1360,6 +1560,8 @@ function logError(where, e) {
         // web sayfası süreçlerine girmesi için açık izin gerekiyor (Marionette de böyle yapıyor);
         // child yalnız parent'tan gelen mesajlara cevap verir
         safeForUntrustedWebProcess: true,
+        // iframe'ler de (farklı süreçteki site dışı çerçeveler dahil)
+        allFrames: true,
       });
 
       const file = localFile(socketPath);

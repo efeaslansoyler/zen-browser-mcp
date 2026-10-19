@@ -1,8 +1,10 @@
-// İçerik sürecinde, her sayfanın üst çerçevesinde çalışır. Hatalar fırlatılmaz, { error }
+// İçerik sürecinde, her sayfanın her çerçevesinde (iframe'ler dahil) çalışır. Hatalar fırlatılmaz, { error }
 // olarak döner: sendQuery hata mesajını düzgün taşımıyor.
 //
-// read_page/find öğelere "ref_N" kimliği verir; kimlikler bu actor örneğinde (yani bu sayfa
-// yüklemesinde) geçerlidir, yeni sayfada sıfırlanır. DOM'a ayrıcalıklı (Xray) erişimle bakılır:
+// read_page/find öğelere "ref_N" kimliği verir (alt çerçevede "ref_N_f<browsingContext id>":
+// main.js isteği bu ekle doğru çerçeveye yollar); kimlikler bu actor örneğinde (yani bu sayfa
+// yüklemesinde) geçerlidir, yeni sayfada sıfırlanır. read_page iframe'in yerine
+// "{{frame:<id>}}" satırı koyar, main.js onu o çerçevenin ağacıyla değiştirir. DOM'a ayrıcalıklı (Xray) erişimle bakılır:
 // sayfanın kendi tanımladığı özellikler/override'lar görülmez, yerel DOM davranışı esastır.
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -170,6 +172,14 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#readPage(data) };
         case "find":
           return { value: this.#find(data.query) };
+        case "frame_rect":
+          return this.#frameRect(data.bcId);
+        case "frame_at":
+          return { value: this.#frameAt(data.x, data.y) };
+        case "active_frame":
+          return { value: this.#frameId(this.document.activeElement) };
+        case "check":
+          return { value: this.#check(data) };
         case "form_input":
           return { value: this.#formInput(data.ref, data.value) };
         case "locate":
@@ -225,7 +235,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   #ref(el) {
     let id = this.#ids.get(el);
     if (!id) {
-      id = `ref_${this.#next++}`;
+      const bc = this.browsingContext;
+      id = `ref_${this.#next++}${bc.parent ? `_f${bc.id}` : ""}`;
       this.#ids.set(el, id);
       this.#refs.set(id, new WeakRef(el));
     }
@@ -242,7 +253,8 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   // ---- read_page ----
 
-  #readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE }) {
+  // bare: alt çerçeve için yalnız ağaç satırları (başlık ve URL main.js'te)
+  #readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false }) {
     const root = ref_id ? this.#element(ref_id) : this.document.body;
     if (!root) return "(sayfa boş)";
     const lines = [];
@@ -268,6 +280,13 @@ export class ZenMcpChild extends JSWindowActorChild {
       const interactive = INTERACTIVE_ROLES.has(role);
       const printed = interactiveOnly ? interactive : !!role;
       let childIndent = indent;
+      // iframe'in içi ayrı bir actor'da: yerine işaret, main.js doldurur
+      const frameId = this.#frameId(el);
+      if (frameId) {
+        if (!interactiveOnly) push(indent, this.#describeElement(el, role));
+        push(interactiveOnly ? indent : indent + 1, `{{frame:${frameId}}}`);
+        return;
+      }
       if (printed) {
         push(indent, this.#describeElement(el, role));
         childIndent = interactiveOnly ? indent : indent + 1;
@@ -296,6 +315,7 @@ export class ZenMcpChild extends JSWindowActorChild {
       lines.push(`…(kesildi: ${max_chars} karakter sınırı; ref_id ile alt ağaca odaklan veya ${hint})`);
     }
     const doc = this.document;
+    if (bare) return lines.join("\n");
     return `${doc.title}\n${doc.URL}\n\n${lines.join("\n") || "(görünür öğe yok)"}`;
   }
 
@@ -371,10 +391,61 @@ export class ZenMcpChild extends JSWindowActorChild {
       if (this.#inViewport(el)) score += 0.1;
       results.push({ el, role, score });
     }
+    // main.js bütün çerçevelerin sonuçlarını puana göre birleştirir
     results.sort((a, b) => b.score - a.score);
-    const top = results.slice(0, 20);
-    if (!top.length) return `"${query}" ile eşleşen öğe yok. read_page ile sayfanın yapısına bak.`;
-    return top.map(({ el, role }) => this.#describeElement(el, role)).join("\n");
+    return results.slice(0, 20).map(({ el, role, score }) => ({ line: this.#describeElement(el, role), score }));
+  }
+
+  // ---- iframe'ler ----
+
+  // iframe/frame öğesinin içindeki çerçevenin browsingContext kimliği (yüklenmemişse null)
+  #frameId(el) {
+    const tag = el?.localName;
+    if (tag !== "iframe" && tag !== "frame") return null;
+    return el.browsingContext?.id ?? null;
+  }
+
+  #frameElement(bcId) {
+    for (const el of this.document.querySelectorAll("iframe, frame")) {
+      if (this.#frameId(el) === bcId) return el;
+    }
+    return null;
+  }
+
+  // iframe'in içerik kutusu bu çerçevenin görünür alanında; gerekirse görünür yapılır
+  #frameRect(bcId) {
+    const el = this.#frameElement(bcId);
+    if (!el) throw new Error("iframe bulunamadı (sayfa değişmiş olabilir).");
+    if (!this.#fullyInViewport(el)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+    return this.#contentOrigin(el);
+  }
+
+  #contentOrigin(el) {
+    const r = el.getBoundingClientRect();
+    const s = this.contentWindow.getComputedStyle(el);
+    return {
+      x: r.left + el.clientLeft + parseFloat(s.paddingLeft),
+      y: r.top + el.clientTop + parseFloat(s.paddingTop),
+    };
+  }
+
+  // nokta bir iframe'in üstündeyse o çerçevenin kimliği ve içindeki koordinat
+  #frameAt(x, y) {
+    const el = this.document.elementFromPoint(x, y);
+    const bcId = this.#frameId(el);
+    if (!bcId) return null;
+    const o = this.#contentOrigin(el);
+    return { bcId, x: x - o.x, y: y - o.y };
+  }
+
+  // wait_for: metin ve/veya seçici bu çerçevede görünüyor mu
+  #check({ text, selector }) {
+    const doc = this.document;
+    const has = el => !text || normalize(el.innerText ?? "").includes(normalize(text));
+    if (selector) {
+      return [...doc.querySelectorAll(selector)].some(el => this.#visible(el) && has(el));
+    }
+    return !!doc.body && has(doc.body);
   }
 
   // ---- form_input ----

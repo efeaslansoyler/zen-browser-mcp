@@ -65,6 +65,18 @@ Davranış notları:
   adımları sırayla çalıştırır, ilk hatada durur, metinleri tek blokta birleştirir.
   Ekran görüntüsünde `scale` (0,1–1); koordinatlar dönen görüntünün pikselleri.
 - `tabs_close_mcp`: Claude'un açtığı sekmeyi kapatır, kullanıcının verdiğini kapatmaz, geri verir.
+- **iframe'ler (Faz 4):** actor `allFrames: true` ile her çerçevede. Alt çerçevedeki ref'e actor
+  browsingContext kimliğini ekler (`ref_3_f150323855361`), köprü Claude'a kısa numarayla
+  (`ref_3_f2`) gösterir ve geri çevirir (`shortRefs`/`longRef`). `read_page` iframe yerine
+  `{{frame:<id>}}` koyar, köprü o çerçevenin ağacını `[iframe url]` altına yerleştirir; `find`
+  bütün çerçevelerde arayıp puana göre birleştirir; `get_page_text` iframe metinlerini ekler.
+  Fare olayları noktanın altındaki en içteki çerçevenin actor'ından o çerçevenin koordinatıyla
+  gider (`deepest`): üst sayfadan gönderilen olay site dışı (ayrı süreçteki) iframe'e ulaşmıyor.
+  Tuşlar odaktaki çerçeveye (`focusedFrame`). Ref koordinatı iframe kutuları toplanarak üst
+  sayfaya çevrilir (`toTop`). Konsol ve `javascript_tool` yalnız üst çerçevede.
+- `wait_for`: metin / seçici (+metin) görünene, `gone` ile kaybolana, `network_idle` ile 0,5 sn
+  istek olmayana kadar (10 sn'den uzun istekler sayılmaz). Köprüde yoklamayla, bütün çerçevelerde;
+  gezinme boyunca sürer. Zaman aşımı hata (toplu çağrıyı durdurur).
 
 - Claude yalnız kendisindeki sekmelere dokunabilir: kendi açtıkları ve Efe'nin sağ tık
   menüsünden "Claude'a ver" ile verdikleri (`givenByUser: true`). "Claude'dan geri al" süren
@@ -143,7 +155,9 @@ Davranış notları:
 - XPCOM sabitleri `Object.entries` ile görünmez → `for...in`.
 - `addSystemEventListener` yok → `addEventListener(…, { mozSystemGroup: true })`.
 - Kapalı shadow DOM'un içi pencere dinleyicisinin `composedPath()`'inde görünmez.
-- Autoconfig kapsamında `IOUtils` yok → pencerenin `IOUtils`'i.
+- Autoconfig kapsamında `IOUtils` ve `BrowsingContext` yok → pencerenin `IOUtils`/`BrowsingContext`'i.
+- Üst sayfadan windowUtils ile gönderilen fare/klavye olayı site dışı (Fission, ayrı süreç)
+  iframe'e geçmiyor; aynı sitedekine geçiyor. Olay çerçevenin kendi actor'ından gönderilmeli.
 - Actor yok olunca bekleyen `sendQuery` reddedilmiyor → `currentWindowGlobal` değişimini izle.
 - Container'sız sekmede Firefox `.tab-context-line`'ı `display: none` yapıyor.
 - Zen'in ana tema rengi (`--zen-primary-color`) Efe'de açık gri (#bebebe): üstüne beyaz yazı
@@ -172,8 +186,7 @@ Davranış notları:
 ## Sıradaki
 
 0. Öğe seçimi: Efe'nin `claude-zen` denemesi, sonra isteğe bağlı birden fazla öğe seçme.
-1. **Faz 4:** iframe desteği (`read_page`/tıklama/yazma alt çerçevelerde; şu an yalnız üst
-   çerçeve) ve `wait_for` (metin/öğe görünene, ağ durulana kadar).
+1. ~~Faz 4~~ ✅ iframe ve `wait_for` (2026-10-19).
 2. **Faz 5:** ağ isteği ayrıntıları (başlıklar, cevap gövdesi), etkinlik günlüğü, hassas
    siteler listesi.
 3. İsteğe bağlı: Quickshell barında Claude göstergesi; açık kaynak için README ve kurulum betiği.

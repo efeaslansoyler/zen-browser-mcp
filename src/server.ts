@@ -134,6 +134,7 @@ register(
   [
     "Get the page as an accessibility-style tree: roles, names, values and states, each element with a ref (e.g. ref_12) usable in computer, form_input and read_page.",
     "Cheaper and more precise than a screenshot for finding and operating controls. Refs stay valid until the page navigates.",
+    "Iframes (cross-origin too) are included under [iframe url]; their refs look like ref_3_f12 and work with every tool.",
     "filter: \"interactive\" lists only controls (buttons, links, inputs...) as a flat list; default \"all\" includes headings, landmarks and text.",
   ].join(" "),
   {
@@ -152,6 +153,23 @@ register(
     tabId,
     query: z.string().describe('Keywords, e.g. "search", "sign in", "email".'),
   },
+);
+
+register(
+  "wait_for",
+  [
+    "Wait until something is true on the page instead of sleeping: text appears (anywhere, iframes included), an element matching a CSS selector is visible (with text: one that contains it), and/or the network is idle (no requests for 0.5 s).",
+    "gone: true waits for the text/selector to disappear (e.g. a spinner). Keeps waiting across navigations, so it works right after submitting a form. Fails with an error on timeout (stops a browser_batch).",
+  ].join(" "),
+  {
+    tabId,
+    text: z.string().optional().describe("Text to wait for (case-insensitive)."),
+    selector: z.string().optional().describe("CSS selector to wait for."),
+    gone: z.boolean().optional().describe("Wait for text/selector to disappear instead."),
+    network_idle: z.boolean().optional().describe("Also wait until no request is in flight for 0.5 s."),
+    timeout: z.number().optional().describe("Seconds (default 10, max 60)."),
+  },
+  (args) => (Math.min(args.timeout ?? 10, 60) + 15) * 1000,
 );
 
 register(
@@ -260,7 +278,9 @@ register(
 
 // toplu çağrıda her adım için bekleme süresi: kullanıcıyı bekleyenler kendi süreleri kadar
 const stepTimeout = ({ name, input = {} }: { name: string; input?: any }) =>
-  name === "ask_user"
+  name === "wait_for"
+    ? Math.min(input.timeout ?? 10, 60) + 15
+    : name === "ask_user"
     ? (input.timeout ?? 300) + 20
     : name === "request_tab"
       ? (input.timeout ?? 120) + 20

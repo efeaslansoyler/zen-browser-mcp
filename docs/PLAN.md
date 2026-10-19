@@ -32,7 +32,7 @@ kendiliğinden öne getirilmez.
    kısa turuncu halka; Zen odakta değilse masaüstü bildirimi.
 3. ✅ (2026-10-19) "Claude'a ver / Geri al" sekme sağ tık menüsünde; ada hangi sekmenin Claude'da olduğunu
    gösterir.
-4. Güvenilirlik: iframe desteği (read_page/tıklama/yazma alt çerçevelerde), `wait_for`
+4. ✅ (2026-10-19) Güvenilirlik: iframe desteği (read_page/tıklama/yazma alt çerçevelerde), `wait_for`
    (metin/öğe görünene, ağ durulana kadar).
 5. Geliştirici ve güvenlik: ağ isteği ayrıntıları (başlıklar, cevap gövdesi), etkinlik
    günlüğü, hassas siteler listesi (yalnız okuma, tıklamada ask_user zorunlu).
