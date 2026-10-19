@@ -12,7 +12,14 @@
       html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0a09; }
       #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: "Inter", sans-serif; color: #f3f3f3; }
       .clip { position: absolute; inset: 0; }
-      .bg { position: absolute; inset: 0; background: radial-gradient(1200px 700px at 50% 40%, #2a1d16 0%, #0b0a09 70%); }
+      .bg { position: absolute; inset: 0; background: #0b0a09; overflow: hidden; }
+      .glow { position: absolute; width: 1400px; height: 1400px; border-radius: 50%; background: radial-gradient(circle, rgba(217, 119, 87, 0.42) 0%, rgba(217, 119, 87, 0.12) 35%, rgba(217, 119, 87, 0) 65%); }
+      .glow.b { background: radial-gradient(circle, rgba(255, 170, 120, 0.22) 0%, rgba(255, 170, 120, 0) 60%); }
+      #main { perspective: 2200px; }
+      .kin { position: absolute; left: 0; top: 0; width: 1920px; text-align: center; opacity: 0; }
+      .kin .lab { display: inline-block; padding: 14px 34px 18px; border-radius: 18px; background: rgba(16, 13, 11, 0.86); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-size: 64px; font-weight: 800; letter-spacing: -2px; color: #fff; }
+      .kin .w { display: inline-block; margin: 0 9px; }
+      .kin b { color: #ff9a72; text-shadow: 0 0 28px rgba(217, 119, 87, 0.75); }
 
       /* title and end */
       .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
@@ -131,14 +138,14 @@
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="33">
-      <div class="bg"></div>
+      <div class="bg"><div class="glow" id="g1" style="left: 260px; top: -300px"></div><div class="glow b" id="g2" style="left: 900px; top: 200px"></div></div>
 
       <!-- 1. title -->
       <section id="title" class="clip" data-start="0" data-duration="3.2" data-track-index="1">
         <div class="card" id="title-in">
           <svg class="spark" id="title-spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
-          <div class="t-big">Claude, in <em>your own</em> Zen browser</div>
-          <div class="t-sub">Your tabs, your logins, real input. You stay in control.</div>
+          <div class="t-big" id="tt1">Your browser. Your logins.</div>
+          <div class="t-big" id="tt2">Now with <em>Claude</em>.</div>
         </div>
       </section>
 
@@ -246,13 +253,14 @@
           <div class="tl a" id="tl8" style="top: 356px">  The heading is green now. ✓</div>
         </div>
 
-        <div class="cap" id="c1">Claude works in <b>its own background tab</b>. You keep yours.</div>
-        <div class="cap" id="c2">Peek at it live, jump in anytime.</div>
-        <div class="cap" id="c3"><b>Real</b> mouse and keyboard input. No WebDriver.</div>
-        <div class="cap" id="c4">Ask mode and hand-offs: <b>you approve</b> what matters.</div>
-        <div class="cap" id="c5"><b>Point</b> at an element and say what to change.</div>
-        <div class="cap" id="c6">Claude edits your code, <b>then checks the page itself</b>.</div>
-        <div class="cap" id="c7"><b>Stop</b> it with one click.</div>
+        <div class="kin" id="c1"><span class="lab">Claude gets <b>its own tab</b>.</span></div>
+        <div class="kin" id="c2"><span class="lab">Peek <b>live</b>. Jump in anytime.</span></div>
+        <div class="kin" id="c3"><span class="lab"><b>Real</b> clicks. <b>Real</b> typing.</span></div>
+        <div class="kin" id="c4"><span class="lab">You approve <b>what matters</b>.</span></div>
+        <div class="kin" id="c4b"><span class="lab">Payment stays <b>yours</b>.</span></div>
+        <div class="kin" id="c5"><span class="lab"><b>Point</b> at it.</span></div>
+        <div class="kin" id="c6"><span class="lab">Claude <b>fixes it</b>. Then <b>checks</b>.</span></div>
+        <div class="kin" id="c7"><span class="lab"><b>Stop</b> anytime.</span></div>
       </section>
 
       <!-- 7. end -->
@@ -272,7 +280,17 @@
       const C = (x, y) => ({ x: 248 + x, y: 8 + y }); // content → window coordinates
       const show = (sel, t, d = 0.25) => tl.to(sel, { opacity: 1, duration: d }, t);
       const hide = (sel, t, d = 0.2) => tl.to(sel, { opacity: 0, duration: d }, t);
-      const cap = (sel, a, b) => { tl.fromTo(sel, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35 }, a); hide(sel, b, 0.25); };
+      // kinetic headline: tilted label pops in, words flip up one by one
+      const cap = (sel, a, b, y = 64) => {
+        tl.set(sel, { y, rotation: -2.5, opacity: 1 }, a);
+        tl.fromTo(`${sel} .lab`, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2)", immediateRender: false }, a);
+        tl.fromTo(`${sel} .w`, { y: 46, opacity: 0, rotationX: -75 }, { y: 0, opacity: 1, rotationX: 0, duration: 0.42, stagger: 0.07, ease: "back.out(1.8)", immediateRender: false }, a + 0.06);
+        tl.to(sel, { opacity: 0, y: y - 24, duration: 0.25 }, b);
+      };
+      // camera: the window moves in 3D; zooms bring the island or a control to the front
+      const cam = (t, v, d = 0.6) => tl.to("#win", { ...v, duration: d, ease: "power3.inOut" }, t);
+      const OV = (rx, ry, x = 0, y = 70, scale = 0.8) => ({ rotationX: rx, rotationY: ry, x, y, scale });
+      const Z = (scale, x, y) => ({ rotationX: 0, rotationY: 0, scale, x, y });
       // island: switch to a state with a given size
       let islState = null;
       const isl = (state, t, w, h = 40) => {
@@ -294,17 +312,38 @@
       };
       const page = (from, to, t) => { if (from) hide(from, t, 0.2); show(to, t + 0.05, 0.25); };
 
+      for (const el of document.querySelectorAll(".kin .lab, #tt1, #tt2")) {
+        const html = el.innerHTML.replace(/<(b|em)>([^<]*)<\/\1>/g, (m, tag, t) => t.split(" ").map((w) => `<${tag}>${w}</${tag}>`).join(" "));
+        el.innerHTML = html.split(/\s+/).filter(Boolean).map((w) => `<span class="w">${w}</span>`).join(" ");
+      }
       gsap.set("#isl", { xPercent: -50 });
       gsap.set(["#ccur", "#ucur"], { x: 1100, y: 640, opacity: 0 });
       gsap.set("#rip", { x: 0, y: 0 });
 
       // 1. title
-      tl.fromTo("#title-in", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.2);
+      tl.fromTo("#title-in", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.1);
+      tl.fromTo("#tt1 .w", { y: 60, opacity: 0, rotationX: -80 }, { y: 0, opacity: 1, rotationX: 0, duration: 0.5, stagger: 0.12, ease: "back.out(1.8)" }, 0.2);
+      tl.fromTo("#tt2 .w", { y: 60, opacity: 0, scale: 0.6 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, stagger: 0.12, ease: "back.out(2.2)" }, 1.15);
+      tl.fromTo("#title-in", { rotation: 0 }, { rotation: -2, duration: 2.6, ease: "none", immediateRender: false }, 0.1);
+      tl.to("#g1", { x: 360, y: 260, duration: 33, ease: "none" }, 0);
+      tl.to("#g2", { x: -520, y: -120, duration: 33, ease: "none" }, 0);
       tl.fromTo("#title-spark", { rotation: 0 }, { rotation: 180, duration: 3, ease: "none" }, 0);
       tl.to("#title-in", { opacity: 0, duration: 0.4 }, 2.75);
 
       // 2. user reads docs; Claude works in a background tab
-      tl.fromTo("#win", { opacity: 0, y: 30, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, 2.85);
+      tl.fromTo("#win", { opacity: 0, rotationX: 30, rotationY: -24, scale: 0.5, y: 240 }, { opacity: 1, ...OV(8, -10), duration: 1.0, ease: "power3.out" }, 2.85);
+      cam(5.6, Z(1.55, -186, 475));
+      cam(7.4, OV(6, 9), 0.7);
+      cam(9.8, OV(4, 3));
+      cam(10.9, Z(1.35, 280, 339));
+      cam(13.6, Z(1.45, -174, 426), 0.5);
+      cam(15.7, Z(1.12, -288, 60));
+      cam(18.4, OV(6, -8), 0.7);
+      cam(19.4, OV(5, 8));
+      cam(21.4, Z(1.45, -174, 398), 0.5);
+      cam(23.3, { rotationX: 4, rotationY: 14, scale: 0.72, x: -300, y: 70 }, 0.7);
+      cam(27.3, OV(4, 0), 0.45);
+      cam(27.8, Z(1.6, -192, 546), 0.45);
       tab("docs", 2.85);
       show("#p-docs", 2.85, 0.01);
       show("#ucur", 3.0, 0.2);
@@ -345,8 +384,9 @@
       // 4. ask mode, then the payment is handed to the user
       move("#ccur", C(428, 627), 13.4, 0.5);
       isl("#i-perm", 13.9, 540, 124);
-      cap("#c4", 14.0, 19.0);
-      move("#ucur", { x: 1203, y: 120 }, 14.3, 0.8);
+      cap("#c4", 14.0, 15.6);
+      cap("#c4b", 16.1, 18.9, 880);
+      move("#ucur", { x: 1122, y: 117 }, 14.3, 0.8);
       press("#ucur", 15.3);
       isl("#i-type", 15.5, 380);
       ripple(C(428, 627), 15.6);
@@ -381,7 +421,7 @@
       isl("#i-compose", 21.65, 540, 158);
       hide("#note-ph", 21.95, 0.05);
       type("#note", "Make this heading green", 21.95, 0.95);
-      move("#ucur", { x: 1216, y: 151 }, 22.6, 0.45);
+      move("#ucur", { x: 1102, y: 149 }, 22.6, 0.45);
       press("#ucur", 23.15);
       isl("#i-sent", 23.25, 230);
       hide(["#pf", "#pl"], 23.3, 0.2);
