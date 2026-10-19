@@ -9,6 +9,12 @@ const XHTML = "http://www.w3.org/1999/xhtml";
 const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
 
+// dönen yıldız: Claude'un "çalışıyor" işareti
+const SPARK = "data:image/svg+xml," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`
+);
+
+// Dynamic Island gibi: koyu, tam yuvarlak hap; her temada aynı (koyu hap açık temada da okunur)
 const CSS = `
   #${ID} {
     position: fixed;
@@ -18,83 +24,111 @@ const CSS = `
     align-items: center;
     gap: 8px;
     box-sizing: border-box;
-    max-width: min(560px, 80vw);
-    min-height: 36px;
-    padding: 5px 5px 5px 12px;
-    border-radius: 14px;
-    /* Zen toast'ı gibi tema rengi, ama açık tema renklerinde (ör. gri) beyaz yazı okunmuyordu:
-       rengin koyu (açık temada açık) bir tonu, yazı her temada okunur */
-    background: linear-gradient(
-      to bottom,
-      light-dark(color-mix(in srgb, var(--zen-primary-color) 35%, #f6f6f6), color-mix(in srgb, var(--zen-primary-color) 40%, #1c1c1c)),
-      light-dark(color-mix(in srgb, var(--zen-primary-color) 25%, #ececec), color-mix(in srgb, var(--zen-primary-color) 28%, #121212))
-    );
-    color: light-dark(#1a1a1a, #f2f2f2);
-    border: 1px solid color-mix(in srgb, var(--zen-primary-color) 30%, transparent);
-    box-shadow: light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4)) 0 0 22px 2px;
+    height: 34px;
+    max-width: min(520px, 70vw);
+    padding: 0 5px 0 11px;
+    border-radius: 999px;
+    background: rgba(14, 14, 14, 0.94);
+    color: #f3f3f3;
+    /* iç kenar: koyu sayfalarda (ör. YouTube başlığı) hap arka plana karışmasın */
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
     font: menu;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12.5px;
     transform-origin: top center;
-    transition: opacity 0.2s ease, scale 0.2s ease, translate 0.2s ease;
+    transition:
+      opacity 0.2s ease,
+      scale 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.25),
+      translate 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.25);
     -moz-window-dragging: no-drag;
 
     &[hidden] {
       display: flex !important;
       opacity: 0;
-      scale: 0.92;
-      translate: -50% -8px;
+      scale: 0.6;
+      translate: -50% -12px;
       pointer-events: none;
     }
 
-    & .dot {
+    & .spark {
       flex: none;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #d97757;
-      animation: zen-mcp-pulse 1.2s ease-in-out infinite;
+      width: 14px;
+      height: 14px;
+      background: url("${SPARK}") center / contain no-repeat;
+      animation: zen-mcp-spin 2.4s linear infinite;
     }
-    &[state="stopped"] .dot {
+    &[state="stopped"] .spark {
       animation: none;
-      background: color-mix(in srgb, currentColor 45%, transparent);
+      filter: grayscale(1);
+      opacity: 0.5;
     }
 
     & .info {
       display: flex;
+      align-items: center;
       gap: 6px;
       min-width: 0;
       cursor: pointer;
     }
-    & .text {
+    & .favicon {
+      flex: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+
+      &:not([src]) { display: none; }
+    }
+    & .host {
+      flex: none;
+      opacity: 0.5;
+    }
+    & .action {
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
       font-weight: 500;
-      opacity: 0.75;
     }
 
     & button {
       appearance: none;
       flex: none;
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
       margin: 0;
-      padding: 5px 10px;
+      padding: 0;
       border: none;
-      border-radius: 9px;
-      background: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.1));
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
       color: inherit;
       font: inherit;
       font-size: 12px;
+      font-weight: 600;
       cursor: pointer;
+      transition: background 0.15s ease;
 
-      &:hover {
-        background: light-dark(rgba(0, 0, 0, 0.13), rgba(255, 255, 255, 0.18));
+      &::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        background: currentColor;
       }
+      &:hover { background: rgba(255, 255, 255, 0.2); }
+    }
+    &[state="stopped"] button {
+      width: auto;
+      padding: 0 12px;
+      background: #d97757;
+      color: #fff;
+
+      &::before { display: none; }
+      &:hover { background: #e08667; }
     }
   }
 
-  @keyframes zen-mcp-pulse {
-    50% { opacity: 0.35; }
+  @keyframes zen-mcp-spin {
+    to { rotate: 1turn; }
   }
 `;
 
@@ -127,17 +161,21 @@ export class Island {
     const el = doc.createElementNS(XHTML, "div");
     el.id = ID;
     el.hidden = true;
-    const dot = doc.createElementNS(XHTML, "span");
-    dot.className = "dot";
-    const info = doc.createElementNS(XHTML, "span");
-    info.className = "info";
-    const name = doc.createElementNS(XHTML, "span");
-    name.textContent = "Claude";
-    const text = doc.createElementNS(XHTML, "span");
-    text.className = "text";
-    info.append(name, text);
+    const span = cls => {
+      const node = doc.createElementNS(XHTML, "span");
+      node.className = cls;
+      return node;
+    };
+    const spark = span("spark");
+    spark.title = "Claude";
+    const info = span("info");
+    const favicon = doc.createElementNS(XHTML, "img");
+    favicon.className = "favicon";
+    const host = span("host");
+    const text = span("action");
+    info.append(favicon, host, text);
     const button = doc.createElementNS(XHTML, "button");
-    el.append(dot, info, button);
+    el.append(spark, info, button);
     doc.documentElement.append(el);
 
     info.addEventListener("click", () => {
@@ -159,7 +197,7 @@ export class Island {
     const onResize = () => this.#place(win);
     win.addEventListener("resize", onResize);
 
-    this.#windows.set(win, { el, text, button, onKey, onResize });
+    this.#windows.set(win, { el, favicon, host, text, button, onKey, onResize });
     this.#render();
   }
 
@@ -200,13 +238,13 @@ export class Island {
   stopped() {
     this.#clearTimeout(this.#hideTimer);
     this.#state = "stopped";
-    this.#text = "durduruldu";
+    this.#text = "";
     this.#render();
   }
 
   resumed() {
     this.#state = "working";
-    this.#text = "devam edebilir";
+    this.#text = "devam ediyor";
     this.#render();
     this.#clearTimeout(this.#hideTimer);
     this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);
@@ -220,13 +258,22 @@ export class Island {
 
   // Durdurulmuşken her pencerede; çalışırken yalnız işlem yapılan sekmenin penceresinde
   #render() {
-    const owner = this.#browser?.deref()?.ownerDocument?.defaultView;
-    for (const [win, { el, text, button }] of this.#windows) {
-      const visible = this.#state === "stopped" || (this.#state === "working" && win === owner);
+    const browser = this.#browser?.deref();
+    const owner = browser?.ownerDocument?.defaultView;
+    const stopped = this.#state === "stopped";
+    // "seaskablo.com — tıklıyor": site soluk, işlem belirgin; sekmenin favicon'u başta
+    const [siteName, action] = this.#text.includes(" — ") ? this.#text.split(" — ") : ["", this.#text];
+    let icon = null;
+    try { icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser)); } catch {}
+    for (const [win, { el, favicon, host, text, button }] of this.#windows) {
+      const visible = stopped || (this.#state === "working" && win === owner);
       el.setAttribute("state", this.#state);
-      text.textContent = this.#text;
-      button.textContent = this.#state === "stopped" ? "Devam et" : "■ Durdur";
-      button.title = this.#state === "stopped" ? "" : "Claude'u durdur (Ctrl+Shift+Esc)";
+      host.textContent = stopped ? "" : siteName;
+      text.textContent = stopped ? "Claude durduruldu" : action;
+      if (icon && !stopped) favicon.src = icon;
+      else favicon.removeAttribute("src");
+      button.textContent = stopped ? "Devam et" : "";
+      button.title = stopped ? "" : "Claude'u durdur (Ctrl+Shift+Esc)";
       if (visible) this.#place(win);
       el.hidden = !visible;
     }
