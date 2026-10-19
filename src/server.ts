@@ -121,6 +121,16 @@ register(
 );
 
 register(
+  "handle_dialog",
+  "Answer a JavaScript dialog (alert, confirm, prompt) open in a tab. While one is open the page is frozen, and other tools report it instead of acting. accept: true presses OK, false presses Cancel; text fills a prompt before accepting.",
+  {
+    tabId,
+    accept: z.boolean(),
+    text: z.string().optional().describe("Text to enter into a prompt dialog."),
+  },
+);
+
+register(
   "read_console_messages",
   "Read the page's console output (console.log/info/warn/error and uncaught JS errors) since the page loaded; no need to start listening first. Use pattern to filter, since output can be verbose.",
   {

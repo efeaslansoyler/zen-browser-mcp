@@ -374,15 +374,57 @@ function logError(where, e) {
 
     // ---- içerik süreci (actor) ----
 
+    // ---- sayfa diyalogları (alert/confirm/prompt) ----
+    //
+    // Açık bir diyalog sayfanın JS'ini durdurur: sayfaya giden istek cevapsız kalır. Bu yüzden
+    // istekten önce ve beklerken diyalog aranır; varsa hata yerine bilgi dönülür (DialogOpen),
+    // Claude handle_dialog ile cevaplar.
+    class DialogOpen extends Error {}
+
+    function openDialog(browser) {
+      const gBrowser = browser.ownerDocument.defaultView.gBrowser;
+      let dialogs;
+      try { dialogs = gBrowser.getTabDialogBox(browser).getContentDialogManager()._dialogs; } catch { return null; }
+      for (const dialog of dialogs ?? []) {
+        const win = dialog._frame?.contentWindow;
+        if (win?.Dialog?.args) return win;
+      }
+      return null;
+    }
+
+    function describeDialog(win) {
+      const { promptType, text, value } = win.Dialog.args;
+      const extra = promptType.startsWith("prompt") && value ? ` (varsayılan: "${value}")` : "";
+      return `Sayfada açık ${promptType} diyaloğu: "${text}"${extra}. handle_dialog ile kabul et veya iptal et.`;
+    }
+
+    function throwIfDialog(browser) {
+      const win = openDialog(browser);
+      if (win) throw new DialogOpen(describeDialog(win));
+    }
+
     async function query(browser, name, data, timeout = 30000) {
       const wg = browser.browsingContext?.currentWindowGlobal;
       if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
-      const result = await Promise.race([
-        wg.getActor("ZenMcp").sendQuery(name, data),
-        sleep(timeout).then(() => { throw new Error(`Sayfa ${timeout / 1000} sn içinde cevap vermedi.`); }),
-      ]);
-      if (result?.error) throw new Error(result.error);
-      return result;
+      throwIfDialog(browser);
+      let done = false;
+      const watchDialog = (async () => {
+        while (!done) {
+          await sleep(250);
+          if (!done) throwIfDialog(browser);
+        }
+      })();
+      try {
+        const result = await Promise.race([
+          wg.getActor("ZenMcp").sendQuery(name, data),
+          watchDialog,
+          sleep(timeout).then(() => { throw new Error(`Sayfa ${timeout / 1000} sn içinde cevap vermedi.`); }),
+        ]);
+        if (result?.error) throw new Error(result.error);
+        return result;
+      } finally {
+        done = true;
+      }
     }
 
     // ---- tool'lar: hepsi MCP içerik dizisi döner ----
@@ -425,9 +467,11 @@ function logError(where, e) {
         switch (args.action) {
           case "screenshot": {
             const shot = await screenshot(browser);
+            // diyalog tarayıcı arayüzünde çizilir, sayfanın görüntüsünde çıkmaz
+            const dialog = openDialog(browser);
             return [
               { type: "image", data: shot.data, mimeType: "image/jpeg" },
-              { type: "text", text: `${shot.width}x${shot.height}, tabId ${browser.browserId}` },
+              { type: "text", text: `${shot.width}x${shot.height}, tabId ${browser.browserId}${dialog ? `\n${describeDialog(dialog)}` : ""}` },
             ];
           }
           case "left_click":
@@ -493,6 +537,22 @@ function logError(where, e) {
       async form_input({ tabId, ref, value }) {
         const { value: result } = await query(browserFor(tabId), "form_input", { ref, value });
         return text(result);
+      },
+
+      async handle_dialog({ tabId, accept, text: answer }) {
+        const browser = browserFor(tabId);
+        const win = openDialog(browser);
+        if (!win) return text("Açık diyalog yok.");
+        const { promptType, text: message } = win.Dialog.args;
+        if (answer != null && accept) {
+          const box = promptType === "promptPassword" ? win.Dialog.ui.password1Textbox : win.Dialog.ui.loginTextbox;
+          box.value = String(answer);
+        }
+        const dialog = win.document.querySelector("dialog");
+        if (accept) dialog.acceptDialog();
+        else dialog.cancelDialog();
+        await sleep(200);
+        return text(`${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`);
       },
 
       read_network_requests({ tabId, urlPattern, limit = 100, clear }) {
@@ -584,7 +644,10 @@ function logError(where, e) {
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
         message = { ok: true, content: await fn(args) };
       } catch (e) {
-        message = { ok: false, error: String(e?.message ?? e) };
+        // diyalog bir hata değil, Claude'un bilmesi gereken durum
+        message = e instanceof DialogOpen
+          ? { ok: true, content: text(e.message) }
+          : { ok: false, error: String(e?.message ?? e) };
       }
       try { reply(transport, output, message); } catch (e) { logError("cevap", e); }
     }
