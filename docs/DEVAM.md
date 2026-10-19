@@ -127,6 +127,8 @@ Davranış notları:
 
 ## Sıradaki
 
+0. **Zen'den öğe seçip Claude'a iş verme** (Claude Code channels ile; ayrıntılar `PLAN.md`
+   sonunda). Efe'nin fikri, bir sonraki oturumda ilk iş.
 1. **Faz 4:** iframe desteği (`read_page`/tıklama/yazma alt çerçevelerde; şu an yalnız üst
    çerçeve) ve `wait_for` (metin/öğe görünene, ağ durulana kadar).
 2. **Faz 5:** ağ isteği ayrıntıları (başlıklar, cevap gövdesi), etkinlik günlüğü, hassas

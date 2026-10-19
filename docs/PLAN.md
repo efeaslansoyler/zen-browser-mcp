@@ -38,3 +38,37 @@ kendiliğinden öne getirilmez.
    günlüğü, hassas siteler listesi (yalnız okuma, tıklamada ask_user zorunlu).
 
 İsteğe bağlı, sonra: Quickshell barında Claude göstergesi.
+
+## Sıradaki: Zen'den öğe seçip Claude'a iş verme (Efe'nin fikri, 2026-10-19)
+
+Faz 4'ten önce yapılacak. Kullanıcı "ana sayfadaki şu kısmı düzelt" diye tarif etmek yerine
+Zen'de öğeyi seçer, notunu yazar, istek Claude Code oturumuna kendiliğinden düşer.
+
+- **Taşıma, Claude Code channels** (araştırma önizlemesi;
+  https://code.claude.com/docs/en/channels-reference.md):
+  - `src/server.ts` `capabilities.experimental['claude/channel'] = {}` ve `instructions` bildirir,
+    olayı `notifications/claude/channel` ile gönderir (`{ content, meta }`). Claude'a
+    `<channel source="zen" …>` olarak ulaşır.
+  - McpServer'da alttaki Server: `server.server.notification(...)`.
+  - Özel kanal izin listesinde değil: Claude Code
+    `claude --dangerously-load-development-channels server:zen` ile açılmalı (her açılışta
+    uyarı). Bunun için `claude-zen` alias'ı.
+- **Zen → Node itme:** şu an bağlantı başına tek istek var. Node, köprüye kalıcı bir
+  "subscribe" bağlantısı açar, Zen olayları bu bağlantıya satır satır yazar. Birden fazla
+  oturum varsa olay, Zen'i en son kullanan oturuma gider.
+- **Yedek:** kanal açık değilse (abone yoksa) seçim ve not panoya kopyalanır (`wl-copy`),
+  bildirim gelir: "Claude Code'a yapıştır".
+- **Seçim arayüzü:**
+  - Sayfa sağ tık menüsünde "Claude'a göster…" (tıklanan öğe).
+  - Seçici modu (kısayol, ör. Ctrl+Shift+E): fareyle gezdikçe turuncu çerçeve, tıklayınca
+    seçim, ok tuşlarıyla üst/alt öğe, Esc iptal.
+  - Seçimden sonra ada "Ne yapılsın?" metin kutusunu açar; Enter gönderir, ada "gönderildi ✓"
+    der.
+  - Sonra: birden fazla öğe seçme.
+- **Gönderilen bağlam:**
+  - not, sayfa URL'si, CSS seçici yolu, rol, ad, metin
+  - kısaltılmış outerHTML (~1500 karakter)
+  - önemli hesaplanmış stiller (yazı tipi ve boyutu, renkler, padding/margin, display, boyut)
+  - öğenin kırpılmış ekran görüntüsü (dosya yolu; Claude `Read` ile bakar)
+  - React/Next.js dev'de bileşen zinciri (fiber `_debugOwner` adları, ör.
+    `HeroSection > CTAButton`): repoda doğru dosyayı bulmak için
