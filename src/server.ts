@@ -24,7 +24,7 @@ function register(name: string, description: string, inputSchema: z.ZodRawShape,
 
 register(
   "tabs_context_mcp",
-  "Get the tabs Claude controls in Zen. Call this first in a browser task to get valid tab IDs. Tabs the user opened themselves are not listed.",
+  "Get the tabs Claude controls in Zen: the ones it opened and the ones the user handed over from the tab context menu (givenByUser: true; continue from where the user left off). Call this first in a browser task to get valid tab IDs. Other user tabs are not listed and cannot be used; the user can take a tab back at any time.",
   {
     createIfEmpty: z
       .boolean()

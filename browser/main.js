@@ -87,15 +87,22 @@ function logError(where, e) {
       return tabs;
     }
 
+    // Yalnız Claude'daki sekmeler (Claude'un açtıkları ve kullanıcının verdikleri): kullanıcının
+    // kendi sekmesine, numarası bilinse de dokunulmaz
     function browserFor(tabId) {
       const tab = findTab(tabId);
-      if (!tab) throw new Error(`Sekme ${tabId} bulunamadı. tabs_context_mcp ile güncel sekmeleri al.`);
+      if (tab) restoreMark(tab);
+      if (!tab || !state.tabs.has(tabId)) {
+        throw new Error(`Sekme ${tabId} Claude'da değil (kapanmış ya da kullanıcı geri almış olabilir). tabs_context_mcp ile güncel sekmeleri al.`);
+      }
       return tab.linkedBrowser;
     }
 
     function describeTab(tab) {
       const b = tab.linkedBrowser;
-      return { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
+      const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
+      if (tab.getAttribute(MARK) === "user") info.givenByUser = true;
+      return info;
     }
 
     // Claude in Chrome gibi kullanıcının penceresinde, arka planda: girdiler sayfa sürecinden
@@ -116,20 +123,34 @@ function logError(where, e) {
     const MARK = "zen-mcp";
     const { SessionStore } = ChromeUtils.importESModule("moz-src:///browser/components/sessionstore/SessionStore.sys.mjs");
 
-    function mark(tab) {
-      tab.setAttribute(MARK, "true");
+    // origin: "true" Claude açtı, "user" kullanıcı sağ tık menüsünden verdi
+    function mark(tab, origin = "true") {
+      tab.setAttribute(MARK, origin);
       state.tabs.add(tab.linkedBrowser.browserId);
-      try { SessionStore.setCustomTabValue(tab, MARK, "true"); } catch {}
+      try { SessionStore.setCustomTabValue(tab, MARK, origin); } catch {}
+    }
+
+    // kullanıcı sekmeyi geri aldı: işaret, takip ve kayıtlar silinir; süren işlem kesilir
+    function unmark(tab) {
+      const browser = tab.linkedBrowser;
+      const id = browser.browserId;
+      tab.removeAttribute(MARK);
+      state.tabs.delete(id);
+      state.scale.delete(id);
+      network.delete(id);
+      try { SessionStore.deleteCustomTabValue(tab, MARK); } catch {}
+      cancelAsk(browser, "taken_back");
+      island?.release(browser);
     }
 
     function restoreMark(tab) {
-      let marked = false;
-      try { marked = SessionStore.getCustomTabValue(tab, MARK) === "true"; } catch {}
-      if (!marked || tab.hasAttribute(MARK)) return;
+      let origin = "";
+      try { origin = SessionStore.getCustomTabValue(tab, MARK); } catch {}
+      if ((origin !== "true" && origin !== "user") || tab.hasAttribute(MARK)) return;
       // geri yüklenen sekme tembel: <browser> ilk kullanıma kadar yok, browserId 0.
       // Öğeyi şimdi oluştur (sayfa yüklenmez) ki takip edilebilir bir kimliği olsun
       if (!tab.linkedPanel) tab.ownerDocument.defaultView.gBrowser.insertBrowser(tab);
-      mark(tab);
+      mark(tab, origin);
     }
 
     function restoreMarks() {
@@ -152,6 +173,7 @@ function logError(where, e) {
     const onWindowReady = win => {
       watchWindow(win);
       island?.attach(win);
+      attachMenu(win);
       for (const delay of [0, 2000, 5000, 10000, 20000]) {
         setTimeout(() => {
           try { restoreMarks(); } catch (e) { logError("restoreMarks", e); }
@@ -178,6 +200,51 @@ function logError(where, e) {
       }
     `));
     const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
+
+    // ---- "Claude'a ver / Claude'dan geri al": sekme sağ tık menüsünde ----
+
+    const MENU_ID = "zen-mcp-context-give";
+    const MENU_ICON = "data:image/svg+xml," + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`
+    );
+
+    // menünün açıldığı sekme; o sekme çoklu seçimin parçasıysa seçili sekmelerin hepsi
+    function contextTabs(win) {
+      const tab = win.TabContextMenu?.contextTab;
+      if (!tab) return [];
+      return tab.multiselected ? win.gBrowser.selectedTabs : [tab];
+    }
+
+    function attachMenu(win) {
+      const menu = win.document.getElementById("tabContextMenu");
+      if (!menu || win.document.getElementById(MENU_ID)) return;
+      const item = win.document.createXULElement("menuitem");
+      item.id = MENU_ID;
+      item.className = "menuitem-iconic";
+      item.setAttribute("image", MENU_ICON);
+      // Firefox'un yapay zekâ bölümünün sonuna; yoksa menünün sonuna
+      const anchor = win.document.getElementById("context_aiSeparator");
+      menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
+      const onShowing = event => {
+        if (event.target !== menu) return;
+        const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
+        item.hidden = !tabs.length;
+        const allGiven = tabs.length && tabs.every(t => t.hasAttribute(MARK));
+        item.setAttribute("label", allGiven ? "Claude'dan geri al" : "Claude'a ver");
+      };
+      const onCommand = () => {
+        const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
+        if (tabs.every(t => t.hasAttribute(MARK))) tabs.forEach(unmark);
+        else for (const tab of tabs) if (!tab.hasAttribute(MARK)) mark(tab, "user");
+      };
+      menu.addEventListener("popupshowing", onShowing);
+      item.addEventListener("command", onCommand);
+      menuCleanups.set(win, () => {
+        menu.removeEventListener("popupshowing", onShowing);
+        item.remove();
+      });
+    }
+    const menuCleanups = new Map();
 
     // ---- ağ kaydı: Claude'un sekmelerindeki HTTP istekleri, sekme açıldığından beri ----
 
@@ -548,6 +615,7 @@ function logError(where, e) {
           if (done) return;
           throwIfDialog(browser);
           if (browser.browsingContext?.currentWindowGlobal !== wg) throw new PageGone("Sayfa değişti.");
+          if (!state.tabs.has(browser.browserId)) throw new Error("Kullanıcı bu sekmeyi Claude'dan geri aldı; artık bu sekmede işlem yapamazsın.");
         }
       })();
       try {
@@ -704,6 +772,7 @@ function logError(where, e) {
           timeout: `Kullanıcı ${timeout} sn içinde yanıt vermedi.`,
           navigated: "Sayfa değişti (kullanıcı bir işlem yapmış olabilir); screenshot ile kontrol et.",
           replaced: "Yerine yeni bir ask_user geldi.",
+          taken_back: "Kullanıcı bu sekmeyi Claude'dan geri aldı; artık bu sekmede işlem yapamazsın.",
         }[result] ?? String(result));
       },
 
@@ -833,7 +902,7 @@ function logError(where, e) {
         let shown = false;
         if (tools[tool]) {
           if (state.paused) throw new Stopped();
-          const browser = args.tabId != null ? findTab(args.tabId)?.linkedBrowser : null;
+          const browser = state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
           if (browser) {
             island?.working(browser, describeAction(tool, args, browser));
             activeCalls++;
@@ -889,7 +958,10 @@ function logError(where, e) {
         { stop: stopClaude, resume: resumeClaude, goTo: goToTab, answer: (browser, result) => cancelAsk(browser, result) },
         { setTimeout, clearTimeout }
       );
-      for (const win of browserWindows()) island.attach(win);
+      for (const win of browserWindows()) {
+        island.attach(win);
+        attachMenu(win);
+      }
       if (state.paused) island.stopped();
       for (const topic of NETWORK_TOPICS) Services.obs.addObserver(networkObserver, topic);
       restoreMarks();
@@ -921,6 +993,10 @@ function logError(where, e) {
       try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
       try { island?.destroy(); } catch {}
       island = null;
+      for (const cleanup of menuCleanups.values()) {
+        try { cleanup(); } catch {}
+      }
+      menuCleanups.clear();
       for (const topic of NETWORK_TOPICS) {
         try { Services.obs.removeObserver(networkObserver, topic); } catch {}
       }

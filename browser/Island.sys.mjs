@@ -350,6 +350,15 @@ export class Island {
     this.idle();
   }
 
+  // sekme artık Claude'da değil (kullanıcı geri aldı): onu gösteriyorsa gizlen
+  release(browser) {
+    if (this.#state === "stopped" || this.#browser?.deref() !== browser) return;
+    this.#clearTimeout(this.#hideTimer);
+    this.#state = "hidden";
+    this.#browser = null;
+    this.#render();
+  }
+
   stopped() {
     this.#clearTimeout(this.#hideTimer);
     this.#state = "stopped";
