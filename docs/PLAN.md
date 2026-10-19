@@ -30,7 +30,7 @@ kendiliğinden öne getirilmez.
    stil; canlı durum metni; Durdur/Devam ve kısayol.
 2. ✅ (2026-10-19) ask_user ve diyaloglar adaya taşınır (sekme öne getirilmez); sayfada tıklanan noktada
    kısa turuncu halka; Zen odakta değilse masaüstü bildirimi.
-3. "Claude'a ver / Geri al" sekme sağ tık menüsünde; ada hangi sekmenin Claude'da olduğunu
+3. ✅ (2026-10-19) "Claude'a ver / Geri al" sekme sağ tık menüsünde; ada hangi sekmenin Claude'da olduğunu
    gösterir.
 4. Güvenilirlik: iframe desteği (read_page/tıklama/yazma alt çerçevelerde), `wait_for`
    (metin/öğe görünene, ağ durulana kadar).
