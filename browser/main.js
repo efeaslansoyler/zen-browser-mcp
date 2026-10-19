@@ -36,6 +36,9 @@ function logError(where, e) {
     const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
     const dir = zenMcpDir;
+    // Arayüz dili: tarayıcı Türkçeyse Türkçe, değilse İngilizce. Claude'a giden mesajlar
+    // (hatalar, tool sonuçları) hep İngilizce.
+    const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
     const dirURI = Services.io.newFileURI(localFile(dir)).spec.replace(/\/?$/, "/");
     const version = (globalThis.zenMcpVersion = (globalThis.zenMcpVersion || 0) + 1);
     const socketPath = `${zenMcpRuntimeDir()}/${zenMcpApp}.sock`;
@@ -100,7 +103,7 @@ function logError(where, e) {
       const tab = findTab(tabId);
       if (tab) restoreMark(tab);
       if (!tab || !state.tabs.has(tabId)) {
-        throw new Error(`Sekme ${tabId} Claude'da değil (kapanmış ya da kullanıcı geri almış olabilir). tabs_context_mcp ile güncel sekmeleri al.`);
+        throw new Error(`Tab ${tabId} is not Claude's (closed, or the user took it back). Use tabs_context_mcp for current tabs.`);
       }
       return tab.linkedBrowser;
     }
@@ -116,7 +119,7 @@ function logError(where, e) {
     // gittiği için sekmenin seçili olması gerekmez, kullanıcının görünümü değişmez
     function createTab() {
       const win = Services.wm.getMostRecentWindow("navigator:browser");
-      if (!win) throw new Error("Açık Zen penceresi yok.");
+      if (!win) throw new Error("No browser window is open.");
       const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true });
       mark(tab);
       return tab;
@@ -237,7 +240,7 @@ function logError(where, e) {
       const modeItem = win.document.createXULElement("menuitem");
       modeItem.id = MENU_ID + "-mode";
       modeItem.setAttribute("type", "checkbox");
-      modeItem.setAttribute("label", "Claude her işlemde izin istesin");
+      modeItem.setAttribute("label", L("Claude asks before every action", "Claude her işlemde izin istesin"));
       menu.insertBefore(modeItem, item.nextSibling);
       modeItem.addEventListener("command", toggleMode);
       const onShowing = event => {
@@ -245,7 +248,7 @@ function logError(where, e) {
         const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
         item.hidden = !tabs.length;
         const allGiven = tabs.length && tabs.every(t => t.hasAttribute(MARK));
-        item.setAttribute("label", allGiven ? "Claude'dan geri al" : "Claude'a ver");
+        item.setAttribute("label", allGiven ? L("Take back from Claude", "Claude'dan geri al") : L("Give to Claude", "Claude'a ver"));
         modeItem.setAttribute("checked", readConfig().mode === "ask");
       };
       const onCommand = () => {
@@ -272,7 +275,7 @@ function logError(where, e) {
     const lastUse = (globalThis.zenMcpLastUse ||= new Map()); // session → son tool çağrısı
 
     function subscribe({ session, cwd }, transport, output) {
-      if (!session) throw new Error("session gerekli.");
+      if (!session) throw new Error("session is required.");
       const old = subscribers.get(session);
       if (old) try { old.transport.close(Cr.NS_OK); } catch {}
       const name = String(cwd ?? "").split("/").filter(Boolean).pop() || "Claude Code";
@@ -362,7 +365,7 @@ function logError(where, e) {
         if (!info || info.cancelled) endPick();
         else await composePick(current, info);
       } catch (e) {
-        logError("seçim", e);
+        logError("pick", e);
         if (pick === current) endPick();
       }
     }
@@ -370,7 +373,7 @@ function logError(where, e) {
     async function composePick(current, info) {
       current.info = info;
       current.shot = await elementShot(current.browser, info).catch(e => {
-        logError("seçim görüntüsü", e);
+        logError("pick screenshot", e);
         return null;
       });
       if (pick !== current) return;
@@ -400,7 +403,9 @@ function logError(where, e) {
       state.pickedTabs.add(current.browser.browserId);
       if (pick !== current) return;
       endPick({ keepIsland: true });
-      island?.sent(sent ? `${target.name} oturumuna gönderildi ✓` : "Panoya kopyalandı, Claude Code'a yapıştır");
+      island?.sent(sent
+        ? L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
+        : L("Copied, paste it into Claude Code", "Panoya kopyalandı, Claude Code'a yapıştır"));
     }
 
     // Claude'a giden metin; Claude Code'da <channel source="zen" …> gövdesi olur
@@ -481,7 +486,7 @@ function logError(where, e) {
       item.id = PAGE_MENU_ID;
       item.className = "menuitem-iconic";
       item.setAttribute("image", MENU_ICON);
-      item.setAttribute("label", "Claude'a göster…");
+      item.setAttribute("label", L("Show to Claude…", "Claude'a göster…"));
       // "İncele"nin üstüne; yoksa menünün sonuna
       const anchor = doc.getElementById("inspect-separator");
       menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
@@ -596,7 +601,7 @@ function logError(where, e) {
       try {
         channel[visit]({
           visitHeader(name, value) {
-            out.push([name.toLowerCase(), SECRET_HEADERS.has(name.toLowerCase()) ? "[gizli]" : value]);
+            out.push([name.toLowerCase(), SECRET_HEADERS.has(name.toLowerCase()) ? "[hidden]" : value]);
           },
         });
       } catch {}
@@ -609,7 +614,7 @@ function logError(where, e) {
         const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
         if (!stream || !(stream instanceof Ci.nsISeekableStream)) return undefined;
         const size = stream.available();
-        if (!size || size > MAX_UPLOAD_TEXT) return size ? `(${size} bayt, gösterilmedi)` : undefined;
+        if (!size || size > MAX_UPLOAD_TEXT) return size ? `(${size} bytes, not shown)` : undefined;
         const pos = stream.tell();
         stream.seek(Ci.nsISeekableStream.NS_SEEK_SET, 0);
         const raw = NetUtil.readInputStreamToString(stream, size);
@@ -670,31 +675,31 @@ function logError(where, e) {
     // read_network_requests id ile: tek isteğin ayrıntısı
     async function requestDetails(browser, r, maxChars) {
       const win = browser.ownerDocument.defaultView;
-      const lines = [`#${r.id} ${r.method} ${r.error ?? r.status ?? "bekliyor"} ${r.url}`];
-      const extra = [r.type, r.mime, r.cached && "önbellek", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
+      const lines = [`#${r.id} ${r.method} ${r.error ?? r.status ?? "pending"} ${r.url}`];
+      const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
       if (extra) lines[0] += `  (${extra})`;
-      const headers = list => list?.length ? list.map(([k, v]) => `  ${k}: ${v}`).join("\n") : "  (yok)";
-      lines.push("", "İstek başlıkları:", headers(r.requestHeaders));
-      if (r.requestBody) lines.push("", "İstek gövdesi:", decode(win, r.requestBody, maxChars));
-      lines.push("", "Cevap başlıkları:", headers(r.responseHeaders));
-      if (r.body === undefined) lines.push("", "Cevap gövdesi: kaydedilmedi (yalnız fetch/XHR ve belge isteklerinde).");
-      else if (r.body === null) lines.push("", "Cevap gövdesi: bellek sınırı yüzünden silindi.");
+      const headers = list => list?.length ? list.map(([k, v]) => `  ${k}: ${v}`).join("\n") : "  (none)";
+      lines.push("", "Request headers:", headers(r.requestHeaders));
+      if (r.requestBody) lines.push("", "Request body:", decode(win, r.requestBody, maxChars));
+      lines.push("", "Response headers:", headers(r.responseHeaders));
+      if (r.body === undefined) lines.push("", "Response body: not recorded (only for fetch/XHR and documents).");
+      else if (r.body === null) lines.push("", "Response body: dropped (memory limit).");
       else if (!/json|text|xml|javascript|html|csv|graphql|x-www-form-urlencoded/i.test(r.mime ?? "")) {
-        lines.push("", `Cevap gövdesi: ikili veri (${r.mime ?? "türü bilinmiyor"}, ${r.bodySize} bayt).`);
+        lines.push("", `Response body: binary (${r.mime ?? "unknown type"}, ${r.bodySize} bytes).`);
       } else {
-        const cut = r.bodySize > r.body.length ? ` (ilk ${r.body.length} bayt kaydedildi)` : "";
+        const cut = r.bodySize > r.body.length ? `, first ${r.body.length} bytes kept` : "";
         const encoding = r.responseHeaders?.find(([k]) => k === "content-encoding")?.[1];
         let raw = r.body;
         let note = "";
         if (encoding && encoding !== "identity") {
           try {
             raw = await decompress(win, raw, encoding);
-            note = `, ${encoding} açıldı`;
+            note = `, ${encoding} decoded`;
           } catch (e) {
-            note = `, ${encoding} açılamadı${cut ? " (kesik)" : ""}: ${e?.message ?? e}`;
+            note = `, ${encoding} could not be decoded${cut ? " (truncated)" : ""}: ${e?.message ?? e}`;
           }
         }
-        lines.push("", `Cevap gövdesi (${r.bodySize} bayt${cut}${note}):`, decode(win, raw, maxChars));
+        lines.push("", `Response body (${r.bodySize} bytes${cut}${note}):`, decode(win, raw, maxChars));
       }
       return lines.join("\n");
     }
@@ -720,7 +725,7 @@ function logError(where, e) {
       } catch {
         t = raw;
       }
-      return t.length > maxChars ? t.slice(0, maxChars) + `\n…(kesildi, ${t.length} karakter)` : t;
+      return t.length > maxChars ? t.slice(0, maxChars) + `\n…(truncated, ${t.length} characters)` : t;
     }
     const NETWORK_TOPICS = [
       "http-on-modify-request",
@@ -797,7 +802,7 @@ function logError(where, e) {
       const id = /_f(\d+)$/.exec(longRef(ref) ?? "")?.[1];
       if (!id) return browser.browsingContext;
       const bc = bcById(browser, Number(id));
-      if (!bc || bc.top !== browser.browsingContext) throw new Error(`${ref} bulunamadı (çerçeve kapanmış olabilir); read_page veya find ile yeniden al.`);
+      if (!bc || bc.top !== browser.browsingContext) throw new Error(`${ref} not found (its frame may be gone); get refs again with read_page or find.`);
       return bc;
     }
 
@@ -848,7 +853,7 @@ function logError(where, e) {
         const { x, y } = await query(browser, "locate", { ref: longRef(args.ref) }, 30000, frame);
         return toTop(browser, frame, x, y);
       }
-      if (args[key] == null) throw new Error(`${args.action} için ${key}${key === "coordinate" ? " veya ref" : ""} gerekli.`);
+      if (args[key] == null) throw new Error(`${args.action} needs ${key}${key === "coordinate" ? " or ref" : ""}.`);
       return toPagePoint(browser, args[key]);
     }
 
@@ -859,7 +864,7 @@ function logError(where, e) {
         else if (m === "shift") mods.shiftKey = true;
         else if (m === "alt" || m === "option") mods.altKey = true;
         else if (m === "meta" || m === "super" || m === "cmd" || m === "command") mods.metaKey = true;
-        else throw new Error(`Bilinmeyen değiştirici tuş: ${m}`);
+        else throw new Error(`Unknown modifier: ${m}`);
       }
       return mods;
     }
@@ -883,7 +888,7 @@ function logError(where, e) {
       const multiplier = axis => Services.prefs.getIntPref(`mousewheel.default.delta_multiplier_${axis}`, 100) / 100 || 1;
       const px = amount * 100;
       const delta = { up: [0, -px], down: [0, px], left: [-px, 0], right: [px, 0] }[direction];
-      if (!delta) throw new Error(`Geçersiz kaydırma yönü: ${direction}`);
+      if (!delta) throw new Error(`Invalid scroll direction: ${direction}`);
       return input(browser, { kind: "wheel", x, y, dx: delta[0], dy: delta[1], multiplier: [multiplier("x"), multiplier("y")] });
     }
 
@@ -902,7 +907,7 @@ function logError(where, e) {
       if (KEYS[lower]) return KEYS[lower];
       if (/^f([1-9]|1[0-2])$/.test(lower)) return "KEY_" + lower.toUpperCase();
       if ([...name].length === 1) return name;
-      throw new Error(`Bilinmeyen tuş: ${name}`);
+      throw new Error(`Unknown key: ${name}`);
     }
 
     // "ctrl+a", "Return", "Tab Tab Return"
@@ -931,7 +936,7 @@ function logError(where, e) {
     // dönen görüntünün pikselleri
     async function screenshot(browser, scale = 1) {
       const wg = browser.browsingContext?.currentWindowGlobal;
-      if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
+      if (!wg) throw new Error("The page has not loaded yet.");
       // sanal imleç ve tıklama halkası Claude'un gördüğü görüntüde sayfayı kapatmasın
       const overlays = hidden => query(browser, "overlays", { hidden }, 2000).catch(() => {});
       await overlays(true);
@@ -977,8 +982,8 @@ function logError(where, e) {
 
     function describeDialog(win) {
       const { promptType, text, value } = win.Dialog.args;
-      const extra = promptType.startsWith("prompt") && value ? ` (varsayılan: "${value}")` : "";
-      return `Sayfada açık ${promptType} diyaloğu: "${text}"${extra}. handle_dialog ile kabul et veya iptal et.`;
+      const extra = promptType.startsWith("prompt") && value ? ` (default: "${value}")` : "";
+      return `The page has an open ${promptType} dialog: "${text}"${extra}. Accept or dismiss it with handle_dialog.`;
     }
 
     function throwIfDialog(browser) {
@@ -994,10 +999,13 @@ function logError(where, e) {
       const dialog = openDialog(browser);
       if (!dialog || !island) return;
       const { promptType, text: message } = dialog.Dialog.args;
-      const kind = { alert: "uyarı gösteriyor", prompt: "senden bir metin istiyor" }[promptType.replace(/Check$/, "")] ?? "onay istiyor";
+      const kind = {
+        alert: L("shows an alert", "uyarı gösteriyor"),
+        prompt: L("asks you for text", "senden bir metin istiyor"),
+      }[promptType.replace(/Check$/, "")] ?? L("asks for confirmation", "onay istiyor");
       let host = "";
       try { host = browser.currentURI.host; } catch {}
-      island.dialog(browser, `${host} — sayfa ${kind}`, message);
+      island.dialog(browser, `${host} — ${L("the page", "sayfa")} ${kind}`, message);
       while (openDialog(browser) && island?.state === "dialog") await sleep(500);
       island?.dialogEnded();
     }
@@ -1008,7 +1016,7 @@ function logError(where, e) {
     // kadar sekmelere dokunan her tool reddedilir. Durum reload'da korunur.
     class Stopped extends Error {
       constructor() {
-        super("Kullanıcı Claude'u Zen'deki adadan durdurdu. Kullanıcı adadaki \"Devam et\"e basana kadar tarayıcıda işlem yapılamaz; ne yapmak istediğini kullanıcıya sor.");
+        super("The user stopped Claude from the browser's island. Nothing can be done in the browser until they press \"Resume\" there; ask the user what they want.");
       }
     }
     const stopListeners = new Set();
@@ -1089,7 +1097,7 @@ function logError(where, e) {
       const win = browser.ownerDocument.defaultView;
       if (Services.focus.activeWindow === win) return false;
       try {
-        const alert = new AlertNotification({ name: ALERT_NAME, title: "Claude senden bir şey istiyor", text: message, textClickable: true });
+        const alert = new AlertNotification({ name: ALERT_NAME, title: L("Claude needs you", "Claude senden bir şey istiyor"), text: message, textClickable: true });
         alerts.showAlert(alert, (_subject, topic) => {
           if (topic === "alertclickcallback") goToTab(browser);
         });
@@ -1116,38 +1124,40 @@ function logError(where, e) {
       try { host = browser.currentURI.host; } catch {}
       const what = {
         navigate: () => {
-          if (args.url === "back") return "geri gidiyor";
-          if (args.url === "forward") return "ileri gidiyor";
+          if (args.url === "back") return L("going back", "geri gidiyor");
+          if (args.url === "forward") return L("going forward", "ileri gidiyor");
           try { host = Services.uriFixup.getFixupURIInfo(args.url).preferredURI.host; } catch {}
-          return "sayfayı açıyor";
+          return L("opening the page", "sayfayı açıyor");
         },
         computer: () => ({
-          screenshot: "ekrana bakıyor", left_click: "tıklıyor", right_click: "sağ tıklıyor",
-          double_click: "çift tıklıyor", triple_click: "tıklıyor", hover: "fareyi gezdiriyor",
-          left_click_drag: "sürüklüyor", scroll: "kaydırıyor", scroll_to: "kaydırıyor",
-          type: "yazıyor", key: "tuşa basıyor", wait: "bekliyor",
-        })[args.action] ?? "çalışıyor",
-        read_page: () => "sayfayı okuyor",
-        get_page_text: () => "sayfayı okuyor",
-        find: () => `"${args.query}" arıyor`,
+          screenshot: L("looking at the page", "ekrana bakıyor"), left_click: L("clicking", "tıklıyor"),
+          right_click: L("right-clicking", "sağ tıklıyor"), double_click: L("double-clicking", "çift tıklıyor"),
+          triple_click: L("clicking", "tıklıyor"), hover: L("hovering", "fareyi gezdiriyor"),
+          left_click_drag: L("dragging", "sürüklüyor"), scroll: L("scrolling", "kaydırıyor"),
+          scroll_to: L("scrolling", "kaydırıyor"), type: L("typing", "yazıyor"), key: L("pressing keys", "tuşa basıyor"),
+          wait: L("waiting", "bekliyor"),
+        })[args.action] ?? L("working", "çalışıyor"),
+        read_page: () => L("reading the page", "sayfayı okuyor"),
+        get_page_text: () => L("reading the page", "sayfayı okuyor"),
+        find: () => L(`looking for "${args.query}"`, `"${args.query}" arıyor`),
         form_input: () => "formu dolduruyor",
-        file_upload: () => "dosya yüklüyor",
-        javascript_tool: () => "sayfada kod çalıştırıyor",
+        file_upload: () => L("uploading a file", "dosya yüklüyor"),
+        javascript_tool: () => L("running code on the page", "sayfada kod çalıştırıyor"),
         read_console_messages: () => "konsolu okuyor",
-        read_network_requests: () => "ağ isteklerine bakıyor",
-        handle_dialog: () => "diyaloğu cevaplıyor",
-        ask_user: () => "senden bir şey istiyor",
-        request_tab: () => "sekmeye erişmek istiyor",
-        tabs_close_mcp: () => "sekmeyi kapatıyor",
-        wait_for: () => "bekliyor",
-      }[tool]?.() ?? "çalışıyor";
+        read_network_requests: () => L("checking network requests", "ağ isteklerine bakıyor"),
+        handle_dialog: () => L("answering a dialog", "diyaloğu cevaplıyor"),
+        ask_user: () => L("needs you", "senden bir şey istiyor"),
+        request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
+        tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
+        wait_for: () => L("waiting", "bekliyor"),
+      }[tool]?.() ?? L("working", "çalışıyor");
       return host ? `${host} — ${what}` : what;
     }
 
     // frame: sekmedeki bir alt çerçevenin BrowsingContext'i (varsayılan üst çerçeve)
     async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
       const wg = frame?.currentWindowGlobal;
-      if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
+      if (!wg) throw new Error("The page has not loaded yet.");
       throwIfDialog(browser);
       let done = false;
       const watchDialog = (async () => {
@@ -1155,15 +1165,15 @@ function logError(where, e) {
           await sleep(250);
           if (done) return;
           throwIfDialog(browser);
-          if (frame.currentWindowGlobal !== wg) throw new PageGone("Sayfa değişti.");
-          if (!state.tabs.has(browser.browserId)) throw new Error("Kullanıcı bu sekmeyi Claude'dan geri aldı; artık bu sekmede işlem yapamazsın.");
+          if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
+          if (!state.tabs.has(browser.browserId)) throw new Error("The user took this tab back from Claude; you can't use it anymore.");
         }
       })();
       try {
         const result = await guard(Promise.race([
           wg.getActor("ZenMcp").sendQuery(name, data),
           watchDialog,
-          sleep(timeout).then(() => { throw new Error(`Sayfa ${timeout / 1000} sn içinde cevap vermedi.`); }),
+          sleep(timeout).then(() => { throw new Error(`The page did not respond within ${timeout / 1000} s.`); }),
         ]));
         if (result?.error) throw new Error(shortRefs(result.error));
         return result;
@@ -1183,7 +1193,7 @@ function logError(where, e) {
         const bc = bcById(browser, Number(m[2]));
         const wg = bc?.currentWindowGlobal;
         if (!wg || bc.top !== browser.browsingContext || level > 6) {
-          parts.push(`${indent}(iframe yüklenmedi)`);
+          parts.push(`${indent}(iframe not loaded)`);
           continue;
         }
         let inner;
@@ -1192,9 +1202,9 @@ function logError(where, e) {
           inner = await expandFrames(browser, inner, opts, level + 1);
         } catch (e) {
           if (e instanceof DialogOpen) throw e;
-          inner = `(okunamadı: ${e?.message ?? e})`;
+          inner = `(could not read: ${e?.message ?? e})`;
         }
-        const body = inner ? inner.split("\n").map(line => indent + line).join("\n") : `${indent}(görünür öğe yok)`;
+        const body = inner ? inner.split("\n").map(line => indent + line).join("\n") : `${indent}(no visible elements)`;
         parts.push(`${indent}[iframe ${wg.documentURI?.spec ?? ""}]\n${body}`);
       }
       parts.push(value.slice(last));
@@ -1264,10 +1274,11 @@ function logError(where, e) {
 
     // ---- izin: onaylı modda ya da hassas sitede işlem öncesi adadan sorulur ----
 
-    const ACTION_VERBS = {
-      left_click: "tıklamak", right_click: "sağ tıklamak", double_click: "çift tıklamak",
-      triple_click: "üç kez tıklamak", left_click_drag: "sürüklemek", type: "yazmak", key: "tuşa basmak",
-    };
+    const actionVerb = action => ({
+      left_click: L("click", "tıklamak"), right_click: L("right-click", "sağ tıklamak"),
+      double_click: L("double-click", "çift tıklamak"), triple_click: L("triple-click", "üç kez tıklamak"),
+      left_click_drag: L("drag", "sürüklemek"), type: L("type", "yazmak"), key: L("press keys", "tuşa basmak"),
+    })[action];
 
     // izin gerektiren işlemse kısa tarif ("button "Gönder"'e tıklamak"), değilse null
     async function describeWrite(tool, args, browser) {
@@ -1282,28 +1293,31 @@ function logError(where, e) {
         } catch (e) {
           if (e instanceof DialogOpen || e instanceof Stopped) throw e;
         }
-        return args.ref ?? "bir öğe";
+        return args.ref ?? L("an element", "bir öğe");
       };
       const quote = (t, n = 80) => `"${String(t).length > n ? String(t).slice(0, n - 1) + "…" : t}"`;
       switch (tool) {
         case "computer": {
-          const verb = ACTION_VERBS[args.action];
+          const verb = actionVerb(args.action);
           if (!verb) return null;
-          if (args.action === "type") return `${quote(args.text ?? "")} yazmak`;
-          if (args.action === "key") return `${args.text} tuşuna basmak`;
+          if (args.action === "type") return L(`type ${quote(args.text ?? "")}`, `${quote(args.text ?? "")} yazmak`);
+          if (args.action === "key") return L(`press ${args.text}`, `${args.text} tuşuna basmak`);
           return `${await target()}: ${verb}`;
         }
         case "form_input":
-          return `${await target()}: ${typeof args.value === "boolean" ? (args.value ? "işaretlemek" : "işareti kaldırmak") : `${quote(args.value)} yazmak`}`;
+          return `${await target()}: ${typeof args.value === "boolean"
+            ? (args.value ? L("check", "işaretlemek") : L("uncheck", "işareti kaldırmak"))
+            : L(`type ${quote(args.value)}`, `${quote(args.value)} yazmak`)}`;
         case "file_upload":
-          return `${await target()}: dosya yüklemek (${args.paths?.map(p => p.split("/").pop()).join(", ")})`;
+          return `${await target()}: ${L("upload", "dosya yüklemek")} (${args.paths?.map(p => p.split("/").pop()).join(", ")})`;
         case "javascript_tool":
-          return `sayfada kod çalıştırmak: ${quote(args.text ?? "", 120)}`;
+          return `${L("run code on the page", "sayfada kod çalıştırmak")}: ${quote(args.text ?? "", 120)}`;
         case "handle_dialog":
-          return `sayfanın diyaloğunu ${args.accept ? "kabul etmek" : "iptal etmek"}`;
+          return args.accept ? L("accept the page's dialog", "sayfanın diyaloğunu kabul etmek") : L("dismiss the page's dialog", "sayfanın diyaloğunu iptal etmek");
         case "navigate":
-          if (args.url === "back" || args.url === "forward") return `${args.url === "back" ? "geri" : "ileri"} gitmek`;
-          return `${quote(args.url, 100)} adresine gitmek`;
+          if (args.url === "back") return L("go back", "geri gitmek");
+          if (args.url === "forward") return L("go forward", "ileri gitmek");
+          return L(`go to ${quote(args.url, 100)}`, `${quote(args.url, 100)} adresine gitmek`);
       }
       return null;
     }
@@ -1325,15 +1339,16 @@ function logError(where, e) {
       }
       if (!lines.length) return;
       const host = hostOf(browser);
-      const why = isSensitive(host) ? " (hassas site)" : "";
+      const why = isSensitive(host) ? L(" (sensitive site)", " (hassas site)") : "";
       const message = lines.length === 1
-        ? `Claude şunu yapmak istiyor: ${lines[0]}`
-        : `Claude şunları yapmak istiyor:\n${lines.map(l => `• ${l}`).join("\n")}`;
-      const result = await askIsland(browser, `${host ? host + " — " : ""}izin istiyor${why}`, message, { ok: "İzin ver", cancel: "Verme" });
+        ? L(`Claude wants to: ${lines[0]}`, `Claude şunu yapmak istiyor: ${lines[0]}`)
+        : L("Claude wants to:", "Claude şunları yapmak istiyor:") + `\n${lines.map(l => `• ${l}`).join("\n")}`;
+      const result = await askIsland(browser, `${host ? host + " — " : ""}${L("asks for permission", "izin istiyor")}${why}`, message,
+        { ok: L("Allow", "İzin ver"), cancel: L("Deny", "Verme") });
       if (result !== "done") {
         throw new Error(result === "timeout"
-          ? "Kullanıcı izin sorusuna yanıt vermedi; işlem yapılmadı."
-          : "Kullanıcı bu işleme izin vermedi; işlem yapılmadı. Ne yapmak istediğini kullanıcıya sor.");
+          ? "The user did not answer the permission request; nothing was done."
+          : "The user denied this action; nothing was done. Ask the user what they want.");
       }
     }
 
@@ -1346,7 +1361,7 @@ function logError(where, e) {
       async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs();
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
-        if (!tabs.length) return text("Claude'un sekmesi yok. createIfEmpty: true ile veya tabs_create_mcp ile aç.");
+        if (!tabs.length) return text("Claude has no tabs. Open one with createIfEmpty: true or tabs_create_mcp.");
         return text({ tabs: tabs.map(describeTab) });
       },
 
@@ -1359,15 +1374,15 @@ function logError(where, e) {
         const tab = browserFor(tabId) && findTab(tabId);
         const given = tab.getAttribute(MARK) === "user";
         unmark(tab);
-        if (given) return text(`Sekme ${tabId} kullanıcının; kapatılmadı, kullanıcıya geri verildi.`);
+        if (given) return text(`Tab ${tabId} belongs to the user; not closed, given back to them.`);
         tab.ownerDocument.defaultView.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true });
-        return text(`Sekme ${tabId} kapatıldı.`);
+        return text(`Tab ${tabId} closed.`);
       },
 
       // Birkaç tool çağrısı tek seferde, sırayla; ilk hatada durur. Metin cevapları tek blokta
       // birleşir (her biri ayrı içerik olmasın), görüntüler sırasıyla araya girer.
       async browser_batch({ actions }) {
-        if (!Array.isArray(actions) || !actions.length) throw new Error("actions boş.");
+        if (!Array.isArray(actions) || !actions.length) throw new Error("actions is empty.");
         // izin gereken adımlar sekme başına tek soruda
         const byTab = new Map();
         for (const { name, input = {} } of actions) {
@@ -1388,9 +1403,9 @@ function logError(where, e) {
         for (const [i, { name, input = {} }] of actions.entries()) {
           const label = `[${i + 1}] ${name}`;
           const left = actions.length - i - 1;
-          const rest = left ? ` Kalan ${left} adım çalıştırılmadı.` : "";
+          const rest = left ? ` The remaining ${left} step(s) did not run.` : "";
           if (name === "browser_batch" || !tools[name]) {
-            lines.push(`${label}: ${name === "browser_batch" ? "iç içe browser_batch olmaz" : "bilinmeyen tool"}.${rest}`);
+            lines.push(`${label}: ${name === "browser_batch" ? "browser_batch cannot be nested" : "unknown tool"}.${rest}`);
             break;
           }
           try {
@@ -1434,7 +1449,7 @@ function logError(where, e) {
       async computer(args) {
         const browser = browserFor(args.tabId);
         const need = key => {
-          if (args[key] == null) throw new Error(`${args.action} için ${key} gerekli.`);
+          if (args[key] == null) throw new Error(`${args.action} needs ${key}.`);
           return args[key];
         };
         switch (args.action) {
@@ -1485,11 +1500,11 @@ function logError(where, e) {
             await guard(sleep(Math.min(need("duration"), 30) * 1000));
             break;
           default:
-            throw new Error(`Desteklenmeyen işlem: ${args.action}`);
+            throw new Error(`Unsupported action: ${args.action}`);
         }
         // olayların sayfada işlenmesine kısa süre tanı
         await sleep(100);
-        return text(`${args.action} tamam.`);
+        return text(`${args.action} done.`);
       },
 
       // iframe'lerin metni sayfanın metninin ardından, kaynağıyla
@@ -1506,7 +1521,7 @@ function logError(where, e) {
             if (e instanceof DialogOpen) throw e;
           }
         }
-        if (out.length > MAX_PAGE_TEXT) out = out.slice(0, MAX_PAGE_TEXT) + "\n…(kesildi)";
+        if (out.length > MAX_PAGE_TEXT) out = out.slice(0, MAX_PAGE_TEXT) + "\n…(truncated)";
         return text(out);
       },
 
@@ -1517,7 +1532,7 @@ function logError(where, e) {
         let { value } = await query(browser, "read_page", { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext }, 30000, frame);
         value = shortRefs(await expandFrames(browser, value, opts));
         if (value.length > max_chars) {
-          value = value.slice(0, value.lastIndexOf("\n", max_chars)) + `\n…(kesildi: ${max_chars} karakter sınırı; ref_id ile alt ağaca odaklan)`;
+          value = value.slice(0, value.lastIndexOf("\n", max_chars)) + `\n…(truncated at ${max_chars} characters; focus on a subtree with ref_id)`;
         }
         return text(value);
       },
@@ -1534,7 +1549,7 @@ function logError(where, e) {
             if (e instanceof DialogOpen || bc === browser.browsingContext) throw e;
           }
         }
-        if (!results.length) return text(`"${q}" ile eşleşen öğe yok. read_page ile sayfanın yapısına bak.`);
+        if (!results.length) return text(`Nothing matches "${q}". Look at the page structure with read_page.`);
         results.sort((a, b) => b.score - a.score);
         return text(shortRefs(results.slice(0, 20).map(r => r.line).join("\n")));
       },
@@ -1543,10 +1558,10 @@ function logError(where, e) {
       // çalışır: beklerken sayfa değişse (ör. form gönderildi) de sürer. Bütün çerçevelere bakar.
       async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }) {
         const browser = browserFor(tabId);
-        if (!wanted && !selector && !network_idle) throw new Error("text, selector ya da network_idle gerekli.");
+        if (!wanted && !selector && !network_idle) throw new Error("text, selector or network_idle is required.");
         if (selector) {
           try { browser.ownerDocument.createDocumentFragment().querySelector(selector); } catch {
-            throw new Error(`Geçersiz CSS seçici: ${selector}`);
+            throw new Error(`Invalid CSS selector: ${selector}`);
           }
         }
         const start = Date.now();
@@ -1578,8 +1593,8 @@ function logError(where, e) {
             ok = !busy && now - quietSince >= 500;
           }
           const elapsed = Date.now() - start;
-          if (ok) return text(`Tamam (${(elapsed / 1000).toFixed(1)} sn).`);
-          if (elapsed >= limit) throw new Error(`${Math.min(timeout, 60)} sn içinde gerçekleşmedi.`);
+          if (ok) return text(`Done (${(elapsed / 1000).toFixed(1)} s).`);
+          if (elapsed >= limit) throw new Error(`Not met within ${Math.min(timeout, 60)} s.`);
           await guard(sleep(250));
         }
       },
@@ -1612,13 +1627,13 @@ function logError(where, e) {
           }
         }
         return text({
-          clicked: "Kullanıcı işaretlenen öğeye tıkladı.",
-          done: "Kullanıcı Tamam'a bastı.",
-          cancelled: "Kullanıcı vazgeçti.",
-          timeout: `Kullanıcı ${timeout} sn içinde yanıt vermedi.`,
-          navigated: "Sayfa değişti (kullanıcı bir işlem yapmış olabilir); screenshot ile kontrol et.",
-          replaced: "Yerine yeni bir ask_user geldi.",
-          taken_back: "Kullanıcı bu sekmeyi Claude'dan geri aldı; artık bu sekmede işlem yapamazsın.",
+          clicked: "The user clicked the outlined element.",
+          done: "The user pressed OK.",
+          cancelled: "The user cancelled.",
+          timeout: `The user did not answer within ${timeout} s.`,
+          navigated: "The page changed (the user may have done something); check with a screenshot.",
+          replaced: "A newer ask_user replaced this one.",
+          taken_back: "The user took this tab back from Claude; you can't use it anymore.",
         }[result] ?? String(result));
       },
 
@@ -1626,21 +1641,22 @@ function logError(where, e) {
       // Verme", Zen odakta değilse masaüstü bildirimi. Ver denirse sekme sağ tık menüsünden
       // verilmiş gibi işaretlenir.
       async request_tab({ tabId, reason, timeout = 120 }) {
-        if (state.tabs.has(tabId)) return text({ ...describeTab(findTab(tabId)), note: "Sekme zaten Claude'da." });
+        if (state.tabs.has(tabId)) return text({ ...describeTab(findTab(tabId)), note: "The tab is already Claude's." });
         const tab = findTab(tabId);
-        if (!tab) throw new Error(`Sekme ${tabId} kapanmış.`);
+        if (!tab) throw new Error(`Tab ${tabId} is closed.`);
         if (!state.pickedTabs.has(tabId)) {
-          throw new Error(`Sekme ${tabId} istenemez: yalnız kullanıcının öğe seçip gönderdiği sekmeler (channel olayındaki source_tab) istenebilir.`);
+          throw new Error(`Tab ${tabId} can't be requested: only tabs the user picked an element from (source_tab in a channel event).`);
         }
         const browser = tab.linkedBrowser;
         const result = await askIsland(browser, describeAction("request_tab", {}, browser),
-          `Claude bu sekmeye erişmek istiyor: ${reason}`, { ok: "Ver", cancel: "Verme" }, timeout);
+          L(`Claude wants access to this tab: ${reason}`, `Claude bu sekmeye erişmek istiyor: ${reason}`),
+          { ok: L("Allow", "Ver"), cancel: L("Deny", "Verme") }, timeout);
         if (result !== "done") {
-          return text(result === "timeout" ? `Kullanıcı ${timeout} sn içinde yanıt vermedi.` : "Kullanıcı sekmeyi vermedi.");
+          return text(result === "timeout" ? `The user did not answer within ${timeout} s.` : "The user declined.");
         }
-        if (!tab.isConnected) throw new Error("Sekme bu arada kapandı.");
+        if (!tab.isConnected) throw new Error("The tab was closed meanwhile.");
         mark(tab, "user");
-        return text({ ...describeTab(tab), note: "Kullanıcı sekmeyi verdi." });
+        return text({ ...describeTab(tab), note: "The user granted the tab." });
       },
 
       async file_upload({ tabId, ref, paths }) {
@@ -1652,9 +1668,9 @@ function logError(where, e) {
         const files = [];
         for (const path of paths) {
           const file = localFile(path);
-          if (!file.exists() || !file.isFile()) throw new Error(`Dosya yok: ${path}`);
+          if (!file.exists() || !file.isFile()) throw new Error(`No such file: ${path}`);
           total += file.fileSize;
-          if (total > MAX_UPLOAD) throw new Error(`Dosyalar toplam ${MAX_UPLOAD / 1048576} MB'ı aşıyor.`);
+          if (total > MAX_UPLOAD) throw new Error(`Files exceed ${MAX_UPLOAD / 1048576} MB in total.`);
           let type = "application/octet-stream";
           try { type = mime.getTypeFromFile(file); } catch {}
           files.push({ name: file.leafName, type, lastModified: file.lastModifiedTime, bytes: await IOUtils.read(path) });
@@ -1666,7 +1682,7 @@ function logError(where, e) {
       async handle_dialog({ tabId, accept, text: answer }) {
         const browser = browserFor(tabId);
         const win = openDialog(browser);
-        if (!win) return text("Açık diyalog yok.");
+        if (!win) return text("No dialog is open.");
         const { promptType, text: message } = win.Dialog.args;
         if (answer != null && accept) {
           const box = promptType === "promptPassword" ? win.Dialog.ui.password1Textbox : win.Dialog.ui.loginTextbox;
@@ -1684,23 +1700,23 @@ function logError(where, e) {
         const log = network.get(browser.browserId);
         if (id != null) {
           const r = log?.list.find(r => r.id === id);
-          if (!r) return text(`#${id} yok (sayfa başka siteye geçince kayıtlar silinir); id'leri listeden al.`);
+          if (!r) return text(`No request #${id} (the log is cleared when the page moves to another site); take ids from the list.`);
           return requestDetails(browser, r, max_chars).then(text);
         }
         let list = log?.list ?? [];
         if (urlPattern) list = list.filter(r => r.url.includes(urlPattern));
         const lines = list.slice(-limit).map(r => {
-          const status = r.error ?? (r.status ?? (r.duration == null ? "bekliyor" : "cevap yok"));
-          const extra = [r.type, r.mime, r.cached && "önbellek", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
+          const status = r.error ?? (r.status ?? (r.duration == null ? "pending" : "no response"));
+          const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
           return `#${r.id} ${r.method} ${status} ${r.url}${extra ? `  (${extra})` : ""}`;
         });
         if (clear && log) {
           log.list.length = 0;
           log.byChannel.clear();
         }
-        if (!lines.length) return text("Kayıtlı istek yok (sekme Claude tarafından açıldığından beri, eşleşen).");
+        if (!lines.length) return text("No matching requests recorded (since Claude opened the tab).");
         const hidden = list.length - lines.length;
-        return text((hidden > 0 ? `…önceki ${hidden} istek gösterilmedi\n` : "") + lines.join("\n"));
+        return text((hidden > 0 ? `…${hidden} earlier request(s) not shown\n` : "") + lines.join("\n"));
       },
 
       async read_console_messages({ tabId, onlyErrors, pattern, limit, clear }) {
@@ -1748,14 +1764,14 @@ function logError(where, e) {
           // yeni sürüm başlamadıysa soket de yok: köprü tarayıcı yeniden başlayana kadar
           // ölü kalmasın, yarım kurulumu temizleyip bu sürümü yeniden başlat
           if (!(globalThis.zenMcpRunning > version)) {
-            logError("reload", new Error(`yeni sürüm başlamadı, v${version} ile devam`));
+            logError("reload", new Error(`new version did not start, staying on v${version}`));
             try { globalThis.zenMcpStop?.(); } catch {}
             start();
             globalThis.zenMcpStop = stop;
             globalThis.zenMcpRunning = version;
           }
         });
-        return text(`v${version} kapatılıyor, yeniden yükleniyor.`);
+        return text(`v${version} stopping, reloading.`);
       },
       // sistem bağlamında eval() yasak; Marionette gibi sistem principal'lı sandbox kullan.
       // code bir ifade olmalı; yardımcılar h üzerinden: h.browserFor(id), h.query(browser, ...), h.state...
@@ -1836,7 +1852,7 @@ function logError(where, e) {
         out.write(bytes, bytes.length);
         out.close();
       } catch (e) {
-        logError("günlük", e);
+        logError("activity log", e);
       }
     }
 
@@ -1857,7 +1873,7 @@ function logError(where, e) {
           message = { ok: false, error: String(e?.message ?? e) };
         }
       }
-      try { reply(transport, output, message); } catch (e) { logError("cevap", e); }
+      try { reply(transport, output, message); } catch (e) { logError("reply", e); }
     }
 
     function onConnection(transport) {
@@ -1910,7 +1926,7 @@ function logError(where, e) {
           goTo: goToTab,
           answer: answerIsland,
           pick: startPick,
-          send: note => sendPick(note).catch(e => logError("gönderme", e)),
+          send: note => sendPick(note).catch(e => logError("send", e)),
           cancelPick: () => endPick(),
           toggleMode,
         },
@@ -1949,7 +1965,7 @@ function logError(where, e) {
       server.initWithFilename(file, 0o600, -1);
       server.asyncListen({
         onSocketAccepted(_server, transport) {
-          try { onConnection(transport); } catch (e) { logError("bağlantı", e); }
+          try { onConnection(transport); } catch (e) { logError("connection", e); }
         },
         onStopListening() {},
       });

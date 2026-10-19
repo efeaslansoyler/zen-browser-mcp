@@ -20,7 +20,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000): Promise
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     let buffer = "";
-    socket.setTimeout(timeout, () => socket.destroy(new Error(`Zen ${timeout / 1000} sn içinde cevap vermedi.`)));
+    socket.setTimeout(timeout, () => socket.destroy(new Error(`The browser did not answer within ${timeout / 1000} s.`)));
     socket.on("connect", () => socket.write(ascii(JSON.stringify({ tool, args, session })) + "\n"));
     socket.on("data", (chunk) => {
       buffer += chunk.toString("latin1");
@@ -29,7 +29,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000): Promise
     socket.on("error", (e: NodeJS.ErrnoException) =>
       reject(
         e.code === "ENOENT" || e.code === "ECONNREFUSED"
-          ? new Error(`Zen'e bağlanılamadı: Zen açık mı? Kurulum için \`npx ${NAME} install\`, kontrol için \`npx ${NAME} doctor\`.`)
+          ? new Error(`Could not connect to the browser. Is it open? Install with \`npx ${NAME} install\`, check with \`npx ${NAME} doctor\`.`)
           : e,
       ),
     );
@@ -40,7 +40,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000): Promise
         if (reply.ok) resolve(reply.content);
         else reject(new Error(reply.error));
       } catch {
-        reject(new Error(`Zen'den geçersiz cevap: ${buffer.slice(0, 200)}`));
+        reject(new Error(`Invalid reply from the browser: ${buffer.slice(0, 200)}`));
       }
     });
   });

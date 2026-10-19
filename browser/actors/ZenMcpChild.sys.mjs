@@ -9,6 +9,10 @@
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
+// Kullanıcının gördüğü yazılar (imleç etiketi, öğe tarifi) tarayıcı Türkçeyse Türkçe; Claude'a
+// giden mesajlar hep İngilizce
+const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
+
 // sanal imleç: Claude turuncusu ok, yanında küçük etiket ("Claude", "yazıyor…")
 const ARROW = "data:image/svg+xml," + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#d97757" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`
@@ -248,7 +252,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #element(ref) {
     const el = this.#refs.get(ref)?.deref();
     if (!el || !el.isConnected) {
-      throw new Error(`${ref} bulunamadı (sayfa değişmiş olabilir); read_page veya find ile yeniden al.`);
+      throw new Error(`${ref} not found (the page may have changed); get refs again with read_page or find.`);
     }
     return el;
   }
@@ -258,7 +262,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   // bare: alt çerçeve için yalnız ağaç satırları (başlık ve URL main.js'te)
   #readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false }) {
     const root = ref_id ? this.#element(ref_id) : this.document.body;
-    if (!root) return "(sayfa boş)";
+    if (!root) return "(empty page)";
     const lines = [];
     let size = 0;
     let truncated = false;
@@ -313,12 +317,12 @@ export class ZenMcpChild extends JSWindowActorChild {
 
     walk(root, 0, 0);
     if (truncated) {
-      const hint = interactiveOnly ? "find ile ara" : 'filter: "interactive" kullan';
-      lines.push(`…(kesildi: ${max_chars} karakter sınırı; ref_id ile alt ağaca odaklan veya ${hint})`);
+      const hint = interactiveOnly ? "search with find" : 'use filter: "interactive"';
+      lines.push(`…(truncated at ${max_chars} characters; focus on a subtree with ref_id or ${hint})`);
     }
     const doc = this.document;
     if (bare) return lines.join("\n");
-    return `${doc.title}\n${doc.URL}\n\n${lines.join("\n") || "(görünür öğe yok)"}`;
+    return `${doc.title}\n${doc.URL}\n\n${lines.join("\n") || "(no visible elements)"}`;
   }
 
   #describeElement(el, role) {
@@ -347,7 +351,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     if (expanded) parts.push(`expanded=${expanded}`);
     if (el.getAttribute("aria-selected") === "true") parts.push("selected");
     if (el.getAttribute("aria-checked")) parts.push(`checked=${el.getAttribute("aria-checked")}`);
-    if (!this.#inViewport(el)) parts.push("(görünür alanın dışında)");
+    if (!this.#inViewport(el)) parts.push("(off-screen)");
     return parts.join(" ");
   }
 
@@ -371,7 +375,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   // kelimenin başıyla eşleşmeli ("to" "autoconfig"e uymaz, "serv" "server"a uyar)
   #find(query) {
     const words = tokens(query);
-    if (!words.length) throw new Error("Boş sorgu.");
+    if (!words.length) throw new Error("Empty query.");
     const results = [];
     const all = this.document.body?.querySelectorAll("*") ?? [];
     for (const el of all) {
@@ -417,7 +421,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   // iframe'in içerik kutusu bu çerçevenin görünür alanında; gerekirse görünür yapılır
   #frameRect(bcId) {
     const el = this.#frameElement(bcId);
-    if (!el) throw new Error("iframe bulunamadı (sayfa değişmiş olabilir).");
+    if (!el) throw new Error("iframe not found (the page may have changed).");
     if (!this.#fullyInViewport(el)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     return this.#contentOrigin(el);
   }
@@ -443,7 +447,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   // izin sorusu ve günlük için öğenin kısa tarifi: 'button "Teklif al"'
   #describeTarget({ ref, x, y }) {
     const el = ref ? this.#element(ref) : this.document.elementFromPoint(x, y);
-    if (!el) return "boş bir yer";
+    if (!el) return L("an empty spot", "boş bir yer");
     const role = roleOf(el) || el.localName;
     const name = accessibleName(el, this.document) || truncate(clean(el.innerText ?? ""), 40);
     return name ? `${role} "${truncate(name, 60)}"` : role;
@@ -471,11 +475,11 @@ export class ZenMcpChild extends JSWindowActorChild {
       const wanted = String(value);
       const opt = [...el.options].find(o => o.value === wanted) ||
         [...el.options].find(o => normalize(o.text) === normalize(wanted));
-      if (!opt) throw new Error(`"${wanted}" seçeneği yok. Seçenekler: ${[...el.options].map(o => o.text.trim()).join(", ")}`);
+      if (!opt) throw new Error(`No option "${wanted}". Options: ${[...el.options].map(o => o.text.trim()).join(", ")}`);
       el.value = opt.value;
       fire("input");
       fire("change");
-      return `${ref}: "${opt.text.trim()}" seçildi.`;
+      return `${ref}: selected "${opt.text.trim()}".`;
     }
     if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) {
       const checked = value === true || value === "true" || value === 1 || value === "1" || value === "on";
@@ -483,7 +487,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         // tıklama: sayfanın click dinleyicileri ve label/radio grubu davranışı da çalışsın
         el.click();
       }
-      return `${ref}: ${el.checked ? "işaretli" : "işaretsiz"}.`;
+      return `${ref}: ${el.checked ? "checked" : "unchecked"}.`;
     }
     if (tag === "INPUT" || tag === "TEXTAREA") {
       el.focus();
@@ -491,22 +495,22 @@ export class ZenMcpChild extends JSWindowActorChild {
       el.value = String(value);
       fire("input");
       fire("change");
-      return `${ref}: değer ayarlandı.`;
+      return `${ref}: value set.`;
     }
     if (el.isContentEditable) {
       el.focus();
       this.document.execCommand("selectAll");
       this.document.execCommand("insertText", false, String(value));
-      return `${ref}: içerik ayarlandı.`;
+      return `${ref}: content set.`;
     }
-    throw new Error(`${ref} bir form alanı değil (${roleOf(el) || tag.toLowerCase()}).`);
+    throw new Error(`${ref} is not a form field (${roleOf(el) || tag.toLowerCase()}).`);
   }
 
   // ---- file_upload: dosyalar parent'ta okunur (bu süreç sandbox'ta, diske erişemez) ----
 
   #fileUpload(ref, files) {
     const input = this.#fileInputNear(this.#element(ref));
-    if (!input) throw new Error(`${ref} yakınında dosya alanı (input type=file) yok.`);
+    if (!input) throw new Error(`No file input (input type=file) near ${ref}.`);
     if (files.length > 1 && !input.multiple) throw new Error("Bu alan tek dosya kabul ediyor.");
     const win = this.contentWindow;
     const list = files.map(f => new win.File([Cu.cloneInto(f.bytes, win)], f.name, { type: f.type, lastModified: f.lastModified }));
@@ -515,7 +519,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     // ayrıcalıklı koddan oluşturulan olaylar sayfaya güvenilir (isTrusted) görünür
     input.dispatchEvent(new win.Event("input", { bubbles: true }));
     input.dispatchEvent(new win.Event("change", { bubbles: true }));
-    return `${files.length} dosya yüklendi: ${files.map(f => f.name).join(", ")}`;
+    return `${files.length} file(s) uploaded: ${files.map(f => f.name).join(", ")}`;
   }
 
   // Sürükle-bırak alanları çoğunlukla gizli bir input[type=file] kullanır: öğenin kendisi,
@@ -804,13 +808,13 @@ export class ZenMcpChild extends JSWindowActorChild {
       list = list.filter(e => re.test(e.message) || re.test(e.source ?? ""));
     }
     if (clear) this.#consoleSince = Date.now();
-    if (!list.length) return "Konsol mesajı yok" + (pattern || onlyErrors ? " (filtreyle eşleşen)." : ".");
+    if (!list.length) return "No console messages" + (pattern || onlyErrors ? " matching the filter." : ".");
     const shown = list.slice(-limit);
     const lines = shown.map(e => {
       const time = new Date(e.time).toTimeString().slice(0, 8);
       return `[${e.level}] ${time} ${truncate(e.message, 2000)}${e.source ? `  (${e.source})` : ""}`;
     });
-    if (list.length > shown.length) lines.unshift(`…önceki ${list.length - shown.length} mesaj gösterilmedi`);
+    if (list.length > shown.length) lines.unshift(`…${list.length - shown.length} earlier message(s) not shown`);
     return lines.join("\n");
   }
 
@@ -845,11 +849,11 @@ export class ZenMcpChild extends JSWindowActorChild {
         }
         if (button === 0) this.#focusAt(x, y);
         this.#ripple(x, y);
-        return "tamam";
+        return "done";
       case "hover":
         await this.#moveCursor(x, y);
         mouse(x, y, { type: "mousemove" });
-        return "tamam";
+        return "done";
       case "drag": {
         await this.#moveCursor(x, y);
         this.#press();
@@ -861,22 +865,22 @@ export class ZenMcpChild extends JSWindowActorChild {
         }
         mouse(to[0], to[1], { type: "mouseup" });
         await this.#moveCursor(to[0], to[1]);
-        return "tamam";
+        return "done";
       }
       case "wheel":
         await this.#moveCursor(x, y);
         return this.#wheel(x, y, dx, dy, multiplier);
       case "keys":
-        this.#cursorLabel("tuşa basıyor");
+        this.#cursorLabel(L("pressing keys", "tuşa basıyor"));
         for (const { key, mods } of keys) eu.synthesizeKey(key, mods, win);
-        return "tamam";
+        return "done";
       case "text":
-        this.#cursorLabel("yazıyor…");
+        this.#cursorLabel(L("typing…", "yazıyor…"));
         text.split("\n").forEach((line, i) => {
           if (i > 0) eu.synthesizeKey("KEY_Enter", {}, win);
           if (line) eu.sendString(line, win);
         });
-        return "tamam";
+        return "done";
       default:
         throw new Error(`Bilinmeyen girdi: ${kind}`);
     }
@@ -962,7 +966,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     for (const pick of this.document.querySelectorAll("zen-mcp-pick")) {
       pick.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
     }
-    return "tamam";
+    return "done";
   }
 
   // Tıklanan noktada kısa turuncu halka: kullanıcı sekmeye bakınca Claude'un son ne yaptığını
@@ -1005,7 +1009,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     if (!moved[0] && !moved[1]) {
       scroller.scrollBy({ left: dx, top: dy, behavior: "instant" });
     }
-    return "tamam";
+    return "done";
   }
 
   // noktadaki öğenin kaydırılabilir en yakın atası, yoksa sayfanın kendisi
@@ -1026,7 +1030,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const el = this.#element(ref);
     if (!this.#fullyInViewport(el)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     const r = el.getBoundingClientRect();
-    if (!r.width && !r.height) throw new Error(`${ref} görünmüyor (boyutu yok).`);
+    if (!r.width && !r.height) throw new Error(`${ref} is not visible (no size).`);
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
 

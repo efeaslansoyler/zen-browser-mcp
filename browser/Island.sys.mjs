@@ -7,6 +7,8 @@
 // çağrılar yapar.
 
 const XHTML = "http://www.w3.org/1999/xhtml";
+// arayüz dili: tarayıcı Türkçeyse Türkçe, değilse İngilizce
+const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
 const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
 const PREVIEW_WIDTH = 340; // canlı önizleme genişliği (CSS px)
@@ -329,22 +331,22 @@ export class Island {
     const detail = node("div", "detail");
     const message = node("div", "message");
     const buttons = node("div", "buttons");
-    const cancel = node("button", "cancel", "Vazgeç");
-    const goto = node("button", "goto", "Sekmeye git");
-    const ok = node("button", "ok primary", "Tamam");
+    const cancel = node("button", "cancel", L("Cancel", "Vazgeç"));
+    const goto = node("button", "goto", L("Go to tab", "Sekmeye git"));
+    const ok = node("button", "ok primary", L("OK", "Tamam"));
     buttons.append(cancel, goto, ok);
     detail.append(message, buttons);
     const preview = node("div", "preview");
-    preview.title = "Sekmeye git";
+    preview.title = L("Go to tab", "Sekmeye git");
     const canvas = node("canvas");
     preview.append(canvas);
     const compose = node("div", "compose");
     const note = node("textarea");
-    note.placeholder = "Ne yapılsın?";
+    note.placeholder = L("What should Claude do?", "Ne yapılsın?");
     const footer = node("div", "compose-footer");
     const target = node("span", "target");
-    const discard = node("button", "", "Vazgeç");
-    const send = node("button", "primary", "Gönder");
+    const discard = node("button", "", L("Cancel", "Vazgeç"));
+    const send = node("button", "primary", L("Send", "Gönder"));
     footer.append(target, discard, send);
     compose.append(note, footer);
     el.append(row, detail, compose, preview);
@@ -592,8 +594,8 @@ export class Island {
     if (pick) {
       siteName = "";
       if (pick.mode === "picking") {
-        action = "Claude'a göstermek için bir öğeye tıkla";
-        hintText = "↑ üst öğe · Esc";
+        action = L("Click an element to show Claude", "Claude'a göstermek için bir öğeye tıkla");
+        hintText = L("↑ parent · Esc", "↑ üst öğe · Esc");
       } else if (pick.mode === "compose") {
         try { siteName = browser.currentURI.host; } catch {}
         action = pick.label;
@@ -604,26 +606,26 @@ export class Island {
     for (const [win, parts] of this.#windows) {
       const { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, target } = parts;
       mode.setAttribute("mode", this.#mode);
-      mode.textContent = this.#mode === "ask" ? "onaylı" : "otomatik";
+      mode.textContent = this.#mode === "ask" ? L("ask", "onaylı") : L("auto", "otomatik");
       mode.title = this.#mode === "ask"
-        ? "Claude her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)"
-        : "Claude sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)";
+        ? L("Claude asks before every action. Click: auto (acts without asking)", "Claude her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)")
+        : L("Claude acts without asking. Click: ask (asks before every action)", "Claude sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)");
       const visible = stopped || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
       host.textContent = stopped ? "" : siteName;
-      text.textContent = stopped ? "Claude durduruldu" : action;
+      text.textContent = stopped ? L("Claude is stopped", "Claude durduruldu") : action;
       hint.textContent = hintText;
-      target.textContent = pick?.mode !== "compose" ? "" : pick.target ? `→ ${pick.target}` : "→ pano (açık Claude Code kanalı yok)";
+      target.textContent = pick?.mode !== "compose" ? "" : pick.target ? `→ ${pick.target}` : L("→ clipboard (no Claude Code channel open)", "→ pano (açık Claude Code kanalı yok)");
       if (icon && !stopped) favicon.src = icon;
       else favicon.removeAttribute("src");
-      stop.textContent = stopped ? "Devam et" : "";
-      stop.title = stopped ? "" : "Claude'u durdur (Ctrl+Shift+Esc)";
+      stop.textContent = stopped ? L("Resume", "Devam et") : "";
+      stop.title = stopped ? "" : L("Stop Claude (Ctrl+Shift+Esc)", "Claude'u durdur (Ctrl+Shift+Esc)");
       message.textContent = this.#message;
       // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
       goto.hidden = win.gBrowser.selectedBrowser === browser;
       ok.hidden = !(state === "ask" && this.#askDone);
-      ok.textContent = this.#askLabels.ok ?? "Tamam";
-      cancel.textContent = this.#askLabels.cancel ?? "Vazgeç";
+      ok.textContent = this.#askLabels.ok ?? L("OK", "Tamam");
+      cancel.textContent = this.#askLabels.cancel ?? L("Cancel", "Vazgeç");
       goto.classList.toggle("primary", ok.hidden);
       if (visible) this.#place(win);
       el.hidden = !visible;
