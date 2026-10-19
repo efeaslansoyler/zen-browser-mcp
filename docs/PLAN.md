@@ -28,7 +28,7 @@ kendiliğinden öne getirilmez.
 
 1. ✅ (2026-10-19) Ada altyapısı: her pencereye ekleme (yeni pencereler, reload'da temizlik), Zen temasıyla
    stil; canlı durum metni; Durdur/Devam ve kısayol.
-2. ask_user ve diyaloglar adaya taşınır (sekme öne getirilmez); sayfada tıklanan noktada
+2. ✅ (2026-10-19) ask_user ve diyaloglar adaya taşınır (sekme öne getirilmez); sayfada tıklanan noktada
    kısa turuncu halka; Zen odakta değilse masaüstü bildirimi.
 3. "Claude'a ver / Geri al" sekme sağ tık menüsünde; ada hangi sekmenin Claude'da olduğunu
    gösterir.
