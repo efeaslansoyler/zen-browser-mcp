@@ -141,6 +141,17 @@ register(
 );
 
 register(
+  "file_upload",
+  "Put local files into a file input without opening a file picker. ref can be the file input itself or an upload button/drop zone: a nearby (often hidden) input[type=file] is used. Use absolute paths.",
+  {
+    tabId,
+    ref: z.string().describe("The file input, or the upload button/area (from read_page or find)."),
+    paths: z.array(z.string()).min(1).describe("Absolute paths of the files to upload."),
+  },
+  () => 90_000,
+);
+
+register(
   "handle_dialog",
   "Answer a JavaScript dialog (alert, confirm, prompt) open in a tab. While one is open the page is frozen, and other tools report it instead of acting. accept: true presses OK, false presses Cancel; text fills a prompt before accepting.",
   {

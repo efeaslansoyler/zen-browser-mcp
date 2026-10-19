@@ -89,6 +89,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#console(data) };
         case "ask_user":
           return { value: await this.#askUser(data) };
+        case "file_upload":
+          return { value: this.#fileUpload(data.ref, data.files) };
         default:
           return { error: `Bilinmeyen mesaj: ${name}` };
       }
@@ -313,6 +315,35 @@ export class ZenMcpChild extends JSWindowActorChild {
       return `${ref}: içerik ayarlandı.`;
     }
     throw new Error(`${ref} bir form alanı değil (${roleOf(el) || tag.toLowerCase()}).`);
+  }
+
+  // ---- file_upload: dosyalar parent'ta okunur (bu süreç sandbox'ta, diske erişemez) ----
+
+  #fileUpload(ref, files) {
+    const input = this.#fileInputNear(this.#element(ref));
+    if (!input) throw new Error(`${ref} yakınında dosya alanı (input type=file) yok.`);
+    if (files.length > 1 && !input.multiple) throw new Error("Bu alan tek dosya kabul ediyor.");
+    const win = this.contentWindow;
+    const list = files.map(f => new win.File([Cu.cloneInto(f.bytes, win)], f.name, { type: f.type, lastModified: f.lastModified }));
+    // ayrıcalıklı yöntem: dosya seçme penceresi açmadan alanı doldurur
+    input.mozSetFileArray(list);
+    // ayrıcalıklı koddan oluşturulan olaylar sayfaya güvenilir (isTrusted) görünür
+    input.dispatchEvent(new win.Event("input", { bubbles: true }));
+    input.dispatchEvent(new win.Event("change", { bubbles: true }));
+    return `${files.length} dosya yüklendi: ${files.map(f => f.name).join(", ")}`;
+  }
+
+  // Sürükle-bırak alanları çoğunlukla gizli bir input[type=file] kullanır: öğenin kendisi,
+  // bağlı olduğu label, kendi içi ve birkaç ata yukarısına kadar ara
+  #fileInputNear(el) {
+    const isFile = node => node?.localName === "input" && node.type === "file";
+    if (isFile(el)) return el;
+    if (isFile(el.control)) return el.control;
+    for (let node = el, depth = 0; node && depth < 5; node = node.parentElement, depth++) {
+      const found = node.querySelector?.('input[type="file"]');
+      if (found) return found;
+    }
+    return null;
   }
 
   // ---- ask_user: öğeyi çerçevele, kullanıcıya ne yapacağını söyle, cevabını bekle ----

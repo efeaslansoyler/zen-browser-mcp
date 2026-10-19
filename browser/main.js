@@ -181,6 +181,7 @@ function logError(where, e) {
     // ---- ağ kaydı: Claude'un sekmelerindeki HTTP istekleri, sekme açıldığından beri ----
 
     const MAX_REQUESTS = 500;
+    const MAX_UPLOAD = 100 * 1048576;
     const network = (globalThis.zenMcpNetwork ||= new Map()); // browserId → { list, byChannel, host }
     // XPCOM sabitleri Object.entries'de görünmez, for...in ile gezilir
     const CONTENT_TYPES = {};
@@ -567,6 +568,26 @@ function logError(where, e) {
           navigated: "Sayfa değişti (kullanıcı bir işlem yapmış olabilir); screenshot ile kontrol et.",
           replaced: "Yerine yeni bir ask_user geldi.",
         }[result] ?? String(result));
+      },
+
+      async file_upload({ tabId, ref, paths }) {
+        const browser = browserFor(tabId);
+        const mime = Cc["@mozilla.org/mime;1"].getService(Ci.nsIMIMEService);
+        // autoconfig bağlamında IOUtils yok; tarayıcı penceresininki kullanılır
+        const { IOUtils } = browser.ownerDocument.defaultView;
+        let total = 0;
+        const files = [];
+        for (const path of paths) {
+          const file = localFile(path);
+          if (!file.exists() || !file.isFile()) throw new Error(`Dosya yok: ${path}`);
+          total += file.fileSize;
+          if (total > MAX_UPLOAD) throw new Error(`Dosyalar toplam ${MAX_UPLOAD / 1048576} MB'ı aşıyor.`);
+          let type = "application/octet-stream";
+          try { type = mime.getTypeFromFile(file); } catch {}
+          files.push({ name: file.leafName, type, lastModified: file.lastModifiedTime, bytes: await IOUtils.read(path) });
+        }
+        const { value } = await query(browser, "file_upload", { ref, files }, 60000);
+        return text(value);
       },
 
       async handle_dialog({ tabId, accept, text: answer }) {
