@@ -8,7 +8,7 @@ Let Claude use **your own Zen browser**: your tabs, your logins, real mouse and 
 input, and a small island at the top of the window that shows what Claude is doing. Works with
 Claude Code (and any MCP client). Firefox and other Firefox-based browsers work too.
 
-<!-- demo: docs/demo.gif -->
+[![zen-mcp demo: Claude shops in a background tab, asks before acting, hands the payment to you, and receives an element you point at](docs/demo.gif)](docs/demo.mp4)
 
 ## Why
 

@@ -76,3 +76,16 @@ Zen'de öğeyi seçer, notunu yazar, istek Claude Code oturumuna kendiliğinden 
   - öğenin kırpılmış ekran görüntüsü (dosya yolu; Claude `Read` ile bakar)
   - React/Next.js dev'de bileşen zinciri (fiber `_debugOwner` adları, ör.
     `HeroSection > CTAButton`): repoda doğru dosyayı bulmak için
+
+## Fikirler (vercel-labs/agent-browser'dan, 2026-10-19)
+
+agent-browser Chromium/Safari için CDP/WebDriver tabanlı ajan CLI'si; Firefox/Zen yok, kullanıcıyla
+birlikte çalışma (ada, durdurma, sekme verme) yok. Bizim konum: kendi Firefox/Zen tarayıcında
+Claude ile birlikte çalışma. Alınabilecekler:
+
+- Örtülü öğe kontrolü: tıklama noktasında başka öğe varsa (çerez bandı, modal) tıklamadan hata
+  ve örten öğeyi bildir.
+- İzinli alan adları: Claude yalnız belirli sitelere gidebilsin (hassas sitelerin tersi).
+- CLI + skill modu: MCP tool tanımları her turda bağlamda; CLI'yi skill ile kullanmak daha az
+  token harcayabilir, ölçülmeli.
+- React araçları (bileşen ağacı, props) ve erişilebilirlik denetimi (axe-core).

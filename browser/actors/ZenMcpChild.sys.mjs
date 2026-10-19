@@ -834,21 +834,24 @@ export class ZenMcpChild extends JSWindowActorChild {
     return this.#eventUtils;
   }
 
-  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1] }) {
+  // silent: sanal imleç ve halka yok (geliştirme/demo: kullanıcının tıklaması gibi)
+  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false }) {
     const win = this.contentWindow;
     const eu = this.#eu();
     const mouse = (px, py, event) => eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
     switch (kind) {
       case "click":
-        await this.#moveCursor(x, y);
-        this.#press();
+        if (!silent) {
+          await this.#moveCursor(x, y);
+          this.#press();
+        }
         mouse(x, y, { type: "mousemove" });
         for (let i = 1; i <= count; i++) {
           mouse(x, y, { type: "mousedown", button, clickCount: i });
           mouse(x, y, { type: "mouseup", button, clickCount: i });
         }
         if (button === 0) this.#focusAt(x, y);
-        this.#ripple(x, y);
+        if (!silent) this.#ripple(x, y);
         return "done";
       case "hover":
         await this.#moveCursor(x, y);

@@ -248,7 +248,8 @@ const CSS = `
         background: #000;
       }
     }
-    &[previewing]:is([state="working"], [state="ask"], [state="dialog"]) .preview { display: block; }
+    /* soru varken önizleme düğmelerin yanında sayfayı kapatmasın */
+    &[previewing][state="working"] .preview { display: block; }
 
     & .buttons {
       display: flex;
@@ -520,7 +521,7 @@ export class Island {
 
   resumed() {
     this.#state = "working";
-    this.#text = "devam ediyor";
+    this.#text = L("resuming", "devam ediyor");
     this.#render();
     this.#clearTimeout(this.#hideTimer);
     this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);

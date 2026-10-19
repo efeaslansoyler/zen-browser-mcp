@@ -9,7 +9,7 @@ ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren k
 Claude Code ile (ve her MCP istemcisiyle) çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
 
-<!-- demo: docs/demo.gif -->
+[![zen-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/demo.gif)](docs/demo.mp4)
 
 ## Neden
 

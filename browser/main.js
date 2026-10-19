@@ -41,7 +41,8 @@ function logError(where, e) {
     const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
     const dirURI = Services.io.newFileURI(localFile(dir)).spec.replace(/\/?$/, "/");
     const version = (globalThis.zenMcpVersion = (globalThis.zenMcpVersion || 0) + 1);
-    const socketPath = `${zenMcpRuntimeDir()}/${zenMcpApp}.sock`;
+    // ZEN_MCP_SOCKET: aynı kullanıcıda ikinci bir tarayıcı (demo, test) ayrı sokette dinlesin
+    const socketPath = Services.env.get("ZEN_MCP_SOCKET") || `${zenMcpRuntimeDir()}/${zenMcpApp}.sock`;
 
     function localFile(path) {
       const f = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
@@ -1784,7 +1785,7 @@ function logError(where, e) {
         sandbox.Services = Services;
         sandbox.h = {
           version, state, tools, browserFor, findTab, liveTabs, toPagePoint, screenshot, query,
-          island, subscribers, channelTarget, startPick, sendPick, endPick, pageQuery,
+          island, subscribers, channelTarget, startPick, sendPick, endPick, pageQuery, target, mark, input,
           get pick() { return pick; },
         };
         const value = await Cu.evalInSandbox(`(async () => (${code}))()`, sandbox, null, "chrome_eval", 1);
