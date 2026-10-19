@@ -12,8 +12,14 @@ ve Efe'nin terminalindeki canlı Zen testi geçti: reload, batch/bekleme iptali,
 hızlı Durdur/Devam ve gerçek yazmanın 240/50000 karakterde kesilmesi doğrulandı.
 Ayrıntılar DEVAM.md'de.
 
-Öncelik adayları: batch/site değişiminde izinler, gerçek iptal, çoklu oturum sekme
-sahipliği, örtülü öğe kontrolü, çıktı/diff verimliliği ve CLI+skill ölçümü.
+Batch/site değişiminde izin kontrolü tamamlandı. 10 yeni izin testi dahil 35
+soketsiz otomatik test ve Efe'nin terminalindeki canlı test geçti: doğrudan gezinme,
+HTTP yönlendirmesi, red sonrasında kalan yazmaların engellenmesi ve aynı hedef
+belgede toplu onay doğrulandı. Özgün izin yapılandırması geri yüklendi.
+Detaylar DEVAM.md'nin güncel çalışma bölümünde.
+
+Sıradaki adaylar: çoklu oturum sekme sahipliği, örtülü öğe kontrolü,
+çıktı/diff verimliliği, gelişmiş öğe seçimi ve CLI+skill ölçümü.
 Aşağıdaki bölümler önceki planın tarihçesidir.
 
 

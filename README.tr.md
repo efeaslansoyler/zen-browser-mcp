@@ -138,7 +138,10 @@ adadan onaylar veya reddedersin.
 
 İşlemler: tıklama, sürükleme, yazma, tuşa basma, form doldurma, dosya yükleme, JavaScript
 çalıştırma, diyalog cevaplama ve onaylı modda başka adrese gitme. Okuma, ekran görüntüsü,
-kaydırma ve bekleme her zaman serbest. Toplu işlemler tek soruyla onaylanır.
+kaydırma ve bekleme her zaman serbest. Aynı sayfadaki toplu işlemler tek onayı paylaşır.
+Gezinme, yönlendirme, sayfa yenileme veya izin ayarı değişikliği bu onayı geçersiz kılar;
+sonraki adımlar güncel siteye göre yeniden kontrol edilir. Hedef sayfadaki işlemlerin izni
+gezinmeden sonra istenir. İzin reddedilirse kalan toplu işlem adımları çalışmaz.
 
 Modu adadan (Claude çalışırken), sekme sağ tık menüsünden (**Claude her işlemde izin
 istesin**) ya da komutla değiştir:

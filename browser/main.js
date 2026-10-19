@@ -1421,27 +1421,48 @@ function logError(where, e) {
       return tool !== "navigate" && isSensitive(hostOf(browser));
     }
 
-    // izin verilmezse hata; steps: [{ tool, args, what? }] (toplu çağrı tek soruda; what
-    // verilmişse yeniden tarif edilmez)
+    // Approval belongs to one document, origin and permission configuration.
+    // A redirect, reload or settings change invalidates it, even on the same host.
+    function permissionContext(browser) {
+      const settings = readConfig();
+      return {
+        document: browser.browsingContext?.currentWindowGlobal,
+        origin: browser.currentURI?.prePath || browser.currentURI?.spec,
+        policy: JSON.stringify([settings.mode, settings.sensitive]),
+      };
+    }
+
+    function samePermissionContext(a, b) {
+      return a?.document === b.document && a?.origin === b.origin && a?.policy === b.policy;
+    }
+
+    // Rebuild the request if the page changes while describing actions or awaiting
+    // the user's answer. An answer for the old page must never authorize the new one.
     async function requirePermission(browser, steps) {
-      const lines = [];
-      for (const { tool, args, what: known } of steps) {
-        if (!needsPermission(tool, browser)) continue;
-        const what = known === undefined ? await describeWrite(tool, args, browser) : known;
-        if (what) lines.push(what);
-      }
-      if (!lines.length) return;
-      const host = hostOf(browser);
-      const why = isSensitive(host) ? L(" (sensitive site)", " (hassas site)") : "";
-      const message = lines.length === 1
-        ? L(`${activeAgent.name} wants to: ${lines[0]}`, `${activeAgent.name} şunu yapmak istiyor: ${lines[0]}`)
-        : L(`${activeAgent.name} wants to:`, `${activeAgent.name} şunları yapmak istiyor:`) + `\n${lines.map(l => `• ${l}`).join("\n")}`;
-      const result = await askIsland(browser, `${host ? host + " — " : ""}${L("asks for permission", "izin istiyor")}${why}`, message,
-        { ok: L("Allow", "İzin ver"), cancel: L("Deny", "Verme") });
-      if (result !== "done") {
-        throw new Error(result === "timeout"
-          ? "The user did not answer the permission request; nothing was done."
-          : "The user denied this action; nothing was done. Ask the user what they want.");
+      for (;;) {
+        operation?.check();
+        const context = permissionContext(browser);
+        const lines = [];
+        for (const { tool, args } of steps) {
+          if (!needsPermission(tool, browser)) continue;
+          const what = await describeWrite(tool, args, browser);
+          if (what) lines.push(what);
+        }
+        if (!samePermissionContext(context, permissionContext(browser))) continue;
+        if (!lines.length) return { context, asked: false };
+        const host = hostOf(browser);
+        const why = isSensitive(host) ? L(" (sensitive site)", " (hassas site)") : "";
+        const message = lines.length === 1
+          ? L(`${activeAgent.name} wants to: ${lines[0]}`, `${activeAgent.name} şunu yapmak istiyor: ${lines[0]}`)
+          : L(`${activeAgent.name} wants to:`, `${activeAgent.name} şunları yapmak istiyor:`) + `\n${lines.map(l => `• ${l}`).join("\n")}`;
+        const result = await askIsland(browser, `${host ? host + " — " : ""}${L("asks for permission", "izin istiyor")}${why}`, message,
+          { ok: L("Allow", "İzin ver"), cancel: L("Deny", "Verme") });
+        if (result !== "done") {
+          throw new Error(result === "timeout"
+            ? "The user did not answer the permission request; nothing was done."
+            : "The user denied this action; nothing was done. Ask the user what they want.");
+        }
+        if (samePermissionContext(context, permissionContext(browser))) return { context, asked: true };
       }
     }
 
@@ -1476,17 +1497,8 @@ function logError(where, e) {
       // birleşir (her biri ayrı içerik olmasın), görüntüler sırasıyla araya girer.
       async browser_batch({ actions }) {
         if (!Array.isArray(actions) || !actions.length) throw new Error("actions is empty.");
-        // izin gereken adımlar sekme başına tek soruda
-        const byTab = new Map();
-        for (const { name, input = {} } of actions) {
-          if (!tools[name] || !state.tabs.has(input.tabId)) continue;
-          if (!byTab.has(input.tabId)) byTab.set(input.tabId, []);
-          byTab.get(input.tabId).push({ tool: name, args: input });
-        }
-        for (const [tabId, steps] of byTab) {
-          const browser = findTab(tabId)?.linkedBrowser;
-          if (browser) await requirePermission(browser, steps);
-        }
+        // Grants exist only within this batch and are checked again at each step.
+        const approvals = new Map();
         const content = [];
         let lines = [];
         const flush = () => {
@@ -1503,7 +1515,15 @@ function logError(where, e) {
             break;
           }
           try {
-            for (const c of await runTool(name, input, { approved: true })) {
+            const steps = [];
+            for (const action of actions.slice(i)) {
+              if (action.input?.tabId !== input.tabId) continue;
+              if (!tools[action.name] || action.name === "browser_batch") break;
+              steps.push({ tool: action.name, args: action.input });
+              // Never ask for destination-page actions before navigating there.
+              if (action.name === "navigate") break;
+            }
+            for (const c of await runTool(name, input, { approvals, steps })) {
               if (c.type === "text") lines.push(`${label}: ${c.text}`);
               else {
                 lines.push(`${label}:`);
@@ -1902,8 +1922,8 @@ function logError(where, e) {
     }
 
     // durdurulmuşsa reddeder, sürerken adada ne yapıldığını gösterir
-    // approved: toplu çağrıda izin baştan alındı
-    async function runTool(tool, args, { approved = false } = {}) {
+    // Batch grants cover only listed actions on the unchanged document/site/policy.
+    async function runTool(tool, args, { approvals, steps = [{ tool, args }] } = {}) {
       if (state.paused) throw new Stopped();
       const browser = state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
       const entry = { t: new Date().toISOString(), tool };
@@ -1920,7 +1940,15 @@ function logError(where, e) {
         if (browser && tool !== "browser_batch") {
           const what = await describeWrite(tool, args, browser);
           if (what) entry.what = what;
-          if (!approved) await requirePermission(browser, [{ tool, args, what }]);
+          let grant = approvals?.get(browser);
+          while (!grant?.actions.has(args) || !samePermissionContext(grant.context, permissionContext(browser))) {
+            const permission = await requirePermission(browser, steps);
+            if (!samePermissionContext(permission.context, permissionContext(browser))) continue;
+            grant = { context: permission.context, actions: new Set(steps.map(step => step.args)) };
+            // Automatic mode is not an approval: reevaluate its policy next step.
+            if (permission.asked) approvals?.set(browser, grant);
+            break;
+          }
         }
         operation?.check();
         const result = await tools[tool](args);

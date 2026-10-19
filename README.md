@@ -138,7 +138,10 @@ if it needs live access, and you approve or decline in the browser.
 
 Actions are clicks, dragging, typing, key presses, filling forms, uploading files, running
 JavaScript, answering dialogs and, in ask mode, navigating. Reading, screenshots, scrolling and
-waiting are always allowed. A batch of actions is approved with one question.
+waiting are always allowed. Batch actions on an unchanged page share one approval. Navigation,
+redirects, page reloads or permission-setting changes invalidate that approval; subsequent
+actions are checked again against the current site. Destination-page actions are requested
+after navigation. Denying permission stops the remaining batch steps.
 
 Switch modes from the island (while Claude works) or from the tab context menu (**Claude asks
 before every action**), or:

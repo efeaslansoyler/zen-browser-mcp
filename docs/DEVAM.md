@@ -6,6 +6,34 @@ Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.
 
 Bu bölüm güncel durumdur; aşağıdaki tarihli bölümler geliştirme geçmişidir.
 
+### Güncel çalışma — batch/site değişiminde izinler (2026-10-20)
+
+**Güncel sonuç: canlı izin doğrulaması GEÇTİ.** Efe terminalinde
+`node scripts/check-permissions.ts` çalıştırdı. Doğrudan hassas siteye gezinme ve
+HTTP yönlendirmesi sonrasında izin istendi; red kalan yazmaları engelledi.
+Onay aynı değişmeyen hedef belgede toplu yazmalara izin verdi. Betik başarılı
+bitti ve özgün izin yapılandırmasını geri yükledi. Aşağıdaki EPERM/bekleyen
+canlı test kayıtları bu başarılı denemeden öncedir. Değişiklikler henüz commit değil.
+
+
+- Önceki gerçek iptal işi `f101d33` ile commit edildi; push kullanıcıda.
+- Batch'in baştan aldığı koşulsuz `approved: true` kaldırıldı. İzin her adımda güncel
+  belge, origin ve izin ayarlarıyla karşılaştırılır. Toplu onay yalnız aynı batch'teki
+  listelenmiş adımlar için geçerlidir; otomatik modda izinsiz geçiş onay olarak saklanmaz.
+- Gezinme adımının ötesindeki işlemler başlangıç sayfasında onaylatılmaz. Yönlendirme,
+  aynı origin'de yeni belge, origin değişimi ve ayar değişimi önceki onayı geçersiz kılar.
+  İzin sorusu hazırlanırken veya cevap beklerken sayfa değişirse istek yeniden kurulur.
+- Red/timeout kalan batch'i durdurur ve tamamlanan adımların çıktısı korunur.
+- Yeni 10 izin testi ve önceki 25 soketsiz test geçti; derleme/sözdizimi/diff kontrolleri geçti.
+- Canlı test sürücüsü: `node scripts/check-permissions.ts`. Yeni kodu reload eder,
+  yalnız localhost/127.0.0.1 test sunucusunu kullanır. 127.0.0.1 geçici hassas site yapılır;
+  test sonunda ayar dosyası eski içeriğine döner ve yalnız test sekmesi kapatılır.
+  Kullanıcının mevcut modu auto olmalı; ask modunu düşürmez. Test kendi benzersiz
+  işaretini taşıyan izin kutularında gerçek ada düğmelerini kullanarak onay/red dener.
+- Canlı çalışma bu ortamda yine soket EPERM hatasında kaldı; kullanıcı terminalinde
+  doğrudan gezinme, HTTP yönlendirmesi, red ve aynı belgede toplu onay doğrulaması bekliyor.
+- Değişiklikler henüz commit edilmedi. Bir sonraki özellik çoklu oturum sekme sahipliği.
+
 ### Son çalışma — gerçek Durdur / Devam (2026-10-20)
 
 **Güncel sonuç: canlı doğrulama GEÇTİ.** Efe kendi terminalinde
