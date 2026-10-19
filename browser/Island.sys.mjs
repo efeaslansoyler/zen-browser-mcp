@@ -180,13 +180,19 @@ export class Island {
     for (const win of [...this.#windows.keys()]) this.detach(win);
   }
 
-  // Claude bir sekmede iş yapıyor; son işlemden HIDE_AFTER sonra gizlenir
+  // Claude bir sekmede iş yapıyor; işlem sürdükçe görünür kalır
   working(browser, text) {
     if (this.#state === "stopped") return;
+    this.#clearTimeout(this.#hideTimer);
     this.#state = "working";
     this.#text = text;
     this.#browser = new WeakRef(browser);
     this.#render();
+  }
+
+  // süren işlem kalmadı: HIDE_AFTER sonra gizlen (arada yeni işlem gelirse iptal)
+  idle() {
+    if (this.#state !== "working") return;
     this.#clearTimeout(this.#hideTimer);
     this.#hideTimer = this.#setTimeout(() => this.#hide(), HIDE_AFTER);
   }

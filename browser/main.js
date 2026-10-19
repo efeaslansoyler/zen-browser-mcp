@@ -461,6 +461,7 @@ function logError(where, e) {
     }
 
     let island = null;
+    let activeCalls = 0; // adayı gösteren, sürmekte olan tool çağrıları
 
     // adada görünen kısa açıklama: "seaskablo.com — tıklıyor"
     function describeAction(tool, args, browser) {
@@ -780,12 +781,21 @@ function logError(where, e) {
         const { tool, args = {} } = JSON.parse(line);
         const fn = tools[tool] || commands[tool];
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
+        let shown = false;
         if (tools[tool]) {
           if (state.paused) throw new Stopped();
           const browser = args.tabId != null ? findTab(args.tabId)?.linkedBrowser : null;
-          if (browser) island?.working(browser, describeAction(tool, args, browser));
+          if (browser) {
+            island?.working(browser, describeAction(tool, args, browser));
+            activeCalls++;
+            shown = true;
+          }
         }
-        message = { ok: true, content: await fn(args) };
+        try {
+          message = { ok: true, content: await fn(args) };
+        } finally {
+          if (shown && --activeCalls === 0) island?.idle();
+        }
       } catch (e) {
         // diyalog bir hata değil, Claude'un bilmesi gereken durum
         message = e instanceof DialogOpen
