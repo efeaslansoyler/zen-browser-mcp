@@ -813,6 +813,10 @@ function logError(where, e) {
       "http-on-failed-opening-request",
     ];
 
+    const { Cancellation } = ChromeUtils.importESModule(`resource://zenmcp/Cancellation.sys.mjs?v=${version}`);
+    let operation = null;
+    let stopGeneration = 0;
+    let querySequence = 0;
     const pendingListeners = new Set();
 
     function waitForLoad(browser, timeout = 20000, destination = null) {
@@ -830,7 +834,9 @@ function logError(where, e) {
         };
         // tarayıcı dinleyiciyi zayıf referansla tutar; bitene kadar biz tutalım
         pendingListeners.add(listener);
+        const off = operation?.onCancel(() => { try { browser.stop(); } finally { finish(); } });
         function finish() {
+          off?.();
           clearTimeout(timer);
           pendingListeners.delete(listener);
           try { browser.removeProgressListener(listener); } catch {}
@@ -1025,7 +1031,7 @@ function logError(where, e) {
       try {
         bitmap = await wg.drawSnapshot(null, 1, "white");
       } finally {
-        overlays(false);
+        try { wg.getActor("ZenMcp").sendAsyncMessage("overlays", { hidden: false }); } catch {}
       }
       const { width: w, height: h } = bitmap;
       const s = Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h))) * Math.min(1, Math.max(0.1, scale));
@@ -1100,31 +1106,21 @@ function logError(where, e) {
         super("The user stopped browser automation from the browser's island. Nothing can be done in the browser until they press \"Resume\" there; ask the user what they want.");
       }
     }
-    const stopListeners = new Set();
-
-    // bekleyen bir işleme yarıştırılır; durdurulunca reddedilir. cancel ile bırakılır.
-    function whenStopped() {
-      let reject;
-      const promise = new Promise((_, r) => (reject = r));
-      stopListeners.add(reject);
-      promise.cancel = () => stopListeners.delete(reject);
-      return promise;
+    async function guard(promise) {
+      if (state.paused) throw new Stopped();
+      return operation ? operation.race(promise) : promise;
     }
 
-    async function guard(promise) {
-      const stopped = whenStopped();
-      try {
-        return await Promise.race([promise, stopped]);
-      } finally {
-        stopped.cancel();
-      }
+    function operationSleep(ms) {
+      if (state.paused) throw new Stopped();
+      return operation ? operation.wait(ms, { setTimeout, clearTimeout }) : sleep(ms);
     }
 
     function stopClaude() {
       if (state.paused) return;
       state.paused = true;
-      for (const reject of stopListeners) reject(new Stopped());
-      stopListeners.clear();
+      stopGeneration++;
+      operation?.cancel(new Stopped());
       // sayfada bekleyen ask_user çizimini kaldır
       for (const tab of liveTabs()) {
         cancelAsk(tab.linkedBrowser, "stopped");
@@ -1143,9 +1139,11 @@ function logError(where, e) {
       const answered = new Promise(resolve => tabRequests.set(browser, resolve));
       island?.ask(browser, text, message, true, labels);
       const notified = notifyAsk(browser, message);
+      const timer = new Cancellation();
       try {
-        return await guard(Promise.race([answered, sleep(timeout * 1000).then(() => "timeout")]));
+        return await guard(Promise.race([answered, timer.wait(timeout * 1000, { setTimeout, clearTimeout }).then(() => "timeout")]));
       } finally {
+        timer.cancel();
         tabRequests.delete(browser);
         island?.askEnded();
         if (notified) {
@@ -1237,13 +1235,23 @@ function logError(where, e) {
 
     // frame: sekmedeki bir alt çerçevenin BrowsingContext'i (varsayılan üst çerçeve)
     async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
+      if (state.paused) throw new Stopped();
+      operation?.check();
+      const scope = operation;
       const wg = frame?.currentWindowGlobal;
       if (!wg) throw new Error("The page has not loaded yet.");
       throwIfDialog(browser);
       let done = false;
+      const actor = wg.getActor("ZenMcp");
+      const requestId = ++querySequence;
+      const watcher = new Cancellation();
+      const cancelActor = () => {
+        try { actor.sendAsyncMessage("cancel_operation", { requestId }); } catch {}
+      };
+      const off = scope?.onCancel(cancelActor);
       const watchDialog = (async () => {
         while (!done) {
-          await sleep(250);
+          await watcher.wait(250, { setTimeout, clearTimeout });
           if (done) return;
           throwIfDialog(browser);
           if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
@@ -1252,14 +1260,18 @@ function logError(where, e) {
       })();
       try {
         const result = await guard(Promise.race([
-          wg.getActor("ZenMcp").sendQuery(name, { ...data, agent: activeAgent }),
+          actor.sendQuery(name, { ...data, agent: activeAgent, requestId }),
           watchDialog,
-          sleep(timeout).then(() => { throw new Error(`The page did not respond within ${timeout / 1000} s.`); }),
+          watcher.wait(timeout, { setTimeout, clearTimeout }).then(() => { throw new Error(`The page did not respond within ${timeout / 1000} s.`); }),
         ]));
+        scope?.check();
         if (result?.error) throw new Error(shortRefs(result.error));
         return result;
       } finally {
         done = true;
+        off?.();
+        cancelActor();
+        watcher.cancel();
       }
     }
 
@@ -1580,13 +1592,13 @@ function logError(where, e) {
             for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
             break;
           case "wait":
-            await guard(sleep(Math.min(need("duration"), 30) * 1000));
+            await operationSleep(Math.min(need("duration"), 30) * 1000);
             break;
           default:
             throw new Error(`Unsupported action: ${args.action}`);
         }
         // olayların sayfada işlenmesine kısa süre tanı
-        await sleep(100);
+        await operationSleep(100);
         return text(`${args.action} done.`);
       },
 
@@ -1678,7 +1690,7 @@ function logError(where, e) {
           const elapsed = Date.now() - start;
           if (ok) return text(`Done (${(elapsed / 1000).toFixed(1)} s).`);
           if (elapsed >= limit) throw new Error(`Not met within ${Math.min(timeout, 60)} s.`);
-          await guard(sleep(250));
+          await operationSleep(250);
         }
       },
 
@@ -1774,7 +1786,7 @@ function logError(where, e) {
         const dialog = win.document.querySelector("dialog");
         if (accept) dialog.acceptDialog();
         else dialog.cancelDialog();
-        await sleep(200);
+        await operationSleep(200);
         return text(`${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`);
       },
 
@@ -1867,6 +1879,7 @@ function logError(where, e) {
         sandbox.Services = Services;
         sandbox.h = {
           version, state, tools, browserFor, findTab, liveTabs, toPagePoint, screenshot, query,
+          stopClaude, resumeClaude,
           island, subscribers, channelTarget, startPick, sendPick, endPick, pageQuery, target, mark, input,
           get pick() { return pick; },
         };
@@ -1909,7 +1922,10 @@ function logError(where, e) {
           if (what) entry.what = what;
           if (!approved) await requirePermission(browser, [{ tool, args, what }]);
         }
+        operation?.check();
         const result = await tools[tool](args);
+        // Preserve completed steps and the cancellation error from a partial batch.
+        if (!result?.isError) operation?.check();
         if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
         return result;
       } catch (e) {
@@ -1949,11 +1965,16 @@ function logError(where, e) {
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
         if (session && tools[tool]) lastUse.set(session, Date.now());
         if (tools[tool]) {
+          if (state.paused) throw new Stopped();
+          const generation = stopGeneration;
           const pending = toolQueue.then(async () => {
+            if (generation !== stopGeneration || state.paused) throw new Stopped();
+            const scope = operation = new Cancellation();
             activeAgent = agentTheme(agent ?? { id: "claude" });
             globalThis.zenMcpActiveAgent = { id: activeAgent.id, name: activeAgent.name };
             island?.setAgent(activeAgent);
-            return runTool(tool, args);
+            try { return await runTool(tool, args); }
+            finally { scope.cancel(); if (operation === scope) operation = null; }
           });
           toolQueue = pending.catch(() => {});
           const content = await pending;
@@ -2072,6 +2093,7 @@ function logError(where, e) {
     }
 
     function stop() {
+      operation?.cancel(new Stopped());
       try { endPick(); } catch {}
       // aboneler yeni sürüme yeniden bağlansın
       for (const sub of subscribers.values()) {

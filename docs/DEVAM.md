@@ -6,6 +6,51 @@ Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.
 
 Bu bölüm güncel durumdur; aşağıdaki tarihli bölümler geliştirme geçmişidir.
 
+### Son çalışma — gerçek Durdur / Devam (2026-10-20)
+
+**Güncel sonuç: canlı doğrulama GEÇTİ.** Efe kendi terminalinde
+`node scripts/check-cancellation.ts` çalıştırdı: yeni köprü Zen yeniden başlatılmadan
+yüklendi; aktif bekleme/batch iptali ve durdurulmuşken yeni işlerin reddi geçti;
+hızlı Durdur/Devam eski işi canlandırmadı. Gerçek yazma 240/50000 karakterde kesildi,
+gecikmiş girdi gelmedi ve yeni yazma çalıştı. Test sekmesi kapatıldı.
+Güvenilir modül yolu regresyonu dahil soket gerektirmeyen 25 otomatik test geçti.
+Aşağıdaki EPERM ve ilk reload hatası kayıtları bu sonucun öncesindeki denemelerdir.
+
+
+- Kullanıcının ilk canlı testinde reload başarısız oldu: günlükte "System modules must
+  be loaded from a trusted scheme". Ana süreç Cancellation import'u file:// yerine
+  resource://zenmcp/ olarak düzeltildi; güvenilir şema regresyon testi eklendi.
+  Bu düzeltmeden sonra kullanıcı terminalinde canlı testi tekrar çalıştırmak gerekiyor.
+
+
+- Önceki çoklu ajan/Codex değişiklikleri `f024be4` ile commit edildi. Push bu ortamda
+  GitHub DNS çözümlemesi engellendiği için tamamlanmadı; commit yerelde.
+- Yeni `browser/Cancellation.sys.mjs` ana süreç ve actor için iptal kapsamı sağlar.
+  Durdur aktif kapsamı iptal eder; bekleme zamanlayıcıları temizlenir, gezinme yüklemesi
+  durur ve dinleyicisi kaldırılır. Actor sorgularına istek kimliğiyle iptal iletilir.
+- Yazma küçük Unicode parçaları arasında, tuş dizileri ve sürükleme adımları arasında
+  olay döngüsüne döner. İptal kalan girdiyi keser; sürükleme fareyi bırakır; kaydırmanın
+  gecikmeli fallback'i çalışmaz. İmleç hareketinde iptal edilen tıklama gönderilmez.
+- Durdur öncesi kuyruk istekleri nesil kontrolüyle reddedilir; hızlı Devam eski işleri
+  canlandırmaz. Batch tamamlanan adımları ve iptal hatasını korur. Yeni istekler çalışır.
+- Doğrulama: derleme, sözdizimi ve diff kontrolü geçti. Yeni 9 iptal testi dahil soket
+  gerektirmeyen 24 test geçti. Testler gerçek actor sınıfını ve ana süreçteki batch,
+  kuyruk, Durdur/Devam, gezinme kodunu sahte platform sınırlarıyla çalıştırır.
+- `scripts/check-cancellation.ts` canlı test sürücüsü eklendi. Yerel terminalde
+  `node scripts/check-cancellation.ts` yeni kodu reload eder; gerçek batch/bekleme,
+  hızlı Durdur/Devam, gerçek yazma iptali ve yeni girdi kabulünü test eder; yalnız
+  kendi geçici sekmesini kapatır. Sözdizimi kontrolü geçti, canlı çalışma EPERM'de kaldı.
+- Standart Zen MCP erişimi çalışıyor; fakat `reload` ve `chrome_eval` geliştirme
+  komutları MCP'ye açık değil. Dolayısıyla MCP bağlantısını doğrulamak bu yeni kodun
+  yüklendiğini veya iptal testinin canlı geçtiğini kanıtlamaz.
+- Canlı Zen doğrulaması ve reload YAPILAMADI: bu ortam tarayıcı soketine bağlantıyı
+  `EPERM` ile engelliyor. Hook relay yaşam döngüsü testi de Unix soketi açamadığından
+  çalışmıyor. Soket erişimli ortamda reload + gerçek Durdur/Devam denemesi bekliyor.
+- İptal yapılmış tıklama/ağ isteğini geri almaz; sayfanın kendi başlattığı JS/timer işleri
+  ve senkron çalışan JavaScript zorla sonlandırılmaz. Yeni değişiklikler henüz commit değil.
+- Bu sohbette kullanıcının seaskablo.com üzerinden öğe gönderimi başarıyla ulaştı.
+  Bu, hook güven onayının veya temiz oturum otomatik kaydının ayrıca doğrulandığı anlamına gelmez.
+
 ### Amaç ve kararlar
 
 - Zen MCP artık yalnız Claude'a özel değil: günlük Zen/Firefox penceresinde farklı AI

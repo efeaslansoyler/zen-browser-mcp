@@ -9,6 +9,8 @@
 
 const { agentTheme, applyTheme } = ChromeUtils.importESModule(new URL("../Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
 
+const { Cancellation } = ChromeUtils.importESModule(new URL("../Cancellation.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
+
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
 // Kullanıcının gördüğü yazılar (imleç etiketi, öğe tarifi) tarayıcı Türkçeyse Türkçe; Claude'a
@@ -148,6 +150,7 @@ const INTERACTIVE_ROLES = new Set([
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD", "META", "LINK"]);
 
 export class ZenMcpChild extends JSWindowActorChild {
+  #operations = new Map();
   #refs = new Map();
   #agent = agentTheme({ id: "claude" });
   #eventUtils = null;
@@ -169,6 +172,12 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   async receiveMessage({ name, data }) {
+    const scope = new Cancellation();
+    if (name === "cancel_operation") {
+      this.#operations.get(data.requestId)?.cancel();
+      return null;
+    }
+    if (data?.requestId != null) this.#operations.set(data.requestId, scope);
     try {
       if (data?.agent) {
         this.#agent = agentTheme(data.agent);
@@ -198,11 +207,14 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "locate":
           return this.#locate(data.ref);
         case "input":
-          return { value: await this.#input(data) };
+          return { value: await this.#input(data, scope) };
         case "console":
           return { value: this.#console(data) };
-        case "ask_user":
-          return { value: await this.#askUser(data) };
+        case "ask_user": {
+          const off = scope.onCancel(() => this.#ask?.finish("stopped"));
+          try { return { value: await this.#askUser(data) }; }
+          finally { off(); }
+        }
         case "overlays":
           return { value: this.#overlays(data.hidden) };
         case "cancel_ask":
@@ -225,7 +237,16 @@ export class ZenMcpChild extends JSWindowActorChild {
       }
     } catch (e) {
       return { error: String(e?.message ?? e) };
+    } finally {
+      if (data?.requestId != null) this.#operations.delete(data.requestId);
     }
+  }
+
+  didDestroy() {
+    for (const scope of this.#operations.values()) scope.cancel();
+    this.#operations.clear();
+    if (this.#cursor) clearTimeout(this.#cursor.hideTimer);
+    this.#ask?.finish("navigated");
   }
 
   #text() {
@@ -848,14 +869,23 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   // silent: sanal imleç ve halka yok (geliştirme/demo: kullanıcının tıklaması gibi)
-  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false }) {
+  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false }, scope) {
     const win = this.contentWindow;
     const eu = this.#eu();
-    const mouse = (px, py, event) => eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
+    scope.onCancel(() => {
+      if (!this.#cursor) return;
+      clearTimeout(this.#cursor.hideTimer);
+      this.#cursor.pointer.classList.remove("press");
+      this.#cursor.pointer.classList.add("gone");
+    });
+    const mouse = (px, py, event) => {
+      scope.check();
+      eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
+    };
     switch (kind) {
       case "click":
         if (!silent) {
-          await this.#moveCursor(x, y);
+          await this.#moveCursor(x, y, scope);
           this.#press();
         }
         mouse(x, y, { type: "mousemove" });
@@ -867,35 +897,54 @@ export class ZenMcpChild extends JSWindowActorChild {
         if (!silent) this.#ripple(x, y);
         return "done";
       case "hover":
-        await this.#moveCursor(x, y);
+        await this.#moveCursor(x, y, scope);
         mouse(x, y, { type: "mousemove" });
         return "done";
       case "drag": {
-        await this.#moveCursor(x, y);
+        await this.#moveCursor(x, y, scope);
         this.#press();
         mouse(x, y, { type: "mousemove" });
         mouse(x, y, { type: "mousedown" });
-        const steps = 10;
-        for (let i = 1; i <= steps; i++) {
-          mouse(x + ((to[0] - x) * i) / steps, y + ((to[1] - y) * i) / steps, { type: "mousemove", buttons: 1 });
-        }
-        mouse(to[0], to[1], { type: "mouseup" });
-        await this.#moveCursor(to[0], to[1]);
+        let released = false;
+        let last = [x, y];
+        const release = () => {
+          if (released) return;
+          released = true;
+          eu.synthesizeMouseAtPoint(...last, { type: "mouseup" }, win);
+          this.#cursor?.pointer.classList.remove("press");
+        };
+        const off = scope.onCancel(release);
+        try {
+          const steps = 10;
+          for (let i = 1; i <= steps; i++) {
+            await scope.wait(0, { setTimeout, clearTimeout });
+            last = [x + ((to[0] - x) * i) / steps, y + ((to[1] - y) * i) / steps];
+            mouse(...last, { type: "mousemove", buttons: 1 });
+          }
+        } finally { off(); release(); }
+        await this.#moveCursor(to[0], to[1], scope);
         return "done";
       }
       case "wheel":
-        await this.#moveCursor(x, y);
-        return this.#wheel(x, y, dx, dy, multiplier);
+        await this.#moveCursor(x, y, scope);
+        return await this.#wheel(x, y, dx, dy, multiplier, scope);
       case "keys":
         this.#cursorLabel(L("pressing keys", "tuşa basıyor"));
-        for (const { key, mods } of keys) eu.synthesizeKey(key, mods, win);
+        for (const { key, mods } of keys) {
+          await scope.wait(0, { setTimeout, clearTimeout });
+          scope.check();
+          eu.synthesizeKey(key, mods, win);
+        }
         return "done";
       case "text":
         this.#cursorLabel(L("typing…", "yazıyor…"));
-        text.split("\n").forEach((line, i) => {
-          if (i > 0) eu.synthesizeKey("KEY_Enter", {}, win);
-          if (line) eu.sendString(line, win);
-        });
+        // Yield between small Unicode-safe chunks so Stop can reach this process.
+        for (const character of text.match(/[^\n]{1,16}|\n/gu) ?? []) {
+          await scope.wait(0, { setTimeout, clearTimeout });
+          scope.check();
+          if (character === "\n") eu.synthesizeKey("KEY_Enter", {}, win);
+          else eu.sendString(character, win);
+        }
         return "done";
       default:
         throw new Error(`Bilinmeyen girdi: ${kind}`);
@@ -942,7 +991,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     cursor.host.style.setProperty("--zen-agent-arrow", `url("${arrow}")`);
   }
 
-  async #moveCursor(x, y) {
+  async #moveCursor(x, y, scope) {
     const cursor = this.#cursorEl();
     this.#paintCursor(cursor);
     const visible = !this.document.hidden;
@@ -955,7 +1004,8 @@ export class ZenMcpChild extends JSWindowActorChild {
     cursor.x = x;
     cursor.y = y;
     this.#cursorIdle();
-    if (ms) await new Promise(r => setTimeout(r, ms + 30));
+    if (ms) await scope.wait(ms + 30, { setTimeout, clearTimeout });
+    scope.check();
   }
 
   #press() {
@@ -1023,13 +1073,14 @@ export class ZenMcpChild extends JSWindowActorChild {
   // Tekerlek olayı gönderilir (sayfanın wheel dinleyicileri çalışsın). Tarayıcı deltayı
   // mousewheel.default.delta_multiplier_* ile çarptığı için olay deltası ona bölünür. Arka
   // plandaki sekmede tekerlek sayfayı kaydırmaz; o zaman istenen miktar doğrudan kaydırılır.
-  async #wheel(x, y, dx, dy, [mx, my]) {
+  async #wheel(x, y, dx, dy, [mx, my], scope) {
     const win = this.contentWindow;
     const scroller = this.#scrollerAt(x, y);
     const before = [scroller.scrollLeft, scroller.scrollTop];
     const dpr = win.devicePixelRatio;
     this.#eu().synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
-    await new Promise(r => setTimeout(r, 150));
+    await scope.wait(150, { setTimeout, clearTimeout });
+    scope.check();
     const moved = [scroller.scrollLeft - before[0], scroller.scrollTop - before[1]];
     if (!moved[0] && !moved[1]) {
       scroller.scrollBy({ left: dx, top: dy, behavior: "instant" });
