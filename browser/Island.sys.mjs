@@ -150,7 +150,58 @@ const CSS = `
       &::before { display: none; }
       &:hover { background: #e08667; }
     }
-    &:is([state="ask"], [state="dialog"]) .stop { display: none; }
+    &:is([state="ask"], [state="dialog"], [state="picking"], [state="compose"], [state="sent"]) .stop { display: none; }
+    &:is([state="picking"], [state="compose"], [state="sent"]) .spark { animation: none; }
+
+    & .hint {
+      flex: none;
+      opacity: 0.5;
+      font-size: 11.5px;
+      &:empty { display: none; }
+    }
+
+    /* öğe seçildi: "Ne yapılsın?" */
+    & .compose {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 10px 10px 33px;
+    }
+    &[state="compose"] .compose { display: flex; }
+    & textarea {
+      appearance: none;
+      box-sizing: border-box;
+      width: 400px;
+      max-width: 100%;
+      height: 56px;
+      margin: 0;
+      padding: 7px 9px;
+      resize: none;
+      border: none;
+      border-radius: 9px;
+      outline: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+      font: inherit;
+      line-height: 1.4;
+
+      &:focus { box-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.7); }
+      &::placeholder { color: rgba(243, 243, 243, 0.45); }
+    }
+    & .compose-footer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    & .target {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      opacity: 0.5;
+      font-size: 11.5px;
+    }
 
     & .detail {
       display: none;
@@ -182,7 +233,7 @@ const CSS = `
         background: #000;
       }
     }
-    &[previewing]:not([state="stopped"], [state="hidden"]) .preview { display: block; }
+    &[previewing]:is([state="working"], [state="ask"], [state="dialog"]) .preview { display: block; }
 
     & .buttons {
       display: flex;
@@ -203,6 +254,10 @@ const CSS = `
 
 const isStopKey = event =>
   event.key === "Escape" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
+// Ctrl+Shift+F: öğe seç (Ctrl+Shift+E Zen'de ağ izleyicisi)
+const isPickKey = event =>
+  event.key?.toLowerCase() === "f" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
+const SENT_FOR = 2500;
 
 export class Island {
   #windows = new Map(); // pencere → DOM parçaları ve dinleyiciler
@@ -211,13 +266,19 @@ export class Island {
   #text = "";
   #message = "";
   #askDone = false; // ask_user wait: "done" → adada Tamam
+  #askLabels = {}; // { ok, cancel }: düğme yazıları (request_tab: Ver / Verme)
   #browser = null; // son işlem yapılan sekme (WeakRef)
   #hideTimer = null;
+  // kullanıcının öğe seçimi Claude'un durumunun üstüne biner, bitince ada o duruma döner:
+  // { mode: "picking" | "compose" | "sent", browser (WeakRef), label, target, text }
+  #pick = null;
+  #pickTimer = null;
   #actions;
   #setTimeout;
   #clearTimeout;
 
-  // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled") }
+  // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled"),
+  //            pick(win), send(note), cancelPick() }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
     this.#setTimeout = setTimeout;
@@ -245,7 +306,8 @@ export class Island {
     const favicon = node("img", "favicon");
     const host = node("span", "host");
     const text = node("span", "action");
-    info.append(favicon, host, text);
+    const hint = node("span", "hint");
+    info.append(favicon, host, text, hint);
     const stop = node("button", "stop");
     row.append(spark, info, stop);
     const detail = node("div", "detail");
@@ -260,10 +322,39 @@ export class Island {
     preview.title = "Sekmeye git";
     const canvas = node("canvas");
     preview.append(canvas);
-    el.append(row, detail, preview);
+    const compose = node("div", "compose");
+    const note = node("textarea");
+    note.placeholder = "Ne yapılsın?";
+    const footer = node("div", "compose-footer");
+    const target = node("span", "target");
+    const discard = node("button", "", "Vazgeç");
+    const send = node("button", "primary", "Gönder");
+    footer.append(target, discard, send);
+    compose.append(note, footer);
+    el.append(row, detail, compose, preview);
     doc.documentElement.append(el);
 
+    const submit = () => {
+      if (this.#pick?.mode !== "compose") return;
+      const value = note.value.trim();
+      if (value) this.#actions.send(value);
+      else note.focus();
+    };
+    send.addEventListener("click", submit);
+    discard.addEventListener("click", () => this.#actions.cancelPick());
+    // Enter gönderir, Shift+Enter yeni satır, Esc vazgeçer
+    note.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        submit();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.#actions.cancelPick();
+      }
+    });
+
     const goToTab = () => {
+      if (this.#pick) return;
       const browser = this.#browser?.deref();
       if (browser) this.#actions.goTo(browser);
     };
@@ -283,7 +374,14 @@ export class Island {
       else this.#actions.stop();
     });
     // Ctrl+Shift+Esc: Claude'u durdur (sayfa odaktayken de; tuşları önce tarayıcı görür)
+    // Ctrl+Shift+F: öğe seç (seçim sürerken yeniden basmak vazgeçer)
     const onKey = event => {
+      if (isPickKey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.#actions.pick(win);
+        return;
+      }
       if (!isStopKey(event) || this.#state === "stopped") return;
       event.preventDefault();
       event.stopPropagation();
@@ -296,7 +394,7 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, stop, message, goto, ok, canvas, previewing: false, onKey, onResize, onTabSelect });
+    this.#windows.set(win, { el, favicon, host, text, hint, stop, message, cancel, goto, ok, note, target, canvas, previewing: false, onKey, onResize, onTabSelect });
     this.#render();
   }
 
@@ -316,6 +414,7 @@ export class Island {
 
   destroy() {
     this.#clearTimeout(this.#hideTimer);
+    this.#clearTimeout(this.#pickTimer);
     for (const win of [...this.#windows.keys()]) this.detach(win);
   }
 
@@ -342,13 +441,20 @@ export class Island {
 
   // Claude kullanıcıdan bir şey istiyor: genişle, mesajı göster; askEnded'e kadar kalır.
   // done: Tamam düğmesi (wait: "done"); yoksa kullanıcı sayfadaki öğeye tıklayınca biter.
-  ask(browser, text, message, done) {
+  // labels: düğme yazıları, ör. { ok: "Ver", cancel: "Verme" }
+  ask(browser, text, message, done, labels = {}) {
     if (this.#state === "stopped") return;
     this.#clearTimeout(this.#hideTimer);
     this.#state = "ask";
     this.#text = text;
     this.#message = message;
     this.#askDone = done;
+    this.#askLabels = labels;
+    // "gönderildi" bildirimi beklemesin; seçim ya da not yazımı sürüyorsa o üstte kalır
+    if (this.#pick?.mode === "sent") {
+      this.#clearTimeout(this.#pickTimer);
+      this.#pick = null;
+    }
     this.#browser = new WeakRef(browser);
     this.#render();
   }
@@ -402,6 +508,46 @@ export class Island {
     this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);
   }
 
+  // ---- kullanıcının öğe seçimi ----
+
+  get pickMode() {
+    return this.#pick?.mode ?? null;
+  }
+
+  // seçici açık: "bir öğeye tıkla"
+  picking(browser) {
+    this.#clearTimeout(this.#pickTimer);
+    this.#pick = { mode: "picking", browser: new WeakRef(browser) };
+    this.#render();
+  }
+
+  // öğe seçildi: not kutusu; target gönderilecek Claude Code oturumunun adı (yoksa pano)
+  compose(browser, label, target) {
+    this.#clearTimeout(this.#pickTimer);
+    this.#pick = { mode: "compose", browser: new WeakRef(browser), label, target };
+    for (const parts of this.#windows.values()) parts.note.value = "";
+    this.#render();
+    const owner = browser.ownerDocument?.defaultView;
+    this.#windows.get(owner)?.note.focus();
+  }
+
+  // "gönderildi" kısa süre görünür, sonra ada Claude'un durumuna döner
+  sent(text) {
+    const browser = this.#pick?.browser;
+    if (!browser) return;
+    this.#pick = { mode: "sent", browser, text };
+    this.#render();
+    this.#clearTimeout(this.#pickTimer);
+    this.#pickTimer = this.#setTimeout(() => this.pickEnded(), SENT_FOR);
+  }
+
+  pickEnded() {
+    this.#clearTimeout(this.#pickTimer);
+    if (!this.#pick) return;
+    this.#pick = null;
+    this.#render();
+  }
+
   #hide() {
     if (this.#state !== "working") return;
     // kullanıcı önizlemeyi izliyorsa kaybolma; fare ayrılınca idle() yeniden sayar
@@ -412,19 +558,34 @@ export class Island {
 
   // Durdurulmuşken her pencerede; diğer durumlarda yalnız Claude'un sekmesinin penceresinde
   #render() {
-    const browser = this.#browser?.deref();
+    const pick = this.#pick;
+    const browser = (pick ? pick.browser : this.#browser)?.deref();
     const owner = browser?.ownerDocument?.defaultView;
-    const stopped = this.#state === "stopped";
+    const state = pick ? pick.mode : this.#state;
+    const stopped = state === "stopped";
     // "seaskablo.com — tıklıyor": site soluk, işlem belirgin; sekmenin favicon'u başta
-    const [siteName, action] = this.#text.includes(" — ") ? this.#text.split(" — ") : ["", this.#text];
+    let [siteName, action] = this.#text.includes(" — ") ? this.#text.split(" — ") : ["", this.#text];
+    let hintText = "";
+    if (pick) {
+      siteName = "";
+      if (pick.mode === "picking") {
+        action = "Claude'a göstermek için bir öğeye tıkla";
+        hintText = "↑ üst öğe · Esc";
+      } else if (pick.mode === "compose") {
+        try { siteName = browser.currentURI.host; } catch {}
+        action = pick.label;
+      } else action = pick.text;
+    }
     let icon = null;
     try { icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser)); } catch {}
     for (const [win, parts] of this.#windows) {
-      const { el, favicon, host, text, stop, message, goto, ok } = parts;
-      const visible = stopped || (this.#state !== "hidden" && win === owner);
-      el.setAttribute("state", this.#state);
+      const { el, favicon, host, text, hint, stop, message, cancel, goto, ok, target } = parts;
+      const visible = stopped || (state !== "hidden" && win === owner);
+      el.setAttribute("state", state);
       host.textContent = stopped ? "" : siteName;
       text.textContent = stopped ? "Claude durduruldu" : action;
+      hint.textContent = hintText;
+      target.textContent = pick?.mode !== "compose" ? "" : pick.target ? `→ ${pick.target}` : "→ pano (açık Claude Code kanalı yok)";
       if (icon && !stopped) favicon.src = icon;
       else favicon.removeAttribute("src");
       stop.textContent = stopped ? "Devam et" : "";
@@ -432,7 +593,9 @@ export class Island {
       message.textContent = this.#message;
       // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
       goto.hidden = win.gBrowser.selectedBrowser === browser;
-      ok.hidden = !(this.#state === "ask" && this.#askDone);
+      ok.hidden = !(state === "ask" && this.#askDone);
+      ok.textContent = this.#askLabels.ok ?? "Tamam";
+      cancel.textContent = this.#askLabels.cancel ?? "Vazgeç";
       goto.classList.toggle("primary", ok.hidden);
       if (visible) this.#place(win);
       el.hidden = !visible;

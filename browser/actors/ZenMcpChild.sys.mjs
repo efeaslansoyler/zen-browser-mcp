@@ -79,6 +79,43 @@ const ASK_CSS = `
   }
 `;
 
+// öğe seçici: fareyle gezilen öğenin çerçevesi ve etiketi; seçilince çerçeve sabit kalır
+const PICK_CSS = `
+  .box {
+    position: fixed; box-sizing: border-box; pointer-events: none;
+    border: 2px solid #d97757; border-radius: 4px;
+    background: rgba(217, 119, 87, 0.12);
+    transition: left 0.06s, top 0.06s, width 0.06s, height 0.06s;
+  }
+  .box.picked {
+    border-width: 3px;
+    box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.25), 0 0 24px rgba(217, 119, 87, 0.55);
+    background: none;
+  }
+  .label {
+    position: fixed; pointer-events: none;
+    padding: 2px 7px; border-radius: 999px;
+    background: #d97757; color: #fff;
+    font: 600 11px/1.4 system-ui, sans-serif; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .label span { font-weight: 400; opacity: 0.8; }
+`;
+
+// seçilen öğeden gönderilen outerHTML ve metin sınırı
+const MAX_PICK_HTML = 1500;
+const MAX_PICK_TEXT = 300;
+
+// React/Next.js'in kendi bileşenleri: bileşen zincirinde gürültü
+const FRAMEWORK_COMPONENTS = new Set([
+  "InnerLayoutRouter", "OuterLayoutRouter", "RedirectBoundary", "RedirectErrorBoundary",
+  "NotFoundBoundary", "NotFoundErrorBoundary", "HTTPAccessFallbackBoundary",
+  "HTTPAccessFallbackErrorBoundary", "LoadingBoundary", "ErrorBoundary", "ErrorBoundaryHandler",
+  "ScrollAndFocusHandler", "InnerScrollAndFocusHandler", "RenderFromTemplateContext", "AppRouter",
+  "Router", "HotReload", "ReactDevOverlay", "ServerRoot", "Root", "AppContainer",
+  "SegmentViewNode", "SegmentStateProvider", "LinkComponent", "Suspense", "Fragment",
+]);
+
 const MAX_TEXT = 100000;
 const MAX_TREE = 50000;
 const MAX_NAME = 100;
@@ -110,6 +147,17 @@ export class ZenMcpChild extends JSWindowActorChild {
   #cursor = null;
   #ids = new WeakMap();
   #next = 1;
+  #pick = null;
+  #contextTarget = null;
+
+  // sağ tık menüsündeki "Claude'a göster" için tıklanan öğe (main.js bu olayı actor'a bağlar)
+  handleEvent(event) {
+    // sayfanın kendi ürettiği olay seçilen öğeyi değiştiremesin
+    if (event.type !== "contextmenu" || !event.isTrusted) return;
+    let target = event.composedPath()[0] ?? event.target;
+    if (target?.nodeType !== 1) target = target?.parentElement;
+    this.#contextTarget = target ? new WeakRef(target) : null;
+  }
 
   async receiveMessage({ name, data }) {
     try {
@@ -140,6 +188,12 @@ export class ZenMcpChild extends JSWindowActorChild {
           return null;
         case "file_upload":
           return { value: this.#fileUpload(data.ref, data.files) };
+        case "pick_start":
+          return await this.#pickStart(data);
+        case "pick_end":
+          this.#pick?.finish(null);
+          this.#pickEnd();
+          return null;
         default:
           return { error: `Bilinmeyen mesaj: ${name}` };
       }
@@ -403,6 +457,7 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   didDestroy() {
     this.#ask?.finish("navigated");
+    this.#pick?.finish(null);
   }
 
   #askUser({ ref, x, y, wait = "done", timeout = 300 }) {
@@ -467,6 +522,171 @@ export class ZenMcpChild extends JSWindowActorChild {
       };
       this.#ask = { finish };
     });
+  }
+
+  // ---- öğe seçici: kullanıcı sayfada bir öğe seçer, adada notunu yazıp Claude'a gönderir ----
+  //
+  // Seçim sürerken sayfanın tıklama ve tuş olayları engellenir (bağlantı açılmasın, kısayollar
+  // çalışmasın); fare hareketi engellenmez, üzerine gelince açılan menüler açık kalır. Seçilen
+  // öğe not yazılırken çerçeveli kalır; pick_end ile kalkar.
+
+  #pickOverlay = null;
+
+  // fromContext: sağ tık menüsünden; seçim sağ tıklanan öğeden başlar, fareyle değişir
+  #pickStart({ fromContext = false } = {}) {
+    this.#pick?.finish(null);
+    this.#pickEnd();
+    const doc = this.document;
+    const win = this.contentWindow;
+    const overlay = this.#pickOverlayEl();
+    let current = null;
+    let hovered = null;
+    let trail = []; // ↑ ile çıkılan öğeler; ↓ geri iner
+    const show = el => {
+      current = el;
+      overlay.track(el);
+    };
+    if (fromContext) {
+      const el = this.#contextTarget?.deref();
+      if (el?.isConnected) show((hovered = el));
+    }
+    const MOUSE = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "dblclick", "contextmenu"];
+    const KEYS = ["keydown", "keypress", "keyup"];
+    const CAPTURE = { capture: true };
+
+    return new Promise(resolve => {
+      const onMove = event => {
+        if (!event.isTrusted) return;
+        const el = doc.elementFromPoint(event.clientX, event.clientY);
+        if (!el || el === hovered) return;
+        hovered = el;
+        trail = [];
+        show(el);
+      };
+      const onMouse = event => {
+        if (!event.isTrusted) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type === "click" && event.button === 0 && current) finish(current);
+        else if (event.type === "contextmenu") finish(null);
+      };
+      const onKey = event => {
+        if (!event.isTrusted) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type !== "keydown") return;
+        if (event.key === "Escape") finish(null);
+        else if (event.key === "Enter" && current) finish(current);
+        else if (event.key === "ArrowUp" && current?.parentElement && current.parentElement !== doc.documentElement) {
+          trail.push(current);
+          show(current.parentElement);
+        } else if (event.key === "ArrowDown" && trail.length) show(trail.pop());
+      };
+      win.addEventListener("mousemove", onMove, CAPTURE);
+      for (const type of MOUSE) win.addEventListener(type, onMouse, CAPTURE);
+      for (const type of KEYS) win.addEventListener(type, onKey, CAPTURE);
+
+      const finish = el => {
+        if (this.#pick?.finish !== finish) return;
+        this.#pick = null;
+        try {
+          win.removeEventListener("mousemove", onMove, CAPTURE);
+          for (const type of MOUSE) win.removeEventListener(type, onMouse, CAPTURE);
+          for (const type of KEYS) win.removeEventListener(type, onKey, CAPTURE);
+        } catch {}
+        if (!el) {
+          this.#pickEnd();
+          resolve({ cancelled: true });
+          return;
+        }
+        overlay.freeze();
+        try {
+          resolve(this.#pickInfo(el));
+        } catch (e) {
+          this.#pickEnd();
+          resolve({ error: String(e?.message ?? e) });
+        }
+      };
+      this.#pick = { finish };
+    });
+  }
+
+  #pickEnd() {
+    this.#pickOverlay?.remove();
+    this.#pickOverlay = null;
+  }
+
+  // Kapalı shadow DOM içinde çerçeve ve etiket ("button.cta 320×48"); öğe kayarsa takip eder
+  #pickOverlayEl() {
+    const doc = this.document;
+    const win = this.contentWindow;
+    const host = doc.createElement("zen-mcp-pick");
+    host.setAttribute("style", "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;");
+    const root = host.attachShadow({ mode: "closed" });
+    const style = doc.createElement("style");
+    style.textContent = PICK_CSS;
+    const box = doc.createElement("div");
+    box.className = "box";
+    const label = doc.createElement("div");
+    label.className = "label";
+    root.append(style, box, label);
+    doc.documentElement.append(host);
+
+    let target = null;
+    let frame = 0;
+    const place = () => {
+      if (target?.isConnected) {
+        const r = target.getBoundingClientRect();
+        Object.assign(box.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        // etiket öğenin üstünde; yer yoksa içinde, üst kenarda
+        const top = r.top >= 24 ? r.top - 22 : Math.max(r.top, 0) + 4;
+        label.style.left = `${Math.max(4, Math.min(r.left, win.innerWidth - label.offsetWidth - 4))}px`;
+        label.style.top = `${Math.min(top, win.innerHeight - 22)}px`;
+        label.hidden = false;
+      }
+      frame = win.requestAnimationFrame(place);
+    };
+    label.hidden = true;
+    place();
+
+    const overlay = {
+      track: el => {
+        target = el;
+        const r = el.getBoundingClientRect();
+        const size = doc.createElement("span");
+        size.textContent = ` ${Math.round(r.width)}×${Math.round(r.height)}`;
+        label.textContent = elementLabel(el);
+        label.append(size);
+      },
+      freeze: () => box.classList.add("picked"),
+      remove: () => {
+        try { win.cancelAnimationFrame(frame); } catch {}
+        host.remove();
+      },
+    };
+    this.#pickOverlay = overlay;
+    return overlay;
+  }
+
+  // Claude'a gidecek bağlam: kodda doğru yeri bulmaya yetecek kadar, sayfa boyutundan bağımsız
+  #pickInfo(el) {
+    const doc = this.document;
+    const win = this.contentWindow;
+    const r = el.getBoundingClientRect();
+    return {
+      url: doc.URL,
+      title: doc.title,
+      label: elementLabel(el),
+      selector: cssPath(el, win),
+      role: roleOf(el),
+      name: accessibleName(el, doc),
+      text: truncate(clean(el.innerText ?? el.textContent), MAX_PICK_TEXT),
+      html: truncate(el.outerHTML, MAX_PICK_HTML),
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      viewport: { width: win.innerWidth, height: win.innerHeight, scrollX: win.scrollX, scrollY: win.scrollY, dpr: win.devicePixelRatio },
+      styles: pickStyles(el, win),
+      components: componentChain(el),
+    };
   }
 
   // ---- konsol: Firefox bu sayfanın console.* çağrılarını (ConsoleAPIStorage) ve JS hatalarını
@@ -657,6 +877,9 @@ export class ZenMcpChild extends JSWindowActorChild {
   #overlays(hidden) {
     if (this.#cursor?.host.isConnected) this.#cursor.pointer.style.visibility = hidden ? "hidden" : "";
     if (hidden) for (const ripple of this.document.querySelectorAll("zen-mcp-ripple")) ripple.remove();
+    for (const pick of this.document.querySelectorAll("zen-mcp-pick")) {
+      pick.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
+    }
     return "tamam";
   }
 
@@ -816,6 +1039,126 @@ const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const normalize = s => clean(s).toLocaleLowerCase("tr");
 // harf/rakam dışındaki her şey ayırıcı: "package.json" → ["package", "json"]
 const tokens = s => normalize(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+// ---- seçilen öğe ----
+
+// "button#cta.btn.primary"
+function elementLabel(el) {
+  let s = el.localName;
+  if (el.id) s += "#" + el.id;
+  const classes = [...el.classList].slice(0, 2);
+  if (classes.length) s += "." + classes.join(".");
+  return truncate(s, 60);
+}
+
+// Sayfada tek öğeye uyan kısa seçici: benzersiz id'de ya da yol benzersizleşince durur
+function cssPath(el, win) {
+  const doc = el.ownerDocument;
+  const esc = s => win.CSS.escape(s);
+  const unique = sel => {
+    try { return doc.querySelectorAll(sel).length === 1; } catch { return false; }
+  };
+  const parts = [];
+  for (let node = el; node?.nodeType === 1 && node !== doc.documentElement; node = node.parentElement) {
+    if (node.id && unique(`#${esc(node.id)}`)) {
+      parts.unshift(`#${esc(node.id)}`);
+      break;
+    }
+    let part = node.localName;
+    // Tailwind gibi araç sınıfları (md:flex, w-[20px]) seçiciyi uzatır; sade sınıflardan ilk ikisi
+    const classes = [...node.classList].filter(c => /^[a-zA-Z_-][\w-]*$/.test(c)).slice(0, 2);
+    part += classes.map(c => "." + esc(c)).join("");
+    const same = node.parentElement ? [...node.parentElement.children].filter(c => c.localName === node.localName) : [];
+    if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
+    parts.unshift(part);
+    if (unique(parts.join(" > "))) break;
+  }
+  return parts.join(" > ");
+}
+
+// Tasarım düzeltmesi için önemli hesaplanmış stiller; varsayılan değerler atlanır
+function pickStyles(el, win) {
+  const s = win.getComputedStyle(el);
+  const out = { display: s.display };
+  if (s.position !== "static") out.position = s.position;
+  out.font = `${s.fontWeight} ${s.fontSize}/${s.lineHeight} ${s.fontFamily.split(",")[0].trim()}`;
+  out.color = s.color;
+  if (s.backgroundColor !== "rgba(0, 0, 0, 0)") out.background = s.backgroundColor;
+  if (s.backgroundImage !== "none") out["background-image"] = truncate(s.backgroundImage, 200);
+  if (s.padding && s.padding !== "0px") out.padding = s.padding;
+  if (s.margin && s.margin !== "0px") out.margin = s.margin;
+  if (parseFloat(s.borderTopWidth) || parseFloat(s.borderRightWidth) || parseFloat(s.borderBottomWidth) || parseFloat(s.borderLeftWidth)) {
+    out.border = s.border || `${s.borderWidth} ${s.borderStyle} ${s.borderColor}`;
+  }
+  if (s.borderRadius && s.borderRadius !== "0px") out["border-radius"] = s.borderRadius;
+  if (/flex|grid/.test(s.display)) {
+    if (s.display.includes("flex")) out["flex-direction"] = s.flexDirection;
+    if (s.display.includes("grid")) out["grid-template-columns"] = truncate(s.gridTemplateColumns, 120);
+    out["justify-content"] = s.justifyContent;
+    out["align-items"] = s.alignItems;
+    if (s.gap && s.gap !== "normal") out.gap = s.gap;
+  }
+  if (s.opacity !== "1") out.opacity = s.opacity;
+  // Tailwind her öğeye saydam ring/gölge katmanları koyar; yalnız görünenler
+  const shadows = splitTopLevel(s.boxShadow).filter(l => l !== "none" && !/rgba\([^)]*,\s*0\)|\/\s*0\)|transparent/.test(l));
+  if (shadows.length) out["box-shadow"] = truncate(shadows.join(", "), 160);
+  return out;
+}
+
+// virgülle ayrılmış CSS listesi, parantez içindeki virgüller bölünmeden
+function splitTopLevel(value) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "(") depth++;
+    else if (value[i] === ")") depth--;
+    else if (value[i] === "," && !depth) {
+      parts.push(value.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+// Production build'de adlar küçültülmüş ("_", "y", "Oe"): yanıltmasın diye atlanır
+const isMinified = name => name.length <= 2;
+// Next.js iç sınırları: __next_root_layout_boundary__ gibi
+const isInternal = name => /^__.*__$/.test(name);
+
+// Geliştirme sürümündeki React (fiber) ya da Vue bileşen zinciri, dıştan içe: repoda doğru
+// dosyayı bulmak için. Sayfanın nesnelerine Xray'siz bakılır.
+function componentChain(el) {
+  try {
+    const raw = Cu.waiveXrays(el);
+    const key = Object.keys(raw).find(k => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+    if (key) {
+      const names = [];
+      for (let fiber = raw[key]; fiber && names.length < 8; fiber = fiber.return) {
+        const type = fiber.type;
+        if (!type || typeof type === "string") continue;
+        const name = type.displayName || type.name || type.render?.displayName || type.render?.name || type.type?.displayName || type.type?.name;
+        if (typeof name === "string" && name && !isMinified(name) && !isInternal(name) && !FRAMEWORK_COMPONENTS.has(name) && names.at(-1) !== name) names.push(name);
+      }
+      return names.length ? { framework: "React", chain: names.reverse() } : null;
+    }
+    // Vue 3 geliştirme sürümü bileşenin dosyasını da tutar
+    let instance = raw.__vueParentComponent;
+    if (instance) {
+      const names = [];
+      let file = null;
+      for (; instance && names.length < 8; instance = instance.parent) {
+        const type = instance.type;
+        const name = type?.__name || type?.name;
+        if (typeof name === "string" && name && !isMinified(name)) names.push(name);
+        if (!file && typeof type?.__file === "string") file = type.__file;
+      }
+      return names.length ? { framework: "Vue", chain: names.reverse(), file } : null;
+    }
+  } catch {}
+  return null;
+}
 
 // console.* argümanı sayfanın nesnesi: Xray'i kaldırıp JSON dene, olmazsa String
 function formatArg(arg) {

@@ -43,14 +43,20 @@ Claude Code ──stdio MCP──▶ src/server.ts ──Unix soket──▶ bro
   `ask_user` çerçevesi, tıklama halkası, `file_upload`.
 - **Ada (`Island.sys.mjs`):** Zen penceresinin üst ortasında Dynamic Island gibi bir hap.
   Canlı durum, Durdur/Devam (Ctrl+Shift+Esc), `ask_user` mesajı ve düğmeleri, diyalog
-  bildirimi, üzerine gelince canlı önizleme.
+  bildirimi, üzerine gelince canlı önizleme, öğe seçiminde "Ne yapılsın?" kutusu.
+- **Zen → Claude (channels):** `claude --dangerously-load-development-channels server:zen` ile
+  açılan oturumda `server.ts` bunu `/proc` üzerinden komut satırından anlar
+  (`ZEN_MCP_CHANNEL=1/0` geçersiz kılar), `claude/channel` yeteneğini bildirir ve köprüye
+  kalıcı bir `subscribe` bağlantısı açar (köprü reload'da kapatır, 3 sn'de yeniden bağlanır).
+  Her istek `session` kimliği taşır; olay Zen'i en son kullanan ya da en son bağlanan oturuma
+  gider. Abone yoksa metin panoya kopyalanır. Bayraksız oturumlar abone olmaz.
 
 ## Tool'lar (Claude in Chrome adlarıyla uyumlu)
 
 `tabs_context_mcp`, `tabs_create_mcp`, `navigate`, `computer` (screenshot, tıklamalar, hover,
 drag, scroll, scroll_to, type, key, wait; koordinat ya da ref), `read_page`, `find`,
 `form_input`, `get_page_text`, `javascript_tool`, `read_console_messages`,
-`read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`.
+`read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`, `request_tab`.
 
 Davranış notları:
 
@@ -72,6 +78,25 @@ Davranış notları:
 - Fareyi gezdirdikten (hover) sonra açılır menü çıkabilir: tıklamadan önce yeniden ekran
   görüntüsü al.
 
+## Öğe seçip Claude'a iş verme
+
+- Ctrl+Shift+F (yeniden basmak vazgeçer) ya da sayfanın sağ tık menüsünde "Claude'a göster…"
+  (yalnız http/https/file, yalnız üst çerçeve). Herhangi bir sekmede çalışır, sekme Claude'a
+  verilmez.
+- Seçerken tıklama ve tuşlar sayfaya gitmez, fare hareketi gider (hover menüleri açık kalır).
+  ↑/↓ üst/alt öğe, Enter ya da tıklama seçer, Esc ya da sağ tık vazgeçer. Sekme değişirse
+  seçici kapanır.
+- Ada "Ne yapılsın?" der: Enter gönderir, Shift+Enter yeni satır, Esc vazgeçer. Hedef oturumun
+  adı (cwd'nin son klasörü) ya da "pano" yazar.
+- Giden bağlam: not, URL, CSS seçici, rol/ad, React/Vue bileşen zinciri (Next.js iç
+  bileşenleri ayıklanır), kutu, önemli hesaplanmış stiller, metin, kısaltılmış outerHTML ve
+  öğenin PNG görüntüsü (`$XDG_RUNTIME_DIR/zen-mcp-picks`, son 20). Meta: `url`, `screenshot`,
+  sekme Claude'daysa `tab_id`, değilse `source_tab`. Production build'in küçültülmüş bileşen
+  adları (≤2 harf) ve saydam gölge katmanları ayıklanır.
+- `request_tab`: Claude yalnız kullanıcının seçim gönderdiği sekmeyi (`state.pickedTabs`)
+  isteyebilir. Ada `ask` durumunda "Ver / Verme" gösterir, Ver denirse sekme "Claude'a ver"
+  ile verilmiş gibi işaretlenir. Yeni istek adadaki "gönderildi" yazısını hemen kaldırır.
+
 ## Geliştirme ve test
 
 - **Zen'i kapatmadan güncelleme:** `node scripts/zenctl.ts reload`. Yeni sürüm başlamazsa eski
@@ -89,6 +114,10 @@ Davranış notları:
      `Services.console.getMessageArray()` oku.
 - **Tarayıcı arayüzünün ekran görüntüsü:** pencerenin
   `browsingContext.currentWindowGlobal.drawSnapshot(DOMRect, scale, renk)` sonucu.
+- **Seçimi test etme:** `h.startPick(win)` / `h.pickFromContextMenu(win, browser)` /
+  `h.sendPick(not)`, abone için `subscribe` (src/zen.ts) kullanan küçük bir node betiği. Claude'un
+  `right_click`'i `contextmenu` olayı üretmiyor; sağ tık menüsünü denemek için EventUtils'i
+  tarayıcı penceresine yükleyip `synthesizeMouseAtPoint(x, y, {type: "contextmenu", button: 2}, win)`.
 - **Süreç öldürme tuzağı:** `pkill -f "<desen>"` desenin geçtiği kendi kabuğunu da öldürür.
   Sunucuyu portundan bul: `ss -ltnpH 'sport = :8765'`.
 
@@ -115,6 +144,9 @@ Davranış notları:
   okunmuyor, ada bu yüzden koyu.
 - Zen'de pencere senkronu açık; senkronsuz pencere `OpenBrowserWindow({ zenSyncedWindow: false })`.
   Bu yol denendi ve bırakıldı.
+- `drawSnapshot(rect, …)` rect'i belge koordinatında ister (görünür alan + scrollX/Y).
+- `NetUtil.asyncCopy` hedef akışı da kapatır; açık kalacak abone bağlantısına
+  `nsIAsyncStreamCopier` ile `closeSink: false` yazılıyor.
 - Hyprland görünmeyen workspace'teki pencereyi askıya alıyor (`document.hidden`, odak geçmiyor,
   APZ kaydırmıyor). Pencere seviyesinden girdi göndermekten bu yüzden vazgeçildi.
 
@@ -124,11 +156,16 @@ Davranış notları:
 - Faz 2: `ask_user`/diyaloglar adada, tıklama halkası, masaüstü bildirimi ✅
 - Faz 3: Claude'a ver / geri al ✅
 - Ek: sanal imleç ve adada canlı önizleme ✅ (Efe beğendi)
+- Zen'den öğe seçip Claude'a iş verme ✅ headless'ta denendi (seçici, sağ tık, not, abone, pano).
+  Gerçek `claude-zen` oturumunda olayın gelmesi henüz denenmedi: otomatik mod, bayrağı
+  Claude'un açıp uyarıyı onaylamasını reddetti; Efe deneyecek. Kalıcı ayar yok (research
+  preview): dotfiles'ta `alias claude='claude --dangerously-load-development-channels server:zen'`
+  (Efe'nin onayıyla), her açılışta uyarı bir kez geçiliyor.
+- Sağ tık "Claude'a göster…" seçiciyi sağ tıklanan öğeden başlatır (fareyle değişir).
 
 ## Sıradaki
 
-0. **Zen'den öğe seçip Claude'a iş verme** (Claude Code channels ile; ayrıntılar `PLAN.md`
-   sonunda). Efe'nin fikri, bir sonraki oturumda ilk iş.
+0. Öğe seçimi: Efe'nin `claude-zen` denemesi, sonra isteğe bağlı birden fazla öğe seçme.
 1. **Faz 4:** iframe desteği (`read_page`/tıklama/yazma alt çerçevelerde; şu an yalnız üst
    çerçeve) ve `wait_for` (metin/öğe görünene, ağ durulana kadar).
 2. **Faz 5:** ağ isteği ayrıntıları (başlıklar, cevap gövdesi), etkinlik günlüğü, hassas

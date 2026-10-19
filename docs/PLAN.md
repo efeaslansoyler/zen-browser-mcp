@@ -39,7 +39,10 @@ kendiliğinden öne getirilmez.
 
 İsteğe bağlı, sonra: Quickshell barında Claude göstergesi.
 
-## Sıradaki: Zen'den öğe seçip Claude'a iş verme (Efe'nin fikri, 2026-10-19)
+## Zen'den öğe seçip Claude'a iş verme (Efe'nin fikri, 2026-10-19) ✅ (birden fazla öğe seçme hariç)
+
+Yapıldı: Ctrl+Shift+F (Ctrl+Shift+E Zen'de ağ izleyicisi) ve sayfa sağ tık menüsü, adada not,
+kanal yoksa pano. Gerçek bir `claude-zen` oturumuyla uçtan uca deneme Efe'de (aşağıda).
 
 Faz 4'ten önce yapılacak. Kullanıcı "ana sayfadaki şu kısmı düzelt" diye tarif etmek yerine
 Zen'de öğeyi seçer, notunu yazar, istek Claude Code oturumuna kendiliğinden düşer.
