@@ -7,6 +7,42 @@
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
+// sanal imleç: Claude turuncusu ok, yanında küçük etiket ("Claude", "yazıyor…")
+const ARROW = "data:image/svg+xml," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#d97757" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`
+);
+const CURSOR_CSS = `
+  .pointer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transition: translate var(--move, 0ms) cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.35s ease;
+  }
+  .pointer.gone { opacity: 0; }
+  .arrow {
+    width: 22px;
+    height: 22px;
+    margin: -2px 0 0 -3px;
+    background: url("${ARROW}") no-repeat;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    transform-origin: 3px 2px;
+    transition: scale 0.12s ease;
+  }
+  .pointer.press .arrow { scale: 0.82; }
+  .label {
+    position: absolute;
+    left: 13px;
+    top: 17px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #d97757;
+    color: #fff;
+    font: 600 11px/1.4 system-ui, sans-serif;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+`;
+
 // tıklama halkası
 const RIPPLE_CSS = `
   div {
@@ -71,6 +107,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #eventUtils = null;
   #consoleSince = 0;
   #ask = null;
+  #cursor = null;
   #ids = new WeakMap();
   #next = 1;
 
@@ -95,6 +132,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#console(data) };
         case "ask_user":
           return { value: await this.#askUser(data) };
+        case "overlays":
+          return { value: this.#overlays(data.hidden) };
         case "cancel_ask":
           // kullanıcı adadan vazgeçti ya da Claude'u durdurdu (cevap beklenmez)
           this.#ask?.finish(data?.result ?? "stopped");
@@ -495,6 +534,8 @@ export class ZenMcpChild extends JSWindowActorChild {
     const mouse = (px, py, event) => eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
     switch (kind) {
       case "click":
+        await this.#moveCursor(x, y);
+        this.#press();
         mouse(x, y, { type: "mousemove" });
         for (let i = 1; i <= count; i++) {
           mouse(x, y, { type: "mousedown", button, clickCount: i });
@@ -504,9 +545,12 @@ export class ZenMcpChild extends JSWindowActorChild {
         this.#ripple(x, y);
         return "tamam";
       case "hover":
+        await this.#moveCursor(x, y);
         mouse(x, y, { type: "mousemove" });
         return "tamam";
       case "drag": {
+        await this.#moveCursor(x, y);
+        this.#press();
         mouse(x, y, { type: "mousemove" });
         mouse(x, y, { type: "mousedown" });
         const steps = 10;
@@ -514,14 +558,18 @@ export class ZenMcpChild extends JSWindowActorChild {
           mouse(x + ((to[0] - x) * i) / steps, y + ((to[1] - y) * i) / steps, { type: "mousemove", buttons: 1 });
         }
         mouse(to[0], to[1], { type: "mouseup" });
+        await this.#moveCursor(to[0], to[1]);
         return "tamam";
       }
       case "wheel":
+        await this.#moveCursor(x, y);
         return this.#wheel(x, y, dx, dy, multiplier);
       case "keys":
+        this.#cursorLabel("tuşa basıyor");
         for (const { key, mods } of keys) eu.synthesizeKey(key, mods, win);
         return "tamam";
       case "text":
+        this.#cursorLabel("yazıyor…");
         text.split("\n").forEach((line, i) => {
           if (i > 0) eu.synthesizeKey("KEY_Enter", {}, win);
           if (line) eu.sendString(line, win);
@@ -530,6 +578,86 @@ export class ZenMcpChild extends JSWindowActorChild {
       default:
         throw new Error(`Bilinmeyen girdi: ${kind}`);
     }
+  }
+
+  // ---- sanal imleç: kullanıcı sekmeye bakınca Claude'un nereye tıkladığını izlesin ----
+  //
+  // İşlemden önce imleç son konumundan hedefe kayar; yalnız sekme görünürken (izleyen yoksa
+  // gecikme olmasın diye arka planda anında konumlanır). Boşta kalınca kaybolur.
+
+  #cursorEl() {
+    if (this.#cursor?.host.isConnected) return this.#cursor;
+    const doc = this.document;
+    const win = this.contentWindow;
+    const host = doc.createElement("zen-mcp-cursor");
+    host.setAttribute("style", "all: initial !important; position: fixed !important; left: 0 !important; top: 0 !important; z-index: 2147483647 !important; pointer-events: none !important;");
+    const root = host.attachShadow({ mode: "closed" });
+    const style = doc.createElement("style");
+    style.textContent = CURSOR_CSS;
+    const pointer = doc.createElement("div");
+    pointer.className = "pointer";
+    const arrow = doc.createElement("div");
+    arrow.className = "arrow";
+    const label = doc.createElement("div");
+    label.className = "label";
+    label.textContent = "Claude";
+    pointer.append(arrow, label);
+    root.append(style, pointer);
+    doc.documentElement.append(host);
+    // ilk görünüşte sayfanın ortasından gelsin
+    const x = this.#cursor?.x ?? win.innerWidth / 2;
+    const y = this.#cursor?.y ?? win.innerHeight / 2;
+    pointer.style.setProperty("--move", "0ms");
+    pointer.style.translate = `${x}px ${y}px`;
+    this.#cursor = { host, pointer, label, x, y, hideTimer: null };
+    return this.#cursor;
+  }
+
+  async #moveCursor(x, y) {
+    const cursor = this.#cursorEl();
+    const visible = !this.document.hidden;
+    const distance = Math.hypot(x - cursor.x, y - cursor.y);
+    const ms = visible && distance > 2 ? Math.round(Math.min(450, 160 + distance * 0.35)) : 0;
+    cursor.label.textContent = "Claude";
+    cursor.pointer.classList.remove("gone");
+    cursor.pointer.style.setProperty("--move", `${ms}ms`);
+    cursor.pointer.style.translate = `${x}px ${y}px`;
+    cursor.x = x;
+    cursor.y = y;
+    this.#cursorIdle();
+    if (ms) await new Promise(r => setTimeout(r, ms + 30));
+  }
+
+  #press() {
+    const pointer = this.#cursor?.pointer;
+    if (!pointer) return;
+    pointer.classList.add("press");
+    setTimeout(() => pointer.classList.remove("press"), 160);
+  }
+
+  #cursorLabel(text) {
+    const cursor = this.#cursor;
+    if (!cursor?.host.isConnected) return;
+    cursor.label.textContent = text;
+    cursor.pointer.classList.remove("gone");
+    this.#cursorIdle();
+  }
+
+  // boşta 4 sn sonra kaybolur (ada ile aynı)
+  #cursorIdle() {
+    const cursor = this.#cursor;
+    clearTimeout(cursor.hideTimer);
+    cursor.hideTimer = setTimeout(() => {
+      cursor.label.textContent = "Claude";
+      cursor.pointer.classList.add("gone");
+    }, 4000);
+  }
+
+  // Claude'un kendi ekran görüntüsünde imleç ve halkalar sayfanın üstünü kapatmasın
+  #overlays(hidden) {
+    if (this.#cursor?.host.isConnected) this.#cursor.pointer.style.visibility = hidden ? "hidden" : "";
+    if (hidden) for (const ripple of this.document.querySelectorAll("zen-mcp-ripple")) ripple.remove();
+    return "tamam";
   }
 
   // Tıklanan noktada kısa turuncu halka: kullanıcı sekmeye bakınca Claude'un son ne yaptığını

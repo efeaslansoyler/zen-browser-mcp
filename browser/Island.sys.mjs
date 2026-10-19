@@ -9,6 +9,8 @@
 const XHTML = "http://www.w3.org/1999/xhtml";
 const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
+const PREVIEW_WIDTH = 340; // canlı önizleme genişliği (CSS px)
+const PREVIEW_EVERY = 400; // ms, ~2,5 kare/sn
 
 // dönen yıldız: Claude'un "çalışıyor" işareti
 const SPARK = "data:image/svg+xml," + encodeURIComponent(
@@ -164,6 +166,24 @@ const CSS = `
       max-height: 6.5em;
       overflow: auto;
     }
+    /* canlı önizleme: üzerine gelince Claude'un sekmesinin küçük, canlı görüntüsü */
+    & .preview {
+      display: none;
+      padding: 0 6px 6px;
+      cursor: pointer;
+
+      & canvas {
+        display: block;
+        width: ${PREVIEW_WIDTH}px;
+        max-height: 240px;
+        object-fit: cover;
+        object-position: top;
+        border-radius: 11px;
+        background: #000;
+      }
+    }
+    &[previewing]:not([state="stopped"], [state="hidden"]) .preview { display: block; }
+
     & .buttons {
       display: flex;
       gap: 6px;
@@ -236,7 +256,11 @@ export class Island {
     const ok = node("button", "ok primary", "Tamam");
     buttons.append(cancel, goto, ok);
     detail.append(message, buttons);
-    el.append(row, detail);
+    const preview = node("div", "preview");
+    preview.title = "Sekmeye git";
+    const canvas = node("canvas");
+    preview.append(canvas);
+    el.append(row, detail, preview);
     doc.documentElement.append(el);
 
     const goToTab = () => {
@@ -245,6 +269,9 @@ export class Island {
     };
     info.addEventListener("click", goToTab);
     goto.addEventListener("click", goToTab);
+    preview.addEventListener("click", goToTab);
+    el.addEventListener("mouseenter", () => this.#startPreview(win));
+    el.addEventListener("mouseleave", () => this.#stopPreview(win));
     const answer = result => () => {
       const browser = this.#browser?.deref();
       if (browser) this.#actions.answer(browser, result);
@@ -269,7 +296,7 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, stop, message, goto, ok, onKey, onResize, onTabSelect });
+    this.#windows.set(win, { el, favicon, host, text, stop, message, goto, ok, canvas, previewing: false, onKey, onResize, onTabSelect });
     this.#render();
   }
 
@@ -277,6 +304,7 @@ export class Island {
     const parts = this.#windows.get(win);
     if (!parts) return;
     this.#windows.delete(win);
+    parts.previewing = false;
     try {
       parts.el.remove();
       win.removeEventListener("keydown", parts.onKey, true);
@@ -376,6 +404,8 @@ export class Island {
 
   #hide() {
     if (this.#state !== "working") return;
+    // kullanıcı önizlemeyi izliyorsa kaybolma; fare ayrılınca idle() yeniden sayar
+    if ([...this.#windows.values()].some(p => p.previewing)) return;
     this.#state = "hidden";
     this.#render();
   }
@@ -406,6 +436,47 @@ export class Island {
       goto.classList.toggle("primary", ok.hidden);
       if (visible) this.#place(win);
       el.hidden = !visible;
+    }
+  }
+
+  // ---- canlı önizleme ----
+
+  #startPreview(win) {
+    const parts = this.#windows.get(win);
+    if (!parts || parts.previewing) return;
+    parts.previewing = true;
+    parts.el.setAttribute("previewing", "true");
+    this.#clearTimeout(this.#hideTimer);
+    this.#previewLoop(parts);
+  }
+
+  #stopPreview(win) {
+    const parts = this.#windows.get(win);
+    if (!parts) return;
+    parts.previewing = false;
+    parts.el.removeAttribute("previewing");
+    this.idle();
+  }
+
+  // Arka plandaki sekmenin görüntüsü drawSnapshot ile (sekme seçilmeden) alınır
+  async #previewLoop(parts) {
+    while (parts.previewing) {
+      const browser = this.#browser?.deref();
+      const wg = browser?.browsingContext?.currentWindowGlobal;
+      if (wg && this.#state !== "stopped") {
+        try {
+          const width = browser.getBoundingClientRect().width || 1;
+          const dpr = browser.ownerDocument.defaultView.devicePixelRatio;
+          const bitmap = await wg.drawSnapshot(null, (PREVIEW_WIDTH * dpr) / width, "white");
+          if (parts.previewing) {
+            parts.canvas.width = bitmap.width;
+            parts.canvas.height = bitmap.height;
+            parts.canvas.getContext("2d").drawImage(bitmap, 0, 0);
+          }
+          bitmap.close();
+        } catch {}
+      }
+      await new Promise(r => this.#setTimeout(r, PREVIEW_EVERY));
     }
   }
 

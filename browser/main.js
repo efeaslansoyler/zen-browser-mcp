@@ -428,7 +428,15 @@ function logError(where, e) {
     async function screenshot(browser) {
       const wg = browser.browsingContext?.currentWindowGlobal;
       if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
-      const bitmap = await wg.drawSnapshot(null, 1, "white");
+      // sanal imleç ve tıklama halkası Claude'un gördüğü görüntüde sayfayı kapatmasın
+      const overlays = hidden => query(browser, "overlays", { hidden }, 2000).catch(() => {});
+      await overlays(true);
+      let bitmap;
+      try {
+        bitmap = await wg.drawSnapshot(null, 1, "white");
+      } finally {
+        overlays(false);
+      }
       const { width: w, height: h } = bitmap;
       const s = Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h)));
       const canvas = browser.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
