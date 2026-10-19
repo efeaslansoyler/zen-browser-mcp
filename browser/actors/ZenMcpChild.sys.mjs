@@ -5,7 +5,37 @@
 // yüklemesinde) geçerlidir, yeni sayfada sıfırlanır. DOM'a ayrıcalıklı (Xray) erişimle bakılır:
 // sayfanın kendi tanımladığı özellikler/override'lar görülmez, yerel DOM davranışı esastır.
 
-const { setTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+
+// sistem olay grubu: sayfanın stopPropagation'ı bu dinleyiciyi etkilemez (yalnız ayrıcalıklı kod)
+const SYSTEM_CAPTURE = { capture: true, mozSystemGroup: true };
+
+// ask_user çizimi; renk Claude sekmesinin kenar çizgisiyle aynı
+const ASK_CSS = `
+  .box {
+    position: fixed; box-sizing: border-box; pointer-events: none;
+    border: 3px solid #d97757; border-radius: 8px;
+    box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.25), 0 0 24px rgba(217, 119, 87, 0.55);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    50% { box-shadow: 0 0 0 8px rgba(217, 119, 87, 0.12), 0 0 32px rgba(217, 119, 87, 0.8); }
+  }
+  .bubble {
+    position: fixed; box-sizing: border-box; max-width: 360px; pointer-events: auto;
+    padding: 12px 14px; border-radius: 10px; border: 1px solid #d97757;
+    background: #1f1f1f; color: #f2f2f2; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    font: 14px/1.45 system-ui, sans-serif; text-align: left;
+  }
+  .title { color: #d97757; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .message { white-space: pre-wrap; }
+  .buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  button {
+    font: 13px system-ui, sans-serif; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid #555; background: #2a2a2a; color: #eee;
+  }
+  button.primary { background: #d97757; border-color: #d97757; color: #fff; }
+`;
 
 const MAX_TEXT = 100000;
 const MAX_TREE = 50000;
@@ -34,6 +64,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #refs = new Map();
   #eventUtils = null;
   #consoleSince = 0;
+  #ask = null;
   #ids = new WeakMap();
   #next = 1;
 
@@ -56,6 +87,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: await this.#input(data) };
         case "console":
           return { value: this.#console(data) };
+        case "ask_user":
+          return { value: await this.#askUser(data) };
         default:
           return { error: `Bilinmeyen mesaj: ${name}` };
       }
@@ -280,6 +313,106 @@ export class ZenMcpChild extends JSWindowActorChild {
       return `${ref}: içerik ayarlandı.`;
     }
     throw new Error(`${ref} bir form alanı değil (${roleOf(el) || tag.toLowerCase()}).`);
+  }
+
+  // ---- ask_user: öğeyi çerçevele, kullanıcıya ne yapacağını söyle, cevabını bekle ----
+  //
+  // Çizim kapalı shadow DOM içinde (sayfanın CSS'i bozamaz, script'leri içine bakamaz).
+  // Yalnız gerçek (isTrusted) tıklamalar sayılır; tıklama sistem olay grubunda dinlenir,
+  // sayfa olayı durdursa da görülür.
+
+  didDestroy() {
+    this.#ask?.finish("navigated");
+  }
+
+  #askUser({ ref, x, y, message, wait = "done", timeout = 300 }) {
+    this.#ask?.finish("replaced");
+    const doc = this.document;
+    const win = this.contentWindow;
+    // önceki bir hatadan asılı kalmış çizim
+    for (const old of doc.querySelectorAll("zen-mcp-ask")) old.remove();
+    const target = ref ? this.#element(ref) : x != null ? doc.elementFromPoint(x, y) : null;
+    if (target && !this.#fullyInViewport(target)) target.scrollIntoView({ block: "center", behavior: "instant" });
+
+    const host = doc.createElement("zen-mcp-ask");
+    host.setAttribute("style", "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;");
+    const root = host.attachShadow({ mode: "closed" });
+    const el = (tag, cls, txt) => {
+      const node = doc.createElement(tag);
+      if (cls) node.className = cls;
+      if (txt) node.textContent = txt;
+      return node;
+    };
+    root.append(el("style", null, ASK_CSS));
+    const box = target ? el("div", "box") : null;
+    if (box) root.append(box);
+    const bubble = el("div", "bubble");
+    bubble.append(el("div", "title", "Claude senden bunu istiyor"), el("div", "message", message));
+    const buttons = el("div", "buttons");
+    const cancel = el("button", null, "Vazgeç");
+    buttons.append(cancel);
+    let ok = null;
+    if (wait !== "click") {
+      ok = el("button", "primary", "Tamam");
+      buttons.append(ok);
+    }
+    bubble.append(buttons);
+    root.append(bubble);
+    doc.documentElement.append(host);
+
+    // öğe kayar/boyutu değişirse çerçeve ve baloncuk takip etsin
+    let frame = 0;
+    const place = () => {
+      const bw = bubble.offsetWidth;
+      const bh = bubble.offsetHeight;
+      if (target) {
+        const r = target.getBoundingClientRect();
+        const pad = 6;
+        Object.assign(box.style, {
+          left: `${r.left - pad}px`, top: `${r.top - pad}px`,
+          width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
+        });
+        const below = r.bottom + pad + 12;
+        const top = below + bh < win.innerHeight ? below : Math.max(12, r.top - pad - 12 - bh);
+        const left = Math.min(Math.max(12, r.left), win.innerWidth - bw - 12);
+        Object.assign(bubble.style, { left: `${left}px`, top: `${top}px` });
+      } else {
+        Object.assign(bubble.style, { left: `${(win.innerWidth - bw) / 2}px`, top: "24px" });
+      }
+      frame = win.requestAnimationFrame(place);
+    };
+    place();
+
+    return new Promise(resolve => {
+      // pencereden bakınca kapalı shadow DOM'un içi görünmez (composedPath'te yok); düğmeler
+      // kendi dinleyicileriyle, işaretlenen öğe pencereden yakalanır
+      const onClick = event => {
+        if (event.isTrusted && wait === "click" && target && event.composedPath().includes(target)) finish("clicked");
+      };
+      const onButton = result => event => {
+        if (event.isTrusted) finish(result);
+      };
+      cancel.addEventListener("click", onButton("cancelled"), SYSTEM_CAPTURE);
+      ok?.addEventListener("click", onButton("done"), SYSTEM_CAPTURE);
+      const timer = setTimeout(() => finish("timeout"), timeout * 1000);
+      try {
+        win.addEventListener("click", onClick, SYSTEM_CAPTURE);
+      } catch (e) {
+        clearTimeout(timer);
+        host.remove();
+        throw e;
+      }
+      const finish = result => {
+        if (this.#ask?.finish !== finish) return;
+        this.#ask = null;
+        clearTimeout(timer);
+        try { win.removeEventListener("click", onClick, SYSTEM_CAPTURE); } catch {}
+        try { win.cancelAnimationFrame(frame); } catch {}
+        host.remove();
+        resolve(result);
+      };
+      this.#ask = { finish };
+    });
   }
 
   // ---- konsol: Firefox bu sayfanın console.* çağrılarını (ConsoleAPIStorage) ve JS hatalarını

@@ -11,10 +11,11 @@ const tabId = z
   .number()
   .describe("Tab ID to act on. Use tabs_context_mcp first if you don't have a valid tab ID.");
 
-function register(name: string, description: string, inputSchema: z.ZodRawShape) {
+// timeout: bu tool'un Zen'den cevap için ne kadar bekleyeceği (ms); ask_user kullanıcıyı bekler
+function register(name: string, description: string, inputSchema: z.ZodRawShape, timeout?: (args: any) => number) {
   server.registerTool(name, { description, inputSchema }, async (args: object) => {
     try {
-      return { content: await call(name, args) };
+      return { content: await call(name, args, timeout?.(args)) };
     } catch (e) {
       return { content: [{ type: "text" as const, text: (e as Error).message }], isError: true };
     }
@@ -118,6 +119,25 @@ register(
   "get_page_text",
   "Get the readable text of the page (main/article content if present, otherwise the body), with title and URL.",
   { tabId },
+);
+
+register(
+  "ask_user",
+  [
+    "Hand a step to the user when they must do it themselves (confirming a payment or deletion, solving a captcha, logging in, choosing something only they know).",
+    "Brings the tab to the front, outlines the element (ref from read_page/find, or a screenshot coordinate) in orange with your message next to it, and waits for the user.",
+    "wait: \"click\" returns when the user clicks the outlined element; \"done\" (default) shows OK/Cancel and returns which they pressed. The user can always cancel.",
+    "Write the message in the user's language and say exactly what to do.",
+  ].join(" "),
+  {
+    tabId,
+    message: z.string().describe("What the user should do, e.g. \"Ödeme tutarını kontrol et, doğruysa Onayla'ya bas.\""),
+    ref: z.string().optional().describe("Element to outline (from read_page or find)."),
+    coordinate: z.tuple([z.number(), z.number()]).optional().describe("Or a point in the latest screenshot; the element there is outlined."),
+    wait: z.enum(["click", "done"]).optional(),
+    timeout: z.number().optional().describe("Seconds to wait (default 300)."),
+  },
+  (args) => ((args.timeout ?? 300) + 20) * 1000,
 );
 
 register(

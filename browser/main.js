@@ -380,6 +380,8 @@ function logError(where, e) {
     // istekten önce ve beklerken diyalog aranır; varsa hata yerine bilgi dönülür (DialogOpen),
     // Claude handle_dialog ile cevaplar.
     class DialogOpen extends Error {}
+    // istek beklenirken sayfa değişti: actor yok oldu, cevap hiç gelmeyecek
+    class PageGone extends Error {}
 
     function openDialog(browser) {
       const gBrowser = browser.ownerDocument.defaultView.gBrowser;
@@ -411,7 +413,9 @@ function logError(where, e) {
       const watchDialog = (async () => {
         while (!done) {
           await sleep(250);
-          if (!done) throwIfDialog(browser);
+          if (done) return;
+          throwIfDialog(browser);
+          if (browser.browsingContext?.currentWindowGlobal !== wg) throw new PageGone("Sayfa değişti.");
         }
       })();
       try {
@@ -537,6 +541,32 @@ function logError(where, e) {
       async form_input({ tabId, ref, value }) {
         const { value: result } = await query(browserFor(tabId), "form_input", { ref, value });
         return text(result);
+      },
+
+      // Claude'un kullanıcıya bırakması gereken adımlar (onay, captcha, giriş...): öğeyi
+      // çerçevele, mesajı göster, sekmeyi öne getir (kullanıcının orada bir şey yapması
+      // gerekiyor), cevabı bekle
+      async ask_user({ tabId, ref, coordinate, message, wait = "done", timeout = 300 }) {
+        const browser = browserFor(tabId);
+        const win = browser.ownerDocument.defaultView;
+        win.gBrowser.selectedTab = win.gBrowser.getTabForBrowser(browser);
+        win.focus();
+        const [x, y] = coordinate ? toPagePoint(browser, coordinate) : [];
+        let result;
+        try {
+          ({ value: result } = await query(browser, "ask_user", { ref, x, y, message, wait, timeout }, (timeout + 10) * 1000));
+        } catch (e) {
+          if (!(e instanceof PageGone)) throw e;
+          result = "navigated";
+        }
+        return text({
+          clicked: "Kullanıcı işaretlenen öğeye tıkladı.",
+          done: "Kullanıcı Tamam'a bastı.",
+          cancelled: "Kullanıcı vazgeçti.",
+          timeout: `Kullanıcı ${timeout} sn içinde yanıt vermedi.`,
+          navigated: "Sayfa değişti (kullanıcı bir işlem yapmış olabilir); screenshot ile kontrol et.",
+          replaced: "Yerine yeni bir ask_user geldi.",
+        }[result] ?? String(result));
       },
 
       async handle_dialog({ tabId, accept, text: answer }) {
