@@ -670,7 +670,9 @@ function logError(where, e) {
     const MAX_EDGE = 1568;
     const MAX_PIXELS = 1150000;
 
-    async function screenshot(browser) {
+    // scale (0,1–1): görüntüyü ayrıca küçültür, token ~scale² ile azalır; koordinatlar yine
+    // dönen görüntünün pikselleri
+    async function screenshot(browser, scale = 1) {
       const wg = browser.browsingContext?.currentWindowGlobal;
       if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
       // sanal imleç ve tıklama halkası Claude'un gördüğü görüntüde sayfayı kapatmasın
@@ -683,7 +685,7 @@ function logError(where, e) {
         overlays(false);
       }
       const { width: w, height: h } = bitmap;
-      const s = Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h)));
+      const s = Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h))) * Math.min(1, Math.max(0.1, scale));
       const canvas = browser.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
       canvas.width = Math.round(w * s);
       canvas.height = Math.round(h * s);
@@ -862,6 +864,7 @@ function logError(where, e) {
         handle_dialog: () => "diyaloğu cevaplıyor",
         ask_user: () => "senden bir şey istiyor",
         request_tab: () => "sekmeye erişmek istiyor",
+        tabs_close_mcp: () => "sekmeyi kapatıyor",
       }[tool]?.() ?? "çalışıyor";
       return host ? `${host} — ${what}` : what;
     }
@@ -895,7 +898,8 @@ function logError(where, e) {
 
     // ---- tool'lar: hepsi MCP içerik dizisi döner ----
 
-    const text = t => [{ type: "text", text: typeof t === "string" ? t : JSON.stringify(t, null, 2) }];
+    // tek satır JSON: girinti her çağrıda boşuna token
+    const text = t => [{ type: "text", text: typeof t === "string" ? t : JSON.stringify(t) }];
 
     const tools = {
       async tabs_context_mcp({ createIfEmpty }) {
@@ -907,6 +911,57 @@ function logError(where, e) {
 
       async tabs_create_mcp() {
         return text(describeTab(await createTab()));
+      },
+
+      // Claude'un açtığı sekme kapanır; kullanıcının verdiği sekme kapanmaz, kullanıcıya geri verilir
+      async tabs_close_mcp({ tabId }) {
+        const tab = browserFor(tabId) && findTab(tabId);
+        const given = tab.getAttribute(MARK) === "user";
+        unmark(tab);
+        if (given) return text(`Sekme ${tabId} kullanıcının; kapatılmadı, kullanıcıya geri verildi.`);
+        tab.ownerDocument.defaultView.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true });
+        return text(`Sekme ${tabId} kapatıldı.`);
+      },
+
+      // Birkaç tool çağrısı tek seferde, sırayla; ilk hatada durur. Metin cevapları tek blokta
+      // birleşir (her biri ayrı içerik olmasın), görüntüler sırasıyla araya girer.
+      async browser_batch({ actions }) {
+        if (!Array.isArray(actions) || !actions.length) throw new Error("actions boş.");
+        const content = [];
+        let lines = [];
+        const flush = () => {
+          if (lines.length) content.push({ type: "text", text: lines.join("\n") });
+          lines = [];
+        };
+        for (const [i, { name, input = {} }] of actions.entries()) {
+          const label = `[${i + 1}] ${name}`;
+          const left = actions.length - i - 1;
+          const rest = left ? ` Kalan ${left} adım çalıştırılmadı.` : "";
+          if (name === "browser_batch" || !tools[name]) {
+            lines.push(`${label}: ${name === "browser_batch" ? "iç içe browser_batch olmaz" : "bilinmeyen tool"}.${rest}`);
+            break;
+          }
+          try {
+            for (const c of await runTool(name, input)) {
+              if (c.type === "text") lines.push(`${label}: ${c.text}`);
+              else {
+                lines.push(`${label}:`);
+                flush();
+                content.push(c);
+              }
+            }
+          } catch (e) {
+            if (e instanceof DialogOpen) {
+              lines.push(`${label}: ${e.message}${rest}`);
+              if (e.browser) showDialog(e.browser);
+            } else {
+              lines.push(`${label}: HATA: ${e?.message ?? e}${rest}`);
+            }
+            break;
+          }
+        }
+        flush();
+        return content;
       },
 
       async navigate({ url, tabId }) {
@@ -932,7 +987,7 @@ function logError(where, e) {
         };
         switch (args.action) {
           case "screenshot": {
-            const shot = await screenshot(browser);
+            const shot = await screenshot(browser, args.scale);
             // diyalog tarayıcı arayüzünde çizilir, sayfanın görüntüsünde çıkmaz
             const dialog = openDialog(browser);
             return [
@@ -1193,6 +1248,21 @@ function logError(where, e) {
       NetUtil.asyncCopy(stream, output, () => transport.close(Cr.NS_OK));
     }
 
+    // durdurulmuşsa reddeder, sürerken adada ne yapıldığını gösterir
+    async function runTool(tool, args) {
+      if (state.paused) throw new Stopped();
+      const browser = state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
+      if (browser) {
+        island?.working(browser, describeAction(tool, args, browser));
+        activeCalls++;
+      }
+      try {
+        return await tools[tool](args);
+      } finally {
+        if (browser && --activeCalls === 0) island?.idle();
+      }
+    }
+
     async function handle(line, transport, output) {
       let message;
       try {
@@ -1200,21 +1270,7 @@ function logError(where, e) {
         const fn = tools[tool] || commands[tool];
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
         if (session && tools[tool]) lastUse.set(session, Date.now());
-        let shown = false;
-        if (tools[tool]) {
-          if (state.paused) throw new Stopped();
-          const browser = state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
-          if (browser) {
-            island?.working(browser, describeAction(tool, args, browser));
-            activeCalls++;
-            shown = true;
-          }
-        }
-        try {
-          message = { ok: true, content: await fn(args) };
-        } finally {
-          if (shown && --activeCalls === 0) island?.idle();
-        }
+        message = { ok: true, content: tools[tool] ? await runTool(tool, args) : await fn(args) };
       } catch (e) {
         // diyalog bir hata değil, Claude'un bilmesi gereken durum
         if (e instanceof DialogOpen) {

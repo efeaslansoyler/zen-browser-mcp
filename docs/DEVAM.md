@@ -53,12 +53,18 @@ Claude Code ──stdio MCP──▶ src/server.ts ──Unix soket──▶ bro
 
 ## Tool'lar (Claude in Chrome adlarıyla uyumlu)
 
-`tabs_context_mcp`, `tabs_create_mcp`, `navigate`, `computer` (screenshot, tıklamalar, hover,
+`tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp`, `navigate`, `computer` (screenshot, tıklamalar, hover,
 drag, scroll, scroll_to, type, key, wait; koordinat ya da ref), `read_page`, `find`,
 `form_input`, `get_page_text`, `javascript_tool`, `read_console_messages`,
-`read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`, `request_tab`.
+`read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`, `request_tab`, `browser_batch`.
 
 Davranış notları:
+
+- Token: cevaplar kısa ve tek satır JSON; Claude in Chrome gibi her cevaba sekme listesi
+  eklenmez. Aynı form görevinde (2026-10-19) Zen ~4.250, Chrome ~5.650 token. `browser_batch`
+  adımları sırayla çalıştırır, ilk hatada durur, metinleri tek blokta birleştirir.
+  Ekran görüntüsünde `scale` (0,1–1); koordinatlar dönen görüntünün pikselleri.
+- `tabs_close_mcp`: Claude'un açtığı sekmeyi kapatır, kullanıcının verdiğini kapatmaz, geri verir.
 
 - Claude yalnız kendisindeki sekmelere dokunabilir: kendi açtıkları ve Efe'nin sağ tık
   menüsünden "Claude'a ver" ile verdikleri (`givenByUser: true`). "Claude'dan geri al" süren

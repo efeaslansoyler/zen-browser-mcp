@@ -75,6 +75,12 @@ register(
 register("tabs_create_mcp", "Open a new empty tab for Claude in Zen and return its tab ID.", {});
 
 register(
+  "tabs_close_mcp",
+  "Close a tab Claude opened when you no longer need it. A tab the user handed over (givenByUser) is not closed but given back to the user.",
+  { tabId },
+);
+
+register(
   "navigate",
   "Navigate a tab to a URL and wait for the page to load. Use \"back\" or \"forward\" for history navigation.",
   {
@@ -114,6 +120,10 @@ register(
     scroll_direction: z.enum(["up", "down", "left", "right"]).optional(),
     scroll_amount: z.number().optional().describe("Scroll ticks (100px each). Default 3."),
     duration: z.number().optional().describe("Seconds to wait (max 30)."),
+    scale: z
+      .number()
+      .optional()
+      .describe("screenshot only: 0.1–1, shrinks the image (tokens ~scale²); coordinates are pixels of the returned image."),
     repeat: z.number().optional().describe("How many times to repeat a key action."),
     tabId,
   },
@@ -246,6 +256,30 @@ register(
     text: z.string().describe("JavaScript code to run."),
     tabId,
   },
+);
+
+// toplu çağrıda her adım için bekleme süresi: kullanıcıyı bekleyenler kendi süreleri kadar
+const stepTimeout = ({ name, input = {} }: { name: string; input?: any }) =>
+  name === "ask_user"
+    ? (input.timeout ?? 300) + 20
+    : name === "request_tab"
+      ? (input.timeout ?? 120) + 20
+      : name === "file_upload"
+        ? 90
+        : 60;
+
+register(
+  "browser_batch",
+  [
+    "Run several of the tools above in one call: each item is {name, input} with exactly the input you would pass to that tool. Items run sequentially and stop at the first error; text results come back as one numbered block, screenshots in place.",
+    "Use it whenever you can predict two or more steps, e.g. navigate, read_page, several form_input, click, get_page_text. Coordinates in a batch refer to the screenshot taken before this call. browser_batch cannot be nested.",
+  ].join(" "),
+  {
+    actions: z
+      .array(z.object({ name: z.string().describe("Tool name, e.g. form_input, computer, navigate."), input: z.record(z.string(), z.any()) }))
+      .min(1),
+  },
+  (args) => (args.actions ?? []).reduce((sum: number, a: any) => sum + stepTimeout(a), 0) * 1000,
 );
 
 await server.connect(new StdioServerTransport());
