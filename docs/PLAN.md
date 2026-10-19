@@ -1,4 +1,16 @@
-# Plan: Claude adası ve sonrası
+# Plan: ajanlarla Zen içinde birlikte çalışma
+
+## Güncel öncelik — 2026-10-20
+
+Önce [DEVAM.md](DEVAM.md) başındaki güncel devir özetini oku. Çoklu ajan teması,
+Codex standart MCP araçları ve queue gönderimi tamamlandı. Otomatik Codex hook
+alıcısı kuruldu; Efe’nin `/hooks` güven onayı ve yeni sohbette gerçekten otomatik
+bağlanma doğrulaması bekleniyor. Sonraki geliştirme planı Efe ile birlikte belirlenecek.
+
+Öncelik adayları: batch/site değişiminde izinler, gerçek iptal, çoklu oturum sekme
+sahipliği, örtülü öğe kontrolü, çıktı/diff verimliliği ve CLI+skill ölçümü.
+Aşağıdaki bölümler önceki planın tarihçesidir.
+
 
 Efe compact mode kullanıyor; sekmedeki turuncu çizgiyi görmüyor. Çözüm: Zen penceresinin
 üst ortasında, sayfanın üzerinde duran bir "ada" (Dynamic Island gibi). Claude'un ne

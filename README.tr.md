@@ -4,9 +4,9 @@
 [![Türkçe](https://img.shields.io/badge/dil-Türkçe-red)](README.tr.md)
 [![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-green)](LICENSE)
 
-Claude **kendi Zen tarayıcını** kullansın: senin sekmelerin, senin oturumların, gerçek fare
+AI ajanları **kendi Zen tarayıcını** kullansın: senin sekmelerin, senin oturumların, gerçek fare
 ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren küçük bir ada.
-Claude Code ile (ve her MCP istemcisiyle) çalışır. Firefox ve diğer Firefox tabanlı
+Claude Code, Codex ve diğer MCP istemcileriyle çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
 
 [![zen-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/demo.gif)](docs/demo.mp4)
@@ -60,10 +60,32 @@ başlatmak gerekmez.
 > tarball kurulumları). `doctor` yükleyicinin gittiğini söylerse `npx zen-mcp install`'ı
 > yeniden çalıştır.
 
+## Codex ve diğer MCP istemcileri
+
+Standart tarayıcı araçları stdio MCP üzerinden çalışır. Yerel geliştirme kurulumu:
+
+```sh
+codex mcp add zen -- node /tam/yol/zen-mcp/src/server.ts
+```
+
+Diğer MCP istemcileri de aynı komutu veya derlenmiş `dist/cli.js` dosyasını başlatabilir.
+Fare koordinatları istemci uyumluluğu için iki sayılık standart dizilerdir (`[x, y]`).
+
+MCP bağlantısındaki istemci adı görünümü otomatik seçer: **Claude turuncu**, **Codex mint**,
+diğer ajanlar kendi istemci adıyla mavi. Ada, sekme şeridi, imleç, tıklama halkası ve kullanıcıya
+bırakılan adımın çerçevesi işlemi yapan ajanı izler. Sekme rengi tarayıcı yeniden açılınca korunur;
+başka ajan aynı sekmeyi kullanırsa güncellenir. Aracı yazılım istemci adını gizliyorsa sunucunun
+ortamına `ZEN_MCP_AGENT=codex` veya `ZEN_MCP_AGENT=claude` eklenebilir.
+
+Kimlik yalnız görünüm içindir; kimlik doğrulama veya oturuma özel sekme yalıtımı sağlamaz.
+İşlemler ortak kuyrukta yürür; Durdur/Devam ve otomatik/onaylı mod bütün ajanlar için ortaktır.
+Kimlik bilgisi kullanıcının vermediği sekmeye erişim sağlamaz. Öğeyi sohbete gönderme Claude channels veya Codex queue ile çalışır;
+diğer istemcilerde pano kullanılabilir.
+
 ## Kullanım
 
 Claude'dan tarayıcıda bir şey yapmasını iste: *"seaskablo.com'u aç, fiyat listesini bul"*.
-Claude arka planda kendi sekmesini açar; sekmede turuncu bir çizgi belirir, ada ne olduğunu
+Claude arka planda kendi sekmesini açar; sekmede ajanın renginde bir çizgi belirir, ada ne olduğunu
 gösterir. Sekmeye gitmek için adaya tıkla.
 
 ### Ada
@@ -76,27 +98,35 @@ gösterir. Sekmeye gitmek için adaya tıkla.
 
 ### Sekme vermek
 
-Sekmeye sağ tıkla → **Claude'a ver**: Claude kaldığın yerden devam eder. **Claude'dan geri
+Sekmeye sağ tıkla → **Ajana ver**: ajan kaldığın yerden devam eder. **Ajandan geri
 al** ile istediğin an bitirirsin.
 
-### Claude'a bir öğe göstermek
+### Ajana bir öğe göstermek
 
-<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>'ye bas (ya da sağ tık → **Claude'a göster…**),
-fareyle öğeyi seç (<kbd>↑</kbd>/<kbd>↓</kbd> üst/alt öğe), tıkla ve ne istediğini yaz. Claude
-Code oturumuna sayfa adresi, CSS seçici, erişilebilir ad, hesaplanmış stiller, metin,
-kısaltılmış HTML, öğenin ekran görüntüsü ve geliştirme sürümlerinde bileşen zinciriyle
-(`HeroSection > CTAButton`) gider. Kendi sitende "bu düğmeyi büyüt" demek için birebir.
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ya da sağ tık → **Ajana göster…** ile öğeyi seç,
+isteğini yaz ve adadaki listeden hedef oturumu seç. Sayfa adresi, seçici, erişilebilir ad,
+stiller, metin, kısaltılmış HTML, öğenin görüntü yolu ve geliştirme sürümündeki bileşen zinciri gönderilir.
 
-Bu, araştırma önizlemesindeki Claude Code [channels](https://code.claude.com/docs/en/channels)
-özelliğini kullanır. Özel kanallar bir bayrak ister ve Claude Code her açılışta onay sorar:
+- **Claude Code:** `claude --dangerously-load-development-channels server:zen` ile channels'ı
+  aç; oturum kendiliğinden bağlanır.
+- **Codex:** bir kez `node dist/cli.js codex-hooks install` çalıştır (kurulu pakette
+  `npx zen-mcp codex-hooks install`), sonra Codex'te `/hooks` ekranından üç Zen hook'una güven.
+  SessionStart, Codex'in verdiği gerçek sohbet UUID'siyle alıcıyı başlatır;
+  UserPromptSubmit bağlantıyı yeniler; SessionEnd kapatır. Sohbet açılınca/devam ettirilince
+  ilk tarayıcı aracı çağrısından önce otomatik bağlanır. Aynı sohbet için ikinci alıcı
+  açılmaz; MCP yeniden bağlansa da alıcı sürer, Zen kapanıp açılınca yeniden bağlanır.
+  `connect_session` elle bağlantı için yedek kalır. Kaldırmak için `codex-hooks uninstall`.
+  Ada ancak queue komutu kabul edilince **kuyruğa alındı** der; bu, ajanın okuması veya
+  tamamlaması değildir. Denediğimiz aktif sohbette mesaj mevcut tur bitince geldi.
+- **Diğer istemciler / bağlantı yok:** **Pano** seçeneğiyle kopyala ve ajana yapıştır.
 
-```sh
-claude --dangerously-load-development-channels server:zen
-```
+Listede ajan, proje ve kısa oturum kimliği görünür. Yazma kutusu açılınca hedefler sabitlenir;
+başka bir oturum etkinleşse de gönderim seçtiğin hedefe gider. Hedef koparsa veya gönderim
+başarısız olursa bağlam panoya kopyalanır; başka sohbete sessizce yönlendirilmez.
+Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 
-Bayrak olmadan öğe ve notun panoya kopyalanır, yapıştırman yeterli.
-
-Claude sonra sekmene canlı bakmak isterse izin isteyebilir; adadan onaylar ya da reddedersin.
+Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;
+adadan onaylar veya reddedersin.
 
 ## Modlar ve hassas siteler
 
@@ -138,6 +168,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `browser_batch` | yukarıdakilerden birkaçı tek çağrıda |
 | `read_console_messages`, `read_network_requests` | konsol çıktısı; başlık ve gövdeleriyle istekler (çerez ve yetki bilgisi gizli) |
 | `javascript_tool`, `handle_dialog` | sayfada JS çalıştırma; `alert`/`confirm`/`prompt` cevaplama |
+| `connect_session` | Codex sohbetini tarayıcıdan seçim alacak şekilde bağlama |
 | `ask_user`, `request_tab` | bir adımı sana bırakma; sekmene erişim isteme |
 
 ## Güvenlik

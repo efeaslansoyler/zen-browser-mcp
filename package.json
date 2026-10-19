@@ -1,7 +1,7 @@
 {
   "name": "zen-mcp",
   "version": "0.1.0",
-  "description": "Let Claude use your Zen (and other Firefox-based) browser with real input, your own sessions, and a live status island.",
+  "description": "Let AI agents use your Zen (and other Firefox-based) browser with real input, your own sessions, and a live status island.",
   "type": "module",
   "bin": {
     "zen-mcp": "dist/cli.js"
@@ -18,7 +18,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "repository": {
     "type": "git",

@@ -2,6 +2,87 @@
 
 Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.md).
 
+## Güncel devir özeti — 2026-10-20
+
+Bu bölüm güncel durumdur; aşağıdaki tarihli bölümler geliştirme geçmişidir.
+
+### Amaç ve kararlar
+
+- Zen MCP artık yalnız Claude'a özel değil: günlük Zen/Firefox penceresinde farklı AI
+  ajanlarıyla birlikte çalışma. Efe'de gerçek test istemcileri Claude Code ve Codex.
+- Aynı pencere/oturumlar, arka plan sekmeleri, gerçek girdi, ada, global Durdur/Devam ve
+  sekme verme/geri alma korunur. Ayrı pencere veya gerçek container istenmiyor.
+- Repo private kalacak; yayın, npm/MCP Registry ve isim değişikliği henüz yapılmayacak.
+- agent-browser referans; onun tüm özelliklerini kopyalamak yerine güvenilirlik ve
+  kullanıcıyla birlikte çalışma akışı geliştirilecek. CLI+MCP birlikte değerlendirilebilir.
+
+### Tamamlananlar
+
+- Codex bağlantısı: XDG_RUNTIME_DIR aktarılmadığında Linux kullanıcı runtime klasörü
+  bulunuyor; hata mesajları soket yolu/gerçek hata kodunu gösteriyor.
+- computer koordinat şeması standart iki sayılık dizi oldu; Codex'te doğrudan tool artık
+  görünür. Gerçek Codex MCP üzerinden açma/okuma/form/tıklama/klavye/screenshot/kapatma geçti.
+- Yeni sekmenin about:blank STOP olayının navigate'i erken bitirmesi düzeltildi.
+- MCP initialize istemci adıyla tema: Claude turuncu, Codex mint, diğer ajanlar mavi.
+  Ada, sekme çizgisi, cursor/ripple/ask çerçevesi birlikte değişir; kimlik yetki vermez.
+- Efe'nin gönderdiği Codex görselinden esinlenen net SVG: browser/assets/codex.svg.
+  Mor-mavi bulut simgesi Codex menü/adasında, eski >_ genel ajanlarda. Menüler her açılışta
+  güncellenir; Zen yeniden başlatılmaz. Sekme menüsü sekmenin mevcut ajanını izler.
+- Claude channels korunuyor. Codex seçimleri execFile(codex queue) ile tam UUID'ye gider;
+  shell yok. Kullanıcı notu, güvenilmeyen sayfa içeriğinden ayrılır; görüntü yolu ve
+  tab_id/source_tab korunur. Gerçek seçim mesajı bu sohbete geldi, kullanıcı girdisi olarak
+  alındığı doğrulandı. Çalışan turda queue girdisi tur bittikten sonra geldi.
+- Ada hedef listesi ajan/proje/oturum son ekini gösterir. Hedef compose açılırken sabitlenir;
+  başka oturuma sessiz geçiş yok. Çift gönderim engellenir; kopma/hata panoya düşer.
+  İki yönlü receipt ile queue kabul edilmeden başarı yazılmaz.
+- Otomatik Codex alıcısı: SessionStart/UserPromptSubmit/SessionEnd hook'ları gerçek host
+  session_id ve cwd ile bir yerel relay yönetir. MCP sürecinde CODEX_THREAD_ID yok;
+  kimliği tahmin etme. connect_session artık elle yedektir, normal yol hook'lardır.
+  Aynı UUID tek receiver; resume/compact/eşzamanlı başlatma/ölü soket toparlanması testli.
+  Normal kapanışta temizlenir; anormal kapanışta 24 saat etkinlik yoksa kapanır.
+- Codex hook tanımları ~/.codex/hooks.json'a kuruldu. Mevcut sohbet relay'i doğrudan
+  başlatıldı ve Zen'de tek codex:<UUID> kaydı görüldü. Güven onayı bypass edilmedi.
+
+### Yeni sohbette ilk iş / açık kalan doğrulama
+
+1. Efe'nin Codex'te /hooks ekranından üç Zen MCP hook'una bir kez güvenip güvenmediğini
+   doğrula. Henüz onayladığına dair kullanıcı mesajı yok. Onay yoksa otomatik tetikleme
+   beklenmez; kod/kurulum hazır olmakla bu onay ayrı şeylerdir.
+2. Güven sonrası gerçekten yeni/açılıp-devam eden sohbetin, connect_session çağırmadan ve
+   ilk browser aracını beklemeden hedef listesine düştüğünü uçtan uca doğrula.
+3. Eski sohbet UUID'sini kopyalama. Gerektiğinde yeni komut ortamındaki CODEX_THREAD_ID
+   okunur veya güvenilir hook input'u kullanılır. Sahiplik/izin ile görsel kimliği karıştırma.
+4. Sonra Efe ile geliştirme planına dön: batch içinde site değişince yeniden izin kontrolü,
+   gerçek işlem iptali, çoklu oturum sekme sahipliği/çakışmalar, örtülü öğe kontrolü,
+   çıktı/diff verimliliği, CLI+skill ölçümü. Bunlar bu oturumda çözülmedi.
+
+### Testler ve çalışma ağacı
+
+- Son npm test: build + 18 test geçti. Bellek içi MCP matrisi, ada, wire/receipt,
+  hook kurulumunu koruma/tekilleştirme ve gerçek alt süreçlerle relay yaşam döngüsü dahil.
+- Canlı check-compat üç ajan kimliğiyle geçti. check-pick-delivery gerçek seçim + görüntü
+  bağlamını Codex queue'ya taşıdı ve mesajın sohbete ulaşması ayrıca gözlendi.
+- Kullanıcı tarayıcısındaki test sekmeleri kapatıldı; mode/sensitive ayarları değiştirilmedi.
+- Çok sayıda tracked/untracked değişiklik var; henüz commit/push yapılmadı. Bunlar bu
+  çalışmanın ürünüdür; silme/resetleme veya istenmeden yayınlama.
+- Sadece belge güncellemesi için testleri tekrar çalıştırmak gerekmez.
+
+### İlgili dosyalar ve komutlar
+
+- src/server.ts, src/zen.ts, src/paths.ts: MCP şema, kimlik, soket, receipt.
+- src/delivery.ts: Codex queue gönderimi.
+- src/codex-hooks.ts, src/codex-relay.ts: kurulum ve otomatik alıcı.
+- browser/Agent.sys.mjs, browser/assets/codex.svg, Island.sys.mjs, main.js, actors/: UI/köprü.
+- npm test
+- node scripts/zenctl.ts reload (Zen'i kapatmadan browser kodu yenileme)
+- node scripts/check-compat.ts --reload (yalnız test sekmeleri)
+- node scripts/check-pick-delivery.ts (GERÇEKTEN mevcut sohbete test mesajı yollar)
+- node dist/cli.js codex-hooks install|uninstall
+- node scripts/zenctl.ts eval '[...h.subscribers.values()].map(s=>({name:s.name,relay:s.relay}))'
+
+Browser reload Node MCP sürecindeki modülleri yenilemez; Node/schema değişince MCP
+istemcisini yeniden bağlamak gerekir. Sadece browser UI değişikliğinde Zen'i kapatma.
+
 ## Ne bu
 
 Claude Code'un Efe'nin günlük tarayıcısı Zen'i (Firefox tabanlı, Gecko 157) kullanmasını
@@ -228,3 +309,81 @@ Davranış notları:
 
 Not: bu oturumdaki MCP sunucusu oturum başında başlar. `src/server.ts` değişince yeni tool'lar
 ve açıklamalar için Claude Code'da `/mcp` ile yeniden bağlan ya da yeni oturum aç.
+
+## Çoklu istemci uyumluluğu ve temalar (2026-10-20)
+
+- Standart araç açıklamaları ajan bağımsız; `computer` koordinatları tuple yerine
+  iki sayılık dizi. Codex'in şemayı doğrudan alabilmesi için `prefixItems` kullanılmıyor.
+- `server.ts`, MCP initialize `clientInfo.name` bilgisini `getClientVersion()` ile okur.
+  `ZEN_MCP_AGENT` görünüm için geçersiz kılabilir. `zen.ts` her istekte `{agent: {id, name}}` taşır.
+- `browser/Agent.sys.mjs`: Node ve Gecko'nun paylaştığı saf kimlik/tema modülü. Claude turuncu,
+  Codex mint (güncel simge: assets/codex.svg), tanınmayan istemci mavi (`>_`). Kimlik yetki sağlamaz. Eski sunucular
+  agent göndermiyorsa eski Claude görünümü korunur.
+- Ada, sekme şeridi, sanal imleç, tıklama halkası, ask_user çerçevesi işlem kimliğini izler.
+  Sekme teması SessionStore'da saklanır; başka istemci kullandığında değişir.
+- Ortak ada ve onay arayüzünde kimlik karışmasın diye tool çağrıları köprüde sıraya alınır.
+  Sekmeler hâlâ ortak; bu değişiklik oturuma özel sahiplik eklemez. Durdurma global kalır.
+- Batch hata sonuçları kısmi çıktıyı koruyarak MCP `isError` taşır. Cevapsız kapatılan
+  soket artık sonsuza dek beklemez, hata döner.
+- `npm test`: build + MCP istemci matrisi, şema, wire protokolü ve ada durumları.
+  Testler gerçek Gecko yerine bellek içi taşıma ve küçük DOM fixture kullanır.
+  Sandbox test alt süreçlerini engelliyorsa: `npm run build` ve
+  `node --test --test-isolation=none test/*.test.mjs`.
+- Canlı etkinleştirme: `node scripts/zenctl.ts reload`, sonra MCP istemcisinde yeniden bağlan.
+  Claude channels akışı korunur; Codex queue ve ardından lifecycle hook alıcısı aşağıda eklendi.
+
+Canlı smoke testi (kendi terminalinden): `node scripts/check-compat.ts --reload`.
+Yalnız kendi test sekmelerini açar/kapatır; Claude, Codex ve genel ajan kimlikleriyle
+okuma/yazma/tıklama/klavye/görüntü, ada-sekme rengi ve batch hata bayrağını doğrular.
+İzin ayarlarını değiştirmez; onaylı moddaysa test adımları tarayıcıda izin isteyebilir.
+
+### Canlı doğrulama ve ilk gezinme yarışı (2026-10-20)
+
+`check-compat.ts --reload` gerçek Zen'de Claude, Codex ve genel ajan kimliğiyle geçti.
+Yeni sekmenin ilk about:blank STOP olayı navigate beklemesini erken bitiriyordu;
+hedef about:blank değilken bu olay artık gezinme tamamlandı sayılmıyor.
+Smoke testi navigate dönüşündeki URL'yi de kontrol ediyor. `npm test`: 8/8 geçti.
+MCP süreci bu değişikliklerden önce açıldıysa kimlik ve computer şeması için yeniden
+bağlanmalı; köprü reload tek başına Node sürecindeki modülleri yenilemez.
+
+## Codex queue ile seçim gönderimi (2026-10-20)
+
+- `connect_session({threadId,label?})` Codex istemcisini kendi gerçek sohbet UUID'sine bağlar.
+  MCP sürecinde CODEX_THREAD_ID bulunmadığı canlı kontrolle doğrulandı; otomatik tahmin yok.
+  İlk sürüm elle bağlanıyordu; güncel otomatik lifecycle hook düzeni aşağıda.
+  connect_session yalnız elle yedek olarak kalır. Yeni tool için MCP süreci yeniden bağlanmalı.
+- `src/delivery.ts`: `execFile` ile shell olmadan `codex queue`; not ve güvenilmeyen sayfa
+  bağlamı ayrılır; screenshot/source_tab/tab_id meta verileri mesajda korunur.
+- `subscribe` iki yönlü: köprü olay kimliği üretir; Node gerçek gönderim tamamlanınca
+  `{event:'delivery',id,ok,error?}` döner. Codex'te başarı queue kabulüdür, ajanın okuması değil.
+  Eski Claude süreçleri ack olmadan eski yazıldı davranışını korur; yeni Claude süreçleri
+  MCP kanal bildiriminin yazılmasını onaylar.
+- Adada hedef seçici: ajan + proje + oturum son eki; seçim anındaki liste sabittir.
+  Hedef koparsa/başarısız olursa panoya düşer, başka aboneye yönlendirilmez. Çift gönderim
+  engellenir. Seçici ve not kutusu seçili ajanın temasına uyar.
+- `scripts/check-pick-delivery.ts`: gerçek MCP initialize/bind → Zen pick → görüntü/bağlam
+  → queue → mint adada alındı kontrolü geçti. CODEX_THREAD_ID gerektirir ve gerçekten bir
+  test mesajı yollar. Test sekmesini ve geçici MCP aboneliğini sonunda kapatır.
+- `npm test`: 15 test; bağlama, istemci matrisi, hedef seçimi, tekrar göndermeme,
+  Node onayının işlem tamamlanmadan dönmemesi ve hata yolu dahil.
+
+## Otomatik Codex bağlantısı — lifecycle hook'ları (2026-10-20)
+
+Elle connect_session gereksinimini kaldıran sahip yol artık hook'lardır:
+- `src/codex-hooks.ts`: SessionStart/UserPromptSubmit/SessionEnd JSON'undan gerçek UUID ve
+  cwd alınır; hiçbir sohbet listesi ya da en son transcript tahmini kullanılmaz.
+- `src/codex-relay.ts`: her UUID için yerel kontrol soketli tek ayrı süreç. Tekrar başlatma,
+  resume, compact ve eşzamanlı başlangıçlar çoğaltmaz. Ölü soket yalnız bağlantı reddiyse
+  ve inode değişmediyse temizlenir. Normal kapanışta SessionEnd durdurur; ani istemci
+  kapanışında 24 saat etkinlik olmayınca kendini kapatır. Zen yoksa abone yeniden dener.
+- Hook'lar modelden bağımsızdır; ilk browser çağrısını veya connect_session aracını beklemez.
+  connect_session aynı alıcı yöneticisini kullanan elle yedektir.
+- Köprü Codex kayıtlarını `codex:<UUID>` ile tekilleştirir. Eski elle bağlı MCP süreci
+  yeniden denese bile otomatik alıcının yerini alamaz; menüde aynı sohbet iki kez görünmez.
+- `node dist/cli.js codex-hooks install|uninstall`: ~/.codex/hooks.json'u diğer ayarları
+  koruyarak yönetir, değişen eski dosyayı yedekler. Kaldırma açık otomatik alıcıları durdurur.
+- Efe'nin kurulumuna hook tanımları eklendi. Mevcut sohbetin alıcısı doğrudan başlatılıp
+  Zen'de doğrulandı. Codex'in /hooks ekranındaki kullanıcı güveni özellikle bypass edilmedi;
+  gelecek oturumların gerçekten otomatik tetiklenmesi için bir kez güvenmesi gerekiyor.
+- `npm test`: 18 test. Hook girdi doğrulama, başka hook'ları koruma, yinelenmeyen kurulum,
+  gerçek alt süreç/kontrol soketiyle start/refresh/end ve SIGKILL sonrası toparlanma dahil.

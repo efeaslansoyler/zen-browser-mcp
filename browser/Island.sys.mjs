@@ -6,6 +6,8 @@
 // Yalnız görünüm: durdurma, sekmeye gitme, vazgeçme gibi işleri main.js'ten gelen geri
 // çağrılar yapar.
 
+const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(new URL("./Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
+
 const XHTML = "http://www.w3.org/1999/xhtml";
 // arayüz dili: tarayıcı Türkçeyse Türkçe, değilse İngilizce
 const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
@@ -122,9 +124,9 @@ const CSS = `
 
       &:hover { background: rgba(255, 255, 255, 0.2); }
       &.primary {
-        background: #d97757;
-        color: #fff;
-        &:hover { background: #e08667; }
+        background: var(--zen-agent-accent, #d97757);
+        color: var(--zen-agent-foreground, #fff);
+        &:hover { background: var(--zen-agent-hover, #e08667); }
       }
     }
 
@@ -137,7 +139,7 @@ const CSS = `
       opacity: 0.55;
 
       &:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
-      &[mode="ask"] { opacity: 0.9; color: #e8a58e; }
+      &[mode="ask"] { opacity: 0.9; color: var(--zen-agent-accent, #e8a58e); }
     }
     &:not([state="working"]) .mode { display: none; }
 
@@ -159,11 +161,11 @@ const CSS = `
     &[state="stopped"] .stop {
       width: auto;
       padding: 0 12px;
-      background: #d97757;
-      color: #fff;
+      background: var(--zen-agent-accent, #d97757);
+      color: var(--zen-agent-foreground, #fff);
 
       &::before { display: none; }
-      &:hover { background: #e08667; }
+      &:hover { background: var(--zen-agent-hover, #e08667); }
     }
     &:is([state="ask"], [state="dialog"], [state="picking"], [state="compose"], [state="sent"]) .stop { display: none; }
     &:is([state="picking"], [state="compose"], [state="sent"]) .spark { animation: none; }
@@ -200,7 +202,7 @@ const CSS = `
       font: inherit;
       line-height: 1.4;
 
-      &:focus { box-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.7); }
+      &:focus { box-shadow: inset 0 0 0 1px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.7); }
       &::placeholder { color: rgba(243, 243, 243, 0.45); }
     }
     & .compose-footer {
@@ -209,13 +211,9 @@ const CSS = `
       gap: 6px;
     }
     & .target {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      opacity: 0.5;
-      font-size: 11.5px;
+      flex: 1; min-width: 0; max-width: 280px;
+      background: #252525; color: inherit; border: 1px solid #555;
+      border-radius: 6px; padding: 4px; font: inherit; font-size: 11.5px;
     }
 
     & .detail {
@@ -264,7 +262,7 @@ const CSS = `
     to { rotate: 1turn; }
   }
   @keyframes zen-mcp-glow {
-    50% { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(217, 119, 87, 0.6), 0 0 18px rgba(217, 119, 87, 0.45); }
+    50% { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.6), 0 0 18px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.45); }
   }
 `;
 
@@ -276,6 +274,7 @@ const isPickKey = event =>
 const SENT_FOR = 2500;
 
 export class Island {
+  #agent = agentTheme({ id: "claude" });
   #windows = new Map(); // pencere → DOM parçaları ve dinleyiciler
   #sheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(CSS));
   #state = "hidden"; // hidden | working | ask | dialog | stopped
@@ -343,9 +342,18 @@ export class Island {
     preview.append(canvas);
     const compose = node("div", "compose");
     const note = node("textarea");
-    note.placeholder = L("What should Claude do?", "Ne yapılsın?");
+    note.placeholder = L("What should the agent do?", "Ne yapılsın?");
     const footer = node("div", "compose-footer");
-    const target = node("span", "target");
+    const target = node("select", "target");
+    target.setAttribute("aria-label", L("Destination session", "Hedef oturum"));
+    target.addEventListener("change", () => {
+      if (this.#pick?.mode !== "compose" || this.#pick.sending) return;
+      this.#pick.targetId = target.value;
+      const selected = this.#pick.targets.find(t => t.id === target.value);
+      this.#pick.agent = selected?.agent ?? agentTheme(null);
+      this.#actions.selectTarget?.(selected);
+      this.#render();
+    });
     const discard = node("button", "", L("Cancel", "Vazgeç"));
     const send = node("button", "primary", L("Send", "Gönder"));
     footer.append(target, discard, send);
@@ -356,7 +364,14 @@ export class Island {
     const submit = () => {
       if (this.#pick?.mode !== "compose") return;
       const value = note.value.trim();
-      if (value) this.#actions.send(value);
+      if (value && !this.#pick.sending) {
+        this.#pick.sending = true;
+        target.disabled = true;
+        send.disabled = true;
+        send.textContent = L("Sending…", "Gönderiliyor…");
+        note.disabled = true;
+        this.#actions.send(value, this.#pick.targetId);
+      }
       else note.focus();
     };
     send.addEventListener("click", submit);
@@ -413,7 +428,7 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, canvas, previewing: false, onKey, onResize, onTabSelect });
+    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, send, canvas, previewing: false, onKey, onResize, onTabSelect });
     this.#render();
   }
 
@@ -439,6 +454,11 @@ export class Island {
 
   get state() {
     return this.#state;
+  }
+
+  setAgent(agent) {
+    this.#agent = agentTheme(agent);
+    this.#render();
   }
 
   // Claude bir sekmede iş yapıyor; işlem sürdükçe görünür kalır
@@ -541,16 +561,23 @@ export class Island {
   }
 
   // seçici açık: "bir öğeye tıkla"
-  picking(browser) {
+  picking(browser, agent = { id: "claude" }) {
     this.#clearTimeout(this.#pickTimer);
-    this.#pick = { mode: "picking", browser: new WeakRef(browser) };
+    this.#pick = { mode: "picking", browser: new WeakRef(browser), agent };
     this.#render();
   }
 
   // öğe seçildi: not kutusu; target gönderilecek Claude Code oturumunun adı (yoksa pano)
-  compose(browser, label, target) {
+  compose(browser, label, targets = [], targetId = "") {
     this.#clearTimeout(this.#pickTimer);
-    this.#pick = { mode: "compose", browser: new WeakRef(browser), label, target };
+    const selected = targets.find(t => t.id === targetId);
+    this.#pick = { mode: "compose", browser: new WeakRef(browser), label, targets, targetId: selected?.id ?? "", agent: selected?.agent ?? agentTheme(null) };
+    for (const parts of this.#windows.values()) {
+      parts.note.disabled = false;
+      parts.target.disabled = false;
+      parts.send.disabled = false;
+      parts.send.textContent = L("Send", "Gönder");
+    }
     for (const parts of this.#windows.values()) parts.note.value = "";
     this.#render();
     const owner = browser.ownerDocument?.defaultView;
@@ -561,7 +588,7 @@ export class Island {
   sent(text) {
     const browser = this.#pick?.browser;
     if (!browser) return;
-    this.#pick = { mode: "sent", browser, text };
+    this.#pick = { mode: "sent", browser, text, agent: this.#pick.agent };
     this.#render();
     this.#clearTimeout(this.#pickTimer);
     this.#pickTimer = this.#setTimeout(() => this.pickEnded(), SENT_FOR);
@@ -595,7 +622,7 @@ export class Island {
     if (pick) {
       siteName = "";
       if (pick.mode === "picking") {
-        action = L("Click an element to show Claude", "Claude'a göstermek için bir öğeye tıkla");
+        action = L("Select an element to send", "Göndermek için bir öğe seç");
         hintText = L("↑ parent · Esc", "↑ üst öğe · Esc");
       } else if (pick.mode === "compose") {
         try { siteName = browser.currentURI.host; } catch {}
@@ -606,21 +633,39 @@ export class Island {
     try { icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser)); } catch {}
     for (const [win, parts] of this.#windows) {
       const { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, target } = parts;
+      const theme = applyTheme(el, pick ? pick.agent : this.#agent);
+      const spark = el.querySelector(".spark");
+      spark.title = theme.name;
+      spark.textContent = theme.id === "codex" ? "" : theme.glyph;
+      spark.style.background = theme.id === "codex" ? `url("${agentIcon(theme)}") center / contain no-repeat` : "none";
+      spark.style.color = theme.accent;
+      spark.style.font = theme.id === "claude" ? "bold 17px/14px system-ui" : "bold 11px/14px monospace";
+      spark.style.animation = theme.id === "claude" && !stopped ? "" : "none";
+      el.setAttribute("aria-label", theme.name);
       mode.setAttribute("mode", this.#mode);
       mode.textContent = this.#mode === "ask" ? L("ask", "onaylı") : L("auto", "otomatik");
       mode.title = this.#mode === "ask"
-        ? L("Claude asks before every action. Click: auto (acts without asking)", "Claude her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)")
-        : L("Claude acts without asking. Click: ask (asks before every action)", "Claude sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)");
+        ? L(`${theme.name} asks before every action. Click: auto (acts without asking)`, `${theme.name} her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)`)
+        : L(`${theme.name} acts without asking. Click: ask (asks before every action)`, `${theme.name} sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)`);
       const visible = stopped || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
       host.textContent = stopped ? "" : siteName;
-      text.textContent = stopped ? L("Claude is stopped", "Claude durduruldu") : action;
+      text.textContent = stopped ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`) : `${theme.name} · ${action}`;
       hint.textContent = hintText;
-      target.textContent = pick?.mode !== "compose" ? "" : pick.target ? `→ ${pick.target}` : L("→ clipboard (no Claude Code channel open)", "→ pano (açık Claude Code kanalı yok)");
+      if (pick?.mode === "compose") {
+        const options = [...pick.targets, { id: "", name: L("Clipboard", "Pano") }].map(destination => {
+          const option = win.document.createElementNS(XHTML, "option");
+          option.value = destination.id;
+          option.textContent = destination.name;
+          return option;
+        });
+        target.replaceChildren(...options);
+        target.value = pick.targetId;
+      }
       if (icon && !stopped) favicon.src = icon;
       else favicon.removeAttribute("src");
       stop.textContent = stopped ? L("Resume", "Devam et") : "";
-      stop.title = stopped ? "" : L("Stop Claude (Ctrl+Shift+Esc)", "Claude'u durdur (Ctrl+Shift+Esc)");
+      stop.title = stopped ? "" : L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
       message.textContent = this.#message;
       // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
       goto.hidden = win.gBrowser.selectedBrowser === browser;

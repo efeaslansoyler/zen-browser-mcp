@@ -68,6 +68,13 @@ function logError(where, e) {
       }
     }
 
+    const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(`resource://zenmcp/Agent.sys.mjs?v=${version}`);
+    // Old MCP processes omit identity; retain their Claude appearance until reconnect.
+    let activeAgent = agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" });
+    // A single island/approval UI is shared. Serialize tool requests so another client
+    // cannot change the identity while an action or user confirmation is pending.
+    let toolQueue = Promise.resolve();
+
     // ---- sekmeler ----
 
     const state = (globalThis.zenMcpState ||= { tabs: new Set(), scale: new Map() });
@@ -104,7 +111,7 @@ function logError(where, e) {
       const tab = findTab(tabId);
       if (tab) restoreMark(tab);
       if (!tab || !state.tabs.has(tabId)) {
-        throw new Error(`Tab ${tabId} is not Claude's (closed, or the user took it back). Use tabs_context_mcp for current tabs.`);
+        throw new Error(`Tab ${tabId} is not assigned to an agent (closed, or the user took it back). Use tabs_context_mcp for current tabs.`);
       }
       return tab.linkedBrowser;
     }
@@ -135,9 +142,16 @@ function logError(where, e) {
     const { SessionStore } = ChromeUtils.importESModule("moz-src:///browser/components/sessionstore/SessionStore.sys.mjs");
 
     // origin: "true" Claude açtı, "user" kullanıcı sağ tık menüsünden verdi
+    function paintTab(tab, agent) {
+      const theme = applyTheme(tab, agent);
+      tab.setAttribute("zen-mcp-agent-name", theme.name);
+      try { SessionStore.setCustomTabValue(tab, "zen-mcp-agent", JSON.stringify({ id: theme.id, name: theme.name })); } catch {}
+    }
+
     function mark(tab, origin = "true") {
       tab.setAttribute(MARK, origin);
       state.tabs.add(tab.linkedBrowser.browserId);
+      paintTab(tab, activeAgent);
       try { SessionStore.setCustomTabValue(tab, MARK, origin); } catch {}
     }
 
@@ -146,6 +160,10 @@ function logError(where, e) {
       const browser = tab.linkedBrowser;
       const id = browser.browserId;
       tab.removeAttribute(MARK);
+      tab.removeAttribute("data-zen-agent");
+      tab.removeAttribute("zen-mcp-agent-name");
+      for (const key of ["accent", "hover", "rgb", "foreground"]) tab.style.removeProperty(`--zen-agent-${key}`);
+      try { SessionStore.deleteCustomTabValue(tab, "zen-mcp-agent"); } catch {}
       state.tabs.delete(id);
       state.scale.delete(id);
       network.delete(id);
@@ -161,7 +179,10 @@ function logError(where, e) {
       // geri yüklenen sekme tembel: <browser> ilk kullanıma kadar yok, browserId 0.
       // Öğeyi şimdi oluştur (sayfa yüklenmez) ki takip edilebilir bir kimliği olsun
       if (!tab.linkedPanel) tab.ownerDocument.defaultView.gBrowser.insertBrowser(tab);
+      let agent = { id: "claude" };
+      try { agent = JSON.parse(SessionStore.getCustomTabValue(tab, "zen-mcp-agent")) || agent; } catch {}
       mark(tab, origin);
+      paintTab(tab, agent);
     }
 
     function restoreMarks() {
@@ -199,7 +220,7 @@ function logError(where, e) {
       .tabbrowser-tab[${MARK}] > .tab-stack > .tab-background > .tab-context-line {
         /* container'sız sekmede Firefox bu öğeyi gizler */
         display: block !important;
-        background-color: #d97757 !important;
+        background-color: var(--zen-agent-accent, #d97757) !important;
         height: 2px;
         border-radius: var(--border-radius-xsmall);
         margin: 0 calc(var(--tab-border-radius) / 2);
@@ -216,9 +237,16 @@ function logError(where, e) {
     // ---- "Claude'a ver / Claude'dan geri al": sekme sağ tık menüsünde ----
 
     const MENU_ID = "zen-mcp-context-give";
-    const MENU_ICON = "data:image/svg+xml," + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`
-    );
+    function menuAgent() {
+      return pick?.agent ?? channelTarget()?.agent ?? activeAgent;
+    }
+
+    function paintMenuIcon(item, agent) {
+      const theme = agentTheme(agent);
+      item.setAttribute("image", agentIcon(theme));
+      item.setAttribute("data-zen-agent", theme.id);
+      item.setAttribute("tooltiptext", theme.name);
+    }
 
     // menünün açıldığı sekme; o sekme çoklu seçimin parçasıysa seçili sekmelerin hepsi
     function contextTabs(win) {
@@ -233,7 +261,7 @@ function logError(where, e) {
       const item = win.document.createXULElement("menuitem");
       item.id = MENU_ID;
       item.className = "menuitem-iconic";
-      item.setAttribute("image", MENU_ICON);
+      paintMenuIcon(item, menuAgent());
       // Firefox'un yapay zekâ bölümünün sonuna; yoksa menünün sonuna
       const anchor = win.document.getElementById("context_aiSeparator");
       menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
@@ -241,15 +269,19 @@ function logError(where, e) {
       const modeItem = win.document.createXULElement("menuitem");
       modeItem.id = MENU_ID + "-mode";
       modeItem.setAttribute("type", "checkbox");
-      modeItem.setAttribute("label", L("Claude asks before every action", "Claude her işlemde izin istesin"));
+      modeItem.setAttribute("label", L("Ask before every agent action", "Ajan her işlemde izin istesin"));
       menu.insertBefore(modeItem, item.nextSibling);
       modeItem.addEventListener("command", toggleMode);
       const onShowing = event => {
         if (event.target !== menu) return;
         const tabs = contextTabs(win).filter(t => !t.hasAttribute("zen-empty-tab"));
         item.hidden = !tabs.length;
+        const tab = tabs[0];
+        paintMenuIcon(item, tab?.hasAttribute(MARK)
+          ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
+          : menuAgent());
         const allGiven = tabs.length && tabs.every(t => t.hasAttribute(MARK));
-        item.setAttribute("label", allGiven ? L("Take back from Claude", "Claude'dan geri al") : L("Give to Claude", "Claude'a ver"));
+        item.setAttribute("label", allGiven ? L("Take back from agent", "Ajandan geri al") : L("Give to agent", "Ajana ver"));
         modeItem.setAttribute("checked", readConfig().mode === "ask");
       };
       const onCommand = () => {
@@ -275,16 +307,25 @@ function logError(where, e) {
     const subscribers = new Map(); // session → { name, transport, output, since, queue }
     const lastUse = (globalThis.zenMcpLastUse ||= new Map()); // session → son tool çağrısı
 
-    function subscribe({ session, cwd }, transport, output) {
+    function subscribe({ session, cwd, agent, label, threadId, ack = false }, transport, output) {
       if (!session) throw new Error("session is required.");
-      const old = subscribers.get(session);
+      const theme = agentTheme(agent ?? { id: "claude" });
+      const relay = theme.id === "codex" && session === `codex:${threadId}`;
+      const key = theme.id === "codex" && threadId ? `codex:${threadId}` : session;
+      const old = subscribers.get(key);
+      if (old?.relay && !relay) throw new Error("This Codex thread already has an automatic receiver.");
       if (old) try { old.transport.close(Cr.NS_OK); } catch {}
-      const name = String(cwd ?? "").split("/").filter(Boolean).pop() || "Claude Code";
-      subscribers.set(session, { name, transport, output, since: Date.now(), queue: Promise.resolve(true) });
+      const project = String(label || cwd || "").split("/").filter(Boolean).pop() || "session";
+      const name = `${theme.name} · ${project}${" · " + String(threadId || session).slice(-6)}`;
+      subscribers.set(key, { id: key, name, agent: theme, ack, relay, threadId, transport, output, since: Date.now(), queue: Promise.resolve(true) });
+      return key;
     }
 
     function unsubscribe(session, transport) {
       if (subscribers.get(session)?.transport === transport) subscribers.delete(session);
+      for (const pending of pendingDeliveries.values()) {
+        if (pending.session === session && pending.transport === transport) pending.finish(false);
+      }
     }
 
     function channelTarget() {
@@ -307,6 +348,30 @@ function logError(where, e) {
         copier.asyncCopy({ onStartRequest() {}, onStopRequest: (_request, status) => resolve(Components.isSuccessCode(status)) }, null);
       }));
       return sub.queue;
+    }
+
+    const pendingDeliveries = new Map();
+    function acknowledge(session, transport, event) {
+      const pending = pendingDeliveries.get(event?.id);
+      if (event?.event !== "delivery" || !pending || pending.session !== session || pending.transport !== transport) return;
+      if (!event.ok) logError("pick delivery", new Error(String(event.error || "Delivery rejected")));
+      pending.finish(event.ok === true);
+    }
+
+    async function deliver(sub, message) {
+      if (!sub.ack) return push(sub, message); // legacy Claude channel processes
+      const id = Services.uuid.generateUUID().toString();
+      return new Promise(resolve => {
+        let timer;
+        const finish = ok => {
+          clearTimeout(timer);
+          pendingDeliveries.delete(id);
+          resolve(ok);
+        };
+        pendingDeliveries.set(id, { session: sub.id, transport: sub.transport, finish });
+        timer = setTimeout(() => finish(false), 40_000);
+        push(sub, { ...message, id }).then(ok => { if (!ok) finish(false); }, () => finish(false));
+      });
     }
 
     // ---- öğe seçip Claude'a iş verme ----
@@ -346,8 +411,9 @@ function logError(where, e) {
         if (pick?.browser === browser && !pick.info) endPick();
       };
       win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
-      pick = { win, browser, onTabSelect };
-      island?.picking(browser);
+      const target = channelTarget();
+      pick = { win, browser, onTabSelect, targetId: target?.id ?? "", agent: target?.agent ?? agentTheme(null) };
+      island?.picking(browser, pick.agent);
       return pick;
     }
 
@@ -361,7 +427,7 @@ function logError(where, e) {
       const current = beginPick(win, browser);
       browser.focus();
       try {
-        const info = await pageQuery(browser, "pick_start", { fromContext });
+        const info = await pageQuery(browser, "pick_start", { fromContext, agent: current.agent });
         if (pick !== current) return;
         if (!info || info.cancelled) endPick();
         else await composePick(current, info);
@@ -379,7 +445,8 @@ function logError(where, e) {
       });
       if (pick !== current) return;
       const label = info.name ? `${info.role || info.label} "${info.name.slice(0, 40)}"` : info.label;
-      island?.compose(current.browser, label, channelTarget()?.name ?? null);
+      const targets = [...subscribers.values()].map(({ id, name, agent }) => ({ id, name, agent }));
+      island?.compose(current.browser, label, targets, current.targetId);
     }
 
     // sayfadaki çerçeveyi kaldırır; keepIsland: adada "gönderildi" gösterilecek
@@ -392,21 +459,29 @@ function logError(where, e) {
       if (!keepIsland) island?.pickEnded();
     }
 
-    async function sendPick(note) {
+    async function sendPick(note, targetId = pick?.targetId) {
       const current = pick;
-      if (!current?.info) return;
+      if (!current?.info || current.sending) return;
+      current.sending = true;
       const { content, meta } = pickMessage(current, note);
-      const target = channelTarget();
-      const sent = target ? await push(target, { event: "channel", content, meta }) : false;
-      if (!sent) {
-        Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(content);
-      }
+      // Pin to the user's selected destination. Never reroute if it disconnects.
+      const target = targetId ? subscribers.get(targetId) : null;
       state.pickedTabs.add(current.browser.browserId);
+      let sent = false;
+      try { sent = target ? await deliver(target, { event: "channel", content, meta, note }) : false; }
+      catch (e) { logError("pick delivery", e); }
+      if (!sent) {
+        Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(content + "\n\nBrowser metadata: " + JSON.stringify(meta));
+      }
       if (pick !== current) return;
       endPick({ keepIsland: true });
       island?.sent(sent
-        ? L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
-        : L("Copied, paste it into Claude Code", "Panoya kopyalandı, Claude Code'a yapıştır"));
+        ? target.agent.id === "codex"
+          ? L(`Queued for ${target.name} ✓`, `${target.name} için kuyruğa alındı ✓`)
+          : L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
+        : targetId
+          ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
+          : L("Copied to clipboard", "Panoya kopyalandı"));
     }
 
     // Claude'a giden metin; Claude Code'da <channel source="zen" …> gövdesi olur
@@ -486,14 +561,15 @@ function logError(where, e) {
       const item = doc.createXULElement("menuitem");
       item.id = PAGE_MENU_ID;
       item.className = "menuitem-iconic";
-      item.setAttribute("image", MENU_ICON);
-      item.setAttribute("label", L("Show to Claude…", "Claude'a göster…"));
+      paintMenuIcon(item, menuAgent());
+      item.setAttribute("label", L("Show to agent…", "Ajana göster…"));
       // "İncele"nin üstüne; yoksa menünün sonuna
       const anchor = doc.getElementById("inspect-separator");
       menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
       let browser = null;
       const onShowing = event => {
         if (event.target !== menu) return;
+        paintMenuIcon(item, menuAgent());
         const context = win.gContextMenu;
         browser = context?.browser ?? null;
         let web = false;
@@ -739,13 +815,17 @@ function logError(where, e) {
 
     const pendingListeners = new Set();
 
-    function waitForLoad(browser, timeout = 20000) {
+    function waitForLoad(browser, timeout = 20000, destination = null) {
       return new Promise(resolve => {
         const listener = {
           QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
           onStateChange(webProgress, _request, flags) {
             const done = Ci.nsIWebProgressListener.STATE_STOP | Ci.nsIWebProgressListener.STATE_IS_WINDOW;
-            if (webProgress.isTopLevel && (flags & done) === done) finish();
+            // A newly inserted tab may still deliver about:blank's STOP after the
+            // listener was installed. It is not the requested navigation completing.
+            const initialBlank = destination && destination !== "about:blank"
+              && browser.currentURI?.spec === "about:blank";
+            if (webProgress.isTopLevel && (flags & done) === done && !initialBlank) finish();
           },
         };
         // tarayıcı dinleyiciyi zayıf referansla tutar; bitene kadar biz tutalım
@@ -1017,7 +1097,7 @@ function logError(where, e) {
     // kadar sekmelere dokunan her tool reddedilir. Durum reload'da korunur.
     class Stopped extends Error {
       constructor() {
-        super("The user stopped Claude from the browser's island. Nothing can be done in the browser until they press \"Resume\" there; ask the user what they want.");
+        super("The user stopped browser automation from the browser's island. Nothing can be done in the browser until they press \"Resume\" there; ask the user what they want.");
       }
     }
     const stopListeners = new Set();
@@ -1098,7 +1178,7 @@ function logError(where, e) {
       const win = browser.ownerDocument.defaultView;
       if (Services.focus.activeWindow === win) return false;
       try {
-        const alert = new AlertNotification({ name: ALERT_NAME, title: L("Claude needs you", "Claude senden bir şey istiyor"), text: message, textClickable: true });
+        const alert = new AlertNotification({ name: ALERT_NAME, title: L(`${activeAgent.name} needs you`, `${activeAgent.name} senden bir şey istiyor`), text: message, textClickable: true });
         alerts.showAlert(alert, (_subject, topic) => {
           if (topic === "alertclickcallback") goToTab(browser);
         });
@@ -1167,12 +1247,12 @@ function logError(where, e) {
           if (done) return;
           throwIfDialog(browser);
           if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
-          if (!state.tabs.has(browser.browserId)) throw new Error("The user took this tab back from Claude; you can't use it anymore.");
+          if (!state.tabs.has(browser.browserId)) throw new Error("The user took this tab back from the agent; you can't use it anymore.");
         }
       })();
       try {
         const result = await guard(Promise.race([
-          wg.getActor("ZenMcp").sendQuery(name, data),
+          wg.getActor("ZenMcp").sendQuery(name, { ...data, agent: activeAgent }),
           watchDialog,
           sleep(timeout).then(() => { throw new Error(`The page did not respond within ${timeout / 1000} s.`); }),
         ]));
@@ -1342,8 +1422,8 @@ function logError(where, e) {
       const host = hostOf(browser);
       const why = isSensitive(host) ? L(" (sensitive site)", " (hassas site)") : "";
       const message = lines.length === 1
-        ? L(`Claude wants to: ${lines[0]}`, `Claude şunu yapmak istiyor: ${lines[0]}`)
-        : L("Claude wants to:", "Claude şunları yapmak istiyor:") + `\n${lines.map(l => `• ${l}`).join("\n")}`;
+        ? L(`${activeAgent.name} wants to: ${lines[0]}`, `${activeAgent.name} şunu yapmak istiyor: ${lines[0]}`)
+        : L(`${activeAgent.name} wants to:`, `${activeAgent.name} şunları yapmak istiyor:`) + `\n${lines.map(l => `• ${l}`).join("\n")}`;
       const result = await askIsland(browser, `${host ? host + " — " : ""}${L("asks for permission", "izin istiyor")}${why}`, message,
         { ok: L("Allow", "İzin ver"), cancel: L("Deny", "Verme") });
       if (result !== "done") {
@@ -1362,7 +1442,7 @@ function logError(where, e) {
       async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs();
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
-        if (!tabs.length) return text("Claude has no tabs. Open one with createIfEmpty: true or tabs_create_mcp.");
+        if (!tabs.length) return text("The agent has no tabs. Open one with createIfEmpty: true or tabs_create_mcp.");
         return text({ tabs: tabs.map(describeTab) });
       },
 
@@ -1406,6 +1486,7 @@ function logError(where, e) {
           const left = actions.length - i - 1;
           const rest = left ? ` The remaining ${left} step(s) did not run.` : "";
           if (name === "browser_batch" || !tools[name]) {
+            content.isError = true;
             lines.push(`${label}: ${name === "browser_batch" ? "browser_batch cannot be nested" : "unknown tool"}.${rest}`);
             break;
           }
@@ -1419,6 +1500,7 @@ function logError(where, e) {
               }
             }
           } catch (e) {
+            content.isError = true;
             if (e instanceof DialogOpen) {
               lines.push(`${label}: ${e.message}${rest}`);
               if (e.browser) showDialog(e.browser);
@@ -1434,7 +1516,7 @@ function logError(where, e) {
 
       async navigate({ url, tabId }) {
         const browser = browserFor(tabId);
-        const loaded = waitForLoad(browser);
+        const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
         if (url === "back") browser.goBack();
         else if (url === "forward") browser.goForward();
         else {
@@ -1634,7 +1716,7 @@ function logError(where, e) {
           timeout: `The user did not answer within ${timeout} s.`,
           navigated: "The page changed (the user may have done something); check with a screenshot.",
           replaced: "A newer ask_user replaced this one.",
-          taken_back: "The user took this tab back from Claude; you can't use it anymore.",
+          taken_back: "The user took this tab back from the agent; you can't use it anymore.",
         }[result] ?? String(result));
       },
 
@@ -1642,7 +1724,7 @@ function logError(where, e) {
       // Verme", Zen odakta değilse masaüstü bildirimi. Ver denirse sekme sağ tık menüsünden
       // verilmiş gibi işaretlenir.
       async request_tab({ tabId, reason, timeout = 120 }) {
-        if (state.tabs.has(tabId)) return text({ ...describeTab(findTab(tabId)), note: "The tab is already Claude's." });
+        if (state.tabs.has(tabId)) return text({ ...describeTab(findTab(tabId)), note: "The tab is already assigned to an agent." });
         const tab = findTab(tabId);
         if (!tab) throw new Error(`Tab ${tabId} is closed.`);
         if (!state.pickedTabs.has(tabId)) {
@@ -1650,7 +1732,7 @@ function logError(where, e) {
         }
         const browser = tab.linkedBrowser;
         const result = await askIsland(browser, describeAction("request_tab", {}, browser),
-          L(`Claude wants access to this tab: ${reason}`, `Claude bu sekmeye erişmek istiyor: ${reason}`),
+          L(`${activeAgent.name} wants access to this tab: ${reason}`, `${activeAgent.name} bu sekmeye erişmek istiyor: ${reason}`),
           { ok: L("Allow", "Ver"), cancel: L("Deny", "Verme") }, timeout);
         if (result !== "done") {
           return text(result === "timeout" ? `The user did not answer within ${timeout} s.` : "The user declined.");
@@ -1715,7 +1797,7 @@ function logError(where, e) {
           log.list.length = 0;
           log.byChannel.clear();
         }
-        if (!lines.length) return text("No matching requests recorded (since Claude opened the tab).");
+        if (!lines.length) return text("No matching requests recorded (since the agent opened the tab).");
         const hidden = list.length - lines.length;
         return text((hidden > 0 ? `…${hidden} earlier request(s) not shown\n` : "") + lines.join("\n"));
       },
@@ -1814,6 +1896,8 @@ function logError(where, e) {
       const entry = { t: new Date().toISOString(), tool };
       if (args.action && tool === "computer") entry.action = args.action;
       if (browser) {
+        paintTab(findTab(args.tabId), activeAgent);
+        entry.agent = activeAgent.name;
         entry.tab = args.tabId;
         entry.host = hostOf(browser);
         island?.working(browser, describeAction(tool, args, browser));
@@ -1860,11 +1944,21 @@ function logError(where, e) {
     async function handle(line, transport, output) {
       let message;
       try {
-        const { tool, args = {}, session } = JSON.parse(line);
+        const { tool, args = {}, session, agent } = JSON.parse(line);
         const fn = tools[tool] || commands[tool];
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
         if (session && tools[tool]) lastUse.set(session, Date.now());
-        message = { ok: true, content: tools[tool] ? await runTool(tool, args) : await fn(args) };
+        if (tools[tool]) {
+          const pending = toolQueue.then(async () => {
+            activeAgent = agentTheme(agent ?? { id: "claude" });
+            globalThis.zenMcpActiveAgent = { id: activeAgent.id, name: activeAgent.name };
+            island?.setAgent(activeAgent);
+            return runTool(tool, args);
+          });
+          toolQueue = pending.catch(() => {});
+          const content = await pending;
+          message = { ok: true, content, ...(content.isError ? { isError: true } : {}) };
+        } else message = { ok: true, content: await fn(args) };
       } catch (e) {
         // diyalog bir hata değil, Claude'un bilmesi gereken durum
         if (e instanceof DialogOpen) {
@@ -1891,22 +1985,21 @@ function logError(where, e) {
         onStartRequest() {},
         onDataAvailable(_request, stream, _offset, count) {
           buffer += NetUtil.readInputStreamToString(stream, count);
-          const end = buffer.indexOf("\n");
-          if (end < 0 || handled) return;
-          handled = true;
-          const line = buffer.slice(0, end);
-          let request = null;
-          try { request = JSON.parse(line); } catch {}
-          // abone bağlantısı açık kalır; diğerleri tek istek, tek cevap
-          if (request?.tool !== "subscribe") {
-            handle(line, transport, output);
-            return;
-          }
-          try {
-            subscribe(request.args ?? {}, transport, output);
-            session = request.args.session;
-          } catch (e) {
-            reply(transport, output, { ok: false, error: String(e?.message ?? e) });
+          let end;
+          while ((end = buffer.indexOf("\n")) >= 0) {
+            const line = buffer.slice(0, end);
+            buffer = buffer.slice(end + 1);
+            let request = null;
+            try { request = JSON.parse(line); } catch {}
+            if (session) { acknowledge(session, transport, request); continue; }
+            if (handled) return;
+            handled = true;
+            if (request?.tool !== "subscribe") { handle(line, transport, output); return; }
+            try {
+              session = subscribe(request.args ?? {}, transport, output);
+            } catch (e) {
+              reply(transport, output, { ok: false, error: String(e?.message ?? e) });
+            }
           }
         },
         onStopRequest() {
@@ -1927,7 +2020,13 @@ function logError(where, e) {
           goTo: goToTab,
           answer: answerIsland,
           pick: startPick,
-          send: note => sendPick(note).catch(e => logError("send", e)),
+          send: (note, targetId) => sendPick(note, targetId).catch(e => logError("send", e)),
+          selectTarget: target => {
+            if (!pick) return;
+            pick.targetId = target?.id ?? "";
+            pick.agent = target?.agent ?? agentTheme(null);
+            pageQuery(pick.browser, "pick_theme", { agent: pick.agent }).catch(() => {});
+          },
           cancelPick: () => endPick(),
           toggleMode,
         },
@@ -1979,6 +2078,7 @@ function logError(where, e) {
         try { sub.transport.close(Cr.NS_OK); } catch {}
       }
       subscribers.clear();
+      for (const pending of pendingDeliveries.values()) pending.finish(false);
       try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
       try { island?.destroy(); } catch {}
       island = null;

@@ -7,6 +7,8 @@
 // "{{frame:<id>}}" satırı koyar, main.js onu o çerçevenin ağacıyla değiştirir. DOM'a ayrıcalıklı (Xray) erişimle bakılır:
 // sayfanın kendi tanımladığı özellikler/override'lar görülmez, yerel DOM davranışı esastır.
 
+const { agentTheme, applyTheme } = ChromeUtils.importESModule(new URL("../Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
+
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
 // Kullanıcının gördüğü yazılar (imleç etiketi, öğe tarifi) tarayıcı Türkçeyse Türkçe; Claude'a
@@ -29,7 +31,7 @@ const CURSOR_CSS = `
     width: 22px;
     height: 22px;
     margin: -2px 0 0 -3px;
-    background: url("${ARROW}") no-repeat;
+    background: var(--zen-agent-arrow, url("${ARROW}")) no-repeat;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
     transform-origin: 3px 2px;
     transition: scale 0.12s ease;
@@ -41,8 +43,8 @@ const CURSOR_CSS = `
     top: 17px;
     padding: 2px 7px;
     border-radius: 999px;
-    background: #d97757;
-    color: #fff;
+    background: var(--zen-agent-accent, #d97757);
+    color: var(--zen-agent-foreground, #fff);
     font: 600 11px/1.4 system-ui, sans-serif;
     white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -59,8 +61,8 @@ const RIPPLE_CSS = `
     height: 28px;
     box-sizing: border-box;
     border-radius: 50%;
-    border: 2px solid #d97757;
-    background: rgba(217, 119, 87, 0.18);
+    border: 2px solid var(--zen-agent-accent, #d97757);
+    background: rgba(var(--zen-agent-rgb, 217, 119, 87), 0.18);
     animation: ripple 0.65s ease-out forwards;
   }
   @keyframes ripple {
@@ -76,12 +78,12 @@ const SYSTEM_CAPTURE = { capture: true, mozSystemGroup: true };
 const ASK_CSS = `
   .box {
     position: fixed; box-sizing: border-box; pointer-events: none;
-    border: 3px solid #d97757; border-radius: 8px;
-    box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.25), 0 0 24px rgba(217, 119, 87, 0.55);
+    border: 3px solid var(--zen-agent-accent, #d97757); border-radius: 8px;
+    box-shadow: 0 0 0 4px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.25), 0 0 24px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.55);
     animation: pulse 1.6s ease-in-out infinite;
   }
   @keyframes pulse {
-    50% { box-shadow: 0 0 0 8px rgba(217, 119, 87, 0.12), 0 0 32px rgba(217, 119, 87, 0.8); }
+    50% { box-shadow: 0 0 0 8px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.12), 0 0 32px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.8); }
   }
 `;
 
@@ -89,19 +91,19 @@ const ASK_CSS = `
 const PICK_CSS = `
   .box {
     position: fixed; box-sizing: border-box; pointer-events: none;
-    border: 2px solid #d97757; border-radius: 4px;
-    background: rgba(217, 119, 87, 0.12);
+    border: 2px solid var(--zen-agent-accent, #d97757); border-radius: 4px;
+    background: rgba(var(--zen-agent-rgb, 217, 119, 87), 0.12);
     transition: left 0.06s, top 0.06s, width 0.06s, height 0.06s;
   }
   .box.picked {
     border-width: 3px;
-    box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.25), 0 0 24px rgba(217, 119, 87, 0.55);
+    box-shadow: 0 0 0 4px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.25), 0 0 24px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.55);
     background: none;
   }
   .label {
     position: fixed; pointer-events: none;
     padding: 2px 7px; border-radius: 999px;
-    background: #d97757; color: #fff;
+    background: var(--zen-agent-accent, #d97757); color: var(--zen-agent-foreground, #fff);
     font: 600 11px/1.4 system-ui, sans-serif; white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
@@ -147,6 +149,7 @@ const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HE
 
 export class ZenMcpChild extends JSWindowActorChild {
   #refs = new Map();
+  #agent = agentTheme({ id: "claude" });
   #eventUtils = null;
   #consoleSince = 0;
   #ask = null;
@@ -167,6 +170,10 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   async receiveMessage({ name, data }) {
     try {
+      if (data?.agent) {
+        this.#agent = agentTheme(data.agent);
+        if (this.#cursor) this.#paintCursor(this.#cursor);
+      }
       switch (name) {
         case "text":
           return this.#text();
@@ -206,6 +213,9 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#fileUpload(data.ref, data.files) };
         case "pick_start":
           return await this.#pickStart(data);
+        case "pick_theme":
+          if (this.#pickOverlay?.host) applyTheme(this.#pickOverlay.host, this.#agent);
+          return null;
         case "pick_end":
           this.#pick?.finish(null);
           this.#pickEnd();
@@ -559,6 +569,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     // sayfaya bir şey çizilmez, cevap adadan (cancel_ask ile) gelir.
     const host = doc.createElement("zen-mcp-ask");
     host.setAttribute("style", "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;");
+    applyTheme(host, this.#agent);
     const root = host.attachShadow({ mode: "closed" });
     const style = doc.createElement("style");
     style.textContent = ASK_CSS;
@@ -708,6 +719,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const win = this.contentWindow;
     const host = doc.createElement("zen-mcp-pick");
     host.setAttribute("style", "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;");
+    applyTheme(host, this.#agent);
     const root = host.attachShadow({ mode: "closed" });
     const style = doc.createElement("style");
     style.textContent = PICK_CSS;
@@ -736,6 +748,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     place();
 
     const overlay = {
+      host,
       track: el => {
         target = el;
         const r = el.getBoundingClientRect();
@@ -900,6 +913,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const win = this.contentWindow;
     const host = doc.createElement("zen-mcp-cursor");
     host.setAttribute("style", "all: initial !important; position: fixed !important; left: 0 !important; top: 0 !important; z-index: 2147483647 !important; pointer-events: none !important;");
+    applyTheme(host, this.#agent);
     const root = host.attachShadow({ mode: "closed" });
     const style = doc.createElement("style");
     style.textContent = CURSOR_CSS;
@@ -909,7 +923,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     arrow.className = "arrow";
     const label = doc.createElement("div");
     label.className = "label";
-    label.textContent = "Claude";
+    label.textContent = this.#agent.name;
     pointer.append(arrow, label);
     root.append(style, pointer);
     doc.documentElement.append(host);
@@ -922,12 +936,19 @@ export class ZenMcpChild extends JSWindowActorChild {
     return this.#cursor;
   }
 
+  #paintCursor(cursor) {
+    applyTheme(cursor.host, this.#agent);
+    const arrow = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="${this.#agent.accent}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`);
+    cursor.host.style.setProperty("--zen-agent-arrow", `url("${arrow}")`);
+  }
+
   async #moveCursor(x, y) {
     const cursor = this.#cursorEl();
+    this.#paintCursor(cursor);
     const visible = !this.document.hidden;
     const distance = Math.hypot(x - cursor.x, y - cursor.y);
     const ms = visible && distance > 2 ? Math.round(Math.min(450, 160 + distance * 0.35)) : 0;
-    cursor.label.textContent = "Claude";
+    cursor.label.textContent = this.#agent.name;
     cursor.pointer.classList.remove("gone");
     cursor.pointer.style.setProperty("--move", `${ms}ms`);
     cursor.pointer.style.translate = `${x}px ${y}px`;
@@ -957,7 +978,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const cursor = this.#cursor;
     clearTimeout(cursor.hideTimer);
     cursor.hideTimer = setTimeout(() => {
-      cursor.label.textContent = "Claude";
+      cursor.label.textContent = this.#agent.name;
       cursor.pointer.classList.add("gone");
     }, 4000);
   }
@@ -978,6 +999,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const doc = this.document;
     const host = doc.createElement("zen-mcp-ripple");
     host.setAttribute("style", `all: initial !important; position: fixed !important; left: ${x}px !important; top: ${y}px !important; z-index: 2147483647 !important; pointer-events: none !important;`);
+    applyTheme(host, this.#agent);
     const root = host.attachShadow({ mode: "closed" });
     const style = doc.createElement("style");
     style.textContent = RIPPLE_CSS;

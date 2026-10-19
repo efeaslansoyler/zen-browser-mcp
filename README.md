@@ -4,9 +4,9 @@
 [![Türkçe](https://img.shields.io/badge/dil-Türkçe-red)](README.tr.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Let Claude use **your own Zen browser**: your tabs, your logins, real mouse and keyboard
-input, and a small island at the top of the window that shows what Claude is doing. Works with
-Claude Code (and any MCP client). Firefox and other Firefox-based browsers work too.
+Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse and keyboard
+input, and a small island at the top of the window that shows what the agent is doing. Works with
+Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based browsers work too.
 
 [![zen-mcp demo: Claude shops in a background tab, asks before acting, hands the payment to you, and receives an element you point at](docs/demo.gif)](docs/demo.mp4)
 
@@ -57,10 +57,33 @@ themselves when Claude Code starts the server, without sudo or a browser restart
 > Some browser updates replace the installation folder (macOS app updates, tarball installs).
 > If `doctor` says the loader is gone, run `npx zen-mcp install` again.
 
+## Codex and other MCP clients
+
+The standard browser tools use stdio MCP. For a local development checkout:
+
+```sh
+codex mcp add zen -- node /absolute/path/to/zen-mcp/src/server.ts
+```
+
+Other MCP clients can launch the same command, or the built package's `dist/cli.js`.
+Mouse coordinates use standard fixed-length arrays (`[x, y]`) for client compatibility.
+
+The MCP initialization client name selects presentation automatically: **Claude** uses
+orange, **Codex** mint, and other agents blue with their client name. The island, tab
+stripe, cursor, click ring, and handoff outline follow the agent performing the action.
+Tab colors survive browser restart and update when a different agent uses that tab.
+For clients that hide their identity behind a proxy, set `ZEN_MCP_AGENT=codex` or
+`ZEN_MCP_AGENT=claude` in the MCP server environment.
+
+Identity is a visual label, not authentication or per-session tab isolation. Tool calls
+share a queue and the global Stop/Resume and auto/ask controls. A user-granted tab still
+requires the existing grant; identity does not grant access. Element-to-chat delivery uses Claude channels or Codex queue as described below; other clients
+can use the clipboard fallback.
+
 ## Using it
 
 Ask Claude to do something in the browser: *"open seaskablo.com and find the price list"*.
-Claude opens its own tab in the background; the tab gets an orange line and the island shows
+Claude opens its own tab in the background; the tab gets an agent-colored line and the island shows
 what's happening. Click the island to jump to the tab.
 
 ### The island
@@ -73,29 +96,37 @@ what's happening. Click the island to jump to the tab.
 
 ### Handing over a tab
 
-Right-click a tab → **Give to Claude** lets Claude continue where you are. **Take back from
-Claude** ends it at any time.
+Right-click a tab → **Give to agent** lets an agent continue where you are. **Take back from
+agent** ends it at any time.
 
-### Showing Claude an element
+### Showing an agent an element
 
-Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> (or right-click → **Show to Claude…**),
-hover to choose an element (<kbd>↑</kbd>/<kbd>↓</kbd> for parent/child), click, and type what
-you want. It's sent to your Claude Code session with the page URL, a CSS selector, the
-accessible name, computed styles, text, trimmed HTML, a screenshot of the element and, on dev
-builds, the component chain (`HeroSection > CTAButton`). Great for "make this button bigger"
-on your own site.
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> (or right-click → **Show to agent…**),
+select an element, write your request, and choose the destination session in the island.
+The payload includes the page URL, selector, accessible name, styles, text, trimmed HTML,
+element screenshot path and, on development builds, the React/Vue component chain.
 
-This uses Claude Code [channels](https://code.claude.com/docs/en/channels), a research
-preview. Custom channels need a flag, and Claude Code asks for confirmation at every start:
+- **Claude Code:** enable [channels](https://code.claude.com/docs/en/channels) with
+  `claude --dangerously-load-development-channels server:zen`. The channel subscribes automatically.
+- **Codex:** install lifecycle hooks once with `node dist/cli.js codex-hooks install`
+  (or `npx zen-mcp codex-hooks install` for an installed package), then review and trust
+  the three Zen hooks in Codex's `/hooks` screen. SessionStart starts a receiver using the
+  exact host-provided session UUID; UserPromptSubmit refreshes it; SessionEnd stops it.
+  Opening or resuming a chat connects automatically, even before its first browser tool call.
+  One receiver per thread survives MCP reconnects and retries when Zen opens or reloads.
+  `connect_session` remains a manual fallback. Remove with `codex-hooks uninstall`.
+  The island says **Queued** only after `codex queue` accepts the message, not when the
+  agent has read or completed it. In the tested active conversation, input arrived after
+  the current turn finished.
+- **Other clients / no connection:** choose **Clipboard**, then paste into your agent.
 
-```sh
-claude --dangerously-load-development-channels server:zen
-```
+The destination list shows the agent, project and a short session suffix. It is fixed when
+compose opens; Send uses the selected target even if another session becomes active.
+If that target disconnects or delivery fails, the context is copied to the clipboard,
+never silently sent to another chat. Double-clicking Send does not duplicate delivery.
 
-Without the flag, the element and your note are copied to the clipboard instead, ready to paste.
-
-If Claude wants to look at your tab live afterwards, it can ask for it; you approve or deny in
-the island.
+Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
+if it needs live access, and you approve or decline in the browser.
 
 ## Modes and sensitive sites
 
@@ -137,6 +168,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `browser_batch` | several of the above in one call |
 | `read_console_messages`, `read_network_requests` | console output; requests with headers and bodies (cookies and auth hidden) |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
+| `connect_session` | bind a Codex conversation for browser-to-chat selections |
 | `ask_user`, `request_tab` | hand a step to you; ask for access to your tab |
 
 ## Security
@@ -186,6 +218,9 @@ node scripts/zenctl.ts reload                    # reload the bridge after chang
 ```
 
 [`docs/DEVAM.md`](docs/DEVAM.md) has architecture notes and the Gecko pitfalls we hit (in Turkish).
+
+Run `npm test` for the MCP compatibility, wire-protocol, and island state tests. These
+use an in-memory browser/DOM fixture; live Gecko behavior still needs a browser smoke test.
 
 ## License
 

@@ -1,33 +1,37 @@
 #!/usr/bin/env node
-// Giriş noktası: argümansız MCP sunucusu (Claude Code böyle başlatır), yanında kurulum komutları
+// Giriş noktası: argümansız MCP sunucusu (MCP istemcin böyle başlatır), yanında kurulum komutları
 import { configCommand } from "./config.ts";
 import { doctor } from "./doctor.ts";
 import { L } from "./i18n.ts";
 import { install, uninstall } from "./install.ts";
+import { stopCodexRelays } from "./codex-relay.ts";
+import { configureCodexHooks, handleCodexHook } from "./codex-hooks.ts";
 import { NAME, VERSION } from "./paths.ts";
 import { serve } from "./server.ts";
 
 const [cmd, ...args] = process.argv.slice(2);
 
-const help = L(`${NAME} ${VERSION}: let Claude use your Zen (or other Firefox-based) browser.
+const help = L(`${NAME} ${VERSION}: let AI agents use your Zen (or other Firefox-based) browser.
 
 Usage:
-  npx ${NAME}                 run the MCP server (Claude Code starts it this way)
+  npx ${NAME}                 run the MCP server (your MCP client starts it this way)
   npx ${NAME} install         install the browser part (asks for sudo if needed)
       --browser <dir>         a specific installation (the folder with application.ini)
       --all                   every browser found
   npx ${NAME} uninstall       remove it
   npx ${NAME} doctor          check the setup
+  npx ${NAME} codex-hooks install|uninstall  manage automatic Codex chat connection
   npx ${NAME} config          show or change settings (mode, sensitive sites)`,
-`${NAME} ${VERSION}: Claude'un Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
+`${NAME} ${VERSION}: AI ajanlarının Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
 
 Kullanım:
-  npx ${NAME}                 MCP sunucusunu çalıştırır (Claude Code böyle başlatır)
+  npx ${NAME}                 MCP sunucusunu çalıştırır (MCP istemcin böyle başlatır)
   npx ${NAME} install         tarayıcı tarafını kurar (gerekirse sudo ister)
       --browser <klasör>      belirli bir kurulum (application.ini'nin olduğu klasör)
       --all                   bulunan bütün tarayıcılar
   npx ${NAME} uninstall       kaldırır
   npx ${NAME} doctor          kurulumu kontrol eder
+  npx ${NAME} codex-hooks install|uninstall  otomatik Codex sohbet bağlantısını yönetir
   npx ${NAME} config          ayarları gösterir ya da değiştirir (mod, hassas siteler)`);
 
 try {
@@ -36,6 +40,22 @@ try {
     case "serve":
       await serve();
       break;
+    case "codex-hook": {
+      let input = "";
+      for await (const chunk of process.stdin) {
+        input += chunk;
+        if (input.length > 1_048_576) throw new Error("Hook input is too large.");
+      }
+      await handleCodexHook(JSON.parse(input));
+      break;
+    }
+    case "codex-hooks": {
+      if (args[0] !== "install" && args[0] !== "uninstall") throw new Error("Usage: zen-mcp codex-hooks install|uninstall");
+      console.log(configureCodexHooks(args[0]));
+      if (args[0] === "uninstall") await stopCodexRelays();
+      if (args[0] === "install") console.log("Review and trust the Zen MCP lifecycle hooks once in Codex with /hooks. No hook trust is bypassed.");
+      break;
+    }
     case "install":
       await install(args);
       break;

@@ -311,15 +311,17 @@ export async function install(args: string[]) {
   console.log(L(`
 Next:
   1. Restart the browser (the loader runs at startup).
-  2. Add the MCP server to Claude Code:
+  2. Add the MCP server to your client:
        claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}
+       codex mcp add ${SERVER_NAME} -- npx -y ${NAME}
   3. Optional, to send page elements from the browser to Claude Code (channels, research preview):
        claude --dangerously-load-development-channels server:${SERVER_NAME}
 Check everything with: npx ${NAME} doctor`, `
 Sırada:
   1. Tarayıcıyı yeniden başlat (yükleyici açılışta çalışır).
-  2. MCP sunucusunu Claude Code'a ekle:
+  2. MCP sunucusunu istemcine ekle:
        claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}
+       codex mcp add ${SERVER_NAME} -- npx -y ${NAME}
   3. İsteğe bağlı, tarayıcıdan öğe seçip Claude Code'a göndermek için (channels, araştırma önizlemesi):
        claude --dangerously-load-development-channels server:${SERVER_NAME}
 Hepsini kontrol etmek için: npx ${NAME} doctor`));

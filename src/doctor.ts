@@ -37,7 +37,7 @@ export async function doctor() {
   const files = installedVersion();
   if (!files || !fs.existsSync(DATA_DIR)) fail(L(`No browser files in ${DATA_DIR}.`, `${DATA_DIR} içinde tarayıcı dosyaları yok.`), `npx ${NAME} install`);
   else if (files === "dev") ok(L(`${DATA_DIR} → development symlink`, `${DATA_DIR} → geliştirme bağı`));
-  else if (files !== VERSION) console.log(`  ${L(`browser files ${files}, package ${VERSION}: updated when Claude Code starts the server`, `tarayıcı dosyaları ${files}, paket ${VERSION}: Claude Code sunucuyu başlatınca güncellenir`)}`);
+  else if (files !== VERSION) console.log(`  ${L(`browser files ${files}, package ${VERSION}: updated when the MCP client starts the server`, `tarayıcı dosyaları ${files}, paket ${VERSION}: MCP istemcisi sunucuyu başlatınca güncellenir`)}`);
   else ok(L(`browser files ${files}`, `tarayıcı dosyaları ${files}`));
 
   try {
@@ -45,7 +45,7 @@ export async function doctor() {
     const info = JSON.parse(reply.type === "text" ? reply.text : "{}");
     ok(L(`bridge running in ${info.browser} ${info.browserVersion} (files ${info.version})`, `köprü ${info.browser} ${info.browserVersion} içinde çalışıyor (dosyalar ${info.version})`));
     if (info.onDisk && info.version !== info.onDisk) {
-      console.log(`  ${L(`files on disk are ${info.onDisk}; the bridge reloads them next time Claude Code starts the server`, `diskteki dosyalar ${info.onDisk}; köprü Claude Code sunucuyu bir sonraki başlatışında yeniden yükler`)}`);
+      console.log(`  ${L(`files on disk are ${info.onDisk}; the bridge reloads them next time the MCP client starts the server`, `diskteki dosyalar ${info.onDisk}; köprü MCP istemcisi sunucuyu bir sonraki başlatışında yeniden yükler`)}`);
     }
   } catch {
     fail(L(`The bridge doesn't answer on ${SOCKET}.`, `Köprü ${SOCKET} üzerinden cevap vermiyor.`),
@@ -56,6 +56,7 @@ export async function doctor() {
   ok(L(`mode ${config.mode}, ${config.sensitive.length} sensitive site(s) (${CONFIG_FILE})`, `mod ${config.mode}, ${config.sensitive.length} hassas site (${CONFIG_FILE})`));
 
   console.log(L(`\nIn Claude Code: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}`, `\nClaude Code'da: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}`));
+  console.log(`Codex: codex mcp add ${SERVER_NAME} -- npx -y ${NAME}`);
   console.log(problems ? L(`\n${problems} problem(s).`, `\n${problems} sorun var.`) : L("\nAll good.", "\nHer şey yolunda."));
   if (problems) process.exitCode = 1;
 }
