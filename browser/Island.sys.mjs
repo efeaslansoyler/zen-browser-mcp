@@ -22,7 +22,15 @@ const CSS = `
     min-height: 36px;
     padding: 5px 5px 5px 12px;
     border-radius: 14px;
-    background: linear-gradient(to bottom, var(--zen-primary-color) -40%, color-mix(in srgb, var(--zen-primary-color), #0f0f0f 20%));
+    /* Zen toast'ı gibi tema rengi, ama açık tema renklerinde (ör. gri) beyaz yazı okunmuyordu:
+       rengin koyu (açık temada açık) bir tonu, yazı her temada okunur */
+    background: linear-gradient(
+      to bottom,
+      light-dark(color-mix(in srgb, var(--zen-primary-color) 35%, #f6f6f6), color-mix(in srgb, var(--zen-primary-color) 40%, #1c1c1c)),
+      light-dark(color-mix(in srgb, var(--zen-primary-color) 25%, #ececec), color-mix(in srgb, var(--zen-primary-color) 28%, #121212))
+    );
+    color: light-dark(#1a1a1a, #f2f2f2);
+    border: 1px solid color-mix(in srgb, var(--zen-primary-color) 30%, transparent);
     box-shadow: light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4)) 0 0 22px 2px;
     font: menu;
     font-size: 13px;
@@ -73,14 +81,14 @@ const CSS = `
       padding: 5px 10px;
       border: none;
       border-radius: 9px;
-      background: light-dark(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.1));
+      background: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.1));
       color: inherit;
       font: inherit;
       font-size: 12px;
       cursor: pointer;
 
       &:hover {
-        background: light-dark(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18));
+        background: light-dark(rgba(0, 0, 0, 0.13), rgba(255, 255, 255, 0.18));
       }
     }
   }

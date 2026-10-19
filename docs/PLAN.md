@@ -12,8 +12,8 @@ kendiliğinden öne getirilmez.
 - Durdur → Claude "Devam et"e basılana kadar hiçbir sekmede işlem yapamaz; süren işlem kesilir,
   tool'lar "kullanıcı durdurdu" döner.
 - Zen penceresi odakta değilken ask_user gelirse masaüstü bildirimi de gider.
-- Stil Zen'in toast'ıyla aynı dil: `--zen-primary-color` degrade, 14px yuvarlak köşe
-  (bkz. zen-styles/zen-popup.css `#zen-toast-container`); canlı tema renklerine uyar.
+- Stil Zen'in toast'ıyla aynı dil (14px yuvarlak köşe, gölge), ama arka plan tema renginin
+  koyu tonu: Efe'nin teması açık gri (#bebebe) ve toast gibi beyaz yazı okunmuyordu.
 
 ## Ada durumları
 
@@ -26,7 +26,7 @@ kendiliğinden öne getirilmez.
 
 ## Fazlar
 
-1. Ada altyapısı: her pencereye ekleme (yeni pencereler, reload'da temizlik), Zen temasıyla
+1. ✅ (2026-10-19) Ada altyapısı: her pencereye ekleme (yeni pencereler, reload'da temizlik), Zen temasıyla
    stil; canlı durum metni; Durdur/Devam ve kısayol.
 2. ask_user ve diyaloglar adaya taşınır (sekme öne getirilmez); sayfada tıklanan noktada
    kısa turuncu halka; Zen odakta değilse masaüstü bildirimi.
