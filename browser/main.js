@@ -77,6 +77,7 @@ function logError(where, e) {
     }
 
     function liveTabs() {
+      restoreMarks();
       const tabs = [];
       for (const id of state.tabs) {
         const tab = findTab(id);
@@ -103,9 +104,149 @@ function logError(where, e) {
       const win = Services.wm.getMostRecentWindow("navigator:browser");
       if (!win) throw new Error("Açık Zen penceresi yok.");
       const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true });
-      state.tabs.add(tab.linkedBrowser.browserId);
+      mark(tab);
       return tab;
     }
+
+    // ---- Claude sekmesi işareti ----
+    //
+    // Container gibi kenar çizgisi, ama container değil: container çerezleri ayırır ve
+    // kullanıcının oturumları görünmez olurdu. İşaret SessionStore'a da yazılır; Zen yeniden
+    // açılınca geri yüklenen sekmeler yeniden işaretlenip takibe alınır.
+    const MARK = "zen-mcp";
+    const { SessionStore } = ChromeUtils.importESModule("moz-src:///browser/components/sessionstore/SessionStore.sys.mjs");
+
+    function mark(tab) {
+      tab.setAttribute(MARK, "true");
+      state.tabs.add(tab.linkedBrowser.browserId);
+      try { SessionStore.setCustomTabValue(tab, MARK, "true"); } catch {}
+    }
+
+    function restoreMark(tab) {
+      let marked = false;
+      try { marked = SessionStore.getCustomTabValue(tab, MARK) === "true"; } catch {}
+      if (!marked || tab.hasAttribute(MARK)) return;
+      // geri yüklenen sekme tembel: <browser> ilk kullanıma kadar yok, browserId 0.
+      // Öğeyi şimdi oluştur (sayfa yüklenmez) ki takip edilebilir bir kimliği olsun
+      if (!tab.linkedPanel) tab.ownerDocument.defaultView.gBrowser.insertBrowser(tab);
+      mark(tab);
+    }
+
+    function restoreMarks() {
+      for (const win of browserWindows()) {
+        for (const tab of win.gBrowser.tabs) restoreMark(tab);
+      }
+    }
+
+    // Zen oturumu kendi yöneticisiyle, pencereler açıldıktan sonra geri yüklüyor; her sekmenin
+    // durumu uygulanırken gelen SSTabRestoring ile yakala
+    const onTabRestoring = event => {
+      try { restoreMark(event.target); } catch (e) { logError("restoreMark", e); }
+    };
+    function watchWindow(win) {
+      win.addEventListener("SSTabRestoring", onTabRestoring);
+    }
+    // Tembel sekmelerin kayıtlı değerleri pencere açıldıktan bir süre sonra okunabilir oluyor
+    // (ne SSTabRestoring ne delayed-startup anında var); birkaç kez daha tara. Claude bir sekme
+    // istediğinde liveTabs zaten yeniden tarar, bu yalnız kenar çizgisinin erken görünmesi için.
+    const onWindowReady = win => {
+      watchWindow(win);
+      for (const delay of [0, 2000, 5000, 10000, 20000]) {
+        setTimeout(() => {
+          try { restoreMarks(); } catch (e) { logError("restoreMarks", e); }
+        }, delay);
+      }
+    };
+
+    // Zen dikey kenar çubuğunda container çizgisini sekmenin kenarında 3 px'lik şerit yapar
+    // (zen-tabs/vertical-tabs.css); Firefox'un [usercontextid] kuralının aynısı, Claude rengiyle
+    const markSheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(`
+      .tabbrowser-tab[${MARK}] > .tab-stack > .tab-background > .tab-context-line {
+        background-color: #d97757 !important;
+        height: 2px;
+        border-radius: var(--border-radius-xsmall);
+        margin: 0 calc(var(--tab-border-radius) / 2);
+        position: relative;
+      }
+      #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[${MARK}] > .tab-stack > .tab-background > .tab-context-line {
+        height: auto;
+        width: 2px;
+        margin: calc(var(--tab-border-radius) / 2) 0;
+      }
+    `));
+    const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
+
+    // ---- ağ kaydı: Claude'un sekmelerindeki HTTP istekleri, sekme açıldığından beri ----
+
+    const MAX_REQUESTS = 500;
+    const network = (globalThis.zenMcpNetwork ||= new Map()); // browserId → { list, byChannel, host }
+    // XPCOM sabitleri Object.entries'de görünmez, for...in ile gezilir
+    const CONTENT_TYPES = {};
+    for (const key in Ci.nsIContentPolicy) {
+      if (key.startsWith("TYPE_") && !key.startsWith("TYPE_INTERNAL")) {
+        CONTENT_TYPES[Ci.nsIContentPolicy[key]] ??= key.slice(5).toLowerCase();
+      }
+    }
+
+    const networkObserver = {
+      observe(subject, topic) {
+        let channel;
+        try { channel = subject.QueryInterface(Ci.nsIHttpChannel); } catch { return; }
+        const bc = channel.loadInfo?.browsingContext;
+        const browserId = bc?.browserId;
+        if (!browserId || !state.tabs.has(browserId)) return;
+        let log = network.get(browserId);
+        if (!log) network.set(browserId, (log = { list: [], byChannel: new Map(), host: "" }));
+
+        if (topic === "http-on-modify-request" || (topic === "http-on-failed-opening-request" && !log.byChannel.has(channel.channelId))) {
+          const type = CONTENT_TYPES[channel.loadInfo.externalContentPolicyType] ?? "other";
+          // Claude in Chrome gibi: ana belge başka bir siteye gidince eski kayıtlar silinir
+          if (type === "document" && bc.top === bc) {
+            const host = channel.URI.host;
+            if (log.host && host !== log.host) {
+              log.list.length = 0;
+              log.byChannel.clear();
+            }
+            log.host = host;
+          }
+          const entry = { method: channel.requestMethod, url: channel.URI.spec, type, status: null, start: Date.now() };
+          log.list.push(entry);
+          log.byChannel.set(channel.channelId, entry);
+          if (log.list.length > MAX_REQUESTS) log.byChannel.delete(log.list.shift().channelId);
+          entry.channelId = channel.channelId;
+          if (topic === "http-on-modify-request") return;
+        }
+        const entry = log.byChannel.get(channel.channelId);
+        if (!entry) return;
+        // açılmadan reddedilen istek (ör. yasaklı port, CSP): stop-request gelmez
+        if (topic === "http-on-failed-opening-request") {
+          entry.error = ChromeUtils.getXPCOMErrorName(channel.status);
+          entry.duration = 0;
+          log.byChannel.delete(channel.channelId);
+          return;
+        }
+        if (topic === "http-on-stop-request") {
+          entry.duration = Date.now() - entry.start;
+          if (!Components.isSuccessCode(channel.status)) entry.error = ChromeUtils.getXPCOMErrorName(channel.status);
+          log.byChannel.delete(channel.channelId);
+          return;
+        }
+        // examine-*: cevap başlıkları geldi
+        try {
+          entry.status = channel.responseStatus;
+          entry.mime = channel.contentType || undefined;
+          if (topic === "http-on-examine-cached-response") entry.cached = true;
+        } catch {}
+      },
+    };
+    const NETWORK_TOPICS = [
+      "http-on-modify-request",
+      "http-on-examine-response",
+      "http-on-examine-cached-response",
+      "http-on-examine-merged-response",
+      "http-on-stop-request",
+      "http-on-failed-opening-request",
+    ];
 
     const pendingListeners = new Set();
 
@@ -352,6 +493,30 @@ function logError(where, e) {
         return text(result);
       },
 
+      read_network_requests({ tabId, urlPattern, limit = 100, clear }) {
+        const browser = browserFor(tabId);
+        const log = network.get(browser.browserId);
+        let list = log?.list ?? [];
+        if (urlPattern) list = list.filter(r => r.url.includes(urlPattern));
+        const lines = list.slice(-limit).map(r => {
+          const status = r.error ?? (r.status ?? (r.duration == null ? "bekliyor" : "cevap yok"));
+          const extra = [r.type, r.mime, r.cached && "önbellek", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
+          return `${r.method} ${status} ${r.url}${extra ? `  (${extra})` : ""}`;
+        });
+        if (clear && log) {
+          log.list.length = 0;
+          log.byChannel.clear();
+        }
+        if (!lines.length) return text("Kayıtlı istek yok (sekme Claude tarafından açıldığından beri, eşleşen).");
+        const hidden = list.length - lines.length;
+        return text((hidden > 0 ? `…önceki ${hidden} istek gösterilmedi\n` : "") + lines.join("\n"));
+      },
+
+      async read_console_messages({ tabId, onlyErrors, pattern, limit, clear }) {
+        const { value } = await query(browserFor(tabId), "console", { onlyErrors, pattern, limit, clear });
+        return text(value);
+      },
+
       async javascript_tool({ text: code, tabId }) {
         const { value } = await query(browserFor(tabId), "eval", { code });
         return text(value);
@@ -364,7 +529,20 @@ function logError(where, e) {
         // cevap yazıldıktan sonra yeniden yükle
         Services.tm.dispatchToMainThread(() => {
           stop();
-          Services.scriptloader.loadSubScript("resource://zenmcp/main.js?" + Date.now(), { zenMcpDir: dir });
+          try {
+            Services.scriptloader.loadSubScript("resource://zenmcp/main.js?" + Date.now(), { zenMcpDir: dir });
+          } catch (e) {
+            logError("reload", e);
+          }
+          // yeni sürüm başlamadıysa soket de yok: köprü tarayıcı yeniden başlayana kadar
+          // ölü kalmasın, yarım kurulumu temizleyip bu sürümü yeniden başlat
+          if (!(globalThis.zenMcpRunning > version)) {
+            logError("reload", new Error(`yeni sürüm başlamadı, v${version} ile devam`));
+            try { globalThis.zenMcpStop?.(); } catch {}
+            start();
+            globalThis.zenMcpStop = stop;
+            globalThis.zenMcpRunning = version;
+          }
         });
         return text(`v${version} kapatılıyor, yeniden yükleniyor.`);
       },
@@ -435,6 +613,11 @@ function logError(where, e) {
     let server = null;
 
     function start() {
+      sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
+      for (const topic of NETWORK_TOPICS) Services.obs.addObserver(networkObserver, topic);
+      restoreMarks();
+      for (const win of browserWindows()) watchWindow(win);
+      Services.obs.addObserver(onWindowReady, "browser-delayed-startup-finished");
       // önceki sürüm stop() çağrılmadan kaybolduysa (ör. farklı kapsamdan yüklendiyse) kaydı kalır
       try { ChromeUtils.unregisterWindowActor("ZenMcp"); } catch {}
       ChromeUtils.registerWindowActor("ZenMcp", {
@@ -458,6 +641,12 @@ function logError(where, e) {
     }
 
     function stop() {
+      try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
+      for (const topic of NETWORK_TOPICS) {
+        try { Services.obs.removeObserver(networkObserver, topic); } catch {}
+      }
+      try { Services.obs.removeObserver(onWindowReady, "browser-delayed-startup-finished"); } catch {}
+      for (const win of browserWindows()) win.removeEventListener("SSTabRestoring", onTabRestoring);
       try { server?.close(); } catch {}
       try { ChromeUtils.unregisterWindowActor("ZenMcp"); } catch {}
       try { localFile(socketPath).remove(false); } catch {}
@@ -468,7 +657,12 @@ function logError(where, e) {
     globalThis.zenMcpStop = stop;
 
     const safeStart = () => {
-      try { start(); } catch (e) { logError("start", e); }
+      try {
+        start();
+        globalThis.zenMcpRunning = version;
+      } catch (e) {
+        logError("start", e);
+      }
     };
     // autoconfig profil okunurken, ağ ve pencereler hazır olmadan çalışır; reload'da hemen başla
     if (browserWindows().length) safeStart();

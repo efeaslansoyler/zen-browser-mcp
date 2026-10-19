@@ -121,6 +121,29 @@ register(
 );
 
 register(
+  "read_console_messages",
+  "Read the page's console output (console.log/info/warn/error and uncaught JS errors) since the page loaded; no need to start listening first. Use pattern to filter, since output can be verbose.",
+  {
+    tabId,
+    onlyErrors: z.boolean().optional().describe("Only errors and assertions."),
+    pattern: z.string().optional().describe("Case-insensitive regex matched against message and source."),
+    limit: z.number().optional().describe("Maximum messages, most recent kept (default 100)."),
+    clear: z.boolean().optional().describe("After reading, hide these messages from later calls."),
+  },
+);
+
+register(
+  "read_network_requests",
+  "List HTTP requests made by a Claude tab (documents, scripts, XHR/fetch, images...) with method, status or error, type and duration, recorded since the tab was opened. Cleared when the page navigates to a different site.",
+  {
+    tabId,
+    urlPattern: z.string().optional().describe("Only requests whose URL contains this text, e.g. \"/api/\"."),
+    limit: z.number().optional().describe("Maximum requests, most recent kept (default 100)."),
+    clear: z.boolean().optional().describe("Clear the log after reading."),
+  },
+);
+
+register(
   "javascript_tool",
   "Run JavaScript in the page with full access to the page's own variables. The value of the last expression is returned (promises are awaited); do not use return.",
   {

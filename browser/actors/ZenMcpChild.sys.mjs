@@ -33,6 +33,7 @@ const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HE
 export class ZenMcpChild extends JSWindowActorChild {
   #refs = new Map();
   #eventUtils = null;
+  #consoleSince = 0;
   #ids = new WeakMap();
   #next = 1;
 
@@ -53,6 +54,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return this.#locate(data.ref);
         case "input":
           return { value: await this.#input(data) };
+        case "console":
+          return { value: this.#console(data) };
         default:
           return { error: `Bilinmeyen mesaj: ${name}` };
       }
@@ -279,6 +282,49 @@ export class ZenMcpChild extends JSWindowActorChild {
     throw new Error(`${ref} bir form alanı değil (${roleOf(el) || tag.toLowerCase()}).`);
   }
 
+  // ---- konsol: Firefox bu sayfanın console.* çağrılarını (ConsoleAPIStorage) ve JS hatalarını
+  // (konsol servisi) sayfa yüklemesi başından beri tutuyor; önceden dinlemeye başlamak gerekmez ----
+
+  #console({ onlyErrors = false, pattern, limit = 100, clear = false }) {
+    const innerId = this.manager.innerWindowId;
+    const entries = [];
+
+    const storage = Cc["@mozilla.org/consoleAPI-storage;1"].getService(Ci.nsIConsoleAPIStorage);
+    for (const event of storage.getEvents(String(innerId))) {
+      const level = event.level === "warn" ? "warning" : event.level;
+      if (onlyErrors && level !== "error" && level !== "assert") continue;
+      const message = [...(event.arguments ?? [])].map(formatArg).join(" ");
+      entries.push({ time: event.timeStamp, level, message, source: event.filename && `${event.filename}:${event.lineNumber}` });
+    }
+
+    for (const m of Services.console.getMessageArray() ?? []) {
+      if (!(m instanceof Ci.nsIScriptError) || m.innerWindowID !== innerId) continue;
+      const isWarning = m.flags & Ci.nsIScriptError.warningFlag;
+      if (onlyErrors && isWarning) continue;
+      entries.push({
+        time: m.timeStamp,
+        level: isWarning ? "warning" : "error",
+        message: m.errorMessage,
+        source: m.sourceName && `${m.sourceName}:${m.lineNumber}`,
+      });
+    }
+
+    let list = entries.filter(e => e.time > this.#consoleSince).sort((a, b) => a.time - b.time);
+    if (pattern) {
+      const re = new RegExp(pattern, "i");
+      list = list.filter(e => re.test(e.message) || re.test(e.source ?? ""));
+    }
+    if (clear) this.#consoleSince = Date.now();
+    if (!list.length) return "Konsol mesajı yok" + (pattern || onlyErrors ? " (filtreyle eşleşen)." : ".");
+    const shown = list.slice(-limit);
+    const lines = shown.map(e => {
+      const time = new Date(e.time).toTimeString().slice(0, 8);
+      return `[${e.level}] ${time} ${truncate(e.message, 2000)}${e.source ? `  (${e.source})` : ""}`;
+    });
+    if (list.length > shown.length) lines.unshift(`…önceki ${list.length - shown.length} mesaj gösterilmedi`);
+    return lines.join("\n");
+  }
+
   // ---- girdi: olaylar bu süreçte, sayfanın windowUtils'i ile üretilir ----
   //
   // Zen'in WebDriver kodunun da kullandığı yol: sayfa bunları gerçek (isTrusted) girdi olarak
@@ -478,6 +524,22 @@ const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const normalize = s => clean(s).toLocaleLowerCase("tr");
 // harf/rakam dışındaki her şey ayırıcı: "package.json" → ["package", "json"]
 const tokens = s => normalize(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+// console.* argümanı sayfanın nesnesi: Xray'i kaldırıp JSON dene, olmazsa String
+function formatArg(arg) {
+  if (typeof arg === "string") return arg;
+  try {
+    const raw = Cu.waiveXrays(arg);
+    if (raw && typeof raw === "object") {
+      if ("stack" in raw && "message" in raw) return `${raw.name ?? "Error"}: ${raw.message}`;
+      const json = JSON.stringify(raw);
+      if (json !== undefined) return truncate(json, 500);
+    }
+    return String(raw);
+  } catch {
+    return String(arg);
+  }
+}
 
 function describe(value) {
   if (value === undefined) return "undefined";
