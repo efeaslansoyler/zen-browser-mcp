@@ -89,6 +89,10 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#console(data) };
         case "ask_user":
           return { value: await this.#askUser(data) };
+        case "cancel_ask":
+          // kullanıcı Claude'u durdurdu (sendAsyncMessage: cevap beklenmez)
+          this.#ask?.finish("stopped");
+          return null;
         case "file_upload":
           return { value: this.#fileUpload(data.ref, data.files) };
         default:

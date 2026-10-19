@@ -151,6 +151,7 @@ function logError(where, e) {
     // istediğinde liveTabs zaten yeniden tarar, bu yalnız kenar çizgisinin erken görünmesi için.
     const onWindowReady = win => {
       watchWindow(win);
+      island?.attach(win);
       for (const delay of [0, 2000, 5000, 10000, 20000]) {
         setTimeout(() => {
           try { restoreMarks(); } catch (e) { logError("restoreMarks", e); }
@@ -406,6 +407,92 @@ function logError(where, e) {
       if (win) throw new DialogOpen(describeDialog(win));
     }
 
+    // ---- durdurma: kullanıcı adadan (ya da Ctrl+Shift+Esc ile) Claude'u durdurur ----
+    //
+    // Süren beklemeler (sayfa cevabı, yükleme, ask_user) hemen kesilir; "Devam et"e basılana
+    // kadar sekmelere dokunan her tool reddedilir. Durum reload'da korunur.
+    class Stopped extends Error {
+      constructor() {
+        super("Kullanıcı Claude'u Zen'deki adadan durdurdu. Kullanıcı adadaki \"Devam et\"e basana kadar tarayıcıda işlem yapılamaz; ne yapmak istediğini kullanıcıya sor.");
+      }
+    }
+    const stopListeners = new Set();
+
+    // bekleyen bir işleme yarıştırılır; durdurulunca reddedilir. cancel ile bırakılır.
+    function whenStopped() {
+      let reject;
+      const promise = new Promise((_, r) => (reject = r));
+      stopListeners.add(reject);
+      promise.cancel = () => stopListeners.delete(reject);
+      return promise;
+    }
+
+    async function guard(promise) {
+      const stopped = whenStopped();
+      try {
+        return await Promise.race([promise, stopped]);
+      } finally {
+        stopped.cancel();
+      }
+    }
+
+    function stopClaude() {
+      if (state.paused) return;
+      state.paused = true;
+      for (const reject of stopListeners) reject(new Stopped());
+      stopListeners.clear();
+      // sayfada bekleyen ask_user çizimini kaldır
+      for (const tab of liveTabs()) {
+        try { tab.linkedBrowser.browsingContext.currentWindowGlobal.getActor("ZenMcp").sendAsyncMessage("cancel_ask"); } catch {}
+      }
+      island?.stopped();
+    }
+
+    function resumeClaude() {
+      state.paused = false;
+      island?.resumed();
+    }
+
+    function goToTab(browser) {
+      const win = browser.ownerDocument.defaultView;
+      const tab = win.gBrowser.getTabForBrowser(browser);
+      if (tab) win.gBrowser.selectedTab = tab;
+      win.focus();
+    }
+
+    let island = null;
+
+    // adada görünen kısa açıklama: "seaskablo.com — tıklıyor"
+    function describeAction(tool, args, browser) {
+      let host = "";
+      try { host = browser.currentURI.host; } catch {}
+      const what = {
+        navigate: () => {
+          if (args.url === "back") return "geri gidiyor";
+          if (args.url === "forward") return "ileri gidiyor";
+          try { host = Services.uriFixup.getFixupURIInfo(args.url).preferredURI.host; } catch {}
+          return "sayfayı açıyor";
+        },
+        computer: () => ({
+          screenshot: "ekrana bakıyor", left_click: "tıklıyor", right_click: "sağ tıklıyor",
+          double_click: "çift tıklıyor", triple_click: "tıklıyor", hover: "fareyi gezdiriyor",
+          left_click_drag: "sürüklüyor", scroll: "kaydırıyor", scroll_to: "kaydırıyor",
+          type: "yazıyor", key: "tuşa basıyor", wait: "bekliyor",
+        })[args.action] ?? "çalışıyor",
+        read_page: () => "sayfayı okuyor",
+        get_page_text: () => "sayfayı okuyor",
+        find: () => `"${args.query}" arıyor`,
+        form_input: () => "formu dolduruyor",
+        file_upload: () => "dosya yüklüyor",
+        javascript_tool: () => "sayfada kod çalıştırıyor",
+        read_console_messages: () => "konsolu okuyor",
+        read_network_requests: () => "ağ isteklerine bakıyor",
+        handle_dialog: () => "diyaloğu cevaplıyor",
+        ask_user: () => "senden bir şey istiyor",
+      }[tool]?.() ?? "çalışıyor";
+      return host ? `${host} — ${what}` : what;
+    }
+
     async function query(browser, name, data, timeout = 30000) {
       const wg = browser.browsingContext?.currentWindowGlobal;
       if (!wg) throw new Error("Sayfa henüz yüklenmedi.");
@@ -420,11 +507,11 @@ function logError(where, e) {
         }
       })();
       try {
-        const result = await Promise.race([
+        const result = await guard(Promise.race([
           wg.getActor("ZenMcp").sendQuery(name, data),
           watchDialog,
           sleep(timeout).then(() => { throw new Error(`Sayfa ${timeout / 1000} sn içinde cevap vermedi.`); }),
-        ]);
+        ]));
         if (result?.error) throw new Error(result.error);
         return result;
       } finally {
@@ -458,7 +545,7 @@ function logError(where, e) {
             triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
           });
         }
-        await loaded;
+        await guard(loaded);
         const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
         return text(describeTab(tab));
       },
@@ -514,7 +601,7 @@ function logError(where, e) {
             for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
             break;
           case "wait":
-            await sleep(Math.min(need("duration"), 30) * 1000);
+            await guard(sleep(Math.min(need("duration"), 30) * 1000));
             break;
           default:
             throw new Error(`Desteklenmeyen işlem: ${args.action}`);
@@ -693,6 +780,11 @@ function logError(where, e) {
         const { tool, args = {} } = JSON.parse(line);
         const fn = tools[tool] || commands[tool];
         if (!fn) throw new Error(`Bilinmeyen tool: ${tool}`);
+        if (tools[tool]) {
+          if (state.paused) throw new Stopped();
+          const browser = args.tabId != null ? findTab(args.tabId)?.linkedBrowser : null;
+          if (browser) island?.working(browser, describeAction(tool, args, browser));
+        }
         message = { ok: true, content: await fn(args) };
       } catch (e) {
         // diyalog bir hata değil, Claude'un bilmesi gereken durum
@@ -730,6 +822,10 @@ function logError(where, e) {
 
     function start() {
       sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
+      const { Island } = ChromeUtils.importESModule(`resource://zenmcp/Island.sys.mjs?v=${version}`);
+      island = new Island({ stop: stopClaude, resume: resumeClaude, goTo: goToTab }, { setTimeout, clearTimeout });
+      for (const win of browserWindows()) island.attach(win);
+      if (state.paused) island.stopped();
       for (const topic of NETWORK_TOPICS) Services.obs.addObserver(networkObserver, topic);
       restoreMarks();
       for (const win of browserWindows()) watchWindow(win);
@@ -758,6 +854,8 @@ function logError(where, e) {
 
     function stop() {
       try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
+      try { island?.destroy(); } catch {}
+      island = null;
       for (const topic of NETWORK_TOPICS) {
         try { Services.obs.removeObserver(networkObserver, topic); } catch {}
       }
