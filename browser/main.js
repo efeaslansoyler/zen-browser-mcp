@@ -156,12 +156,27 @@ function logError(where, e) {
       return eu;
     }
 
-    // ekran görüntüsü koordinatı → pencere koordinatı (CSS px)
-    function toWindowPoint(browser, [x, y]) {
-      const s = state.scale.get(browser.browserId) || 1;
+    // sayfanın görünür alanındaki nokta (CSS px) → pencere koordinatı (CSS px)
+    function cssToWindow(browser, [x, y]) {
       const r = browser.getBoundingClientRect();
       const zoom = browser.fullZoom || 1;
-      return [r.left + (x / s) * zoom, r.top + (y / s) * zoom];
+      return [r.left + x * zoom, r.top + y * zoom];
+    }
+
+    // ekran görüntüsü koordinatı → pencere koordinatı
+    function toWindowPoint(browser, [x, y]) {
+      const s = state.scale.get(browser.browserId) || 1;
+      return cssToWindow(browser, [x / s, y / s]);
+    }
+
+    // ref verilmişse öğeyi (gerekirse kaydırıp) merkezine, yoksa koordinata
+    async function target(browser, args, key = "coordinate") {
+      if (args.ref && key === "coordinate") {
+        const { x, y } = await query(browser, "locate", { ref: args.ref });
+        return cssToWindow(browser, [x, y]);
+      }
+      if (args[key] == null) throw new Error(`${args.action} için ${key}${key === "coordinate" ? " veya ref" : ""} gerekli.`);
+      return toWindowPoint(browser, args[key]);
     }
 
     function parseModifiers(text) {
@@ -182,9 +197,8 @@ function logError(where, e) {
       );
     }
 
-    async function click(browser, coordinate, { button = 0, count = 1, modifiers } = {}) {
+    async function click(browser, point, { button = 0, count = 1, modifiers } = {}) {
       const win = select(browser);
-      const point = toWindowPoint(browser, coordinate);
       const mods = parseModifiers(modifiers);
       await mouse(win, point, { type: "mousemove", ...mods });
       for (let i = 1; i <= count; i++) {
@@ -193,10 +207,8 @@ function logError(where, e) {
       }
     }
 
-    async function drag(browser, from, to) {
+    async function drag(browser, a, b) {
       const win = select(browser);
-      const a = toWindowPoint(browser, from);
-      const b = toWindowPoint(browser, to);
       await mouse(win, a, { type: "mousemove" });
       await mouse(win, a, { type: "mousedown" });
       const steps = 10;
@@ -209,12 +221,15 @@ function logError(where, e) {
       await mouse(win, b, { type: "mouseup" });
     }
 
-    function scroll(browser, coordinate, direction, amount = 3) {
+    function scroll(browser, [x, y], direction, amount = 3) {
       const win = select(browser);
-      const [x, y] = toWindowPoint(browser, coordinate);
-      // tık başına 100 CSS px; EventUtils piksel değil cihaz pikseli bekler
-      const d = amount * 100 * win.devicePixelRatio;
-      const delta = { up: [0, -d], down: [0, d], left: [-d, 0], right: [d, 0] }[direction];
+      // tık başına 100 CSS px. EventUtils cihaz pikseli bekler; tarayıcı da deltayı
+      // mousewheel.default.delta_multiplier_* ile çarpar (Zen'de varsayılan 200)
+      const multiplier = axis => Services.prefs.getIntPref(`mousewheel.default.delta_multiplier_${axis}`, 100) / 100 || 1;
+      const px = amount * 100 * win.devicePixelRatio;
+      const dy = px / multiplier("y");
+      const dx = px / multiplier("x");
+      const delta = { up: [0, -dy], down: [0, dy], left: [-dx, 0], right: [dx, 0] }[direction];
       if (!delta) throw new Error(`Geçersiz kaydırma yönü: ${direction}`);
       return new Promise(resolve =>
         EU(win).synthesizeWheelAtPoint(
@@ -352,25 +367,28 @@ function logError(where, e) {
             ];
           }
           case "left_click":
-            await click(browser, need("coordinate"), { modifiers: args.text });
+            await click(browser, await target(browser, args), { modifiers: args.text });
             break;
           case "right_click":
-            await click(browser, need("coordinate"), { button: 2, modifiers: args.text });
+            await click(browser, await target(browser, args), { button: 2, modifiers: args.text });
             break;
           case "double_click":
-            await click(browser, need("coordinate"), { count: 2, modifiers: args.text });
+            await click(browser, await target(browser, args), { count: 2, modifiers: args.text });
             break;
           case "triple_click":
-            await click(browser, need("coordinate"), { count: 3, modifiers: args.text });
+            await click(browser, await target(browser, args), { count: 3, modifiers: args.text });
             break;
           case "hover":
-            await mouse(select(browser), toWindowPoint(browser, need("coordinate")), { type: "mousemove" });
+            await mouse(select(browser), await target(browser, args), { type: "mousemove" });
             break;
           case "left_click_drag":
-            await drag(browser, need("start_coordinate"), need("coordinate"));
+            await drag(browser, await target(browser, args, "start_coordinate"), await target(browser, args));
             break;
           case "scroll":
-            await scroll(browser, need("coordinate"), need("scroll_direction"), args.scroll_amount);
+            await scroll(browser, await target(browser, args), need("scroll_direction"), args.scroll_amount);
+            break;
+          case "scroll_to":
+            await query(browser, "locate", { ref: need("ref") });
             break;
           case "type":
             typeText(browser, need("text"));
@@ -392,6 +410,21 @@ function logError(where, e) {
       async get_page_text({ tabId }) {
         const page = await query(browserFor(tabId), "text");
         return text(`${page.title}\n${page.url}\n\n${page.text}`);
+      },
+
+      async read_page({ tabId, filter, depth, ref_id, max_chars }) {
+        const { value } = await query(browserFor(tabId), "read_page", { filter, depth, ref_id, max_chars });
+        return text(value);
+      },
+
+      async find({ tabId, query: q }) {
+        const { value } = await query(browserFor(tabId), "find", { query: q });
+        return text(value);
+      },
+
+      async form_input({ tabId, ref, value }) {
+        const { value: result } = await query(browserFor(tabId), "form_input", { ref, value });
+        return text(result);
       },
 
       async javascript_tool({ text: code, tabId }) {
