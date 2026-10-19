@@ -1,5 +1,6 @@
-// zen.cfg bunu sistem yetkisiyle loadSubScript ile yükler (kapsamda zenMcpDir: bu klasörün
-// gerçek yolu). $XDG_RUNTIME_DIR/zen-mcp.sock üzerinde bağlantı başına tek satırlık JSON istek
+// Autoconfig yükleyicisi bunu sistem yetkisiyle loadSubScript ile yükler (kapsamda zenMcpDir:
+// bu klasörün gerçek yolu, zenMcpName: paketin adı, yollarda kullanılır).
+// $XDG_RUNTIME_DIR/<ad>.sock üzerinde bağlantı başına tek satırlık JSON istek
 // alır, tek satırlık JSON cevap yazıp kapatır. Fare/klavye olayları Zen'in kendi WebDriver
 // kodunun yaptığı gibi parent süreçten EventUtils ile gönderilir: sayfa bunları gerçek
 // (isTrusted) girdi olarak görür, remote agent açılmadığı için navigator.webdriver false kalır.
@@ -7,12 +8,16 @@
 "use strict";
 
 // Zen'in stderr'i genelde /dev/null'a gider ve autoconfig konsolu hazır olmadan çalışır;
-// hatalar $XDG_RUNTIME_DIR/zen-mcp.log dosyasına da yazılır
+// hatalar $XDG_RUNTIME_DIR/<ad>.log dosyasına da yazılır
+const zenMcpApp = typeof zenMcpName === "string" ? zenMcpName : "zen-mcp";
+// macOS'ta XDG_RUNTIME_DIR yok; TMPDIR kullanıcıya özel
+const zenMcpRuntimeDir = () => Services.env.get("XDG_RUNTIME_DIR") || Services.env.get("TMPDIR") || "/tmp";
+
 function logError(where, e) {
   const msg = `${new Date().toISOString()} ${where}: ${e}\n${e?.stack ?? ""}\n`;
   try {
     const f = Components.classes["@mozilla.org/file/local;1"].createInstance(Components.interfaces.nsIFile);
-    f.initWithPath((Services.env.get("XDG_RUNTIME_DIR") || "/tmp") + "/zen-mcp.log");
+    f.initWithPath(`${zenMcpRuntimeDir()}/${zenMcpApp}.log`);
     const out = Components.classes["@mozilla.org/network/file-output-stream;1"]
       .createInstance(Components.interfaces.nsIFileOutputStream);
     out.init(f, 0x02 | 0x08 | 0x10, 0o600, 0); // yaz | oluştur | sona ekle
@@ -33,7 +38,7 @@ function logError(where, e) {
     const dir = zenMcpDir;
     const dirURI = Services.io.newFileURI(localFile(dir)).spec.replace(/\/?$/, "/");
     const version = (globalThis.zenMcpVersion = (globalThis.zenMcpVersion || 0) + 1);
-    const socketPath = (Services.env.get("XDG_RUNTIME_DIR") || "/tmp") + "/zen-mcp.sock";
+    const socketPath = `${zenMcpRuntimeDir()}/${zenMcpApp}.sock`;
 
     function localFile(path) {
       const f = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
@@ -426,7 +431,7 @@ function logError(where, e) {
 
     // Seçilen öğenin (görünür kısmının) biraz paylı görüntüsü, PNG; Claude Read ile bakar.
     // Son MAX_SHOTS görüntü tutulur.
-    const SHOTS_DIR = (Services.env.get("XDG_RUNTIME_DIR") || "/tmp") + "/zen-mcp-picks";
+    const SHOTS_DIR = `${zenMcpRuntimeDir()}/${zenMcpApp}-picks`;
     const MAX_SHOTS = 20;
 
     async function elementShot(browser, { rect, viewport }) {
@@ -1198,12 +1203,12 @@ function logError(where, e) {
 
     const MAX_PAGE_TEXT = 100000;
 
-    // ---- ayarlar: ~/.config/zen-mcp/config.json ----
+    // ---- ayarlar: ~/.config/<ad>/config.json ----
     //
     // mode: "auto" (Claude sormadan işlem yapar) ya da "ask" (her işlemde adadan izin ister).
     // sensitive: alan adları; bu sitelerde mod ne olursa olsun her işlemde izin istenir
     // ("garanti.com.tr" alt alan adlarını da kapsar). Dosya değişince kendiliğinden okunur.
-    const CONFIG_PATH = (Services.env.get("XDG_CONFIG_HOME") || Services.env.get("HOME") + "/.config") + "/zen-mcp/config.json";
+    const CONFIG_PATH = `${Services.env.get("XDG_CONFIG_HOME") || Services.env.get("HOME") + "/.config"}/${zenMcpApp}/config.json`;
     const DEFAULT_CONFIG = { mode: "auto", sensitive: [] };
     let config = { ...DEFAULT_CONFIG };
     let configTime = -1;
@@ -1710,13 +1715,33 @@ function logError(where, e) {
     };
 
     // geliştirme komutları: MCP'ye açılmaz, scripts/zenctl.ts kullanır
+    // yüklü tarayıcı dosyalarının sürümü (kurulum .version yazar; geliştirmede bağ, dosya yok)
+    function fileVersion() {
+      try {
+        const f = localFile(dir + "/.version");
+        if (!f.exists()) return "dev";
+        const stream = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
+        stream.init(f, 0x01, 0, 0);
+        const v = NetUtil.readInputStreamToString(stream, stream.available()).trim();
+        stream.close();
+        return v;
+      } catch {
+        return "?";
+      }
+    }
+    const loadedVersion = fileVersion();
+
     const commands = {
+      // CLI (doctor, güncelleme) için: hangi dosya sürümü yüklü, hangi tarayıcı
+      ping() {
+        return text({ app: zenMcpApp, version: loadedVersion, onDisk: fileVersion(), browser: Services.appinfo.name, browserVersion: Services.appinfo.version });
+      },
       reload() {
         // cevap yazıldıktan sonra yeniden yükle
         Services.tm.dispatchToMainThread(() => {
           stop();
           try {
-            Services.scriptloader.loadSubScript("resource://zenmcp/main.js?" + Date.now(), { zenMcpDir: dir });
+            Services.scriptloader.loadSubScript("resource://zenmcp/main.js?" + Date.now(), { zenMcpDir: dir, zenMcpName: zenMcpApp });
           } catch (e) {
             logError("reload", e);
           }
@@ -1795,9 +1820,9 @@ function logError(where, e) {
       }
     }
 
-    // ---- etkinlik günlüğü: ~/.local/state/zen-mcp/activity.jsonl, satır başına bir çağrı ----
+    // ---- etkinlik günlüğü: ~/.local/state/<ad>/activity.jsonl, satır başına bir çağrı ----
     // (5 MB'ı geçince activity.1.jsonl'e taşınır)
-    const ACTIVITY_PATH = (Services.env.get("XDG_STATE_HOME") || Services.env.get("HOME") + "/.local/state") + "/zen-mcp/activity.jsonl";
+    const ACTIVITY_PATH = `${Services.env.get("XDG_STATE_HOME") || Services.env.get("HOME") + "/.local/state"}/${zenMcpApp}/activity.jsonl`;
     const MAX_ACTIVITY = 5 * 1048576;
 
     function logActivity(entry) {

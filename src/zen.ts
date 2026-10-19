@@ -1,9 +1,7 @@
 // Zen içindeki köprüyle konuşur: bağlantı başına tek satır istek, tek satır cevap.
 import net from "node:net";
 import { randomUUID } from "node:crypto";
-
-export const socketPath =
-  process.env.ZEN_MCP_SOCKET ?? `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/zen-mcp.sock`;
+import { NAME, SOCKET as socketPath } from "./paths.ts";
 
 export type Content =
   | { type: "text"; text: string }
@@ -31,7 +29,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000): Promise
     socket.on("error", (e: NodeJS.ErrnoException) =>
       reject(
         e.code === "ENOENT" || e.code === "ECONNREFUSED"
-          ? new Error("Zen'e bağlanılamadı: Zen açık mı, zen.cfg köprüyü yüklüyor mu?")
+          ? new Error(`Zen'e bağlanılamadı: Zen açık mı? Kurulum için \`npx ${NAME} install\`, kontrol için \`npx ${NAME} doctor\`.`)
           : e,
       ),
     );

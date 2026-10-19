@@ -132,6 +132,23 @@ Davranış notları:
   isteyebilir. Ada `ask` durumunda "Ver / Verme" gösterir, Ver denirse sekme "Claude'a ver"
   ile verilmiş gibi işaretlenir. Yeni istek adadaki "gönderildi" yazısını hemen kaldırır.
 
+## Paket ve kurulum (açık kaynak hazırlığı, 2026-10-19)
+
+- `src/cli.ts` giriş: argümansız MCP sunucusu; `install [--browser <klasör>|--all]`,
+  `uninstall`, `doctor`, `config [mode auto|ask | sensitive add|remove …]`. `npm run build`
+  → `dist/` (Node npm paketindeki .ts'yi çalıştırmıyor). İsim ve yollar yalnız `src/paths.ts`te
+  (+ yükleyicinin verdiği `zenMcpName`). CLI mesajları `L(en, tr)`: sistem dili Türkçeyse Türkçe.
+- `install`: tarayıcıyı bulur (`application.ini`), autoconfig varsa .cfg'ye `// BEGIN zen-mcp`
+  … `// END zen-mcp` bloğu ekler, yoksa `<ad>-prefs.js` + `<ad>.cfg` oluşturur; şifreli ya da
+  sandbox'lı autoconfig'i reddeder; yazılamazsa sudo. `browser/`'ı `~/.local/share/<ad>`'a
+  kopyalar, `.version` yazar. Orası bağsa geliştirme kurulumu: dokunulmaz (Efe'nin kurulumu
+  böyle, dotfiles zen.cfg'deki işaretsiz blok "legacy" sayılır).
+- Sunucu açılınca `syncBrowserFiles`: kurulu dosyalar paketten eskiyse kopyalar ve köprüyü
+  `reload` eder (sudo ve tarayıcıyı yeniden başlatmak gerekmez). Köprüde `ping` komutu sürümü
+  verir. Flatpak/Snap desteklenemez (salt okunur), Windows henüz yok (Unix soket).
+- Test: `cp -r /opt/zen-browser-bin` kopyasına `install --browser`, `XDG_DATA_HOME`/
+  `XDG_RUNTIME_DIR` geçici; `npm pack` + `npx -y ./zen-mcp-<sürüm>.tgz` gerçek npx denemesi.
+
 ## Geliştirme ve test
 
 - **Zen'i kapatmadan güncelleme:** `node scripts/zenctl.ts reload`. Yeni sürüm başlamazsa eski

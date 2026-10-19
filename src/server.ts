@@ -2,36 +2,53 @@
 // Tool adları ve parametreleri Claude in Chrome ile aynı tutulur.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { call, subscribe } from "./zen.ts";
+import { NAME, SERVER_NAME, VERSION } from "./paths.ts";
+import { syncBrowserFiles } from "./install.ts";
 
 // Claude Code bu sunucuyu kanal olarak açtı mı: komut satırında
-// --dangerously-load-development-channels (ya da --channels) ve server:zen. Kanal açık değilse
-// olaylar sessizce düşer; o zaman Zen'e abone olunmaz, Zen seçimi panoya kopyalar.
-// ZEN_MCP_CHANNEL=1/0 bu kontrolü geçersiz kılar.
+// --dangerously-load-development-channels (ya da --channels) ve server:zen (ya da paketin adı).
+// Kanal açık değilse olaylar sessizce düşer; o zaman Zen'e abone olunmaz, Zen seçimi panoya
+// kopyalar. ZEN_MCP_CHANNEL=1/0 bu kontrolü geçersiz kılar.
 function channelEnabled(): boolean {
   if (process.env.ZEN_MCP_CHANNEL) return process.env.ZEN_MCP_CHANNEL === "1";
+  const names = new Set([`server:${SERVER_NAME}`, `server:${NAME}`]);
   let pid = process.ppid;
   for (let i = 0; i < 3 && pid > 1; i++) {
-    try {
-      const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
-      if (args.some((a) => /^--(dangerously-load-development-)?channels\b/.test(a))) {
-        return args.some((a) => a.split(/[\s,=]+/).includes("server:zen"));
-      }
-      // /proc/<pid>/stat: "pid (ad) durum ppid ..."
-      pid = Number(readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1].split(" ")[1]);
-    } catch {
-      return false;
+    const proc = processInfo(pid);
+    if (!proc) return false;
+    if (proc.args.some((a) => /^--(dangerously-load-development-)?channels\b/.test(a))) {
+      return proc.args.some((a) => a.split(/[\s,=]+/).some((t) => names.has(t)));
     }
+    pid = proc.ppid;
   }
   return false;
+}
+
+// süreç argümanları ve üst süreç: Linux'ta /proc, macOS'ta ps (argümanlar boşlukla bölünür)
+function processInfo(pid: number): { args: string[]; ppid: number } | null {
+  try {
+    const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
+    // /proc/<pid>/stat: "pid (ad) durum ppid ..."
+    const ppid = Number(readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1].split(" ")[1]);
+    return { args, ppid };
+  } catch {}
+  try {
+    const out = execFileSync("ps", ["-o", "ppid=,args=", "-p", String(pid)], { encoding: "utf8" }).trim();
+    const [ppid, ...args] = out.split(/\s+/);
+    return { args, ppid: Number(ppid) };
+  } catch {
+    return null;
+  }
 }
 
 const channel = channelEnabled();
 
 const server = new McpServer(
-  { name: "zen", version: "0.1.0" },
+  { name: SERVER_NAME, version: VERSION },
   channel
     ? {
         capabilities: { experimental: { "claude/channel": {} } },
@@ -304,18 +321,25 @@ register(
   (args) => (args.actions ?? []).reduce((sum: number, a: any) => sum + stepTimeout(a), 0) * 1000,
 );
 
-await server.connect(new StdioServerTransport());
+export async function serve() {
+  await server.connect(new StdioServerTransport());
+  // tarayıcı tarafı dosyaları bu sürümden eskiyse güncellenir, köprü yeniden yüklenir
+  syncBrowserFiles().catch(() => {});
 
-if (channel) {
-  subscribe(
-    (event) => {
-      if (event?.event !== "channel") return;
-      server.server
-        .notification({ method: "notifications/claude/channel", params: { content: event.content, meta: event.meta } })
-        .catch(() => {});
-    },
-    { cwd: process.cwd() },
-  );
+  if (channel) {
+    subscribe(
+      (event) => {
+        if (event?.event !== "channel") return;
+        server.server
+          .notification({ method: "notifications/claude/channel", params: { content: event.content, meta: event.meta } })
+          .catch(() => {});
+      },
+      { cwd: process.cwd() },
+    );
+  }
+  // Claude Code kapanınca stdin kapanır; Zen bağlantısı süreci ayakta tutmasın
+  process.stdin.on("close", () => process.exit(0));
 }
-// Claude Code kapanınca stdin kapanır; Zen bağlantısı süreci ayakta tutmasın
-process.stdin.on("close", () => process.exit(0));
+
+// geliştirmede doğrudan: node src/server.ts
+if ((import.meta as { main?: boolean }).main) await serve();
