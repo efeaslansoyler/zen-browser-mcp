@@ -5,6 +5,8 @@
 // yüklemesinde) geçerlidir, yeni sayfada sıfırlanır. DOM'a ayrıcalıklı (Xray) erişimle bakılır:
 // sayfanın kendi tanımladığı özellikler/override'lar görülmez, yerel DOM davranışı esastır.
 
+const { setTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+
 const MAX_TEXT = 100000;
 const MAX_TREE = 50000;
 const MAX_NAME = 100;
@@ -30,6 +32,7 @@ const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HE
 
 export class ZenMcpChild extends JSWindowActorChild {
   #refs = new Map();
+  #eventUtils = null;
   #ids = new WeakMap();
   #next = 1;
 
@@ -48,6 +51,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#formInput(data.ref, data.value) };
         case "locate":
           return this.#locate(data.ref);
+        case "input":
+          return { value: await this.#input(data) };
         default:
           return { error: `Bilinmeyen mesaj: ${name}` };
       }
@@ -272,6 +277,104 @@ export class ZenMcpChild extends JSWindowActorChild {
       return `${ref}: içerik ayarlandı.`;
     }
     throw new Error(`${ref} bir form alanı değil (${roleOf(el) || tag.toLowerCase()}).`);
+  }
+
+  // ---- girdi: olaylar bu süreçte, sayfanın windowUtils'i ile üretilir ----
+  //
+  // Zen'in WebDriver kodunun da kullandığı yol: sayfa bunları gerçek (isTrusted) girdi olarak
+  // görür ve sekme arka plandayken de çalışır; sekmeyi seçmek, kullanıcının penceresine
+  // dokunmak gerekmez. Koordinatlar sayfanın görünür alanında CSS px.
+
+  #eu() {
+    if (!this.#eventUtils) {
+      const win = this.contentWindow;
+      const eu = { window: win, parent: win, _EU_Ci: Ci, _EU_Cc: Cc };
+      Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu);
+      this.#eventUtils = eu;
+    }
+    return this.#eventUtils;
+  }
+
+  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1] }) {
+    const win = this.contentWindow;
+    const eu = this.#eu();
+    const mouse = (px, py, event) => eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
+    switch (kind) {
+      case "click":
+        mouse(x, y, { type: "mousemove" });
+        for (let i = 1; i <= count; i++) {
+          mouse(x, y, { type: "mousedown", button, clickCount: i });
+          mouse(x, y, { type: "mouseup", button, clickCount: i });
+        }
+        if (button === 0) this.#focusAt(x, y);
+        return "tamam";
+      case "hover":
+        mouse(x, y, { type: "mousemove" });
+        return "tamam";
+      case "drag": {
+        mouse(x, y, { type: "mousemove" });
+        mouse(x, y, { type: "mousedown" });
+        const steps = 10;
+        for (let i = 1; i <= steps; i++) {
+          mouse(x + ((to[0] - x) * i) / steps, y + ((to[1] - y) * i) / steps, { type: "mousemove", buttons: 1 });
+        }
+        mouse(to[0], to[1], { type: "mouseup" });
+        return "tamam";
+      }
+      case "wheel":
+        return this.#wheel(x, y, dx, dy, multiplier);
+      case "keys":
+        for (const { key, mods } of keys) eu.synthesizeKey(key, mods, win);
+        return "tamam";
+      case "text":
+        text.split("\n").forEach((line, i) => {
+          if (i > 0) eu.synthesizeKey("KEY_Enter", {}, win);
+          if (line) eu.sendString(line, win);
+        });
+        return "tamam";
+      default:
+        throw new Error(`Bilinmeyen girdi: ${kind}`);
+    }
+  }
+
+  // Arka plandaki sekmede tıklama odağı taşımıyor; tıklanan noktadaki odaklanabilir öğeyi
+  // (kullanıcının tıklamasıyla aynı sonuç) elle odakla
+  #focusAt(x, y) {
+    const doc = this.document;
+    const target = doc.elementFromPoint(x, y);
+    const focusable = target?.closest(
+      'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [contenteditable=""], [contenteditable="true"], [tabindex]'
+    );
+    if (focusable && doc.activeElement !== focusable) focusable.focus();
+  }
+
+  // Tekerlek olayı gönderilir (sayfanın wheel dinleyicileri çalışsın). Tarayıcı deltayı
+  // mousewheel.default.delta_multiplier_* ile çarptığı için olay deltası ona bölünür. Arka
+  // plandaki sekmede tekerlek sayfayı kaydırmaz; o zaman istenen miktar doğrudan kaydırılır.
+  async #wheel(x, y, dx, dy, [mx, my]) {
+    const win = this.contentWindow;
+    const scroller = this.#scrollerAt(x, y);
+    const before = [scroller.scrollLeft, scroller.scrollTop];
+    const dpr = win.devicePixelRatio;
+    this.#eu().synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
+    await new Promise(r => setTimeout(r, 150));
+    const moved = [scroller.scrollLeft - before[0], scroller.scrollTop - before[1]];
+    if (!moved[0] && !moved[1]) {
+      scroller.scrollBy({ left: dx, top: dy, behavior: "instant" });
+    }
+    return "tamam";
+  }
+
+  // noktadaki öğenin kaydırılabilir en yakın atası, yoksa sayfanın kendisi
+  #scrollerAt(x, y) {
+    const doc = this.document;
+    const win = this.contentWindow;
+    for (let el = doc.elementFromPoint(x, y); el && el !== doc.documentElement; el = el.parentElement) {
+      const style = win.getComputedStyle(el);
+      const scrollable = /(auto|scroll|overlay)/.test(style.overflowY + style.overflowX);
+      if (scrollable && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)) return el;
+    }
+    return doc.scrollingElement || doc.documentElement;
   }
 
   // ---- locate: ref ile tıklama için öğeyi görünür yap, merkezini ver (CSS px, görünür alan) ----

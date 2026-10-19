@@ -76,12 +76,11 @@ function logError(where, e) {
       return null;
     }
 
-    // yalnız Claude penceresindekiler: kullanıcının sekmesine taşınmış/eski sekmeler sayılmaz
     function liveTabs() {
       const tabs = [];
       for (const id of state.tabs) {
         const tab = findTab(id);
-        if (tab?.ownerDocument.documentElement.hasAttribute(WINDOW_ATTR)) tabs.push(tab);
+        if (tab) tabs.push(tab);
         else state.tabs.delete(id);
       }
       return tabs;
@@ -98,46 +97,14 @@ function logError(where, e) {
       return { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
     }
 
-    // Claude'un sekmeleri ayrı, senkronsuz bir Zen penceresinde: olaylar için sekmeyi seçmek
-    // kullanıcının penceresini değiştirmez, senkron kapalı olduğu için sekmeler kullanıcının
-    // pencerelerine kopyalanmaz, Zen bu pencereyi oturumla da geri yüklemez
-    const WINDOW_ATTR = "zen-mcp-window";
-
-    function claudeWindow() {
-      return browserWindows().find(w => w.document.documentElement.hasAttribute(WINDOW_ATTR)) ?? null;
-    }
-
-    async function openClaudeWindow() {
-      const opener = Services.wm.getMostRecentWindow("navigator:browser");
-      if (!opener) throw new Error("Açık Zen penceresi yok.");
-      const win = opener.OpenBrowserWindow({ zenSyncedWindow: false });
-      await new Promise(resolve => {
-        const observer = subject => {
-          if (subject !== win) return;
-          Services.obs.removeObserver(observer, "browser-delayed-startup-finished");
-          resolve();
-        };
-        Services.obs.addObserver(observer, "browser-delayed-startup-finished");
-      });
-      win.document.documentElement.setAttribute(WINDOW_ATTR, "true");
-      return win;
-    }
-
-    async function createTab() {
-      // yeni pencerenin seçili sekmesi Zen'in "boş sekme" yer tutucusu (zen-empty-tab);
-      // Zen onu değiştirdiği için kullanılmaz, her zaman yeni sekme açılır
-      const win = claudeWindow() ?? (await openClaudeWindow());
-      const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: false });
+    // Claude in Chrome gibi kullanıcının penceresinde, arka planda: girdiler sayfa sürecinden
+    // gittiği için sekmenin seçili olması gerekmez, kullanıcının görünümü değişmez
+    function createTab() {
+      const win = Services.wm.getMostRecentWindow("navigator:browser");
+      if (!win) throw new Error("Açık Zen penceresi yok.");
+      const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true });
       state.tabs.add(tab.linkedBrowser.browserId);
       return tab;
-    }
-
-    // olayların gitmesi için sekmenin penceresinde seçili olması gerekir
-    function select(browser) {
-      const win = browser.ownerDocument.defaultView;
-      const tab = win.gBrowser.getTabForBrowser(browser);
-      if (win.gBrowser.selectedTab !== tab) win.gBrowser.selectedTab = tab;
-      return win;
     }
 
     const pendingListeners = new Set();
@@ -166,44 +133,22 @@ function logError(where, e) {
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // ---- girdi ----
+    // ---- girdi: olayları sayfanın sürecindeki actor üretir (ZenMcpChild #input) ----
 
-    const eventUtils = new WeakMap();
-
-    // EventUtils global'leri (KeyboardEvent, navigator...) yüklendiği nesnenin compartment'ından
-    // okur; pencereyi kirletmemek için pencerenin compartment'ında ayrı bir nesneye yüklenir
-    function EU(win) {
-      let eu = eventUtils.get(win);
-      if (!eu) {
-        eu = Cu.createObjectIn(win);
-        Object.assign(eu, { window: win, parent: win, _EU_Ci: Ci, _EU_Cc: Cc });
-        Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu);
-        eventUtils.set(win, eu);
-      }
-      return eu;
-    }
-
-    // sayfanın görünür alanındaki nokta (CSS px) → pencere koordinatı (CSS px)
-    function cssToWindow(browser, [x, y]) {
-      const r = browser.getBoundingClientRect();
-      const zoom = browser.fullZoom || 1;
-      return [r.left + x * zoom, r.top + y * zoom];
-    }
-
-    // ekran görüntüsü koordinatı → pencere koordinatı
-    function toWindowPoint(browser, [x, y]) {
+    // ekran görüntüsü koordinatı → sayfanın görünür alanında CSS px
+    function toPagePoint(browser, [x, y]) {
       const s = state.scale.get(browser.browserId) || 1;
-      return cssToWindow(browser, [x / s, y / s]);
+      return [x / s, y / s];
     }
 
     // ref verilmişse öğeyi (gerekirse kaydırıp) merkezine, yoksa koordinata
     async function target(browser, args, key = "coordinate") {
       if (args.ref && key === "coordinate") {
         const { x, y } = await query(browser, "locate", { ref: args.ref });
-        return cssToWindow(browser, [x, y]);
+        return [x, y];
       }
       if (args[key] == null) throw new Error(`${args.action} için ${key}${key === "coordinate" ? " veya ref" : ""} gerekli.`);
-      return toWindowPoint(browser, args[key]);
+      return toPagePoint(browser, args[key]);
     }
 
     function parseModifiers(text) {
@@ -218,55 +163,19 @@ function logError(where, e) {
       return mods;
     }
 
-    function mouse(win, [x, y], event) {
-      return new Promise(resolve =>
-        EU(win).synthesizeMouseAtPoint(x, y, { ...event, asyncEnabled: true }, win, () => resolve())
-      );
-    }
+    const input = (browser, data) => query(browser, "input", data);
 
-    async function click(browser, point, { button = 0, count = 1, modifiers } = {}) {
-      const win = select(browser);
-      const mods = parseModifiers(modifiers);
-      await mouse(win, point, { type: "mousemove", ...mods });
-      for (let i = 1; i <= count; i++) {
-        await mouse(win, point, { type: "mousedown", button, clickCount: i, ...mods });
-        await mouse(win, point, { type: "mouseup", button, clickCount: i, ...mods });
-      }
-    }
-
-    async function drag(browser, a, b) {
-      const win = select(browser);
-      await mouse(win, a, { type: "mousemove" });
-      await mouse(win, a, { type: "mousedown" });
-      const steps = 10;
-      for (let i = 1; i <= steps; i++) {
-        await mouse(win, [a[0] + ((b[0] - a[0]) * i) / steps, a[1] + ((b[1] - a[1]) * i) / steps], {
-          type: "mousemove",
-          buttons: 1,
-        });
-      }
-      await mouse(win, b, { type: "mouseup" });
+    async function click(browser, [x, y], { button = 0, count = 1, modifiers } = {}) {
+      await input(browser, { kind: "click", x, y, button, count, modifiers: parseModifiers(modifiers) });
     }
 
     function scroll(browser, [x, y], direction, amount = 3) {
-      const win = select(browser);
-      // tık başına 100 CSS px. EventUtils cihaz pikseli bekler; tarayıcı da deltayı
-      // mousewheel.default.delta_multiplier_* ile çarpar (Zen'de varsayılan 200)
+      // tık başına 100 CSS px; çarpan: tarayıcının tekerlek deltasına uyguladığı (Zen'de 200)
       const multiplier = axis => Services.prefs.getIntPref(`mousewheel.default.delta_multiplier_${axis}`, 100) / 100 || 1;
-      const px = amount * 100 * win.devicePixelRatio;
-      const dy = px / multiplier("y");
-      const dx = px / multiplier("x");
-      const delta = { up: [0, -dy], down: [0, dy], left: [-dx, 0], right: [dx, 0] }[direction];
+      const px = amount * 100;
+      const delta = { up: [0, -px], down: [0, px], left: [-px, 0], right: [px, 0] }[direction];
       if (!delta) throw new Error(`Geçersiz kaydırma yönü: ${direction}`);
-      return new Promise(resolve =>
-        EU(win).synthesizeWheelAtPoint(
-          x,
-          y,
-          { deltaX: delta[0], deltaY: delta[1], deltaMode: 0, asyncEnabled: true },
-          win,
-          () => resolve()
-        )
-      );
+      return input(browser, { kind: "wheel", x, y, dx: delta[0], dy: delta[1], multiplier: [multiplier("x"), multiplier("y")] });
     }
 
     // xdotool adları (Claude in Chrome ile aynı) → KeyboardEvent.key
@@ -287,35 +196,20 @@ function logError(where, e) {
       throw new Error(`Bilinmeyen tuş: ${name}`);
     }
 
-    // içerik odağı adres çubuğundaysa tuşlar sayfaya değil arayüze gider
-    function focusContent(browser) {
-      const win = select(browser);
-      if (win.document.activeElement !== browser) browser.focus();
-      return win;
-    }
-
     // "ctrl+a", "Return", "Tab Tab Return"
     function pressKeys(browser, text) {
-      const win = focusContent(browser);
-      for (const combo of text.trim().split(/\s+/)) {
+      const keys = text.trim().split(/\s+/).map(combo => {
         const parts = combo.split("+");
         const key = keyName(parts.pop());
-        EU(win).synthesizeKey(key, parseModifiers(parts.join("+")), win);
-      }
-    }
-
-    function typeText(browser, text) {
-      const win = focusContent(browser);
-      text.split("\n").forEach((line, i) => {
-        if (i > 0) EU(win).synthesizeKey("KEY_Enter", {}, win);
-        if (line) EU(win).sendString(line, win);
+        return { key, mods: parseModifiers(parts.join("+")) };
       });
+      return input(browser, { kind: "keys", keys });
     }
 
     // ---- ekran görüntüsü ----
 
     // API büyük görselleri küçültür; modelin gördüğü koordinat ile tıklanan aynı olsun diye
-    // görüntüyü kendimiz küçültüp oranı saklıyoruz (toWindowPoint geri çevirir)
+    // görüntüyü kendimiz küçültüp oranı saklıyoruz (toPagePoint geri çevirir)
     const MAX_EDGE = 1568;
     const MAX_PIXELS = 1150000;
 
@@ -405,12 +299,16 @@ function logError(where, e) {
           case "triple_click":
             await click(browser, await target(browser, args), { count: 3, modifiers: args.text });
             break;
-          case "hover":
-            await mouse(select(browser), await target(browser, args), { type: "mousemove" });
+          case "hover": {
+            const [x, y] = await target(browser, args);
+            await input(browser, { kind: "hover", x, y });
             break;
-          case "left_click_drag":
-            await drag(browser, await target(browser, args, "start_coordinate"), await target(browser, args));
+          }
+          case "left_click_drag": {
+            const [x, y] = await target(browser, args, "start_coordinate");
+            await input(browser, { kind: "drag", x, y, to: await target(browser, args) });
             break;
+          }
           case "scroll":
             await scroll(browser, await target(browser, args), need("scroll_direction"), args.scroll_amount);
             break;
@@ -418,10 +316,10 @@ function logError(where, e) {
             await query(browser, "locate", { ref: need("ref") });
             break;
           case "type":
-            typeText(browser, need("text"));
+            await input(browser, { kind: "text", text: need("text") });
             break;
           case "key":
-            for (let i = 0; i < (args.repeat || 1); i++) pressKeys(browser, need("text"));
+            for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
             break;
           case "wait":
             await sleep(Math.min(need("duration"), 30) * 1000);
@@ -471,7 +369,7 @@ function logError(where, e) {
         return text(`v${version} kapatılıyor, yeniden yükleniyor.`);
       },
       // sistem bağlamında eval() yasak; Marionette gibi sistem principal'lı sandbox kullan.
-      // code bir ifade olmalı; yardımcılar h üzerinden: h.browserFor(id), h.EU(win), h.state...
+      // code bir ifade olmalı; yardımcılar h üzerinden: h.browserFor(id), h.query(browser, ...), h.state...
       async chrome_eval({ code }) {
         const sandbox = Cu.Sandbox(Services.scriptSecurityManager.getSystemPrincipal(), {
           sandboxName: "zen-mcp chrome_eval",
@@ -479,7 +377,7 @@ function logError(where, e) {
           wantGlobalProperties: ["ChromeUtils"],
         });
         sandbox.Services = Services;
-        sandbox.h = { version, state, tools, browserFor, findTab, liveTabs, EU, toWindowPoint, screenshot, query };
+        sandbox.h = { version, state, tools, browserFor, findTab, liveTabs, toPagePoint, screenshot, query };
         const value = await Cu.evalInSandbox(`(async () => (${code}))()`, sandbox, null, "chrome_eval", 1);
         return text(value === undefined ? "undefined" : value);
       },
