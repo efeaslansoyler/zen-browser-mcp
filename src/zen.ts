@@ -20,7 +20,10 @@ export function call(tool: string, args: object = {}, timeout = 60_000): Promise
     let buffer = "";
     socket.setTimeout(timeout, () => socket.destroy(new Error(`Zen ${timeout / 1000} sn içinde cevap vermedi.`)));
     socket.on("connect", () => socket.write(ascii(JSON.stringify({ tool, args })) + "\n"));
-    socket.on("data", (chunk) => (buffer += chunk.toString("latin1")));
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("latin1");
+      if (buffer.includes("\n")) socket.end();
+    });
     socket.on("error", (e: NodeJS.ErrnoException) =>
       reject(
         e.code === "ENOENT" || e.code === "ECONNREFUSED"
@@ -28,7 +31,8 @@ export function call(tool: string, args: object = {}, timeout = 60_000): Promise
           : e,
       ),
     );
-    socket.on("end", () => {
+    socket.on("close", () => {
+      if (!buffer) return; // hata yolunda reject zaten çağrıldı
       try {
         const reply = JSON.parse(buffer) as Reply;
         if (reply.ok) resolve(reply.content);
