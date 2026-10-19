@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>zen-mcp demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/InterVariable.ttf"); font-weight: 100 900; }
+      @font-face { font-family: "Mono"; src: url("assets/NotoSansMono-Regular.ttf"); }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0a09; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: "Inter", sans-serif; color: #f3f3f3; }
+      .clip { position: absolute; inset: 0; }
+      .bg { position: absolute; inset: 0; background: radial-gradient(1200px 700px at 50% 40%, #2a1d16 0%, #0b0a09 70%); }
+
+      /* title and end */
+      .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+      .spark { width: 64px; height: 64px; }
+      .t-big { font-size: 76px; font-weight: 700; letter-spacing: -2px; }
+      .t-big em { font-style: normal; color: #d97757; }
+      .t-sub { font-size: 28px; color: #b9aea6; font-weight: 500; }
+      .code { font-family: "Mono", monospace; font-size: 34px; background: #1b1715; border: 1px solid #3a2e27; padding: 18px 30px; border-radius: 14px; color: #f3e9e2; }
+      .code b { color: #d97757; font-weight: 400; }
+
+      /* browser window */
+      .win { position: absolute; left: 160px; top: 40px; width: 1600px; height: 900px; border-radius: 18px; background: #161514; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06); overflow: hidden; }
+      .side { position: absolute; left: 0; top: 0; width: 248px; height: 900px; }
+      .tools { position: absolute; left: 18px; top: 16px; display: flex; gap: 14px; }
+      .tools i { width: 12px; height: 12px; border-radius: 3px; background: #3b3836; display: block; }
+      .url { position: absolute; left: 10px; top: 46px; width: 228px; height: 36px; border-radius: 10px; background: #252322; }
+      .url span { position: absolute; left: 12px; top: 8px; font-size: 14px; color: #aaa39d; white-space: nowrap; opacity: 0; }
+      .tab { position: absolute; left: 10px; width: 228px; height: 40px; border-radius: 10px; }
+      .tab .hl { position: absolute; inset: 0; border-radius: 10px; background: #2c2a28; opacity: 0; }
+      .tab .fav { position: absolute; left: 12px; top: 12px; width: 16px; height: 16px; border-radius: 4px; }
+      .tab .name { position: absolute; left: 38px; top: 10px; font-size: 15px; color: #d6d0cb; white-space: nowrap; width: 180px; overflow: hidden; }
+      .tab .line { position: absolute; left: 0; top: 8px; width: 3px; height: 24px; border-radius: 2px; background: #d97757; opacity: 0; }
+      .content { position: absolute; left: 248px; top: 8px; width: 1344px; height: 884px; border-radius: 12px; background: #fff; overflow: hidden; color: #1d1a17; }
+      .page { position: absolute; inset: 0; opacity: 0; }
+      .abs { position: absolute; }
+
+      /* docs page */
+      .docs-top { left: 0; top: 0; width: 1344px; height: 60px; background: #1b1b1b; }
+      .docs-top span { position: absolute; left: 32px; top: 18px; color: #fff; font-weight: 700; font-size: 18px; }
+      .docs h1 { left: 80px; top: 110px; font-size: 44px; font-weight: 700; letter-spacing: -1px; }
+      .bar { position: absolute; left: 80px; height: 14px; border-radius: 7px; background: #e7e3df; }
+      .codebox { left: 80px; top: 420px; width: 760px; height: 150px; border-radius: 10px; background: #f6f3f0; }
+
+      /* shop */
+      .shop { background: #faf6f1; }
+      .s-head { left: 0; top: 0; width: 1344px; height: 64px; background: #fff; border-bottom: 1px solid #eadfd3; }
+      .logo { position: absolute; left: 48px; top: 18px; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #2b2118; }
+      .logo b { color: #b4562f; }
+      .cart { position: absolute; left: 1180px; top: 15px; width: 116px; height: 34px; border-radius: 17px; background: #2b2118; color: #fff; font-size: 15px; font-weight: 600; }
+      .cart span { position: absolute; left: 0; width: 116px; top: 7px; text-align: center; }
+      .s-hero { left: 48px; top: 104px; font-size: 52px; font-weight: 750; letter-spacing: -1.6px; line-height: 1.08; width: 760px; color: #2b2118; }
+      .prod { position: absolute; top: 290px; width: 400px; height: 300px; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(60, 30, 10, 0.07); }
+      .prod .art { position: absolute; left: 20px; top: 20px; width: 360px; height: 140px; border-radius: 14px; }
+      .prod h3 { position: absolute; left: 22px; top: 176px; font-size: 20px; color: #2b2118; }
+      .prod p { position: absolute; left: 22px; top: 206px; font-size: 14px; color: #7d6b5d; }
+      .prod .price { position: absolute; left: 22px; top: 248px; font-size: 19px; font-weight: 700; color: #2b2118; }
+      .btn { position: absolute; border-radius: 12px; background: #b4562f; color: #fff; font-weight: 650; font-size: 15px; text-align: center; }
+      .prod .btn { left: 250px; top: 236px; width: 130px; height: 42px; line-height: 42px; }
+      .btn .ok { position: absolute; inset: 0; border-radius: 12px; background: #3d7a4f; opacity: 0; }
+
+      /* checkout */
+      .panel { position: absolute; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(60, 30, 10, 0.07); }
+      .lbl { position: absolute; font-size: 14px; font-weight: 650; color: #2b2118; }
+      .field { position: absolute; width: 696px; height: 48px; border-radius: 12px; border: 1px solid #eadfd3; background: #fffdfb; font-size: 17px; color: #2b2118; }
+      .field span { position: absolute; left: 16px; top: 13px; white-space: nowrap; }
+      .field .ph { color: #b3a79c; }
+      .line { position: absolute; left: 32px; width: 392px; font-size: 16px; color: #7d6b5d; }
+      .line b { position: absolute; right: 0; color: #2b2118; }
+      .pay { position: absolute; left: 872px; top: 360px; width: 392px; height: 186px; border-radius: 16px; background: #1d2433; color: #fff; }
+      .pay .t { position: absolute; left: 22px; top: 18px; font-size: 13px; opacity: 0.7; }
+      .pay .amt { position: absolute; left: 22px; top: 44px; font-size: 32px; font-weight: 750; }
+      .pay .pb { position: absolute; left: 22px; top: 112px; width: 348px; height: 50px; border-radius: 11px; background: #4560e0; font-weight: 700; text-align: center; line-height: 50px; font-size: 17px; }
+      .pay .pb .ok { position: absolute; inset: 0; border-radius: 11px; background: #3d7a4f; opacity: 0; }
+      .outline { position: absolute; border: 3px solid #d97757; border-radius: 14px; box-shadow: 0 0 0 5px rgba(217, 119, 87, 0.22), 0 0 30px rgba(217, 119, 87, 0.55); opacity: 0; }
+
+      /* user's own site */
+      .site { background: #fff; }
+      .nav { left: 0; top: 0; width: 1344px; height: 70px; border-bottom: 1px solid #eee; }
+      .nav .brand { position: absolute; left: 96px; top: 22px; font-weight: 800; font-size: 20px; color: #18181b; }
+      .nav .links { position: absolute; left: 980px; top: 25px; font-size: 15px; color: #71717a; word-spacing: 26px; }
+      .s-h1 { left: 96px; top: 210px; font-size: 68px; font-weight: 800; letter-spacing: -2.4px; color: #18181b; white-space: nowrap; }
+      .s-h1 .green { position: absolute; left: 0; top: 0; color: #16a34a; opacity: 0; white-space: nowrap; }
+      .s-p { left: 96px; top: 320px; font-size: 22px; color: #71717a; width: 720px; }
+      .s-btn { left: 96px; top: 420px; width: 170px; height: 52px; border-radius: 12px; background: #18181b; color: #fff; font-weight: 650; text-align: center; line-height: 52px; }
+      .pickframe { position: absolute; border: 2px solid #d97757; border-radius: 6px; background: rgba(217, 119, 87, 0.1); opacity: 0; }
+      .picklbl { position: absolute; padding: 2px 9px; border-radius: 999px; background: #d97757; color: #fff; font-size: 13px; font-weight: 650; opacity: 0; white-space: nowrap; }
+      .flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+
+      /* island */
+      .isl { position: absolute; left: 920px; top: 22px; width: 380px; height: 40px; border-radius: 20px; background: rgba(14, 14, 14, 0.95); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.12); overflow: hidden; opacity: 0; color: #f3f3f3; font-size: 15px; }
+      .ist { position: absolute; left: 0; top: 0; width: 640px; height: 200px; opacity: 0; }
+      .isp { position: absolute; left: 14px; top: 12px; width: 16px; height: 16px; }
+      .ihost { position: absolute; left: 40px; top: 10px; opacity: 0.5; white-space: nowrap; }
+      .iact { position: absolute; top: 10px; font-weight: 600; white-space: nowrap; }
+      .ichip { position: absolute; top: 9px; font-size: 13px; opacity: 0.55; }
+      .istop { position: absolute; top: 7px; width: 26px; height: 26px; border-radius: 13px; background: rgba(255, 255, 255, 0.12); }
+      .istop i { position: absolute; left: 9px; top: 9px; width: 8px; height: 8px; border-radius: 2px; background: #fff; }
+      .imsg { position: absolute; left: 40px; top: 44px; font-weight: 500; line-height: 1.45; white-space: nowrap; }
+      .ibtn { position: absolute; height: 30px; border-radius: 15px; padding: 0 16px; line-height: 30px; font-size: 14px; font-weight: 650; background: rgba(255, 255, 255, 0.12); }
+      .ibtn.p { background: #d97757; color: #fff; }
+      .inote { position: absolute; left: 40px; top: 44px; width: 460px; height: 60px; border-radius: 11px; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.7); }
+      .inote span { position: absolute; left: 12px; top: 9px; white-space: nowrap; }
+      .prev { position: absolute; left: 10px; top: 46px; width: 360px; height: 220px; border-radius: 12px; background: #faf6f1; overflow: hidden; }
+      .prev i { position: absolute; display: block; border-radius: 6px; }
+
+      /* cursors, ripples */
+      .cur { position: absolute; left: 0; top: 0; width: 26px; height: 26px; }
+      .clabel { position: absolute; left: 16px; top: 22px; padding: 2px 9px; border-radius: 999px; background: #b4502c; color: #fff; font-size: 13px; font-weight: 650; white-space: nowrap; }
+      .clabel span { opacity: 0; }
+      .rip { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; border: 2px solid #d97757; background: rgba(217, 119, 87, 0.18); opacity: 0; }
+
+      /* terminal, captions, keys */
+      .term { position: absolute; left: 1060px; top: 330px; width: 780px; height: 440px; border-radius: 14px; background: #121110; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08); opacity: 0; font-family: "Mono", monospace; font-size: 18px; color: #e8e2dc; }
+      .term .tt { position: absolute; left: 0; top: 0; width: 780px; height: 40px; border-bottom: 1px solid #2a2725; font-family: "Inter", sans-serif; font-size: 14px; color: #9a918a; }
+      .term .tt span { position: absolute; left: 20px; top: 12px; }
+      .tl { position: absolute; left: 24px; white-space: pre; opacity: 0; }
+      .tl.o { color: #d97757; }
+      .tl.d { color: #f87171; }
+      .tl.a { color: #4ade80; }
+      .tl.m { color: #9a918a; }
+      .cap { position: absolute; left: 0; top: 968px; width: 1920px; text-align: center; font-size: 30px; font-weight: 600; color: #f3ece6; opacity: 0; letter-spacing: -0.3px; }
+      .cap b { color: #d97757; font-weight: 600; }
+      .keys { position: absolute; left: 768px; top: 700px; display: flex; gap: 10px; opacity: 0; }
+      .keys span { padding: 10px 18px; border-radius: 10px; background: #1d1a17; color: #fff; font-size: 24px; font-weight: 650; box-shadow: 0 4px 0 #000; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="33">
+      <div class="bg"></div>
+
+      <!-- 1. title -->
+      <section id="title" class="clip" data-start="0" data-duration="3.2" data-track-index="1">
+        <div class="card" id="title-in">
+          <svg class="spark" id="title-spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
+          <div class="t-big">Claude, in <em>your own</em> Zen browser</div>
+          <div class="t-sub">Your tabs, your logins, real input. You stay in control.</div>
+        </div>
+      </section>
+
+      <!-- 2-6. the browser -->
+      <section id="main" class="clip" data-start="2.8" data-duration="26.6" data-track-index="2">
+        <div class="win" id="win">
+          <div class="side">
+            <div class="tools"><i></i><i></i><i></i></div>
+            <div class="url"><span id="u-docs">developer.mozilla.org/…/map</span><span id="u-shop">brewandbean.com</span><span id="u-site">localhost:3000</span></div>
+            <div class="tab" id="tab-docs" style="top: 104px"><div class="hl" id="hl-docs"></div><div class="fav" style="background: #1b1b1b"></div><div class="name">Array.map() – MDN</div></div>
+            <div class="tab" id="tab-site" style="top: 148px"><div class="hl" id="hl-site"></div><div class="fav" style="background: #18181b"></div><div class="name">Acme — localhost:3000</div></div>
+            <div class="tab" id="tab-shop" style="top: 192px"><div class="hl" id="hl-shop"></div><div class="line" id="tab-shop-line"></div><div class="fav" style="background: #b4562f"></div><div class="name">Brew &amp; Bean</div></div>
+          </div>
+          <div class="content">
+            <div class="page docs" id="p-docs">
+              <div class="abs docs-top"><span>MDN Web Docs</span></div>
+              <h1 class="abs">Array.prototype.map()</h1>
+              <div class="bar" style="top: 200px; width: 980px"></div>
+              <div class="bar" style="top: 230px; width: 920px"></div>
+              <div class="bar" style="top: 260px; width: 760px"></div>
+              <div class="bar" style="top: 320px; width: 960px"></div>
+              <div class="bar" style="top: 350px; width: 600px"></div>
+              <div class="abs codebox"></div>
+              <div class="bar" style="top: 620px; width: 900px"></div>
+              <div class="bar" style="top: 650px; width: 820px"></div>
+            </div>
+
+            <div class="page shop" id="p-shop">
+              <div class="abs s-head"><div class="logo">Brew <b>&amp;</b> Bean</div><div class="cart"><span id="cart0">Cart (0)</span><span id="cart1" style="opacity: 0">Cart (1)</span><span id="cart2" style="opacity: 0">Cart (2)</span></div></div>
+              <div class="abs s-hero">Fresh roasted coffee, delivered weekly.</div>
+              <div class="prod" style="left: 48px"><div class="art" style="background: #f4e3d3"></div><h3>Ethiopia Yirgacheffe</h3><p>Jasmine, bergamot, honey</p><div class="price">$18</div><div class="btn">Add to cart<div class="ok" id="ok1">Added ✓</div></div></div>
+              <div class="prod" style="left: 472px"><div class="art" style="background: #e3ead6"></div><h3>Colombia Huila</h3><p>Red apple, caramel, cocoa</p><div class="price">$16</div><div class="btn">Add to cart</div></div>
+              <div class="prod" style="left: 896px"><div class="art" style="background: #e9dcef"></div><h3>House Espresso</h3><p>Dark chocolate, hazelnut</p><div class="price">$24</div><div class="btn">Add to cart<div class="ok" id="ok3">Added ✓</div></div></div>
+            </div>
+
+            <div class="page shop" id="p-checkout">
+              <div class="abs s-head"><div class="logo">Brew <b>&amp;</b> Bean</div></div>
+              <div class="panel" style="left: 48px; top: 96px; width: 760px; height: 600px"></div>
+              <div class="lbl" style="left: 80px; top: 128px; font-size: 22px">Delivery</div>
+              <div class="lbl" style="left: 80px; top: 180px">Full name</div>
+              <div class="field" style="left: 80px; top: 204px"><span class="ph" id="ph-name">Jane Doe</span><span id="t-name"></span></div>
+              <div class="lbl" style="left: 80px; top: 272px">Email</div>
+              <div class="field" style="left: 80px; top: 296px"><span class="ph" id="ph-mail">jane@example.com</span><span id="t-mail"></span></div>
+              <div class="lbl" style="left: 80px; top: 364px">Address</div>
+              <div class="field" style="left: 80px; top: 388px"><span>12 Analytical Street, London</span></div>
+              <div class="btn" style="left: 80px; top: 600px; width: 696px; height: 54px; line-height: 54px; font-size: 17px">Place order</div>
+              <div class="panel" style="left: 840px; top: 96px; width: 456px; height: 600px"></div>
+              <div class="lbl" style="left: 872px; top: 128px; font-size: 22px">Your order</div>
+              <div class="line" style="left: 872px; top: 182px">Ethiopia Yirgacheffe<b>$18</b></div>
+              <div class="line" style="left: 872px; top: 214px">House Espresso<b>$24</b></div>
+              <div class="line" style="left: 872px; top: 268px; color: #2b2118; font-weight: 700; font-size: 19px">Total<b>$42</b></div>
+              <div class="pay"><div class="t">🔒 SecurePay · Visa •••• 4242</div><div class="amt">$42</div><div class="pb">Pay now<div class="ok" id="paid">Paid ✓</div></div></div>
+              <div class="outline" id="pay-outline" style="left: 886px; top: 464px; width: 364px; height: 62px"></div>
+            </div>
+
+            <div class="page shop" id="p-done">
+              <div class="abs s-head"><div class="logo">Brew <b>&amp;</b> Bean</div></div>
+              <div class="abs" style="left: 0; top: 330px; width: 1344px; text-align: center; font-size: 54px; font-weight: 800; color: #2b2118; letter-spacing: -1.5px">Order placed ☕</div>
+              <div class="abs" style="left: 0; top: 410px; width: 1344px; text-align: center; font-size: 20px; color: #7d6b5d">Your beans ship tomorrow.</div>
+            </div>
+
+            <div class="page site" id="p-site">
+              <div class="abs nav"><div class="brand">Acme</div><div class="links">Product Pricing Docs</div></div>
+              <div class="abs s-h1" id="h1">Ship features, not boilerplate.<span class="green" id="h1g">Ship features, not boilerplate.</span></div>
+              <div class="abs s-p">Acme turns your ideas into production apps in an afternoon.</div>
+              <div class="abs s-btn">Get started</div>
+              <div class="pickframe" id="pf1" style="left: 92px; top: 316px; width: 728px; height: 38px"></div>
+              <div class="pickframe" id="pf" style="left: 90px; top: 206px; width: 1064px; height: 92px"></div>
+              <div class="picklbl" id="pl" style="left: 90px; top: 178px">h1.hero-title  1052×82</div>
+              <div class="flash" id="flash"></div>
+            </div>
+          </div>
+
+          <!-- island -->
+          <div class="isl" id="isl">
+            <div class="ist" id="i-shop"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">adding to cart</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span>
+              <div class="prev"><i style="left: 0; top: 0; width: 360px; height: 22px; background: #fff"></i><i style="left: 14px; top: 34px; width: 190px; height: 18px; background: #2b2118"></i><i style="left: 14px; top: 92px; width: 104px; height: 108px; background: #fff"></i><i style="left: 128px; top: 92px; width: 104px; height: 108px; background: #fff"></i><i style="left: 242px; top: 92px; width: 104px; height: 108px; background: #fff"></i><i style="left: 20px; top: 98px; width: 92px; height: 50px; background: #f4e3d3"></i><i style="left: 134px; top: 98px; width: 92px; height: 50px; background: #e3ead6"></i><i style="left: 248px; top: 98px; width: 92px; height: 50px; background: #e9dcef"></i><i style="left: 66px; top: 176px; width: 44px; height: 14px; background: #3d7a4f"></i></div>
+            </div>
+            <div class="ist" id="i-type"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">typing</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-perm"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">asks for permission</span><span class="imsg">Claude wants to: button “Place order”: click</span><span class="ibtn" style="left: 374px; top: 82px">Deny</span><span class="ibtn p" style="left: 444px; top: 82px">Allow</span></div>
+            <div class="ist" id="i-ask"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">needs you</span><span class="imsg">Check the total, then press Pay now.</span><span class="ibtn" style="left: 418px; top: 82px">Cancel</span></div>
+            <div class="ist" id="i-pick"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Click an element to show Claude</span><span class="ihost" style="left: 300px; opacity: 0.5">↑ parent · Esc</span></div>
+            <div class="ist" id="i-compose"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">heading “Ship features, not…”</span><div class="inote"><span id="note" style="color: #f3f3f3"></span><span id="note-ph" style="opacity: 0.45">What should Claude do?</span></div><span class="ihost" style="left: 40px; top: 120px; font-size: 13px">→ my-site</span><span class="ibtn" style="left: 336px; top: 114px">Cancel</span><span class="ibtn p" style="left: 424px; top: 114px">Send</span></div>
+            <div class="ist" id="i-sent"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Sent to my-site ✓</span></div>
+            <div class="ist" id="i-check"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">checking the change</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-stopped"><svg class="isp" viewBox="0 0 16 16" style="filter: grayscale(1); opacity: 0.5"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Claude is stopped</span><span class="ibtn p" style="left: 196px; top: 5px">Resume</span></div>
+          </div>
+
+          <!-- cursors and ripples (window coordinates) -->
+          <div class="rip" id="rip"></div>
+          <div class="cur" id="ccur"><svg width="26" height="26" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#d97757" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><div class="clabel"><span id="cl-claude" style="opacity: 1">Claude</span></div><div class="clabel" id="cl-type" style="opacity: 0">typing…</div></div>
+          <div class="cur" id="ucur"><svg width="26" height="26" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+        </div>
+
+        <div class="keys" id="keys"><span>Ctrl</span><span>Shift</span><span>F</span></div>
+        <div class="term" id="term">
+          <div class="tt"><span>claude — ~/projects/my-site</span></div>
+          <div class="tl o" id="tl1" style="top: 64px">← zen: Make this heading green</div>
+          <div class="tl m" id="tl2" style="top: 104px">  (h1.hero-title · HeroSection › Title)</div>
+          <div class="tl" id="tl3" style="top: 152px">● Update(src/components/Hero.tsx)</div>
+          <div class="tl d" id="tl4" style="top: 190px">  - &lt;h1 className="text-zinc-900 …"&gt;</div>
+          <div class="tl a" id="tl5" style="top: 222px">  + &lt;h1 className="text-green-600 …"&gt;</div>
+          <div class="tl" id="tl6" style="top: 270px">● zen · navigate localhost:3000</div>
+          <div class="tl" id="tl7" style="top: 308px">● zen · screenshot</div>
+          <div class="tl a" id="tl8" style="top: 356px">  The heading is green now. ✓</div>
+        </div>
+
+        <div class="cap" id="c1">Claude works in <b>its own background tab</b>. You keep yours.</div>
+        <div class="cap" id="c2">Peek at it live, jump in anytime.</div>
+        <div class="cap" id="c3"><b>Real</b> mouse and keyboard input. No WebDriver.</div>
+        <div class="cap" id="c4">Ask mode and hand-offs: <b>you approve</b> what matters.</div>
+        <div class="cap" id="c5"><b>Point</b> at an element and say what to change.</div>
+        <div class="cap" id="c6">Claude edits your code, <b>then checks the page itself</b>.</div>
+        <div class="cap" id="c7"><b>Stop</b> it with one click.</div>
+      </section>
+
+      <!-- 7. end -->
+      <section id="end" class="clip" data-start="29.2" data-duration="3.8" data-track-index="1">
+        <div class="card" id="end-in">
+          <svg class="spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
+          <div class="t-big">zen-mcp</div>
+          <div class="code"><b>$</b> npx zen-mcp install</div>
+          <div class="t-sub">Zen · Firefox · Claude Code</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const W = { x: 0, y: 0 }; // cursor coordinates are window-relative
+      const C = (x, y) => ({ x: 248 + x, y: 8 + y }); // content → window coordinates
+      const show = (sel, t, d = 0.25) => tl.to(sel, { opacity: 1, duration: d }, t);
+      const hide = (sel, t, d = 0.2) => tl.to(sel, { opacity: 0, duration: d }, t);
+      const cap = (sel, a, b) => { tl.fromTo(sel, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35 }, a); hide(sel, b, 0.25); };
+      // island: switch to a state with a given size
+      let islState = null;
+      const isl = (state, t, w, h = 40) => {
+        if (islState) hide(islState, t, 0.12);
+        tl.to("#isl", { width: w, height: h, duration: 0.35, ease: "back.out(1.4)" }, t);
+        show(state, t + 0.08, 0.2);
+        islState = state;
+      };
+      const move = (sel, p, t, d = 0.55) => tl.to(sel, { x: p.x, y: p.y, duration: d, ease: "power2.inOut" }, t);
+      const ripple = (p, t) => tl.fromTo("#rip", { x: p.x - 18, y: p.y - 18, scale: 0.4, opacity: 1 }, { scale: 1.6, opacity: 0, duration: 0.55, ease: "power2.out" }, t);
+      const press = (sel, t) => tl.to(sel, { scale: 0.85, duration: 0.08, yoyo: true, repeat: 1 }, t);
+      const type = (sel, text, t, d) => {
+        const o = { n: 0 };
+        tl.to(o, { n: text.length, duration: d, ease: "none", onUpdate: () => { document.querySelector(sel).textContent = text.slice(0, Math.round(o.n)); } }, t);
+      };
+      const tab = (name, t) => {
+        for (const n of ["docs", "shop", "site"]) tl.set(`#hl-${n}`, { opacity: n === name ? 1 : 0 }, t);
+        for (const n of ["docs", "shop", "site"]) tl.set(`#u-${n}`, { opacity: n === name ? 1 : 0 }, t);
+      };
+      const page = (from, to, t) => { if (from) hide(from, t, 0.2); show(to, t + 0.05, 0.25); };
+
+      gsap.set("#isl", { xPercent: -50 });
+      gsap.set(["#ccur", "#ucur"], { x: 1100, y: 640, opacity: 0 });
+      gsap.set("#rip", { x: 0, y: 0 });
+
+      // 1. title
+      tl.fromTo("#title-in", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.2);
+      tl.fromTo("#title-spark", { rotation: 0 }, { rotation: 180, duration: 3, ease: "none" }, 0);
+      tl.to("#title-in", { opacity: 0, duration: 0.4 }, 2.75);
+
+      // 2. user reads docs; Claude works in a background tab
+      tl.fromTo("#win", { opacity: 0, y: 30, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" }, 2.85);
+      tab("docs", 2.85);
+      show("#p-docs", 2.85, 0.01);
+      show("#ucur", 3.0, 0.2);
+      move("#ucur", { x: 700, y: 420 }, 3.0, 0.8);
+      show("#tab-shop-line", 3.7, 0.3);
+      tl.fromTo("#tab-shop", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.35 }, 3.6);
+      tl.to("#isl", { opacity: 1, duration: 0.3 }, 3.8);
+      isl("#i-shop", 3.8, 380);
+      cap("#c1", 3.9, 6.2);
+      // hover the island: live preview, then go to the tab
+      move("#ucur", { x: 950, y: 44 }, 5.2, 0.7);
+      tl.to("#isl", { height: 278, duration: 0.4, ease: "back.out(1.3)" }, 5.9);
+      cap("#c2", 6.35, 8.4);
+      press("#ucur", 7.2);
+      tl.to("#isl", { height: 40, duration: 0.3 }, 7.4);
+      tab("shop", 7.4);
+      page("#p-docs", "#p-shop", 7.35);
+
+      // 3. real input
+      show("#ccur", 7.9, 0.2);
+      tl.set("#ccur", { x: 900, y: 420 }, 7.85);
+      move("#ucur", { x: 1500, y: 700 }, 7.7, 0.6);
+      move("#ccur", C(316, 548), 8.0, 0.55);
+      ripple(C(316, 548), 8.6); show("#ok1", 8.62, 0.15); tl.set("#cart0", { opacity: 0 }, 8.65); tl.set("#cart1", { opacity: 1 }, 8.65);
+      move("#ccur", C(1164, 548), 8.9, 0.6);
+      ripple(C(1164, 548), 9.55); show("#ok3", 9.57, 0.15); tl.set("#cart1", { opacity: 0 }, 9.6); tl.set("#cart2", { opacity: 1 }, 9.6);
+      cap("#c3", 8.7, 12.3);
+      move("#ccur", C(1238, 32), 9.9, 0.45); ripple(C(1238, 32), 10.4);
+      page("#p-shop", "#p-checkout", 10.5);
+      move("#ccur", C(300, 228), 10.8, 0.5); ripple(C(300, 228), 11.3);
+      isl("#i-type", 11.3, 380);
+      tl.set("#cl-claude", { opacity: 0 }, 11.35); show("#cl-type", 11.35, 0.1);
+      hide("#ph-name", 11.35, 0.05); type("#t-name", "Ada Lovelace", 11.4, 0.7);
+      move("#ccur", C(300, 320), 12.2, 0.35); ripple(C(300, 320), 12.55);
+      hide("#ph-mail", 12.6, 0.05); type("#t-mail", "ada@example.com", 12.62, 0.75);
+      hide("#cl-type", 13.4, 0.1); tl.set("#cl-claude", { opacity: 1 }, 13.45);
+
+      // 4. ask mode, then the payment is handed to the user
+      move("#ccur", C(428, 627), 13.4, 0.5);
+      isl("#i-perm", 13.9, 540, 124);
+      cap("#c4", 14.0, 19.0);
+      move("#ucur", { x: 1203, y: 120 }, 14.3, 0.8);
+      press("#ucur", 15.3);
+      isl("#i-type", 15.5, 380);
+      ripple(C(428, 627), 15.6);
+      isl("#i-ask", 16.0, 540, 124);
+      tl.fromTo("#pay-outline", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 16.1);
+      tl.to("#pay-outline", { opacity: 0.55, duration: 0.5, yoyo: true, repeat: 3 }, 16.4);
+      move("#ucur", C(1068, 495), 16.6, 0.9);
+      press("#ucur", 17.8);
+      show("#paid", 17.85, 0.15);
+      hide("#pay-outline", 17.9, 0.2);
+      isl("#i-type", 18.0, 380);
+      page("#p-checkout", "#p-done", 18.6);
+      hide("#isl", 19.2, 0.25);
+      hide("#ccur", 19.2, 0.2);
+
+      // 5. point at an element on your own site, Claude fixes it and checks
+      tab("site", 19.5);
+      page("#p-done", "#p-site", 19.45);
+      move("#ucur", { x: 900, y: 600 }, 19.5, 0.5);
+      tl.fromTo("#keys", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.25 }, 19.9);
+      hide("#keys", 20.9, 0.25);
+      tl.to("#isl", { opacity: 1, duration: 0.2 }, 20.1);
+      isl("#i-pick", 20.1, 430);
+      cap("#c5", 20.2, 23.6);
+      // hover the paragraph, then the heading
+      show("#pf1", 20.5, 0.1);
+      move("#ucur", C(400, 334), 20.3, 0.4);
+      move("#ucur", C(520, 250), 20.9, 0.4);
+      hide("#pf1", 21.1, 0.1); show("#pf", 21.1, 0.12); show("#pl", 21.15, 0.12);
+      press("#ucur", 21.55);
+      tl.to("#pf", { borderWidth: 3, boxShadow: "0 0 0 4px rgba(217,119,87,.25), 0 0 24px rgba(217,119,87,.5)", background: "rgba(0,0,0,0)", duration: 0.2 }, 21.6);
+      isl("#i-compose", 21.65, 540, 158);
+      hide("#note-ph", 21.95, 0.05);
+      type("#note", "Make this heading green", 21.95, 0.95);
+      move("#ucur", { x: 1216, y: 151 }, 22.6, 0.45);
+      press("#ucur", 23.15);
+      isl("#i-sent", 23.25, 230);
+      hide(["#pf", "#pl"], 23.3, 0.2);
+      // terminal: the event lands in Claude Code
+      tl.fromTo("#term", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 23.6);
+      cap("#c6", 23.8, 27.3);
+      ["#tl1", "#tl2", "#tl3", "#tl4", "#tl5", "#tl6"].forEach((s, i) => show(s, 23.95 + i * 0.32, 0.15));
+      // Claude goes to the tab itself and reloads
+      isl("#i-check", 25.75, 380);
+      show("#ccur", 25.8, 0.2); tl.set("#ccur", { x: 700, y: 560 }, 25.75);
+      tl.to("#flash", { opacity: 0.9, duration: 0.12, yoyo: true, repeat: 1 }, 26.0);
+      show("#h1g", 26.15, 0.3);
+      show("#tl7", 26.4, 0.15);
+      show("#tl8", 26.85, 0.15);
+      hide("#term", 27.4, 0.35);
+
+      // 6. stop
+      isl("#i-check", 27.5, 380);
+      move("#ucur", { x: 1094, y: 42 }, 27.4, 0.6);
+      cap("#c7", 27.55, 29.1);
+      press("#ucur", 28.1);
+      isl("#i-stopped", 28.2, 300);
+      hide("#ccur", 28.25, 0.2);
+      tl.to("#win", { opacity: 0, scale: 0.98, duration: 0.4 }, 29.0);
+
+      // 7. end card
+      tl.fromTo("#end-in", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 29.3);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
