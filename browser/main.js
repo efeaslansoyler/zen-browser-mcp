@@ -485,7 +485,8 @@ function logError(where, e) {
           : menuAgent());
         const owner = tab && sessions.get(ownership.owner(tab.linkedBrowser.browserId));
         item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner.name}` : ""));
-        modeItem.setAttribute("checked", readConfig().mode === "ask");
+        if (readConfig().mode === "ask") modeItem.setAttribute("checked", "true");
+        else modeItem.removeAttribute("checked");
         const host = tab && hostOf(tab.linkedBrowser);
         siteMenu.hidden = tabs.length !== 1 || !host;
         siteMenu.setAttribute("label", L("Site rules", "Site kuralları") + (host ? ` · ${host}` : ""));
@@ -504,7 +505,7 @@ function logError(where, e) {
           choice.setAttribute("type", "radio");
           choice.setAttribute("name", "zen-mcp-site-rule");
           choice.setAttribute("label", label);
-          choice.setAttribute("checked", (readConfig().sites[host] || "default") === rule);
+          if ((readConfig().sites[host] || "default") === rule) choice.setAttribute("checked", "true");
           choice.addEventListener("command", () => {
             const sites = { ...readConfig().sites };
             if (rule === "default") delete sites[host];

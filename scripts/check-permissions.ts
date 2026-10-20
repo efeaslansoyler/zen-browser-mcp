@@ -126,6 +126,7 @@ try {
       return labels ? [...labels.querySelectorAll('menuitem')].map(el=>({label:el.getAttribute('label'),checked:el.getAttribute('checked')})) : null;
     })()`);
     assert(menu?.length === 3 && menu[2].checked === 'true', JSON.stringify(menu));
+    assert.equal(menu.filter((item: any) => item.checked !== null).length, 1, 'Only the selected XUL item may have a checked attribute');
     console.log('✓ Real tab context menu shows three site rules and selected block');
   } finally {
     await command('tabs_close_mcp', { tabId: embeddedTab });

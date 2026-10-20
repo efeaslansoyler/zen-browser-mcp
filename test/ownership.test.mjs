@@ -279,6 +279,7 @@ test('session menu pins explicit fixture tabs even when native context points el
     children = []; attrs = new Map(); listeners = new Map();
     setAttribute(key, value) { this.attrs.set(key, value); }
     getAttribute(key) { return this.attrs.get(key); }
+    removeAttribute(key) { this.attrs.delete(key); }
     append(...nodes) { this.children.push(...nodes); }
     insertBefore(node, before) { const i = this.children.indexOf(before); if(i < 0) this.children.push(node); else this.children.splice(i, 0, node); }
     replaceChildren(...nodes) { this.children = nodes; }
@@ -299,6 +300,10 @@ test('session menu pins explicit fixture tabs even when native context points el
   h.tabs.get(tabId).ownerDocument.defaultView = win;
   h.context.attachMenu(win);
   menu.listeners.get('popupshowing')({ target: menu });
+  const siteMenu = menu.find(node => (node.getAttribute('label') || '').startsWith('Site rules'));
+  assert.equal(siteMenu.children[0].children.filter(node => node.attrs.has('checked')).length, 1,
+    'Unselected XUL radio items must omit checked, rather than checked="false"');
+  assert.equal(menu.find(node => node.id === 'zen-mcp-context-give-mode').attrs.has('checked'), false);
   context = [h.tabs.get(other)]; // Native popup setup may change contextTab.
   h.context.prepareTabMenu(win, [h.tabs.get(tabId)]);
   assert.throws(() => h.context.prepareTabMenu(win, [h.tabs.get(other)]), /same window/);
