@@ -44,6 +44,16 @@ for (const name of ['codex-mcp-client', 'claude-code', 'Example Agent']) {
         assert.equal(schema.properties[key].prefixItems, undefined);
       }
       assert(!JSON.stringify(schema).includes('prefixItems'));
+      for (const name of ['read_page', 'get_page_text']) {
+        const readSchema = tools.find(tool => tool.name === name).inputSchema;
+        assert.equal(readSchema.properties.diff.type, 'boolean');
+        assert.equal(readSchema.properties.since.type, 'string');
+        const read = await client.callTool({ name, arguments: { tabId: 1, diff: true, since: 'snapshot-fixture' } });
+        assert.equal(read.isError, undefined);
+        assert.equal(received.at(-1)[1].since, 'snapshot-fixture');
+      }
+      received.length = 0;
+
       const result = await client.callTool({ name: 'computer', arguments: { action: 'left_click', coordinate: [10, 20], tabId: 1 } });
       assert.equal(result.isError, undefined);
       assert.equal(received[0][0], 'computer');

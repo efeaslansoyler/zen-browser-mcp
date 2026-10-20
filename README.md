@@ -108,6 +108,21 @@ Ask Claude to do something in the browser: *"open seaskablo.com and find the pri
 Claude opens its own tab in the background; the tab gets an agent-colored line and the island shows
 what's happening. Click the island to jump to the tab.
 
+### Compact repeated reads
+
+`read_page` and `get_page_text` accept `diff: true`. The first response includes a
+`snapshot` ID and full output. On the next call, use the same tool/options and pass that
+exact ID as `since`: unchanged output is short; changed output contains unified line hunks
+and a new ID. Apply hunks to the previous returned text, excluding its metadata header.
+Only the returned scope is compared, including any truncation; removed lines describe the
+old state and their refs should not be used. Snapshot metadata is not page content.
+
+Missing/old IDs, different options, navigation, frame-document changes or ownership changes
+produce a fresh full response. Large/expensive diffs also fall back to full text. Snapshot
+storage is bounded, isolated by MCP session and discarded on bridge reload. Default
+`diff: false` keeps the plain-text response and is available for recovery. Existing clients
+need an MCP reconnect to discover the new arguments.
+
 ### Click target checks
 
 `computer` ref clicks check the selected point before mouse-down and report a covering

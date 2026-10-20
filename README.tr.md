@@ -110,6 +110,21 @@ Claude'dan tarayıcıda bir şey yapmasını iste: *"seaskablo.com'u aç, fiyat 
 Claude arka planda kendi sekmesini açar; sekmede ajanın renginde bir çizgi belirir, ada ne olduğunu
 gösterir. Sekmeye gitmek için adaya tıkla.
 
+### Tekrarlanan okumalarda az çıktı
+
+`read_page` ve `get_page_text`, `diff: true` alır. İlk yanıt `snapshot` kimliğiyle tam
+çıktıyı verir. Sonraki çağrıda aynı araç/seçeneklerle bu kimliği `since` olarak gönder:
+değişmediyse kısa yanıt, değiştiyse unified satır farkları ve yeni kimlik döner.
+Farkları önceki yanıttaki metne uygula; metadata başlığını metne katma. Yalnız dönen
+kapsam (kesilme dahil) karşılaştırılır; silinen satırlar eski durumdur, eski ref'lerini
+kullanma. Snapshot metadata'sı sayfa içeriğinden ayrıdır.
+
+Eksik/eski kimlik, farklı seçenek, gezinme, çerçeve belgesi veya sahiplik değişimi yeni
+tam yanıta düşer. Pahalı/büyük farklarda da tam metin döner. Bellek sınırlıdır,
+MCP oturumuna özeldir ve köprü reload'unda temizlenir. Varsayılan `diff: false`
+düz metni korur ve toparlanmak için kullanılabilir. Mevcut istemcilerin yeni
+parametreleri görmesi için MCP reconnect gerekir.
+
 ### Tıklama hedefi kontrolü
 
 `computer` ref tıklamaları fare düğmesine basmadan önce seçilen noktayı kontrol eder;

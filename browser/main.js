@@ -84,6 +84,8 @@ function logError(where, e) {
     const { Ownership } = ChromeUtils.importESModule(`resource://zenmcp/Ownership.sys.mjs?v=${version}`);
     const ownership = new Ownership(state.owners ||= new Map(), state.ownerVersions ||= new Map(),
       state.tabWork ||= new Map(), state.tabQueues ||= new Map(), state.tabHandoffs ||= new Map());
+    const { ReadSnapshots } = ChromeUtils.importESModule(`resource://zenmcp/ReadSnapshots.sys.mjs?v=${version}`);
+    const readSnapshots = new ReadSnapshots(); // Reload deliberately invalidates previous snapshot IDs.
     const sessions = state.sessions ||= new Map();
     const sessionVersions = state.sessionVersions ||= new Map();
     const ownerConnections = new Map();
@@ -110,6 +112,7 @@ function logError(where, e) {
       sessionVersions.set(id, (sessionVersions.get(id) || 0) + 1);
       sessions.delete(id);
       ownership.removeRequester(id);
+      readSnapshots.clearSession(id);
       if (operation?.session === id) operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
       for (const [tabId, owner] of ownership.owners) {
         if (owner !== id) continue;
@@ -286,6 +289,7 @@ function logError(where, e) {
       const id = tab.linkedBrowser.browserId;
       const changed = ownership.assign(id, session);
       if (changed) {
+        readSnapshots.clearTab(id);
         if (cancel) cancelTabWork(id);
         state.scale.delete(id);
         network.delete(id);
@@ -304,6 +308,7 @@ function logError(where, e) {
       const browser = tab.linkedBrowser;
       const id = browser.browserId;
       ownership.release(id);
+      readSnapshots.clearTab(id);
       if (cancel) cancelTabWork(id);
       tabRequests.get(browser)?.("cancelled");
       tab.removeAttribute(MARK);
@@ -1671,6 +1676,21 @@ function logError(where, e) {
       }
     }
 
+    function readContext(browser) {
+      return {
+        url: browser.currentURI?.spec,
+        ownerVersion: ownership.version(browser.browserId),
+        frames: framesOf(browser).map(frame => [frame.id, frame.currentWindowGlobal]),
+      };
+    }
+
+    function readOutput(browser, scope, context, value, diff, since) {
+      operation?.check();
+      ownership.check(browser.browserId, activeSession);
+      return text(readSnapshots.render({ session: activeSession, tabId: browser.browserId,
+        scope, context, currentContext: readContext(browser), text: value, diff, since }));
+    }
+
     // ---- tool'lar: hepsi MCP içerik dizisi döner ----
 
     // tek satır JSON: girinti her çağrıda boşuna token
@@ -1829,8 +1849,9 @@ function logError(where, e) {
       },
 
       // iframe'lerin metni sayfanın metninin ardından, kaynağıyla
-      async get_page_text({ tabId }) {
+      async get_page_text({ tabId, diff = false, since }) {
         const browser = browserFor(tabId);
+        const context = readContext(browser);
         const page = await query(browser, "text");
         let out = `${page.title}\n${page.url}\n\n${page.text}`;
         for (const bc of framesOf(browser).slice(1)) {
@@ -1843,19 +1864,21 @@ function logError(where, e) {
           }
         }
         if (out.length > MAX_PAGE_TEXT) out = out.slice(0, MAX_PAGE_TEXT) + "\n…(truncated)";
-        return text(out);
+        return readOutput(browser, ["get_page_text"], context, out, diff, since);
       },
 
-      async read_page({ tabId, filter, depth, ref_id, max_chars = 50000 }) {
+      async read_page({ tabId, filter, depth, ref_id, max_chars = 50000, diff = false, since }) {
         const browser = browserFor(tabId);
+        const context = readContext(browser);
         const frame = frameOf(browser, ref_id);
         const opts = { filter, depth, max_chars };
         let { value } = await query(browser, "read_page", { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext }, 30000, frame);
         value = shortRefs(await expandFrames(browser, value, opts));
         if (value.length > max_chars) {
-          value = value.slice(0, value.lastIndexOf("\n", max_chars)) + `\n…(truncated at ${max_chars} characters; focus on a subtree with ref_id)`;
+          const end = value.lastIndexOf("\n", max_chars);
+          value = value.slice(0, end < 0 ? max_chars : end) + `\n…(truncated at ${max_chars} characters; focus on a subtree with ref_id)`;
         }
-        return text(value);
+        return readOutput(browser, ["read_page", filter || "all", depth ?? 30, longRef(ref_id) || null, max_chars], context, value, diff, since);
       },
 
       // bütün çerçevelerde arar, sonuçları puana göre birleştirir

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { ReadSnapshots } from '../browser/ReadSnapshots.sys.mjs';
 import { Ownership } from '../browser/Ownership.sys.mjs';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import { agentTheme } from '../browser/Agent.sys.mjs';
@@ -37,7 +38,7 @@ function harness() {
   const first = new Promise(resolve => { started = resolve; });
   const context = vm.createContext({
     Ownership, Cancellation, agentTheme, activeAgent: agentTheme({ id: 'codex' }), activeSession: null,
-    ownership: new Ownership(), sessions: new Map(), sessionVersions: new Map(),
+    readSnapshots: new ReadSnapshots(), ownership: new Ownership(), sessions: new Map(), sessionVersions: new Map(),
     ownerConnections: new Map(), disconnectTimers: new Map(),
     operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },

@@ -2,6 +2,17 @@
 
 ## Güncel öncelik — 2026-10-20
 
+Koordinasyon ve örtülü öğe kontrolü `9d13f3c` ile commit edildi; push yapılmadı.
+Şimdi read_page/get_page_text için isteğe bağlı diff/since, snapshot kimlikleri,
+oturuma/okuma kapsamına özel sınırlı cache ve full fallback kodlandı. 15 yeni test
+dahil 103 soketsiz test ve Efe terminalindeki gerçek Codex/Claude canlı testi geçti:
+fixture çıktısı 26.176 → 250 karakter, yeni ref ile tıklama ve baz/oturum yalıtımı
+doğrulandı. Test sekmeleri kapandı, ayarlar değişmedi. Ayrıntılar DEVAM.md başındadır.
+Okuma/diff değişiklikleri bu plan kaydıyla birlikte commit edildi. Sıradaki öneri:
+gelişmiş öğe seçimi — birden çok öğeyi seçip tek kullanıcı notuyla hedef oturuma
+göndermek. Sonrasında CLI+skill ölçümü. Yeni özellik henüz uygulanmadı.
+
+
 Örtülü öğe kontrolü kodlandı: ref tıklamasında hedef/üst iframe hit-test,
 hareket sonrasında tekrar kontrol, engelleyici etiketi/ref'i ve çoklu tıklamayı kesme.
 14 yeni test dahil 87 soketsiz test geçti; screenshot gerçek oranı regresyonuyla

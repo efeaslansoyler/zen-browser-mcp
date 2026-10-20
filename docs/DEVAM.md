@@ -4,6 +4,64 @@ Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.
 
 ## Güncel devir özeti — 2026-10-20
 
+### Güncel çalışma — sayfa okuma diff / çıktı verimliliği (2026-10-20)
+
+**Önceki tamamlanan işler `9d13f3c` ile commit edildi** (koordinasyon ve korumalı
+tıklamalar; commit öncesi 88 soketsiz test geçti). Push yapılmadı. Aşağıdaki yeni
+okuma/diff değişiklikleri bu devir kaydıyla birlikte commit edildi.
+
+**Güncel sonuç: canlı read-diff doğrulaması GEÇTİ.** Efe terminalinde
+`node scripts/check-read-diff.ts` çalıştırdı (v4 → reload). Gerçek Codex/Claude
+MCP istemcileriyle plain/full/unchanged/diff akışı geçti; iki uzak satır düzenlemesinde
+çıktı **26.176 → 250 karakter** oldu (bu fixture'da yaklaşık %99 daha az karakter;
+gerçek token ölçümü değildir). Tree diff'inden alınan yeni ref ile tıklama çalıştı.
+Seçenek/eski kimlik fallback, aynı URL'de belge yenilenmesi, iframe silme ve devir
+sonrasında oturuma özel yeni baz doğrulandı. Yabancı sekme okuması engellendi.
+Test sekmeleri kapatıldı; izin ayarları değişmedi. Aşağıdaki EPERM kaydı bu başarılı
+kullanıcı denemesinden öncedir. Yeni diff kodu bu devir kaydıyla birlikte commit edildi.
+
+`read_page` ve `get_page_text` artık
+isteğe bağlı `diff: true` ve `since: <snapshot ID>` alır. Varsayılan düz metin
+formatı korunur. Sunucu yönergeleri tekrar okumalarda diff kullanımını anlatır.
+
+- İlk diff okuması `snapshot: ...`, `mode: full` ve tam mevcut çıktıyı verir.
+  Sonraki çağrı aynı tool/seçeneklerle önceki ID'yi `since` olarak geçirir.
+  Değişmediyse aynı ID ile kısa `mode: unchanged`; değiştiyse yeni ID, `base`
+  ve unified satır hunk'ları (`mode: diff`) döner. Kimliksiz diff çağrısı tamdır.
+- Karşılaştırma yalnız gerçekten dönen metnin kapsamındadır: filter/depth/ref_id/
+  max_chars ve get_page_text kendi ayrı kapsamıdır. Kesilme işaretleri ve ref'ler
+  metnin parçasıdır; görünmeyen/kesilmiş alanların değişmediği iddia edilmez.
+- Cache oturum + sekme + okuma kapsamına özeldir. Yanlış/eski/atılmış since veya
+  başka kapsam tam yanıta düşer. Böylece kaybolmuş bir yanıt istemcinin bazını
+  sessizce değiştirmez. Önceki kimlik yeni bazla eşleşmiyorsa tam metin verilir.
+- Ana belge, URL, iframe ekleme/silme/yeni belge ve sahiplik nesli değişirse baz
+  yenilenir. Okuma sırasında belge/çerçeve değişirse sonuç cache'lenmeden hata
+  verilir. Çıktı kaydından hemen önce iptal ve sahiplik tekrar kontrol edilir.
+- `ReadSnapshots.sys.mjs`: bounded Myers satır diff'i; hesap bütçesi aşılırsa
+  veya delta tam yanıttan uzunsa full fallback. Maksimum 32 kayıt / 2 milyon metin
+  karakteri; tek kayıt en çok 200 bin karakter. Daha büyük sonuç cache'lenmeden
+  tam döner. LRU tahliye, oturum kapanışı ve devir/geri alma/sekme kapanışında
+  temizlik vardır. Bridge reload tüm snapshot ID'lerini geçersiz kılar; disk kaydı yok.
+- Uzun ilk satırda read_page max_chars kesiminin newline bulunamayınca `slice(0,-1)`
+  ile neredeyse tam metni döndürmesi de düzeltildi; artık karakter sınırında keser.
+- 15 yeni test dahil **103 soketsiz test geçti** (hook dosyası hariç). 500 sabit
+  tohumlu rastgele değişiklikte patch eski metne uygulanıp yeni metin birebir
+  doğrulandı. Gerçek ana süreç read araçları ve üç istemci kimliğiyle MCP şeması/
+  parametre aktarımı sınandı. Build/syntax/diff kontrolleri geçti.
+- Canlı sürücü: `node scripts/check-read-diff.ts`. Gerçek Codex ve Claude stdio
+  MCP istemcileri; plain/ilk full/unchanged/uzak satır düzenlemesi ve boyut kazanımı,
+  tree diff'inden çıkan yeni ref ile gerçek tıklama, seçenek/stale ID fallback,
+  aynı URL'ye gezinme, iframe silme, yabancı okuma engeli ve gerçek fixture menüsü
+  ile devir sonrası yeni baz sınanır. Yalnız test sekmeleri kapatılır; ayar değişmez.
+  Mevcut auto modu ister; ask modunu düşürmez.
+- Bu ortamda canlı betik ilk `/run/user/1000/zen-mcp.sock` bağlantısında EPERM
+  ile engellendi; bu ortamda reload/canlı doğrulama gerçekleşmedi. Ardından
+  Efe terminalindeki canlı test yukarıdaki gibi tüm adımlarıyla geçti.
+- Node araç şeması/yönergeleri değişti: mevcut MCP istemcileri reconnect ister;
+  Zen restart gerekmez. Canlı betik reload ve kendi yeni MCP süreçlerini açar.
+- Kalıcı hafıza dosyası salt okunur olduğu için güncel kaynak bu devir bölümüdür.
+
+
 ### Güncel çalışma — örtülü öğe / tıklama kontrolü (2026-10-20)
 
 **Güncel sonuç: canlı hit-test doğrulaması GEÇTİ.** Efe düzeltilen
