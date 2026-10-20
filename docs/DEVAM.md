@@ -49,9 +49,14 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** Dal yalnız ileride lazım
 
 ## Açık işler
 
-1. **Codex hook güveni:** Efe Codex'te `/hooks` ekranından üç Zen MCP hook'una güvendi mi,
-   doğrulanmadı. Güvendiyse temiz bir Codex sohbetinin `connect_session` çağırmadan ada hedef
-   listesine düştüğünü uçtan uca dene. Eski sohbet UUID'si kullanma.
+1. **Codex otomatik alıcı:** Üç hook'un güven kaydı mevcut; bu sohbetin otomatik alıcısı
+   `connect_session` çağrılmadan Zen'e kayıtlı bulundu. Efe'nin gerçek seçiminde gönderim
+   başarısızdı: Codex config'inde `[permissions]` varken `default_permissions` yoktu.
+   `~/.codex/config.toml` yedeklenip köküne `default_permissions = ":workspace"` eklendi;
+   `codex doctor --summary`: 21 başarılı. `node scripts/check-pick-delivery.ts --automatic`
+   otomatik alıcıyla gerçek seçici → queue → ada receipt testini geçti. Kuyruğa alınan öğe bağlamı
+   sohbet girdisi olarak ulaştı; otomatik alıcı uçtan uca doğrulaması tamamlandı. Eski sohbet
+   UUID'si kullanma; `--automatic` elle bağlama yapmaz.
 2. PLAN.md'deki adaylar (izinli alan adları, React/axe, Quickshell göstergesi, isim + npm).
 3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.
 

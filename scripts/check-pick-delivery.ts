@@ -1,5 +1,6 @@
 // Live, opt-in test: sends one browser pick to the exact current Codex chat.
 // node scripts/check-pick-delivery.ts (requires CODEX_THREAD_ID in the environment)
+// Add --automatic to verify the existing hook receiver without connect_session.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -22,13 +23,15 @@ async function tool(name: string, args: Record<string, unknown> = {}) {
 }
 async function evaluate(code: string) { const [result] = await call('chrome_eval', { code }); assert.equal(result.type, 'text'); if (result.type !== 'text') throw new Error('Expected text'); return JSON.parse(result.text); }
 const receiverExisted = await contactRelay(threadId);
+const automatic = process.argv.includes('--automatic');
+if (automatic) assert(receiverExisted, 'The hook must have started this conversation receiver already.');
 let tabId: number | undefined;
 try {
   await client.connect(transport);
-  await tool('connect_session', { threadId, label });
+  if (!automatic) await tool('connect_session', { threadId, label });
   let target;
   for (let i = 0; i < 40 && !target; i++) {
-    target = await evaluate(`[...h.subscribers.values()].filter(s => s.name.includes(${JSON.stringify(label)})).map(s => ({id:s.id,name:s.name}))[0] ?? null`);
+    target = await evaluate(`[...h.subscribers.values()].filter(s => ${automatic ? `s.threadId === ${JSON.stringify(threadId)}` : `s.name.includes(${JSON.stringify(label)})`}).map(s => ({id:s.id,name:s.name}))[0] ?? null`);
     if (!target) await sleep(100);
   }
   assert(target, 'Codex subscription did not register');
@@ -57,6 +60,8 @@ try {
 } finally {
   if (tabId) await tool('tabs_close_mcp', { tabId }).catch(() => {});
   await client.close();
-  if (receiverExisted) await ensureCodexRelay({ threadId, cwd: process.cwd() });
-  else await contactRelay(threadId, 'stop');
+  if (!automatic) {
+    if (receiverExisted) await ensureCodexRelay({ threadId, cwd: process.cwd() });
+    else await contactRelay(threadId, 'stop');
+  }
 }
