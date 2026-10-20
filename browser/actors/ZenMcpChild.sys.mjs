@@ -203,6 +203,14 @@ export class ZenMcpChild extends JSWindowActorChild {
           return this.#text();
         case "eval":
           return { value: await this.#eval(data.code) };
+        case "react": {
+          const { inspectReact } = ChromeUtils.importESModule(new URL("../ReactInspect.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
+          return { value: inspectReact({ ...data, document: this.document,
+            element: data.ref ? this.#element(data.ref) : null,
+            unwrap: value => Cu.waiveXrays(value), refFor: el => this.#ref(el) }) };
+        }
+        case "axe":
+          return { value: await this.#axe(data, scope) };
         case "read_page":
           return { value: this.#readPage(data) };
         case "find":
@@ -295,6 +303,51 @@ export class ZenMcpChild extends JSWindowActorChild {
     let value = Cu.evalInSandbox(code, sandbox, null, "zen-mcp", 1);
     if (value && typeof value.then === "function") value = await value;
     return describe(value);
+  }
+
+  #axeRunning = false;
+  async #axe({ ref, tags, max_nodes = 10, max_rules = 100, timeout_ms = 20000 }, scope) {
+    if (this.#axeRunning) throw new Error("An accessibility scan is already running in this frame.");
+    this.#axeRunning = true;
+    // A fresh content-principal realm: never use or overwrite a page's window.axe.
+    const win = this.contentWindow;
+    let sandbox, timer;
+    try {
+      sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
+      Object.defineProperty(sandbox, 'window', { value: sandbox });
+      Object.defineProperty(sandbox, 'document', { value: Cu.waiveXrays(this.document) });
+      sandbox.scanTarget = ref ? Cu.waiveXrays(this.#element(ref)) : sandbox.document;
+      sandbox.scanOptions = Cu.cloneInto({ iframes: false, elementRef: true,
+        resultTypes: ['violations', 'incomplete'], preload: false,
+        ...(tags?.length ? { runOnly: { type: 'tag', values: tags } } : {}) }, sandbox);
+      Services.scriptloader.loadSubScript(new URL('../vendor/axe.min.js', import.meta.url).href, sandbox);
+      const pending = Cu.evalInSandbox('axe.run(scanTarget, scanOptions)', sandbox, null, 'zen-mcp-axe', 1);
+      const results = await scope.race(Promise.race([pending, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Accessibility scan timed out.')), Math.max(1, Math.min(20000, timeout_ms)));
+      })]));
+      scope.check();
+      const cap = Math.max(1, Math.min(50, max_nodes));
+      const ruleCap = Math.max(1, Math.min(200, max_rules));
+      const summarize = list => list.slice(0, ruleCap).map(rule => ({
+        id: rule.id, impact: rule.impact, description: rule.description, help: rule.help,
+        helpUrl: rule.helpUrl, tags: Array.from(rule.tags), nodeCount: rule.nodes.length,
+        nodes: rule.nodes.slice(0, cap).map(node => ({
+          ref: node.element ? this.#ref(node.element) : undefined,
+          target: Array.from(node.target, selector => String(selector).slice(0, 500)),
+          html: String(node.html).slice(0, 1000), failureSummary: String(node.failureSummary || '').slice(0, 2000),
+        })), truncated: rule.nodes.length > cap,
+      }));
+      return { engine: { name: 'axe-core', version: String(results.testEngine.version) },
+        counts: { violations: results.violations.length, incomplete: results.incomplete.length,
+          passes: results.passes.length, inapplicable: results.inapplicable.length },
+        violations: summarize(results.violations), incomplete: summarize(results.incomplete),
+        truncated: results.violations.length > ruleCap || results.incomplete.length > ruleCap,
+        note: 'Automated checks only. Incomplete results require manual review; zero violations does not establish accessibility compliance.' };
+    } finally {
+      clearTimeout(timer);
+      try { if (sandbox) Cu.nukeSandbox(sandbox); }
+      finally { this.#axeRunning = false; }
+    }
   }
 
   #clipboardPending = new Map();

@@ -220,6 +220,33 @@ A preset is not another browser engine or a physical device fingerprint.
 
 See [feature comparison and limitations](docs/FEATURE-COMPARISON.md).
 
+## React and accessibility inspection
+
+`react` reads a DOM-backed React component tree (`action: "tree"`) or an element's
+ancestor component chain (`action: "inspect", ref: "ref_4"`). `include_props: true`
+adds bounded committed-props previews; the default is false. Getters and components
+are not invoked. `max_depth` (default 12, max 30) and `max_nodes` (default 100, max 300)
+limit the tree. Unavailable/minified names and server-only components cannot be
+recovered; this uses private Fiber data, so React version compatibility is best-effort.
+It does not install a DevTools hook or record renders.
+
+`accessibility` runs the bundled **axe-core 4.14.0** locally, returning `violations`,
+`incomplete` checks requiring manual review, counts and affected element refs.
+Optional `tags` selects rule tags (e.g. `["wcag2a", "wcag2aa"]`); `ref` scopes the
+scan to a subtree. `max_nodes` limits affected nodes per rule (default 10, max 50),
+`max_rules` limits detailed rules per group/frame (default 100, max 200).
+Scans time out after 20 seconds per frame, with a 45-second total work budget.
+No remote service or page-global `axe` installation is used; the sandbox is destroyed
+on completion, cancellation or timeout.
+
+Both tools use owned tabs and existing site permissions, including approval on ask
+sites/in ask mode and denial on blocked sites. Without a ref, accessible frames are
+inspected separately; failed frames are reported explicitly. Cross-frame accessibility
+relationships are not evaluated. With a ref, only its frame/subtree is inspected;
+nested frames are excluded. Navigation during inspection invalidates the result.
+Props and findings are untrusted page data; props can contain sensitive values.
+Automated checks cannot establish accessibility compliance.
+
 ## System clipboard
 
 `clipboard` supports `read`, `write`, `copy` and `paste`. Every operation requires a
@@ -341,6 +368,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp` | Claude's tabs |
 | `navigate` | go to a URL, back, forward |
 | `computer` | screenshot (with `scale`), clicks, hover, drag, scroll, type, keys, wait; by coordinate or element ref |
+| `react`, `accessibility` | React component tree/ancestor props and local axe-core checks, including per-frame reports |
 | `read_page`, `find`, `get_page_text` | accessibility-style tree with refs, keyword search, readable text. Iframes included, cross-origin too |
 | `form_input`, `file_upload` | set form values; put files into file inputs without a picker |
 | `wait_for` | wait until text or an element appears or disappears, or the network is idle |

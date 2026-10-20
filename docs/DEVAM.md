@@ -102,6 +102,24 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
   Test sekmeleri kapandı, eski seçili sekme/pano/auto ayarı geri yüklendi.
   [Güncel özellik karşılaştırması](FEATURE-COMPARISON.md). Yeni şema/tool için MCP reconnect.
 
+- **React + axe incelemesi** (2026-10-20): `react` tree/inspect, DOM'a bağlı committed
+  bileşen ağacı/üst bileşen zinciri, isteğe bağlı sınırlı props (varsayılan kapalı).
+  Getter/bileşen çağrısı ve DevTools hook kurulumu yok; Fiber özel API olduğundan uyum
+  best-effort, production adları küçültülebilir, server-only bileşen/render geçmişi yok.
+  `browser/ReactInspect.sys.mjs`; committed alternate seçimi, döngü/derinlik/öğe sınırları.
+  `accessibility`: paketlenmiş axe-core 4.14.0, yerel content-principal sandbox;
+  violations/incomplete/sayılar/öğe ref'leri, tags ve ref ile alt ağaç filtresi.
+  Sayfanın window.axe nesnesine dokunmaz; bitiş/iptal/20 sn zaman aşımında sandbox yok edilir.
+  Toplam tarama iş bütçesi 45 sn. Her çerçeve ayrı incelenir; çapraz çerçeve ilişkileri yok,
+  ref kapsamı iç iframe'leri içermez; başarısız çerçeveler açıkça raporlanır.
+  İki araç sahiplik/site kurallarına uyar; ask mod/site onayı, block ret; belge/iframe
+  değişirse sonuç geçersiz. Otomatik tarama erişilebilirlik uyumluluğu kanıtı değildir.
+  `npm test`: 167/167; `check-inspection.ts` gerçek React 18.3.1 development/production,
+  yeniden render sonrası güncel props, axe bulgu/ref, çapraz origin iframe ve alt ağaç
+  taraması geçti. `check-permissions.ts` canlı izin/site kontrolleri de geçti.
+  Test sekmeleri kapandı; önceki seçili sekme ve izin config'i geri yüklendi.
+  Yeni `react`/`accessibility` araçları için MCP reconnect gerekir.
+
 **CLI + skill deneyi arşivlendi** (main'e alınmadı). Kalıcı broker'lı CLI
 (`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16
 çağrıda MCP 322 ms, CLI 785 ms, metin aynı. Gerçek ajan pilotu (Codex + Claude, 3 görev ×
@@ -115,8 +133,8 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
    Gerçek seçim → otomatik alıcı → queue → bu sohbete öğe bağlamı ulaştı. Eksik Codex
    `default_permissions` ayarı yedeklenip `:workspace` ile düzeltildi. Tekrar kontrol:
    `node scripts/check-pick-delivery.ts --automatic` (gerçek sohbete mesaj gönderir).
-2. Eklenti ve clipboard özellikleri uygulandı. Yeni `extensions`/`clipboard`/`browser_settings` araçları ve computer seçenekleri
-   için MCP reconnect ve günlük kullanım geri bildirimi bekleniyor. Diğer adaylar React/axe, Quickshell göstergesi,
+2. Eklenti ve clipboard özellikleri uygulandı. Yeni `extensions`/`clipboard`/`browser_settings`/`react`/`accessibility` araçları ve computer seçenekleri
+   için MCP reconnect ve günlük kullanım geri bildirimi bekleniyor. Diğer adaylar Quickshell göstergesi,
    isim + npm; ayrı izinli alan adları yerine site kuralları seçildi.
 3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.
 

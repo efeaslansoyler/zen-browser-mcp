@@ -9,7 +9,7 @@ okumada diff, çoklu öğe seçimi). CLI + skill denendi, ölçüldü; MCP ana y
 (deney arşivlendi; bkz. DEVAM.md).
 
 Codex otomatik alıcı doğrulaması ve site kuralları tamamlandı.
-Sıradaki adaylar: React/axe araçları, Quickshell göstergesi; en sonda isim + npm + MCP Registry.
+Sıradaki adaylar: Quickshell göstergesi; en sonda isim + npm + MCP Registry.
 
 ## Eklenti arayüzü (2026-10-20, Efe) ✅
 
@@ -128,4 +128,4 @@ Claude ile birlikte çalışma. Alınabilecekler:
   siteler ask kuralına taşınır; alt alanlar kapsanır, engelleme önceliklidir.
 - ✅ CLI + skill modu: denendi ve ölçüldü (2026-10-20). Token farkı anlamsız, CLI daha yavaş;
   MCP ana yol. Dal silindi; kod doğrulanmış Git bundle arşivinde (bkz. DEVAM.md).
-- React araçları (bileşen ağacı, props) ve erişilebilirlik denetimi (axe-core).
+- ✅ React araçları (bileşen ağacı, üst bileşen zinciri, opsiyonel props) ve yerel axe-core denetimi (2026-10-20). Render geçmişi/Suspense takibi kapsam dışı.

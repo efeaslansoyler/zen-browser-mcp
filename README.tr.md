@@ -219,6 +219,32 @@ Başka bir tarayıcı motoru veya fiziksel cihaz parmak izi taklidi değildir.
 
 [Özellik karşılaştırması ve sınırlar](docs/FEATURE-COMPARISON.md).
 
+## React ve erişilebilirlik incelemesi
+
+`react`, DOM'a bağlı React bileşen ağacını (`action: "tree"`) veya bir öğenin üst
+bileşen zincirini (`action: "inspect", ref: "ref_4"`) okur. `include_props: true`
+sınırlı props önizlemesi ekler; varsayılan kapalıdır. Getter veya bileşen çağrılmaz.
+`max_depth` varsayılan 12/en fazla 30; `max_nodes` varsayılan 100/en fazla 300.
+Özel Fiber verisi kullanıldığı için React sürüm uyumu best-effort'tur; küçültülmüş
+adlar ve yalnız sunucuda bulunan bileşenler geri getirilemez. DevTools hook'u
+kurulmaz ve render geçmişi kaydedilmez.
+
+`accessibility`, paketlenmiş **axe-core 4.14.0** ile yerel tarama yapar: `violations`,
+elle incelenmesi gereken `incomplete` bulgular, sayılar ve etkilenen öğelerin ref'leri.
+`tags` ile kural etiketleri (ör. `["wcag2a", "wcag2aa"]`), `ref` ile alt ağaç seçilir.
+`max_nodes` kural başına öğe sayısını (varsayılan 10/en fazla 50), `max_rules` sonuç
+grubu/çerçeve başına ayrıntılı kural sayısını (varsayılan 100/en fazla 200) sınırlar.
+Çerçeve başına 20 saniye, toplam iş için 45 saniye sınırı vardır. Dış servis veya
+sayfanın `window.axe` nesnesi kullanılmaz; bitiş/iptal/zaman aşımında sandbox yok edilir.
+
+İki araç da sekme sahipliği ve site izinlerine uyar: ask site/genel ask modunda onay,
+block sitede ret. Ref verilmezse erişilebilen çerçeveler ayrı ayrı incelenir; başarısız
+çerçeveler açıkça raporlanır. Çerçeveler arası erişilebilirlik ilişkileri değerlendirilmez.
+Ref verilirse yalnız ilgili çerçeve/alt ağaç incelenir, iç iframe'ler taranmaz.
+İnceleme sırasında belge değişirse sonuç geçersiz olur. Props ve bulgular güvenilmeyen
+sayfa verisidir; props hassas değerler içerebilir. Otomatik test, erişilebilirlik
+uyumluluğunu tek başına kanıtlamaz.
+
 ## Sistem panosu
 
 `clipboard` aracı `read`, `write`, `copy`, `paste` işlemlerini sunar. Her işlem auto
@@ -340,6 +366,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp` | Claude'un sekmeleri |
 | `navigate` | adrese gitme, geri, ileri |
 | `computer` | ekran görüntüsü (`scale` ile), tıklamalar, hover, sürükleme, kaydırma, yazma, tuşlar, bekleme; koordinat ya da öğe ref'iyle |
+| `react`, `accessibility` | React bileşen ağacı/üst bileşen props ve yerel axe-core denetimi; çerçeve bazlı rapor |
 | `read_page`, `find`, `get_page_text` | ref'li erişilebilirlik ağacı, kelimeyle arama, okunabilir metin. iframe'ler dahil, farklı sitedekiler de |
 | `form_input`, `file_upload` | form değerleri; dosya seçme penceresi açmadan dosya yükleme |
 | `wait_for` | metin ya da öğe görünene ya da kaybolana, ağ durulana kadar bekleme |

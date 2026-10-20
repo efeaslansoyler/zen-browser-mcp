@@ -93,7 +93,7 @@ function logError(where, e) {
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
     const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
     const { ViewPopup, isGloballyBlockingOpenPopup } = ChromeUtils.importESModule("resource:///modules/ExtensionPopups.sys.mjs");
-    const { ReadSnapshots } = ChromeUtils.importESModule(`resource://zenmcp/ReadSnapshots.sys.mjs?v=${version}`);
+    const { ReadSnapshots, sameReadContext } = ChromeUtils.importESModule(`resource://zenmcp/ReadSnapshots.sys.mjs?v=${version}`);
     const readSnapshots = new ReadSnapshots(); // Reload deliberately invalidates previous snapshot IDs.
     const sessions = state.sessions ||= new Map();
     const sessionVersions = state.sessionVersions ||= new Map();
@@ -1586,6 +1586,8 @@ function logError(where, e) {
           wait: L("waiting", "bekliyor"),
         })[args.action] ?? L("working", "çalışıyor"),
         read_page: () => L("reading the page", "sayfayı okuyor"),
+        react: () => L("inspecting React components", "React bileşenlerini inceliyor"),
+        accessibility: () => L("checking accessibility", "erişilebilirliği denetliyor"),
         get_page_text: () => L("reading the page", "sayfayı okuyor"),
         find: () => L(`looking for "${args.query}"`, `"${args.query}" arıyor`),
         form_input: () => "formu dolduruyor",
@@ -1847,6 +1849,10 @@ function logError(where, e) {
       };
       const quote = (t, n = 80) => `"${String(t).length > n ? String(t).slice(0, n - 1) + "…" : t}"`;
       switch (tool) {
+        case "react":
+          return L("inspect React components" + (args.include_props ? " and props" : ""), "React bileşenlerini" + (args.include_props ? " ve props verilerini" : "") + " okumak");
+        case "accessibility":
+          return L("run local axe accessibility checks", "yerel axe erişilebilirlik denetimi çalıştırmak");
         case "extensions":
           if (args.action === "open") return L(`open extension ${args.extensionId} for this tab`, `bu sekme için ${args.extensionId} eklentisini açmak`);
           if (args.action === "computer") return describeWrite("computer", { ...args, action: args.computerAction, ref: undefined, coordinate: undefined }, browser);
@@ -2516,6 +2522,57 @@ function logError(where, e) {
       async javascript_tool({ text: code, tabId }) {
         const { value } = await query(browserFor(tabId), "eval", { code });
         return text(value);
+      },
+
+      async react({ tabId, ref, ...options }) {
+        const browser = browserFor(tabId);
+        if (options.action === "inspect" && !ref) throw new Error("React inspect requires an element ref.");
+        const context = permissionContext(browser);
+        const document = readContext(browser);
+        const frames = ref ? [frameOf(browser, ref)] : framesOf(browser);
+        const results = [];
+        for (const frame of frames) {
+          operation?.check();
+          assertSiteAccess(browser);
+          try {
+            const { value } = await query(browser, "react", { ...options, ref: longRef(ref) }, 30000, frame);
+            results.push({ frame: frame.id, ...value });
+          } catch (error) {
+            operation?.check();
+            if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext) throw error;
+            results.push({ frame: frame.id, error: String(error.message || error), inspected: false });
+          }
+          if (!samePermissionContext(context, permissionContext(browser)) || !sameReadContext(document, readContext(browser))) throw new Error("Page or permissions changed during React inspection; retry.");
+        }
+        return text(shortRefs(JSON.stringify({ frames: results, untrusted: true })));
+      },
+
+      async accessibility({ tabId, ref, ...options }) {
+        const browser = browserFor(tabId);
+        const context = permissionContext(browser);
+        const document = readContext(browser);
+        const deadline = Date.now() + 45000;
+        const frames = ref ? [frameOf(browser, ref)] : framesOf(browser);
+        const results = [];
+        for (const frame of frames) {
+          operation?.check();
+          assertSiteAccess(browser);
+          if (Date.now() >= deadline) {
+            results.push({ frame: frame.id, scanned: false, error: "Total scan time budget exhausted." });
+            continue;
+          }
+          try {
+            const { value } = await query(browser, "axe", { ...options, ref: longRef(ref), timeout_ms: Math.min(20000, deadline - Date.now()) }, Math.min(25000, deadline - Date.now() + 2000), frame);
+            results.push({ frame: frame.id, ...value });
+          } catch (error) {
+            operation?.check();
+            if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext) throw error;
+            results.push({ frame: frame.id, error: String(error.message || error), scanned: false });
+          }
+          if (!samePermissionContext(context, permissionContext(browser)) || !sameReadContext(document, readContext(browser))) throw new Error("Page or permissions changed during accessibility scan; retry.");
+        }
+        return text(shortRefs(JSON.stringify({ frames: results, untrusted: true,
+          coverage: ref ? 'Referenced subtree in its frame; nested frames are not scanned.' : 'Each accessible frame scanned independently; cross-frame relationships are not evaluated.' })));
       },
     };
 

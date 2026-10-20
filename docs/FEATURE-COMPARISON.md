@@ -23,8 +23,8 @@ Aşağıdaki karşılıklar birebir API/engine eşitliği anlamına gelmez.
 | İndirme başlatma/tamamlama/dosya yolu | Aday; özel MCP aracı henüz yok |
 | Konsol ve ağ inceleme | Mevcut: konsol, istek/cevap başlık ve gövdeleri |
 | Ağ route/mock/HAR/throttling | Aday; mevcut araç yalnız gözlem odaklı |
-| React props/render/suspense | Aday; öğe seçiminde bileşen zinciri mevcut |
-| axe erişilebilirlik denetimi | Aday; read_page ağacı bir denetim değildir |
+| React props/render/suspense | Mevcut: react tree/inspect ve isteğe bağlı props; render geçmişi/Suspense takibi yok |
+| axe erişilebilirlik denetimi | Mevcut: accessibility; yerel axe-core, iframe başına bulgu/ref ve incomplete raporu |
 | Tam sayfa screenshot / PDF | Aday; mevcut screenshot viewport kapsamlı |
 | Web Vitals | Aday |
 | Cookie/storage/session export | Şimdilik aday değil; kullanıcının günlük oturumları zaten mevcut |

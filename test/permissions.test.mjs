@@ -34,6 +34,8 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
     },
     text: value => [{ type: 'text', text: value }],
     tools: {
+      react: async () => { effects.push('react'); return []; },
+      accessibility: async () => { effects.push('axe'); return []; },
       navigate: async args => { navigate(args.url); return []; },
       javascript_tool: async args => { effects.push(args.text); return []; },
       extensions: async args => { effects.push(args.action); return []; },
@@ -221,4 +223,17 @@ test('extension UI writes use source-site approvals; reads are free and block de
   const denied = harness({ sites: { 'ordinary.test': 'block' } });
   const result = await denied.batch([denied.action('extensions', { action: 'open', extensionId: 'fixture' })]);
   assert(result.isError); assert.deepEqual(denied.effects, []); assert.equal(denied.prompts.length, 0);
+});
+
+test('React props and axe scans respect ask/site approval and block including batches', async () => {
+  for (const tool of ['react', 'accessibility']) {
+    for (const settings of [{ mode: 'ask' }, { sites: { 'ordinary.test': 'ask' } }]) {
+      const h = harness({ ...settings, answer: () => 'denied' });
+      const result = await h.batch([h.action(tool, { action: 'tree', include_props: true })]);
+      assert.equal(result.isError, true); assert.equal(h.prompts.length, 1); assert.deepEqual(h.effects, []);
+    }
+    const h = harness({ sites: { 'ordinary.test': 'block' } });
+    assert.equal((await h.batch([h.action(tool)])).isError, true);
+    assert.deepEqual(h.effects, []);
+  }
 });
