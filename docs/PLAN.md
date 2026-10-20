@@ -27,6 +27,15 @@ modda da island onayı ister, batch izni diğer pano işlemlerini kapsamaz. Sayf
 eklenti paneli desteklenir, standart pano kısayolları da onay ister. Sonraki adaylar:
 indirme takibi, değişmediyse screenshot göndermeme, işaretli screenshot, React/axe.
 
+## agent-browser karşılaştırması ve girdi paketi (2026-10-20) ✅
+
+[Güncel karşılaştırma](FEATURE-COMPARISON.md). Hover mevcut; key_down/up, ayrı mouse
+kontrolü, opsiyonel human typing/pointer, native sekme viewport/device/media ve
+screenshot if_changed/annotate eklendi. Ayar değişiklikleri auto'da da onaylı; hold
+cleanup ve watchdog zorunlu. Detection bypass garantisi yok. Sonraki adaylar indirme
+takibi, React/axe, ağ route/mock/HAR; Chromium'a özgü başlatma/CDP/profil işleri
+bu günlük Zen ürününe doğrudan taşınmayacak.
+
 ## Ada (2026-10-19)
 
 Efe compact mode kullanıyor; sekmedeki turuncu çizgiyi görmüyor. Çözüm: Zen penceresinin

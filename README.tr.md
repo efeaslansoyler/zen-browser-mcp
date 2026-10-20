@@ -192,6 +192,33 @@ Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;
 adadan onaylar veya reddedersin.
 
+## Girdi ve sekme benzetimi
+
+Hover zaten `computer hover` ile çalışır. İsteğe bağlı `movement: "smooth" | "human"`
+tıklama, hover, hareket ve drag sırasında gerçek ara fare olayları gönderir;
+`duration_ms`, `steps`, `seed` ile yol ayarlanır. `typing: "human"` değişken gecikmelerle
+karakter karakter yazar (`delay_ms`, `seed`). Varsayılan hızlı davranış korunur. Bunlar
+etkileşim seçenekleridir; bot tespitini aşma garantisi değildir.
+
+`computer key_down/key_up` tek tuşu tutar/bırakır (`text: "Shift"`, `"Control"`, `"a"`).
+`mouse_move/mouse_down/mouse_up` ayrı fare kontrolü sağlar (`button: "left" | "middle" |
+"right"`). Tutulan girdiler oturuma/çerçeveye özeldir. Hata, Durdur, gezinme, sahiplik
+değişimi, kopma, reload ve en fazla 30 saniyelik süre sınırında bırakılır (`hold_ms`
+daha kısa olabilir). Basılı Control/Meta üzerinden pano onayı atlanamaz.
+
+Screenshot için `if_changed: true` aynı görüntüyü yeniden göndermez; `annotate: true`
+üst çerçevedeki en fazla 80 görünür kontrolün ref'ini görüntüye ekler.
+
+`browser_settings`: `get`, `devices`, `viewport`, `device`, `media`, `reset`.
+Her değişiklik/reset auto modda da adadan izin ister; sekme değişecekse soruda belirtilir.
+Viewport, DPR, touch-event, özel UA ve renk ayarları sekmeye özeldir; reset veya
+sahiplik bırakılınca geri yüklenir. Pencere boyutu/global pref değiştirilmez.
+Mobile/tablet/desktop genel Gecko preset'leridir. `requested` istenen ayarları, diğer
+alanlar gerçekten görülen ölçüleri verir; native ölçek/mahremiyet nedeniyle fark olabilir.
+Başka bir tarayıcı motoru veya fiziksel cihaz parmak izi taklidi değildir.
+
+[Özellik karşılaştırması ve sınırlar](docs/FEATURE-COMPARISON.md).
+
 ## Sistem panosu
 
 `clipboard` aracı `read`, `write`, `copy`, `paste` işlemlerini sunar. Her işlem auto

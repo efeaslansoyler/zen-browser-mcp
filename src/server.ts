@@ -86,6 +86,18 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
     .number()
     .describe("Tab ID to act on. Use tabs_context_mcp first if you don't have a valid tab ID.");
 
+  const inputOptions = {
+    if_changed: z.boolean().optional().describe("screenshot: return unchanged metadata instead of repeating an identical image; scoped to session, document, scale and annotations."),
+    annotate: z.boolean().optional().describe("screenshot: label up to 80 visible top-frame controls with refs. Does not annotate iframe contents."),
+    movement: z.enum(["instant", "smooth", "human"]).optional().describe("Opt-in real pointer path; default retains existing fast input and visual cursor. No detection bypass guarantee."),
+    typing: z.enum(["instant", "human"]).optional().describe("type only: human sends characters with variable delays."),
+    delay_ms: z.number().min(0).max(1000).optional().describe("Human typing base delay per character; default 65ms."),
+    duration_ms: z.number().min(0).max(5000).optional().describe("Pointer path duration in milliseconds."),
+    steps: z.number().int().min(1).max(300).optional(), seed: z.number().int().optional(),
+    hold_ms: z.number().int().min(100).max(30000).optional().describe("Safety release timeout for held keys/buttons; default and max 30 seconds."),
+    button: z.enum(["left", "middle", "right"]).optional(),
+  };
+
   const readDiff = {
     diff: z.boolean().optional().describe("Opt in to snapshot output. First call returns full text plus snapshot ID; pass since with that ID on the next read for a compact unified line diff or unchanged result. Default false preserves plain text."),
     since: z.string().min(1).max(100).optional().describe("Exact snapshot ID from your previous diff-enabled read of this tab and same tool/options. Missing, stale, evicted or wrong-scope IDs cause a fresh full response. Navigation, reload and ownership changes reset the baseline."),
@@ -93,6 +105,10 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
 
   // Allow the island's full response window for each clipboard/attention prompt.
   function consentTimeout(name: string, args: any): number | undefined {
+    if ((name === "computer" && args.action === "type" || name === "extensions" && args.action === "computer" && args.computerAction === "type") && args.typing === "human") {
+      return Math.min(600000, 10000 + [...String(args.text || "")].length * (args.delay_ms ?? 65) * 3.5) + 135000;
+    }
+    if (name === "browser_settings") return 150000;
     if (name === "clipboard") return 135000;
     if (name === "extensions" && args.action === "open") return 270000;
     if ((name === "computer" && args.action === "key") ||
@@ -126,6 +142,14 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
     },
   );
 
+  register("browser_settings", "Get or temporarily change an owned tab's viewport, generic device preset, DPR, touch-event override, custom user agent or color scheme. Every change/reset requires island approval even in auto mode; applying selects the target tab only after consent. Changes are tab-local and restored on reset, ownership release or bridge reload. Generic mobile/tablet/desktop presets keep Gecko and do not emulate Safari/Chrome or a complete physical device fingerprint; navigator.maxTouchPoints is reported, not spoofed. Server-side UA changes may require explicit navigation/reload. get reports actual metrics; devices lists presets without a tab.", {
+    action: z.enum(["get", "devices", "viewport", "device", "media", "reset"]), tabId: tabId.optional(),
+    width: z.number().int().min(200).max(4000).optional(), height: z.number().int().min(200).max(4000).optional(),
+    dpr: z.number().min(.5).max(4).optional(), touch: z.boolean().optional(),
+    userAgent: z.string().max(1000).optional(), device: z.enum(["mobile", "tablet", "desktop"]).optional(),
+    color_scheme: z.enum(["dark", "light", "no-preference"]).optional(),
+  }, args => args.action === "get" || args.action === "devices" ? 60000 : 150000);
+
   register("clipboard", "Read/write system clipboard text or copy/paste in an owned tab or its open extension panel. Every call requires explicit island approval, including auto mode and browser_batch; approval is never remembered. The clipboard is shared with the user's other applications. read returns untrusted text with truncation metadata; write replaces it. copy uses the existing selection; paste uses ref or the focused editable field. extensionId targets an already-open panel for copy/paste; use its fresh panel ref. No tab switch is performed. Do not use shell, JavaScript or other routes to bypass clipboard consent.", {
     action: z.enum(["read", "write", "copy", "paste"]), tabId,
     text: z.string().max(1000000).optional().describe("Required for write; empty string clears text."),
@@ -137,7 +161,8 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
     action: z.enum(["list", "open", "read", "text", "find", "computer", "form_input", "close"]),
     tabId: tabId.optional(),
     extensionId: z.string().min(1).optional(),
-    computerAction: z.enum(["screenshot", "left_click", "right_click", "double_click", "triple_click", "hover", "left_click_drag", "scroll", "scroll_to", "type", "key", "wait"]).optional(),
+    ...inputOptions,
+    computerAction: z.enum(["screenshot", "left_click", "right_click", "double_click", "triple_click", "hover", "left_click_drag", "scroll", "scroll_to", "type", "key", "key_down", "key_up", "mouse_move", "mouse_down", "mouse_up", "wait"]).optional(),
     ref: z.string().optional(), coordinate: z.array(z.number()).length(2).optional(),
     start_coordinate: z.array(z.number()).length(2).optional(), text: z.string().optional(),
     query: z.string().optional(), value: z.union([z.string(), z.number(), z.boolean()]).optional(),
@@ -182,6 +207,7 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
       "Instead of a coordinate, clicks, hover and scroll accept ref (from read_page or find): the element is scrolled into view and its center is used.",
       "Actions: screenshot, left_click, right_click, double_click, triple_click, hover, left_click_drag (start_coordinate → coordinate), scroll (coordinate or ref, scroll_direction, scroll_amount), scroll_to (ref), type (text), key (text, e.g. \"Return\", \"ctrl+a\", \"Tab Tab Return\"; repeat), wait (duration in seconds).",
       "Ref clicks verify the target is hit-testable, including enclosing iframes. Covered, moved or disabled targets fail before mouse-down; inspect the reported blocker or refresh screenshot/read_page. Coordinate clicks cannot infer a hidden intended target, so prefer ref for controls. Never bypass an obstruction with page JavaScript. Multi-click actions stop if an earlier click changes the target. Hover/scroll_to remain available for covered elements.",
+      "key_down/key_up hold/release one key across calls; mouse_move/down/up support explicit mouse control. Holds are session/frame scoped, automatically released on Stop, errors, navigation, transfer, disconnect, reload or a 30-second deadline. Human typing/movement options are optional, not detection bypass guarantees.",
       "For clicks, text can hold held modifiers such as \"shift\" or \"ctrl+shift\".",
     ].join(" "),
     {
@@ -197,8 +223,9 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
         "scroll_to",
         "type",
         "key",
-        "wait",
+        "wait", "key_down", "key_up", "mouse_move", "mouse_down", "mouse_up",
       ]),
+      ...inputOptions,
       coordinate: z.array(z.number()).length(2).optional().describe("[x, y] in screenshot pixels."),
       ref: z.string().optional().describe("Element reference from read_page or find (e.g. \"ref_12\"), instead of coordinate."),
       start_coordinate: z.array(z.number()).length(2).optional().describe("Drag start [x, y]."),

@@ -9,6 +9,8 @@
 
 const { agentTheme, applyTheme } = ChromeUtils.importESModule(new URL("../Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
 
+const { mousePath, typingPlan } = ChromeUtils.importESModule(new URL("../InputMotion.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
+
 const { Cancellation } = ChromeUtils.importESModule(new URL("../Cancellation.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -165,6 +167,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   // sağ tık menüsündeki "Claude'a göster" için tıklanan öğe (main.js bu olayı actor'a bağlar)
   handleEvent(event) {
     // sayfanın kendi ürettiği olay seçilen öğeyi değiştiremesin
+    if (event.type === "pagehide") { this.#releaseInputs(); return; }
     if (event.type !== "contextmenu" || !event.isTrusted) return;
     let target = event.composedPath()[0] ?? event.target;
     if (target?.nodeType !== 1) target = target?.parentElement;
@@ -184,6 +187,18 @@ export class ZenMcpChild extends JSWindowActorChild {
         if (this.#cursor) this.#paintCursor(this.#cursor);
       }
       switch (name) {
+        case "annotate":
+          return { value: this.#annotate(data.enabled) };
+        case "browser_metrics":
+          return { value: { width: this.contentWindow.innerWidth, height: this.contentWindow.innerHeight,
+            dpr: this.contentWindow.devicePixelRatio, userAgent: this.contentWindow.navigator.userAgent,
+            maxTouchPoints: this.contentWindow.navigator.maxTouchPoints,
+            colorScheme: this.contentWindow.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+            webdriver: this.contentWindow.navigator.webdriver } };
+        case "release_inputs":
+          return { value: this.#releaseInputs() };
+        case "input_state":
+          return { value: this.#inputState() };
         case "text":
           return this.#text();
         case "eval":
@@ -254,6 +269,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   didDestroy() {
+    this.#releaseInputs();
+    this.#annotation?.remove();
     for (const scope of this.#operations.values()) scope.cancel();
     this.#operations.clear();
     if (this.#cursor) clearTimeout(this.#cursor.hideTimer);
@@ -312,6 +329,28 @@ export class ZenMcpChild extends JSWindowActorChild {
     if (pending.ref) expected.element.focus({ preventScroll: true });
     if (!this.document.execCommand(action)) throw new Error(`Native clipboard ${action} was not available.`);
     return "done";
+  }
+
+  #annotation = null;
+  #annotate(enabled) {
+    this.#annotation?.remove(); this.#annotation = null;
+    if (!enabled) return [];
+    const host = this.document.createElement("zen-mcp-annotations");
+    host.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483647";
+    const root = host.attachShadow({ mode: "closed" });
+    const refs = [];
+    for (const element of this.document.querySelectorAll('a[href],button,input,textarea,select,[role="button"],[tabindex]')) {
+      if (!this.#visible(element) || !this.#inViewport(element)) continue;
+      const box = element.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      const ref = this.#ref(element), label = this.document.createElement("span");
+      label.textContent = ref;
+      label.style.cssText = `position:absolute;left:${Math.max(0, box.left)}px;top:${Math.max(0, box.top)}px;background:#111;color:#fff;font:12px/16px monospace;border:1px solid #fff;padding:1px 3px;pointer-events:none`;
+      root.append(label); refs.push(ref);
+      if (refs.length >= 80) break;
+    }
+    this.document.documentElement.append(host); this.#annotation = host;
+    return refs;
   }
 
   // ---- ref'ler ----
@@ -618,11 +657,6 @@ export class ZenMcpChild extends JSWindowActorChild {
   // Çizim kapalı shadow DOM içinde (sayfanın CSS'i bozamaz, script'leri içine bakamaz).
   // Yalnız gerçek (isTrusted) tıklamalar sayılır; tıklama sistem olay grubunda dinlenir,
   // sayfa olayı durdursa da görülür.
-
-  didDestroy() {
-    this.#ask?.finish("navigated");
-    this.#pick?.finish(null);
-  }
 
   #askUser({ ref, x, y, wait = "done", timeout = 300 }) {
     this.#ask?.finish("replaced");
@@ -960,9 +994,64 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   // silent: sanal imleç ve halka yok (geliştirme/demo: kullanıcının tıklaması gibi)
-  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false, ref }, scope) {
+  #heldKeys = new Map();
+  #heldButtons = new Map();
+  #heldOwner = null;
+  #releaseTimer = null;
+  #pointer = null;
+  #inputState() { return { keys: [...this.#heldKeys.keys()], buttons: [...this.#heldButtons.keys()] }; }
+  #heldModifiers() {
+    const mods = {};
+    for (const [key, name] of [["KEY_Shift", "shiftKey"], ["KEY_Control", "ctrlKey"], ["KEY_Alt", "altKey"], ["KEY_Meta", "metaKey"]]) {
+      if (this.#heldKeys.has(key)) mods[name] = true;
+    }
+    return mods;
+  }
+  #armRelease(session, hold_ms = 30000) {
+    if (!session) throw new Error("An exact input session is required.");
+    if (this.#heldOwner && this.#heldOwner !== session) throw new Error("Held input belongs to another session.");
+    if (!Number.isFinite(hold_ms) || hold_ms < 100 || hold_ms > 30000) throw new Error("hold_ms must be 100..30000.");
+    this.#heldOwner = session;
+    clearTimeout(this.#releaseTimer);
+    this.#releaseTimer = setTimeout(() => this.#releaseInputs(), hold_ms);
+  }
+  #releaseInputs() {
+    clearTimeout(this.#releaseTimer);
+    for (const [button, point] of this.#heldButtons) {
+      try { this.#eu().synthesizeMouseAtPoint(point[0], point[1], { ...this.#heldModifiers(), type: "mouseup", button }, this.contentWindow); } catch {}
+    }
+    this.#heldButtons.clear();
+    for (const key of [...this.#heldKeys.keys()].reverse()) {
+      const sentKey = this.#heldKeys.get(key);
+      this.#heldKeys.delete(key);
+      try { this.#eu().synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keyup" }, this.contentWindow); } catch {}
+    }
+    this.#heldOwner = null;
+    return this.#inputState();
+  }
+  async #moveInput(x, y, scope, options, modifiers = {}, buttons = 0) {
+    const from = this.#pointer || [this.contentWindow.innerWidth / 2, this.contentWindow.innerHeight / 2];
+    for (const point of mousePath(from, [x, y], options)) {
+      await scope.wait(point.delay, { setTimeout, clearTimeout });
+      scope.check();
+      this.#eu().synthesizeMouseAtPoint(point.x, point.y, { ...this.#heldModifiers(), ...modifiers, type: "mousemove", buttons }, this.contentWindow);
+      this.#pointer = [point.x, point.y];
+      for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
+      await this.#moveCursor(point.x, point.y, scope, true);
+    }
+  }
+
+  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false, ref, session, hold_ms, movement, duration_ms, steps, seed, typing, delay_ms }, scope) {
     const win = this.contentWindow;
     const eu = this.#eu();
+    if (this.#heldOwner && session !== this.#heldOwner) throw new Error("Held input belongs to another session.");
+    if (kind === "key_down" || kind === "mouse_down") scope.onCancel(() => this.#releaseInputs());
+    const motion = { movement, duration_ms, steps, seed };
+    const buttons = [...this.#heldButtons.keys()].reduce((mask, button) => mask | [1, 4, 2][button], 0);
+    const move = async (px, py, dragging = buttons) => {
+      if (movement && movement !== "instant") await this.#moveInput(px, py, scope, motion, modifiers, dragging);
+      else await this.#moveCursor(px, py, scope, movement === "instant");
+    };
     scope.onCancel(() => {
       if (!this.#cursor) return;
       clearTimeout(this.#cursor.hideTimer);
@@ -971,7 +1060,9 @@ export class ZenMcpChild extends JSWindowActorChild {
     });
     const mouse = (px, py, event) => {
       scope.check();
-      eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
+      this.#pointer = [px, py];
+      for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
+      eu.synthesizeMouseAtPoint(px, py, { ...this.#heldModifiers(), ...modifiers, buttons, ...event }, win);
     };
     switch (kind) {
       case "click": {
@@ -981,7 +1072,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         this.#assertHit(expected, x, y, label);
         try {
           if (!silent) {
-            await this.#moveCursor(x, y, scope);
+            await move(x, y);
             this.#press();
           }
           mouse(x, y, { type: "mousemove" });
@@ -998,12 +1089,13 @@ export class ZenMcpChild extends JSWindowActorChild {
           this.#cursor?.pointer.classList.remove("press");
         }
       }
+      case "mouse_move":
       case "hover":
-        await this.#moveCursor(x, y, scope);
+        await move(x, y);
         mouse(x, y, { type: "mousemove" });
         return "done";
       case "drag": {
-        await this.#moveCursor(x, y, scope);
+        await move(x, y);
         this.#press();
         mouse(x, y, { type: "mousemove" });
         mouse(x, y, { type: "mousedown" });
@@ -1012,40 +1104,82 @@ export class ZenMcpChild extends JSWindowActorChild {
         const release = () => {
           if (released) return;
           released = true;
-          eu.synthesizeMouseAtPoint(...last, { type: "mouseup" }, win);
+          const point = movement && movement !== "instant" ? this.#pointer || last : last;
+          eu.synthesizeMouseAtPoint(...point, { ...this.#heldModifiers(), type: "mouseup" }, win);
           this.#cursor?.pointer.classList.remove("press");
         };
         const off = scope.onCancel(release);
         try {
-          const steps = 10;
-          for (let i = 1; i <= steps; i++) {
+          if (movement && movement !== "instant") {
+            await this.#moveInput(to[0], to[1], scope, motion, modifiers, 1);
+            last = [to[0], to[1]];
+          } else for (let i = 1; i <= 10; i++) {
             await scope.wait(0, { setTimeout, clearTimeout });
-            last = [x + ((to[0] - x) * i) / steps, y + ((to[1] - y) * i) / steps];
+            last = [x + ((to[0] - x) * i) / 10, y + ((to[1] - y) * i) / 10];
             mouse(...last, { type: "mousemove", buttons: 1 });
           }
         } finally { off(); release(); }
-        await this.#moveCursor(to[0], to[1], scope);
+        await move(to[0], to[1]);
         return "done";
       }
       case "wheel":
-        await this.#moveCursor(x, y, scope);
+        await move(x, y);
         return await this.#wheel(x, y, dx, dy, multiplier, scope);
+      case "mouse_down": {
+        this.#armRelease(session, hold_ms);
+        if (this.#heldButtons.has(button)) return this.#inputState();
+        const expected = ref ? this.#element(ref) : this.#hitAt(x, y);
+        this.#assertHit(expected, x, y, ref || "Coordinate target");
+        await move(x, y);
+        this.#assertHit(expected, x, y, ref || "Coordinate target");
+        mouse(x, y, { type: "mousemove" });
+        mouse(x, y, { type: "mousedown", button });
+        this.#heldButtons.set(button, [x, y]);
+        return this.#inputState();
+      }
+      case "mouse_up": {
+        const point = this.#heldButtons.get(button);
+        if (point) {
+          this.#heldButtons.delete(button);
+          eu.synthesizeMouseAtPoint(...point, { ...this.#heldModifiers(), type: "mouseup", button }, win);
+        }
+        return this.#inputState();
+      }
+      case "key_down": {
+        if (!keys || keys.length !== 1) throw new Error("key_down accepts one key.");
+        this.#armRelease(session, hold_ms);
+        const { key } = keys[0];
+        if (!this.#heldKeys.has(key)) {
+          const sentKey = this.#heldModifiers().shiftKey && /^[a-z]$/.test(key) ? key.toUpperCase() : key;
+          eu.synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keydown" }, win);
+          this.#heldKeys.set(key, sentKey);
+        }
+        return this.#inputState();
+      }
+      case "key_up": {
+        const key = keys?.[0]?.key;
+        const sentKey = this.#heldKeys.get(key);
+        if (this.#heldKeys.delete(key)) eu.synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keyup" }, win);
+        if (!this.#heldKeys.size && !this.#heldButtons.size) this.#releaseInputs();
+        return this.#inputState();
+      }
       case "keys":
         this.#cursorLabel(L("pressing keys", "tuşa basıyor"));
         for (const { key, mods } of keys) {
           await scope.wait(0, { setTimeout, clearTimeout });
           scope.check();
-          eu.synthesizeKey(key, mods, win);
+          const merged = { ...this.#heldModifiers(), ...mods };
+          eu.synthesizeKey(merged.shiftKey && /^[a-z]$/.test(key) ? key.toUpperCase() : key, merged, win);
         }
         return "done";
       case "text":
+        if (Object.keys(this.#heldModifiers()).length) throw new Error("Release held modifiers before typing text; use key actions for shortcuts.");
         this.#cursorLabel(L("typing…", "yazıyor…"));
-        // Yield between small Unicode-safe chunks so Stop can reach this process.
-        for (const character of text.match(/[^\n]{1,16}|\n/gu) ?? []) {
-          await scope.wait(0, { setTimeout, clearTimeout });
+        for (const chunk of typingPlan(text, { typing, delay_ms, seed })) {
+          await scope.wait(chunk.delay, { setTimeout, clearTimeout });
           scope.check();
-          if (character === "\n") eu.synthesizeKey("KEY_Enter", {}, win);
-          else eu.sendString(character, win);
+          if (chunk.text === "\n") eu.synthesizeKey("KEY_Enter", {}, win);
+          else eu.sendString(chunk.text, win);
         }
         return "done";
       default:
@@ -1093,12 +1227,12 @@ export class ZenMcpChild extends JSWindowActorChild {
     cursor.host.style.setProperty("--zen-agent-arrow", `url("${arrow}")`);
   }
 
-  async #moveCursor(x, y, scope) {
+  async #moveCursor(x, y, scope, instant = false) {
     const cursor = this.#cursorEl();
     this.#paintCursor(cursor);
     const visible = !this.document.hidden;
     const distance = Math.hypot(x - cursor.x, y - cursor.y);
-    const ms = visible && distance > 2 ? Math.round(Math.min(450, 160 + distance * 0.35)) : 0;
+    const ms = !instant && visible && distance > 2 ? Math.round(Math.min(450, 160 + distance * 0.35)) : 0;
     cursor.label.textContent = this.#agent.name;
     cursor.pointer.classList.remove("gone");
     cursor.pointer.style.setProperty("--move", `${ms}ms`);

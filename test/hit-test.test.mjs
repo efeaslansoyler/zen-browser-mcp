@@ -1,3 +1,4 @@
+import * as inputMotion from "../browser/InputMotion.sys.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,9 +22,10 @@ function harness() {
   };
   const target = node('target'), blocker = node('modal');
   let hit = target, afterMove;
-  const context = vm.createContext({
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {},
     JSWindowActorChild: class {}, URL, Cancellation, Ci: {}, Cc: {},
     ChromeUtils: { importESModule(url) {
+      if (url.includes('InputMotion')) return inputMotion;
       if (url.includes('Cancellation')) return { Cancellation };
       if (url.includes('Timer')) return { setTimeout, clearTimeout };
       return agent;
@@ -154,7 +156,7 @@ const block = (start, end) => parentSource.slice(parentSource.indexOf(start), pa
 test('ref coordinates check every enclosing iframe; hover coordinates skip the click guard', async () => {
   const calls = [];
   const root = { id: 1 }, middle = { id: 2, parent: root }, leaf = { id: 3, parent: middle };
-  const context = vm.createContext({
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {},
     query: async (_, name, data, timeout, frame) => {
       calls.push({ name, data, frame: frame.id });
       return name === 'locate' ? { x: 10, y: 20 } : name === 'frame_rect' ? { x: 100, y: 50 } : { value: true };
@@ -174,7 +176,7 @@ test('ref coordinates check every enclosing iframe; hover coordinates skip the c
 test('routing refuses a ref click if the deepest hit frame changes', async () => {
   const expected = {}, actual = {};
   let sent = false;
-  const context = vm.createContext({ deepest: async () => ({ frame: actual, x: 1, y: 2 }),
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, deepest: async () => ({ frame: actual, x: 1, y: 2 }),
     frameOf: () => expected, query: async () => { sent = true; } });
   vm.runInContext(block('    async function input(', '    async function click('), context);
   await assert.rejects(context.input({}, { kind: 'click', ref: 'ref_1_f2', x: 50, y: 50 }), /iframe is covered or changed/);
@@ -183,7 +185,7 @@ test('routing refuses a ref click if the deepest hit frame changes', async () =>
 
 test('all four computer click actions request hit testing and forward the expected ref', async () => {
   const calls = [];
-  const context = vm.createContext({ browserFor: () => ({}), operationSleep: async () => {}, text: value => value,
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, browserFor: () => ({}), operationSleep: async () => {}, text: value => value,
     target: async (_, args) => { assert.equal(args.forClick, true); return [10, 20]; },
     click: async (_, point, options) => { calls.push(options); },
   });
@@ -202,7 +204,7 @@ test('scaled screenshot coordinates round-trip with size caps rather than the re
     drawSnapshot: async () => ({ width: 2400, height: 1600, close() {} }),
     getActor: () => ({ sendAsyncMessage() {} }),
   } } };
-  const context = vm.createContext({ assertSiteAccess() {}, state, query: async () => {}, MAX_EDGE: 1568, MAX_PIXELS: 1150000 });
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, assertSiteAccess() {}, state, query: async () => {}, MAX_EDGE: 1568, MAX_PIXELS: 1150000 });
   vm.runInContext(block('    function toPagePoint(', '    // ---- iframe') +
     block('    async function screenshot(', '    // ---- içerik süreci'), context);
   await context.screenshot(browser, 0.5);

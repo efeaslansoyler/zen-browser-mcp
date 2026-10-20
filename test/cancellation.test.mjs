@@ -1,3 +1,4 @@
+import * as inputMotion from "../browser/InputMotion.sys.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -34,16 +35,17 @@ function actorHarness() {
   const first = new Promise(resolve => { firstEvent = resolve; });
   const emit = value => { events.push(value); firstEvent(); };
   const source = fs.readFileSync(new URL('../browser/actors/ZenMcpChild.sys.mjs', import.meta.url), 'utf8');
-  const context = vm.createContext({ extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
     JSWindowActorChild: class {}, URL, Cancellation, Ci: {}, Cc: {},
     ChromeUtils: { importESModule(url) {
+      if (url.includes('InputMotion')) return inputMotion;
       if (url.includes('Cancellation')) return { Cancellation };
       if (url.includes('Timer')) return timers;
       return agent;
     } },
     Services: { locale: { appLocaleAsBCP47: 'en' }, scriptloader: { loadSubScript(_, eu) {
       eu.sendString = text => emit(['text', text]);
-      eu.synthesizeKey = key => emit(['key', key]);
+      eu.synthesizeKey = (key,options={}) => emit(['key', key,options.type||'press',!!options.shiftKey]);
       eu.synthesizeMouseAtPoint = (x, y, event) => emit(['mouse', event.type, x, y]);
       eu.synthesizeWheelAtPoint = () => emit(['wheel']);
     } } },
@@ -87,7 +89,7 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
   const effects = [];
   let started;
   const first = new Promise(resolve => { started = resolve; });
-  const context = vm.createContext({ extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
     Cancellation, ...timers, state: { paused: false, tabs: new Map() },
     operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
     ownership: new Ownership(), sessions: new Map([['test-session', {}]]), sessionVersions: new Map(),
@@ -133,7 +135,7 @@ test('cancel navigation stops loading and removes its listener and timeout', asy
   const handles = new Set();
   let stopped = 0, removed = 0;
   const browser = { addProgressListener() {}, removeProgressListener() { removed++; }, stop() { stopped++; } };
-  const context = vm.createContext({ extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} }, operation: scope, pendingListeners: new Set(),
+  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} }, operation: scope, pendingListeners: new Set(),
     ChromeUtils: { generateQI() {} }, Ci: { nsIWebProgress: { NOTIFY_STATE_WINDOW: 1 } },
     setTimeout: fn => { handles.add(fn); return fn; }, clearTimeout: fn => handles.delete(fn),
   });
@@ -186,4 +188,21 @@ test('parent cancellation module loads through the trusted resource scheme', () 
     } },
   });
   assert.equal(loaded, 'resource://zenmcp/Cancellation.sys.mjs?v=12');
+});
+
+
+test('held keys survive completed requests and are released by actor destruction',async()=>{
+  const {actor,events}=actorHarness();
+  const result=await actor.receiveMessage({name:'input',data:{requestId:1,kind:'key_down',keys:[{key:'KEY_Shift'}],session:'A'}});
+  assert.deepEqual([...result.value.keys],['KEY_Shift']);
+  await actor.receiveMessage({name:'input',data:{requestId:2,kind:'keys',keys:[{key:'a',mods:{}}],session:'A'}});
+  assert(events.some(e=>e[1]==='A'&&e[3]));
+  actor.didDestroy();assert(events.some(e=>e[1]==='KEY_Shift'&&e[2]==='keyup'));
+});
+test('held input rejects foreign sessions and the watchdog releases it',async()=>{
+  const {actor,events}=actorHarness();
+  await actor.receiveMessage({name:'input',data:{requestId:1,kind:'key_down',keys:[{key:'KEY_Control'}],session:'A',hold_ms:100}});
+  const foreign=await actor.receiveMessage({name:'input',data:{requestId:2,kind:'keys',keys:[{key:'a',mods:{}}],session:'B'}});
+  assert.match(foreign.error,/another session/);await new Promise(r=>setTimeout(r,130));
+  assert(events.some(e=>e[1]==='KEY_Control'&&e[2]==='keyup'));actor.didDestroy();
 });

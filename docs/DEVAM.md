@@ -84,6 +84,24 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
   geçti; geçici eklenti kaldırıldı, önceki seçili sekme ve sistem panosu geri yüklendi.
   Yeni araç için MCP reconnect gerekir. `npm test`: 143/143 başarılı.
 
+- **Girdi + görünüm paketi** (2026-10-20): computer key_down/key_up, mouse_move/down/up;
+  oturum/çerçeveye özel held-state, native trusted olaylar. Hata/Durdur/gezinme/devir/
+  disconnect/reload ve 30 sn watchdog bırakır. Actor'daki ikinci didDestroy tanımı
+  kaldırıldı; gerçek cancellation/held cleanup artık gölgelenmiyor. Human typing ve
+  smooth/human gerçek fare yolları opsiyonel; varsayılan hızlı kalır, seed destekli.
+  Basılı Control + c/v gibi kombinasyonlarda da clipboard onayı korunur.
+  Screenshot if_changed (tam veri eşitliği, 8 MB/32 giriş) ve annotate (üst çerçeve,
+  en fazla 80 ref etiketi) eklendi. Native `browser_settings`: get/devices/viewport/
+  device/media/reset. Her mutation/reset auto'da da island onayı; gerekirse hedef
+  sekmeye geçiş soruda belirtilir. Global pref/pencere boyutu/RemoteAgent yok.
+  Viewport CSS + native BC DPR/touch/UA/renk override'ları; devir/geri alma/kopma/reload
+  eski ayarları geri getirir. Generic Gecko preset'leri; requested ve etkin ölçüler
+  ayrı döner, DPR/ölçüler native mahremiyet/ölçekle farklı olabilir, maxTouchPoints spoof yok.
+  Ortak modüller InputMotion/BrowserSettings/ScreenshotCache.sys.mjs.
+  `npm test`: 153/153; check-input, check-clipboard ve check-permissions canlı geçti.
+  Test sekmeleri kapandı, eski seçili sekme/pano/auto ayarı geri yüklendi.
+  [Güncel özellik karşılaştırması](FEATURE-COMPARISON.md). Yeni şema/tool için MCP reconnect.
+
 **CLI + skill deneyi → `cli-prototype` dalı** (main'e alınmadı). Kalıcı broker'lı CLI
 (`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16
 çağrıda MCP 322 ms, CLI 785 ms, metin aynı. Gerçek ajan pilotu (Codex + Claude, 3 görev ×
@@ -96,7 +114,7 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** Dal yalnız ileride lazım
    Gerçek seçim → otomatik alıcı → queue → bu sohbete öğe bağlamı ulaştı. Eksik Codex
    `default_permissions` ayarı yedeklenip `:workspace` ile düzeltildi. Tekrar kontrol:
    `node scripts/check-pick-delivery.ts --automatic` (gerçek sohbete mesaj gönderir).
-2. Eklenti ve clipboard özellikleri uygulandı. Yeni `extensions`/`clipboard` araçları
+2. Eklenti ve clipboard özellikleri uygulandı. Yeni `extensions`/`clipboard`/`browser_settings` araçları ve computer seçenekleri
    için MCP reconnect ve günlük kullanım geri bildirimi bekleniyor. Diğer adaylar React/axe, Quickshell göstergesi,
    isim + npm; ayrı izinli alan adları yerine site kuralları seçildi.
 3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.

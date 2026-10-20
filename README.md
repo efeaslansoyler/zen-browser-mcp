@@ -193,6 +193,33 @@ never silently sent to another chat. Double-clicking Send does not duplicate del
 Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
 if it needs live access, and you approve or decline in the browser.
 
+## Input and tab emulation
+
+Hover already works with `computer hover`. Optional `movement: "smooth" | "human"`
+sends real intermediate pointer events for clicks, hover, movement and drag;
+`duration_ms`, `steps`, `seed` control the path. `typing: "human"` sends characters with
+variable delays (`delay_ms`, `seed`). Defaults preserve fast input. These are pacing
+options, not a guarantee against bot detection.
+
+`computer key_down/key_up` hold/release a single key (`text: "Shift"`, `"Control"`, `"a"`).
+`mouse_move/mouse_down/mouse_up` provide separate pointer control (`button: "left" |
+"middle" | "right"`). Holds are session/frame scoped and released on errors, Stop,
+navigation, ownership changes, disconnection, reload and a maximum 30-second watchdog
+(`hold_ms` may shorten it). Held Control/Meta cannot bypass clipboard consent.
+
+`screenshot` accepts `if_changed: true` to skip identical images and `annotate: true`
+to label up to 80 visible top-frame controls with refs.
+
+`browser_settings` supports `get`, `devices`, `viewport`, `device`, `media`, `reset`.
+Every mutation/reset asks in the island, even in auto mode; the prompt mentions any
+necessary tab switch. Viewport, DPR, touch-event, custom user-agent and color overrides
+are per tab, and restored on reset or ownership release. No window resize/global pref
+changes are made. Generic mobile/tablet/desktop presets keep Gecko; actual metrics are
+returned alongside `requested` overrides and may differ due to native scaling/privacy.
+A preset is not another browser engine or a physical device fingerprint.
+
+See [feature comparison and limitations](docs/FEATURE-COMPARISON.md).
+
 ## System clipboard
 
 `clipboard` supports `read`, `write`, `copy` and `paste`. Every operation requires a

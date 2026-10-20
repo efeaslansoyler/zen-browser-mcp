@@ -85,6 +85,9 @@ function logError(where, e) {
     const ownership = new Ownership(state.owners ||= new Map(), state.ownerVersions ||= new Map(),
       state.tabWork ||= new Map(), state.tabQueues ||= new Map(), state.tabHandoffs ||= new Map());
     const { normalizeConfig, siteRule } = ChromeUtils.importESModule(`resource://zenmcp/SiteRules.sys.mjs?v=${version}`);
+    const { ScreenshotCache } = ChromeUtils.importESModule(`resource://zenmcp/ScreenshotCache.sys.mjs?v=${version}`);
+    const screenshotCache = new ScreenshotCache();
+    const { BrowserSettings, DEVICE_PRESETS } = ChromeUtils.importESModule(`resource://zenmcp/BrowserSettings.sys.mjs?v=${version}`);
     const { ClipboardAccess, clipboardShortcut } = ChromeUtils.importESModule(`resource://zenmcp/Clipboard.sys.mjs?v=${version}`);
     const { ExtensionPanels } = ChromeUtils.importESModule(`resource://zenmcp/ExtensionPanels.sys.mjs?v=${version}`);
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -109,6 +112,8 @@ function logError(where, e) {
     }
 
     function cancelTabWork(tabId) {
+      releaseInputs(tabId);
+      browserSettings.restoreTab(tabId);
       extensionPanels.releaseTab(tabId);
       if (operation?.tabs?.has(tabId)) operation.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
     }
@@ -303,6 +308,8 @@ function logError(where, e) {
       const id = tab.linkedBrowser.browserId;
       const changed = ownership.assign(id, session);
       if (changed) {
+        releaseInputs(id);
+        browserSettings.restoreTab(id);
         extensionPanels.releaseTab(id);
         readSnapshots.clearTab(id);
         if (cancel) cancelTabWork(id);
@@ -323,6 +330,8 @@ function logError(where, e) {
       const browser = tab.linkedBrowser;
       const id = browser.browserId;
       ownership.release(id);
+      releaseInputs(id);
+      browserSettings.restoreTab(id);
       extensionPanels.releaseTab(id);
       readSnapshots.clearTab(id);
       if (cancel) cancelTabWork(id);
@@ -1126,6 +1135,28 @@ function logError(where, e) {
     ];
 
     const { Cancellation } = ChromeUtils.importESModule(`resource://zenmcp/Cancellation.sys.mjs?v=${version}`);
+    const heldInputFrames = new Map();
+    function releaseInputs(browserOrId) {
+      const id = typeof browserOrId === "number" ? browserOrId : controlledSource(browserOrId).browserId;
+      const entry = heldInputFrames.get(id);
+      if (!entry) return;
+      clearTimeout(entry.timer);
+      heldInputFrames.delete(id);
+      try { entry.document?.getActor("ZenMcp").sendAsyncMessage("release_inputs", {}); } catch {}
+    }
+    function releaseAllInputs() { for (const id of heldInputFrames.keys()) releaseInputs(id); }
+    function heldFrame(browser) {
+      const entry = heldInputFrames.get(controlledSource(browser).browserId);
+      if (!entry) return null;
+      if (entry.session !== activeSession || !entry.frame.currentWindowGlobal || entry.frame.currentWindowGlobal !== entry.document) { releaseInputs(browser); return null; }
+      return entry.frame;
+    }
+    function rememberInputs(browser, frame, result, hold_ms = 30000) {
+      const id = controlledSource(browser).browserId;
+      clearTimeout(heldInputFrames.get(id)?.timer);
+      if (!result?.keys?.length && !result?.buttons?.length) { heldInputFrames.delete(id); return; }
+      heldInputFrames.set(id, { browser, frame, document: frame.currentWindowGlobal, state: result, session: activeSession, timer: setTimeout(() => releaseInputs(id), hold_ms) });
+    }
     let operation = null;
     let stopGeneration = 0;
     let querySequence = 0;
@@ -1274,14 +1305,19 @@ function logError(where, e) {
     // iframe'e ulaşmıyor. data.to (sürükleme) de aynı çerçeveye çevrilir.
     async function input(browser, data) {
       const inner = await deepest(browser, data.x, data.y);
+      const held = heldFrame(browser);
+      if (held && held !== inner.frame) { releaseInputs(browser); throw new Error("Held input cannot cross frames; inputs released. Use the drag action within one frame."); }
       if (data.ref && inner.frame !== frameOf(browser, data.ref)) throw new Error("Click blocked: target iframe is covered or changed. Refresh screenshot/read_page; no click was sent.");
       const [dx, dy] = [data.x - inner.x, data.y - inner.y];
       const to = data.to && [data.to[0] - dx, data.to[1] - dy];
-      return query(browser, "input", { ...data, x: inner.x, y: inner.y, to }, 30000, inner.frame);
+      const result = await query(browser, "input", { ...data, x: inner.x, y: inner.y, to }, 30000, inner.frame);
+      if (data.kind === "mouse_down") rememberInputs(browser, inner.frame, result.value, data.hold_ms);
+      return result;
     }
 
-    async function click(browser, [x, y], { button = 0, count = 1, modifiers, ref } = {}) {
-      await input(browser, { kind: "click", x, y, button, count, ref: ref && longRef(ref), modifiers: parseModifiers(modifiers) });
+    async function click(browser, [x, y], { button = 0, count = 1, modifiers, ref, ...motion } = {}) {
+      if (typeof button === "string") button = { left: 0, middle: 1, right: 2 }[button];
+      await input(browser, { ...motion, kind: "click", x, y, button, count, ref: ref && longRef(ref), modifiers: parseModifiers(modifiers) });
     }
 
     async function scroll(browser, [x, y], direction, amount = 3) {
@@ -1296,6 +1332,7 @@ function logError(where, e) {
     // xdotool adları (Claude in Chrome ile aynı) → KeyboardEvent.key
     const KEYS = {
       return: "KEY_Enter", enter: "KEY_Enter", tab: "KEY_Tab", escape: "KEY_Escape", esc: "KEY_Escape",
+      shift: "KEY_Shift", control: "KEY_Control", ctrl: "KEY_Control", alt: "KEY_Alt", meta: "KEY_Meta", cmd: "KEY_Meta", super: "KEY_Meta",
       backspace: "KEY_Backspace", delete: "KEY_Delete", space: " ", insert: "KEY_Insert",
       up: "KEY_ArrowUp", down: "KEY_ArrowDown", left: "KEY_ArrowLeft", right: "KEY_ArrowRight",
       arrowup: "KEY_ArrowUp", arrowdown: "KEY_ArrowDown", arrowleft: "KEY_ArrowLeft", arrowright: "KEY_ArrowRight",
@@ -1311,12 +1348,18 @@ function logError(where, e) {
       throw new Error(`Unknown key: ${name}`);
     }
 
+    function heldModifiers(browser) {
+      heldFrame(browser);
+      const keys = heldInputFrames.get(controlledSource(browser).browserId)?.state?.keys || [];
+      return Object.fromEntries([["KEY_Control", "ctrlKey"], ["KEY_Shift", "shiftKey"], ["KEY_Alt", "altKey"], ["KEY_Meta", "metaKey"]].filter(([key]) => keys.includes(key)).map(([, name]) => [name, true]));
+    }
+
     // "ctrl+a", "Return", "Tab Tab Return"
     async function pressKeys(browser, text) {
       const keys = text.trim().split(/\s+/).map(combo => {
         const parts = combo.split("+");
         const key = keyName(parts.pop());
-        return { key, mods: parseModifiers(parts.join("+")) };
+        return { key, mods: { ...heldModifiers(browser), ...parseModifiers(parts.join("+")) } };
       });
       if (!keys.some(clipboardShortcut)) return typeInFocus(browser, { kind: "keys", keys });
       for (const key of keys) {
@@ -1329,7 +1372,9 @@ function logError(where, e) {
 
     // tuşlar odaktaki çerçeveye
     async function typeInFocus(browser, data) {
-      return query(browser, "input", data, 30000, await focusedFrame(browser));
+      const timeout = data.kind === "text" && data.typing === "human"
+        ? Math.min(600000, 10000 + [...data.text].length * (data.delay_ms ?? 65) * 3.5) : 30000;
+      return query(browser, "input", data, timeout, heldFrame(browser) || await focusedFrame(browser));
     }
 
     // ---- ekran görüntüsü ----
@@ -1439,6 +1484,7 @@ function logError(where, e) {
     }
 
     function stopClaude() {
+      releaseAllInputs();
       extensionPanels.destroy();
       if (state.paused) return;
       state.paused = true;
@@ -1588,7 +1634,7 @@ function logError(where, e) {
       })();
       try {
         const result = await guard(Promise.race([
-          actor.sendQuery(name, { ...data, agent: activeAgent, requestId }),
+          actor.sendQuery(name, { ...data, agent: activeAgent, session: activeSession, requestId }),
           watchDialog,
           watcher.wait(timeout, { setTimeout, clearTimeout }).then(() => { throw new Error(`The page did not respond within ${timeout / 1000} s.`); }),
         ]));
@@ -1731,6 +1777,23 @@ function logError(where, e) {
       return surface.source;
     }
 
+    const browserSettings = new BrowserSettings({
+      check: (source, session) => { operation?.check(); ownership.check(source.browserId, session); assertSiteAccess(source); },
+      context: source => JSON.stringify([source.currentURI.spec, ownership.version(source.browserId), readConfig()]),
+      wait: operationSleep,
+      ask: async (source, args, value) => {
+        const target = source.contentTitle || hostOf(source) || source.currentURI.spec;
+        const details = args.action === "reset" ? L("restore this tab's original settings", "bu sekmenin önceki ayarlarını geri yüklemek")
+          : args.action === "media" ? L(`set color scheme to ${value.color_scheme}`, `renk temasını ${value.color_scheme} yapmak`)
+          : L(`set the viewport to ${value.width}×${value.height}${args.action === "device" ? ` (${args.device}, Gecko emulation)` : ""}`, `görünüm alanını ${value.width}×${value.height} yapmak${args.action === "device" ? ` (${args.device}, Gecko benzetimi)` : ""}`);
+        const switching = source.ownerDocument.defaultView.gBrowser.selectedBrowser !== source && args.action !== "reset";
+        return await askIsland(source, L("Browser settings permission", "Tarayıcı ayarı izni"),
+          L(`${activeAgent.name} wants to ${details} for “${target}”.${switching ? " This will select that tab." : ""}`,
+            `${activeAgent.name}, “${target}” için ${details} istiyor.${switching ? " Bu sekmeye geçilecek." : ""}`),
+          { ok: L("Apply once", "Bir kez uygula"), cancel: L("Deny", "Verme") }) === "done";
+      },
+    });
+
     const hostOf = browser => {
       try { return browser.currentURI.host; } catch { return ""; }
     };
@@ -1761,6 +1824,9 @@ function logError(where, e) {
     const actionVerb = action => ({
       left_click: L("click", "tıklamak"), right_click: L("right-click", "sağ tıklamak"),
       double_click: L("double-click", "çift tıklamak"), triple_click: L("triple-click", "üç kez tıklamak"),
+      key_down: L("hold key", "tuşu basılı tutmak"), key_up: L("release key", "tuşu bırakmak"),
+      mouse_move: L("move mouse", "fareyi hareket ettirmek"),
+      mouse_down: L("hold mouse button", "fare düğmesini basılı tutmak"), mouse_up: L("release mouse button", "fare düğmesini bırakmak"),
       left_click_drag: L("drag", "sürüklemek"), type: L("type", "yazmak"), key: L("press keys", "tuşa basmak"),
     })[action];
 
@@ -1787,10 +1853,11 @@ function logError(where, e) {
           if (args.action === "form_input") return L(`fill extension field ${args.ref}`, `eklenti alanını doldurmak: ${args.ref}`);
           return null;
         case "computer": {
+          if (args.action === "hover" && heldInputFrames.get(controlledSource(browser).browserId)?.state?.buttons?.length) return L("move a held mouse button", "basılı fare düğmesiyle hareket etmek");
           const verb = actionVerb(args.action);
           if (!verb) return null;
           if (args.action === "type") return L(`type ${quote(args.text ?? "")}`, `${quote(args.text ?? "")} yazmak`);
-          if (args.action === "key") return L(`press ${args.text}`, `${args.text} tuşuna basmak`);
+          if (["key", "key_down", "key_up"].includes(args.action)) return L(`press ${args.text}`, `${args.text} tuşuna basmak`);
           return `${await target()}: ${verb}`;
         }
         case "form_input":
@@ -1957,6 +2024,13 @@ function logError(where, e) {
 
     const tools = {
       async tab_work(args) { return coordinateTab(args, activeSession); },
+      async browser_settings(args) {
+        if (args.action === "devices") return text({ engine: "Gecko", presets: DEVICE_PRESETS, note: "Generic layout/DPR/touch presets, not a different browser engine or a full physical device fingerprint. User agent is unchanged unless explicitly supplied." });
+        const browser = browserFor(args.tabId);
+        if (args.action !== "get") await browserSettings.change(browser, activeSession, args);
+        const { value } = await query(browser, "browser_metrics");
+        return text({ ...value, requested: browserSettings.entries.get(browser)?.requested, emulated: browserSettings.entries.has(browser), note: "Actual metrics may differ from requested overrides due to native layout/privacy behavior. Overrides are tab-local and restored on reset, take-back, transfer, disconnect or bridge reload. Navigation may be needed for UA-dependent server responses." });
+      },
       async clipboard(args) {
         const source = browserFor(args.tabId);
         if (!args.extensionId) return text(await performClipboard(source, args));
@@ -2082,6 +2156,7 @@ function logError(where, e) {
 
       async navigate({ url, tabId }) {
         const browser = browserFor(tabId);
+        releaseInputs(browser);
         const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
         if (url === "back") browser.goBack();
         else if (url === "forward") browser.goForward();
@@ -2104,16 +2179,29 @@ function logError(where, e) {
         };
         switch (args.action) {
           case "screenshot": {
-            const shot = await screenshot(browser, args.scale);
+            let shot, labels;
+            try {
+              if (args.annotate) labels = (await query(browser, "annotate", { enabled: true })).value;
+              shot = await screenshot(browser, args.scale);
+            } finally {
+              if (args.annotate) await query(browser, "annotate", { enabled: false }).catch(() => {});
+            }
+            if (args.if_changed) {
+              const source = controlledSource(browser);
+              const context = [browser.browsingContext.currentWindowGlobal, ownership.version(source.browserId), args.scale ?? 1, !!args.annotate];
+              if (screenshotCache.unchanged(`${activeSession}:${browser.browserId}`, context, shot.data)) {
+                return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
+              }
+            }
             // diyalog tarayıcı arayüzünde çizilir, sayfanın görüntüsünde çıkmaz
             const dialog = openDialog(browser);
             return [
               { type: "image", data: shot.data, mimeType: "image/jpeg" },
-              { type: "text", text: `${shot.width}x${shot.height}, tabId ${browser.browserId}${dialog ? `\n${describeDialog(dialog)}` : ""}` },
+              { type: "text", text: `${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}` },
             ];
           }
           case "left_click":
-            await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, modifiers: args.text });
+            await click(browser, await target(browser, { ...args, forClick: true }), { ...args, ref: args.ref, modifiers: args.text });
             break;
           case "right_click":
             await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, button: 2, modifiers: args.text });
@@ -2126,12 +2214,12 @@ function logError(where, e) {
             break;
           case "hover": {
             const [x, y] = await target(browser, args);
-            await input(browser, { kind: "hover", x, y });
+            await input(browser, { ...args, kind: "hover", x, y });
             break;
           }
           case "left_click_drag": {
             const [x, y] = await target(browser, args, "start_coordinate");
-            await input(browser, { kind: "drag", x, y, to: await target(browser, args) });
+            await input(browser, { ...args, kind: "drag", x, y, to: await target(browser, args) });
             break;
           }
           case "scroll":
@@ -2141,8 +2229,34 @@ function logError(where, e) {
             await target(browser, { ...args, ref: need("ref") });
             break;
           case "type":
-            await typeInFocus(browser, { kind: "text", text: need("text") });
+            await typeInFocus(browser, { ...args, kind: "text", text: need("text") });
             break;
+          case "key_down":
+          case "key_up": {
+            const key = need("text");
+            if (key.includes("+") || /\s/.test(key)) throw new Error("key_down/key_up accept a single key; hold modifiers separately.");
+            if (args.action === "key_down" && clipboardShortcut({ key: keyName(key), mods: heldModifiers(browser) })) throw new Error("Use clipboard or key for clipboard shortcuts so consent can be requested.");
+            const frame = heldFrame(browser) || await focusedFrame(browser);
+            const result = await query(browser, "input", { kind: args.action, keys: [{ key: keyName(key), mods: {} }], hold_ms: args.hold_ms }, 30000, frame);
+            rememberInputs(browser, frame, result.value, args.hold_ms);
+            break;
+          }
+          case "mouse_move": {
+            const [x, y] = await target(browser, args);
+            await input(browser, { ...args, kind: "mouse_move", x, y });
+            break;
+          }
+          case "mouse_down": {
+            const [x, y] = await target(browser, { ...args, forClick: true });
+            await input(browser, { ...args, kind: "mouse_down", x, y, ref: args.ref && longRef(args.ref), button: { left: 0, middle: 1, right: 2 }[args.button || "left"] });
+            break;
+          }
+          case "mouse_up": {
+            const frame = heldFrame(browser) || await focusedFrame(browser);
+            const result = await query(browser, "input", { kind: "mouse_up", button: { left: 0, middle: 1, right: 2 }[args.button || "left"] }, 30000, frame);
+            rememberInputs(browser, frame, result.value);
+            break;
+          }
           case "key":
             for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
             break;
@@ -2513,7 +2627,7 @@ function logError(where, e) {
             assertSiteURL(destination.spec);
           }
         }
-        if (browser && !["browser_batch", "clipboard"].includes(tool) && !cleanup) {
+        if (browser && !["browser_batch", "clipboard", "browser_settings"].includes(tool) && !cleanup) {
           const what = await describeWrite(tool, args, browser);
           if (what) entry.what = what;
           let grant = approvals?.get(browser);
@@ -2539,6 +2653,7 @@ function logError(where, e) {
         }
         return result;
       } catch (e) {
+        if (browser) releaseInputs(browser);
         entry.error = String(e?.message ?? e).slice(0, 200);
         throw e;
       } finally {
@@ -2719,7 +2834,7 @@ function logError(where, e) {
         child: {
           esModuleURI: `resource://zenmcp/actors/ZenMcpChild.sys.mjs?v=${version}`,
           // "Claude'a göster…" için sağ tıklanan öğe
-          events: { contextmenu: { capture: true, mozSystemGroup: true } },
+          events: { contextmenu: { capture: true, mozSystemGroup: true }, pagehide: { capture: true, mozSystemGroup: true } },
         },
         // web sayfası süreçlerine girmesi için açık izin gerekiyor (Marionette de böyle yapıyor);
         // child yalnız parent'tan gelen mesajlara cevap verir
@@ -2742,6 +2857,8 @@ function logError(where, e) {
 
     function stop() {
       shuttingDown = true;
+      releaseAllInputs();
+      browserSettings.destroy();
       extensionPanels.destroy();
       clearTimeout(sessionSweep);
       operation?.cancel(new Stopped());

@@ -1,3 +1,4 @@
+import * as inputMotion from "../browser/InputMotion.sys.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -34,7 +35,8 @@ function harness() {
     removeEventListener(type, callback) { if (listeners.get(type) === callback) listeners.delete(type); },
   };
   const context = vm.createContext({ URL, JSWindowActorChild: class {},
-    ChromeUtils: { importESModule(url) { if (url.includes('Cancellation')) return { Cancellation }; if (url.includes('Timer')) return { setTimeout, clearTimeout }; return themes; } },
+    ChromeUtils: { importESModule(url) { if (url.includes('InputMotion')) return inputMotion;
+      if (url.includes('Cancellation')) return { Cancellation }; if (url.includes('Timer')) return { setTimeout, clearTimeout }; return themes; } },
     Services: { locale: { appLocaleAsBCP47: 'en' } },
     Cu: { waiveXrays: value => value },
   });
