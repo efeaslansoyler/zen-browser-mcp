@@ -253,6 +253,8 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#operations.clear();
     if (this.#cursor) clearTimeout(this.#cursor.hideTimer);
     this.#ask?.finish("navigated");
+    this.#pick?.finish(null);
+    this.#pickEnd();
   }
 
   #text() {
@@ -666,6 +668,20 @@ export class ZenMcpChild extends JSWindowActorChild {
     let current = null;
     let hovered = null;
     let trail = []; // ↑ ile çıkılan öğeler; ↓ geri iner
+    const selected = [];
+    const add = el => {
+      if (!el?.isConnected) return false;
+      if (selected.includes(el)) return true;
+      if (selected.length === 8) { overlay.notice(L("Up to 8 elements; Shift-click one to remove it", "En fazla 8 öğe; çıkarmak için Shift+tıkla")); return false; }
+      selected.push(el);
+      overlay.select(selected);
+      return true;
+    };
+    const toggle = el => {
+      const index = selected.indexOf(el);
+      if (index < 0) add(el);
+      else { selected.splice(index, 1); overlay.select(selected); }
+    };
     const show = el => {
       current = el;
       overlay.track(el);
@@ -691,7 +707,10 @@ export class ZenMcpChild extends JSWindowActorChild {
         if (!event.isTrusted) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (event.type === "click" && event.button === 0 && current) finish(current);
+        if (event.type === "click" && event.button === 0 && current) {
+          if (event.shiftKey) toggle(current);
+          else if (add(current)) finish(selected);
+        }
         else if (event.type === "contextmenu") finish(null);
       };
       const onKey = event => {
@@ -700,7 +719,12 @@ export class ZenMcpChild extends JSWindowActorChild {
         event.stopImmediatePropagation();
         if (event.type !== "keydown") return;
         if (event.key === "Escape") finish(null);
-        else if (event.key === "Enter" && current) finish(current);
+        else if (event.key === "Enter" && (selected.length || current)) {
+          if (!selected.length) add(current);
+          finish(selected);
+        } else if (event.key === "Backspace" && selected.length) {
+          selected.pop(); overlay.select(selected);
+        }
         else if (event.key === "ArrowUp" && current?.parentElement && current.parentElement !== doc.documentElement) {
           trail.push(current);
           show(current.parentElement);
@@ -710,7 +734,7 @@ export class ZenMcpChild extends JSWindowActorChild {
       for (const type of MOUSE) win.addEventListener(type, onMouse, CAPTURE);
       for (const type of KEYS) win.addEventListener(type, onKey, CAPTURE);
 
-      const finish = el => {
+      const finish = elements => {
         if (this.#pick?.finish !== finish) return;
         this.#pick = null;
         try {
@@ -718,14 +742,16 @@ export class ZenMcpChild extends JSWindowActorChild {
           for (const type of MOUSE) win.removeEventListener(type, onMouse, CAPTURE);
           for (const type of KEYS) win.removeEventListener(type, onKey, CAPTURE);
         } catch {}
-        if (!el) {
+        if (!elements?.length) {
           this.#pickEnd();
           resolve({ cancelled: true });
           return;
         }
         overlay.freeze();
         try {
-          resolve(this.#pickInfo(el));
+          if (elements.some(el => !el.isConnected)) throw new Error("A selected element disappeared. Select the elements again.");
+          const items = elements.map(el => this.#pickInfo(el));
+          resolve(items.length === 1 ? items[0] : { items });
         } catch (e) {
           this.#pickEnd();
           resolve({ error: String(e?.message ?? e) });
@@ -758,6 +784,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     doc.documentElement.append(host);
 
     let target = null;
+    let selections = [];
     let frame = 0;
     const place = () => {
       if (target?.isConnected) {
@@ -768,6 +795,14 @@ export class ZenMcpChild extends JSWindowActorChild {
         label.style.left = `${Math.max(4, Math.min(r.left, win.innerWidth - label.offsetWidth - 4))}px`;
         label.style.top = `${Math.min(top, win.innerHeight - 22)}px`;
         label.hidden = false;
+      }
+      for (const { el, box: selectedBox, label: selectedLabel } of selections) {
+        selectedBox.hidden = selectedLabel.hidden = !el.isConnected;
+        if (!el.isConnected) continue;
+        const r = el.getBoundingClientRect();
+        Object.assign(selectedBox.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        selectedLabel.style.left = `${Math.max(4, Math.min(r.left, win.innerWidth - selectedLabel.offsetWidth - 4))}px`;
+        selectedLabel.style.top = `${Math.max(0, Math.min(r.top - 22, win.innerHeight - 22))}px`;
       }
       frame = win.requestAnimationFrame(place);
     };
@@ -784,7 +819,18 @@ export class ZenMcpChild extends JSWindowActorChild {
         label.textContent = elementLabel(el);
         label.append(size);
       },
-      freeze: () => box.classList.add("picked"),
+      notice: message => { label.textContent = message; },
+      select: elements => {
+        for (const item of selections) { item.box.remove(); item.label.remove(); }
+        selections = elements.map((el, index) => {
+          const selectedBox = doc.createElement("div"), selectedLabel = doc.createElement("div");
+          selectedBox.className = "box picked"; selectedLabel.className = "label";
+          selectedLabel.textContent = `${index + 1}. ${elementLabel(el)}`;
+          root.append(selectedBox, selectedLabel);
+          return { el, box: selectedBox, label: selectedLabel };
+        });
+      },
+      freeze: () => { target = null; box.hidden = label.hidden = true; },
       remove: () => {
         try { win.cancelAnimationFrame(frame); } catch {}
         host.remove();

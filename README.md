@@ -108,6 +108,16 @@ Ask Claude to do something in the browser: *"open seaskablo.com and find the pri
 Claude opens its own tab in the background; the tab gets an agent-colored line and the island shows
 what's happening. Click the island to jump to the tab.
 
+### Select several elements
+
+Open the picker with Ctrl+Shift+F or the page context menu. Shift-click adds/removes
+an element; Enter finishes the selected set. Up to eight elements from the same top-level
+page are supported. Backspace removes the last selection, Escape cancels all, and arrow
+keys still move to parent/child. A normal click keeps the original single-element flow.
+Numbered outlines follow selected elements. Write one note and choose a destination in
+the island: each element arrives with its own context and visible crop when available.
+Selection grants no tab access. A navigation before sending requires a new selection.
+
 ### Compact repeated reads
 
 `read_page` and `get_page_text` accept `diff: true`. The first response includes a

@@ -622,8 +622,8 @@ export class Island {
     if (pick) {
       siteName = "";
       if (pick.mode === "picking") {
-        action = L("Select an element to send", "Göndermek için bir öğe seç");
-        hintText = L("↑ parent · Esc", "↑ üst öğe · Esc");
+        action = L("Select elements (up to 8)", "Öğeleri seç (en çok 8)");
+        hintText = L("Shift-click: add/remove · Enter: done · Esc", "Shift+tık: ekle/çıkar · Enter: bitir · Esc");
       } else if (pick.mode === "compose") {
         try { siteName = browser.currentURI.host; } catch {}
         action = pick.label;

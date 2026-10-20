@@ -618,7 +618,7 @@ function logError(where, e) {
       };
       win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
       const target = channelTarget();
-      pick = { win, browser, onTabSelect, targetId: target?.id ?? "", agent: target?.agent ?? agentTheme(null) };
+      pick = { win, browser, document: browser.browsingContext?.currentWindowGlobal, onTabSelect, targetId: target?.id ?? "", agent: target?.agent ?? agentTheme(null) };
       island?.picking(browser, pick.agent);
       return pick;
     }
@@ -643,14 +643,27 @@ function logError(where, e) {
       }
     }
 
-    async function composePick(current, info) {
-      current.info = info;
-      current.shot = await elementShot(current.browser, info).catch(e => {
-        logError("pick screenshot", e);
-        return null;
-      });
+    async function composePick(current, result) {
+      const infos = result.items || [result];
+      if (!infos.length || infos.length > 8) throw new Error("Choose between 1 and 8 elements.");
+      if (current.document && current.document !== current.browser.browsingContext?.currentWindowGlobal) throw new Error("The page changed; select the elements again.");
+      current.document ||= current.browser.browsingContext?.currentWindowGlobal;
+      current.info = infos[0]; // Keep single-pick compatibility for existing clients/helpers.
+      current.items = [];
+      current.preparing = true;
+      for (const info of infos) {
+        if (pick !== current) return;
+        if (current.browser.browsingContext?.currentWindowGlobal !== current.document) throw new Error("The page changed; select the elements again.");
+        const shot = await elementShot(current.browser, info).catch(e => { logError("pick screenshot", e); return null; });
+        current.items.push({ info, shot });
+      }
       if (pick !== current) return;
-      const label = info.name ? `${info.role || info.label} "${info.name.slice(0, 40)}"` : info.label;
+      current.preparing = false;
+      current.shot = current.items[0].shot;
+      const info = infos[0];
+      const label = infos.length > 1
+        ? L(`${infos.length} selected elements`, `${infos.length} öğe seçildi`)
+        : info.name ? `${info.role || info.label} "${info.name.slice(0, 40)}"` : info.label;
       const targets = [...subscribers.values()].map(({ id, name, agent }) => ({ id, name, agent }));
       island?.compose(current.browser, label, targets, current.targetId);
     }
@@ -667,7 +680,11 @@ function logError(where, e) {
 
     async function sendPick(note, targetId = pick?.targetId) {
       const current = pick;
-      if (!current?.info || current.sending) return;
+      if (!current?.info || current.sending || current.preparing) return;
+      if (current.document && current.browser.browsingContext?.currentWindowGlobal !== current.document) {
+        endPick();
+        throw new Error("The page changed before sending; select the elements again.");
+      }
       current.sending = true;
       const { content, meta } = pickMessage(current, note, targetId);
       // Pin to the user's selected destination. Never reroute if it disconnects.
@@ -691,7 +708,15 @@ function logError(where, e) {
     }
 
     // Claude'a giden metin; Claude Code'da <channel source="zen" …> gövdesi olur
-    function pickMessage({ browser, info, shot }, note, targetId) {
+    function pickMessage({ browser, info, shot, items }, note, targetId) {
+      if (items?.length > 1) {
+        const messages = items.map(item => pickMessage({ browser, ...item }, "", targetId));
+        const meta = { ...messages[0].meta, element_count: String(items.length) };
+        const shots = items.map(item => item.shot).filter(Boolean);
+        if (shots.length) meta.screenshots = JSON.stringify(shots);
+        return { content: [note, "", `Selected elements: ${items.length}`, ...messages.map((message, index) =>
+          `\n--- Selected element ${index + 1} ---\n${message.content.trimStart()}`)].join("\n"), meta };
+      }
       const { rect, viewport } = info;
       const lines = [
         note,
@@ -720,6 +745,7 @@ function logError(where, e) {
     // Son MAX_SHOTS görüntü tutulur.
     const SHOTS_DIR = `${zenMcpRuntimeDir()}/${zenMcpApp}-picks`;
     const MAX_SHOTS = 20;
+    let pickShotId = 0;
 
     async function elementShot(browser, { rect, viewport }) {
       const wg = browser.browsingContext?.currentWindowGlobal;
@@ -749,7 +775,7 @@ function logError(where, e) {
       const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
       const { IOUtils } = win;
       await IOUtils.makeDirectory(SHOTS_DIR, { permissions: 0o700 });
-      const path = `${SHOTS_DIR}/${Date.now()}.png`;
+      const path = `${SHOTS_DIR}/${Date.now()}-${String(++pickShotId).padStart(6, "0")}.png`;
       await IOUtils.write(path, new Uint8Array(await blob.arrayBuffer()));
       const files = (await IOUtils.getChildren(SHOTS_DIR)).sort();
       for (const old of files.slice(0, -MAX_SHOTS)) await IOUtils.remove(old).catch(() => {});

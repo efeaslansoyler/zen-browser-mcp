@@ -2,6 +2,17 @@
 
 ## Güncel öncelik — 2026-10-20
 
+Çoklu öğe seçimi kodlandı: aynı sayfada Shift+tık ile en fazla 8 öğe, Enter ile
+bitirme, tek not, öğe başına bağlam/PNG, hedefi sabitleme ve receipt. Canlı test
+ilk denemede seçim/gönderim/receipt/tek seçim/8 sınırı/Backspace/Esc adımlarını geçti.
+Son gezinme kontrolünün test sürücüsündeki string→JSON hatası düzeltildi;
+`node scripts/check-multi-pick.ts` son tekrarı bekliyor. Kod bu kayıtla birlikte
+commit edildi. Bu betik gerçek
+AI oturumlarına mesaj göndermez; yerel receipt fixture'larını kullanır.
+EPERM shell sandbox'ına özgü görünüyor; standart Zen MCP burada çalıştı.
+Ayrıntılar DEVAM.md başında ve CODEX-SOCKET.md'de. Sonraki aday CLI+skill ölçümü.
+
+
 Koordinasyon ve örtülü öğe kontrolü `9d13f3c` ile commit edildi; push yapılmadı.
 Şimdi read_page/get_page_text için isteğe bağlı diff/since, snapshot kimlikleri,
 oturuma/okuma kapsamına özel sınırlı cache ve full fallback kodlandı. 15 yeni test

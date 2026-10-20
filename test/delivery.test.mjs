@@ -45,3 +45,16 @@ for (const name of ['codex-mcp-client', 'claude-code', 'Unknown']) {
     } finally { await client.close(); await server.close(); }
   });
 }
+
+test('Codex adapter preserves a single note, numbered multiple contexts and screenshot list', async () => {
+  let message;
+  await deliverCodexPick(threadId, {
+    event: 'channel', note: 'Align both', content: 'Align both\n\nSelected elements: 2\n--- Selected element 1 ---\n#one\nScreenshot: /tmp/one.png\n--- Selected element 2 ---\n#two\nScreenshot: /tmp/two.png',
+    meta: { source_tab: '4', element_count: '2', screenshots: '["/tmp/one.png","/tmp/two.png"]' },
+  }, async (_, value) => { message = value; });
+  assert.equal(message.match(/Align both/g).length, 1);
+  assert.match(message, /untrusted page data/);
+  assert.match(message, /Selected element 1[\s\S]*Selected element 2/);
+  assert.match(message, /"element_count":"2"/);
+  assert(message.includes('/tmp/one.png') && message.includes('/tmp/two.png'));
+});

@@ -4,6 +4,62 @@ Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.
 
 ## Güncel devir özeti — 2026-10-20
 
+### Güncel çalışma — çoklu öğe seçimi ve EPERM teşhisi (2026-10-20)
+
+**Kod ve ilk canlı kontroller hazır; düzeltilmiş betiğin son tekrarı BEKLİYOR.**
+Önceki diff işi `f252db4`, koordinasyon/tıklama işi `9d13f3c` ile commit edildi.
+Çoklu seçim değişiklikleri bu devir kaydıyla birlikte commit edildi.
+
+Efe ilk canlı testi çalıştırdı (v5 → reload): Codex ve Claude yerel fixture'larında
+trusted Shift/toggle/Enter, iki bağlam/görsel, ortak not, sabit hedef ve receipt geçti.
+Tek seçim uyumu, 8 sınırı, Backspace ve Esc geçti. Son gezinme kontrolünde uygulama
+beklenen "Error: The page changed..." hatasını verdi; test sürücüsü bu düz metni
+JSON.parse etmeye çalıştığından hata verdi. Sürücü artık hata metnini `{error: ...}`
+nesnesiyle döndürüyor. Uygulama mantığı değiştirilmedi. Son iki assertion'ın canlı
+tekrarı bekliyor; önceki test sekmesi/alıcıları temizlendi, ayarlar değişmedi.
+
+- Seçici açıkken Shift+tık öğe ekler/çıkarır; Enter mevcut seçimleri bitirir.
+  Normal tık tek öğede eski akışı korur, çoklu seçimde tıklananı ekleyip bitirir.
+  Backspace son seçimi çıkarır, Esc hepsini iptal eder. Aynı sayfada en fazla 8 öğe;
+  numaralı çerçeveler konum değişimini takip eder. Sınırda dokuzuncuyu tıklamak
+  sessizce sekizi göndermez; seçim açık kalır ve sınır mesajı gösterilir.
+- Üst sayfadaki öğeler desteklenir (mevcut seçicinin kapsamı). Sekmeler/iframe'ler
+  arasında çoklu sepet eklenmedi. Gezinme/actor kapanışı ve Esc temizler; bir seçilmiş
+  öğe kaldırıldıysa kalanlarını sessizce göndermek yerine yeniden seçim istenir.
+- Tek ortak kullanıcı notu; her öğe için numaralı selector/HTML/stil/metin/bileşen
+  bağlamı ve görünürse ayrı PNG. Metadata element_count ve JSON-string screenshots
+  taşır; ilk screenshot alanı ve tek seçim biçimi geriye uyumludur.
+- Hedef oturum sabit kalır, tek gönderim ve receipt bekleme korunur. Yabancı sahibin
+  sekmesi source_tab kalır; seçim sahiplik/onay vermez. Hazırlık bitmeden gönderim
+  engellenir; gönderim öncesi belge kimliği tekrar kontrol edilir.
+- Codex mesaj adaptörü tek notu ve çoklu görselleri korur; Claude channels aynı
+  tek olay gövdesini alır. Mevcut Node süreçleri değişen adaptör/yönerge için MCP
+  reconnect; tarayıcı tarafı reload ister. Zen restart gerekmez.
+- 12 picker testi + 1 delivery testi eklendi; önceki testlerle **116 soketsiz test
+  geçti** (hook dosyası hariç); build/syntax/diff geçti. Sahte DOM ile gerçek actor,
+  ana süreç, animasyon-frame çizimi ve adaptör çalıştırıldı; canlı sonuç değildir.
+- Canlı sürücü: `node scripts/check-multi-pick.ts`. Gerçek EventUtils girdiyle
+  Shift/toggle/Enter, 8 sınırı, Backspace/Esc, normal tek seçim, PNG'ler ve belge
+  değişince gönderimin reddi sınanır. Codex/Claude görünümlü **yalnız yerel receipt
+  fixture'ları** kullanılır; gerçek bir AI sohbetine mesaj/queue göndermez. Ada hedef
+  seçimi, gerçek Gönder düğmesi, wire receipt ve tek ortak not doğrulanır.
+  Mevcut auto modunu ister, ayar değiştirmez; yalnız test sekmesini kapatır.
+- Bu ortamda canlı betik ilk socket bağlantısında EPERM verdi; reload yapılmadı.
+  **İlk kalan iş: düzeltilen `node scripts/check-multi-pick.ts` betiğinin kullanıcı
+  terminalindeki son tekrarı.**
+
+**EPERM bulgusu:** komut sandbox'ı hem Zen connect hem /tmp'de bağımsız Unix bind
+çağrısını EPERM ile engelliyor; UID ve soket izinleri normal, Seccomp=2/NoNewPrivs=1.
+Buna karşılık **bu sohbetin standart Zen MCP tabs_context_mcp aracı çalıştı**.
+Yani sorun genel MCP değil; sandbox'lı shell komutunun doğrudan soket erişimi.
+Claude'un etkin politikası ölçülmedi; farklı sandbox kullanması olasıdır.
+Kullanıcı config'ine/sandbox politikasına müdahale edilmedi; yükseltme onayları bu
+ortamda kapalı. Resmî profile özgü unix_sockets allowlist'i ve sınırları
+[`CODEX-SOCKET.md`](CODEX-SOCKET.md)'de. Kullanıcıya CLI/masaüstü/IDE açılışı soruldu;
+cevabıyla doğru aktif profil ayar yeri belirlenecek. Native MCP'ye debug eval ekleyip
+sandbox aşılmayacak. Kalıcı hafıza salt okunurdu; güncel kaynak bu bölümdür.
+
+
 ### Güncel çalışma — sayfa okuma diff / çıktı verimliliği (2026-10-20)
 
 **Önceki tamamlanan işler `9d13f3c` ile commit edildi** (koordinasyon ve korumalı

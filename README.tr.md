@@ -110,6 +110,15 @@ Claude'dan tarayıcıda bir şey yapmasını iste: *"seaskablo.com'u aç, fiyat 
 Claude arka planda kendi sekmesini açar; sekmede ajanın renginde bir çizgi belirir, ada ne olduğunu
 gösterir. Sekmeye gitmek için adaya tıkla.
 
+### Birden çok öğe seç
+
+Ctrl+Shift+F veya sayfa sağ tık menüsüyle seçiciyi aç. Shift+tık öğe ekler/çıkarır;
+Enter seçilenleri bitirir. Aynı üst sayfadan en fazla sekiz öğe seçilebilir. Backspace
+son seçimi çıkarır, Esc hepsini iptal eder; ok tuşları üst/alt öğeye geçmeyi sürdürür.
+Normal tık eski tek öğe akışını korur. Numaralı çerçeveler öğeleri takip eder.
+Adada tek not yazıp hedefi seç: her öğe kendi bağlamı ve varsa görünür alan görüntüsüyle
+gider. Seçim sekmeye erişim vermez; göndermeden sayfa değişirse yeniden seçmek gerekir.
+
 ### Tekrarlanan okumalarda az çıktı
 
 `read_page` ve `get_page_text`, `diff: true` alır. İlk yanıt `snapshot` kimliğiyle tam
