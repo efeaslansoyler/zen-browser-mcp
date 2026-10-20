@@ -193,6 +193,34 @@ never silently sent to another chat. Double-clicking Send does not duplicate del
 Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
 if it needs live access, and you approve or decline in the browser.
 
+## System clipboard
+
+`clipboard` supports `read`, `write`, `copy` and `paste`. Every operation requires a
+fresh island approval, including auto mode and each step of a batch. Standard
+Ctrl/Cmd+C/V/X and Insert/Delete clipboard shortcuts use the same consent path.
+Denial or timeout does not access the clipboard or perform the requested action.
+
+An owned `tabId` anchors the request to a browser context. `read` returns plain text
+with `untrusted`, `characters` and `truncated` metadata (`max_chars`: 20000 by default,
+100000 maximum). `write` replaces clipboard text without echoing it in the response
+or activity log. `copy` copies the existing selection; `paste` uses an editable `ref`
+or the focused field. Native copy/paste events are used; no synthetic clipboard data
+is sent to the page. Target changes during approval invalidate the request.
+
+```json
+{"action":"read","tabId":12,"max_chars":20000}
+{"action":"write","tabId":12,"text":"Hello"}
+{"action":"copy","tabId":12}
+{"action":"paste","tabId":12,"ref":"ref_4"}
+```
+
+For an already-open extension panel, copy/paste accept `extensionId` and its panel ref.
+The panel is temporarily kept open while island consent is pending. Clipboard operations
+do not switch tabs. Page block rules still apply. This controls MCP clipboard actions
+and standard shortcuts, not independent clipboard writes by websites or extensions.
+The clipboard is shared with other applications; there is no automatic rollback of
+an approved write. Reconnect the MCP client to discover the new tool.
+
 ## Browser extensions
 
 The agent discovers installed extensions in `tabs_context_mcp` or with `extensions list`.

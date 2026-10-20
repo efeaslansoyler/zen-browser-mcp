@@ -20,6 +20,13 @@ Eklentinin aktif sekme bağlamı için hedef sekme aynı pencerede seçilir; sek
 auto modda da island üzerinden açık onay ister. İlk sürüm toolbar
 panellerini kapsar; sidebar/background entegrasyonları ayrı kapsamdır.
 
+## Pano (2026-10-20, Efe) ✅
+
+MCP ana yol olarak kalacak. Genel sistem panosu read/write/copy/paste; her işlem auto
+modda da island onayı ister, batch izni diğer pano işlemlerini kapsamaz. Sayfa ve açık
+eklenti paneli desteklenir, standart pano kısayolları da onay ister. Sonraki adaylar:
+indirme takibi, değişmediyse screenshot göndermeme, işaretli screenshot, React/axe.
+
 ## Ada (2026-10-19)
 
 Efe compact mode kullanıyor; sekmedeki turuncu çizgiyi görmüyor. Çözüm: Zen penceresinin

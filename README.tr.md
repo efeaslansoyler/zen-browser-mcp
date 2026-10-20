@@ -192,6 +192,34 @@ Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;
 adadan onaylar veya reddedersin.
 
+## Sistem panosu
+
+`clipboard` aracı `read`, `write`, `copy`, `paste` işlemlerini sunar. Her işlem auto
+modda ve batch içinde de island üzerinden ayrı, tek kullanımlık onay ister.
+Ctrl/Cmd+C/V/X ve Insert/Delete pano kısayolları da aynı onaydan geçer. Ret veya zaman
+aşımında panoya erişilmez ve istenen işlem yapılmaz.
+
+İstek bir ajana ait `tabId` ile tarayıcı bağlamına bağlanır. `read` düz metni
+`untrusted`, `characters`, `truncated` bilgileriyle döndürür (`max_chars` varsayılan
+20000, en fazla 100000). `write` panodaki metni değiştirir; metni cevaba veya etkinlik
+günlüğüne yazmaz. `copy` mevcut seçimi kopyalar; `paste` bir düzenlenebilir `ref` veya
+odaktaki alana yapıştırır. Yerel kopyalama/yapıştırma kullanılır, sayfaya sahte pano
+olayı gönderilmez. Onay beklerken hedef değişirse istek geçersiz olur.
+
+```json
+{"action":"read","tabId":12,"max_chars":20000}
+{"action":"write","tabId":12,"text":"Merhaba"}
+{"action":"copy","tabId":12}
+{"action":"paste","tabId":12,"ref":"ref_4"}
+```
+
+Açık eklenti panelinde copy/paste için `extensionId` ve panel ref'i verilir. Island
+onayı beklenirken panelin kendiliğinden kapanması geçici olarak engellenir. Pano
+işlemleri sekme değiştirmez. Site engelleme kuralları geçerlidir. Bu onay MCP pano
+araçları ve standart kısayollar içindir; sitelerin/eklentilerin kendi bağımsız pano
+yazımlarını genel olarak engellemez. Pano diğer uygulamalarla ortaktır; onaylı bir
+yazım otomatik geri alınmaz. Yeni araç için MCP bağlantısını yenilemek gerekir.
+
 ## Tarayıcı eklentileri
 
 Ajan kurulu eklentileri `tabs_context_mcp` cevabında veya `extensions list` ile görür.

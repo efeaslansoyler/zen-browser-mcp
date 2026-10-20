@@ -85,6 +85,7 @@ function logError(where, e) {
     const ownership = new Ownership(state.owners ||= new Map(), state.ownerVersions ||= new Map(),
       state.tabWork ||= new Map(), state.tabQueues ||= new Map(), state.tabHandoffs ||= new Map());
     const { normalizeConfig, siteRule } = ChromeUtils.importESModule(`resource://zenmcp/SiteRules.sys.mjs?v=${version}`);
+    const { ClipboardAccess, clipboardShortcut } = ChromeUtils.importESModule(`resource://zenmcp/Clipboard.sys.mjs?v=${version}`);
     const { ExtensionPanels } = ChromeUtils.importESModule(`resource://zenmcp/ExtensionPanels.sys.mjs?v=${version}`);
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
     const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
@@ -1311,13 +1312,19 @@ function logError(where, e) {
     }
 
     // "ctrl+a", "Return", "Tab Tab Return"
-    function pressKeys(browser, text) {
+    async function pressKeys(browser, text) {
       const keys = text.trim().split(/\s+/).map(combo => {
         const parts = combo.split("+");
         const key = keyName(parts.pop());
         return { key, mods: parseModifiers(parts.join("+")) };
       });
-      return typeInFocus(browser, { kind: "keys", keys });
+      if (!keys.some(clipboardShortcut)) return typeInFocus(browser, { kind: "keys", keys });
+      for (const key of keys) {
+        const action = clipboardShortcut(key);
+        if (action) await performClipboard(browser, { action });
+        else await typeInFocus(browser, { kind: "keys", keys: [key] });
+      }
+      return "done";
     }
 
     // tuşlar odaktaki çerçeveye
@@ -1546,6 +1553,7 @@ function logError(where, e) {
         tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
         wait_for: () => L("waiting", "bekliyor"),
         extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
+        clipboard: () => L("requesting clipboard access", "pano erişimi istiyor"),
       }[tool]?.() ?? L("working", "çalışıyor");
       return host ? `${host} — ${what}` : what;
     }
@@ -1872,6 +1880,76 @@ function logError(where, e) {
         scope, context, currentContext: readContext(browser), text: value, diff, since }));
     }
 
+    function readClipboardText() {
+      const clipboard = Cc["@mozilla.org/widget/clipboard;1"].getService(Ci.nsIClipboard);
+      if (!clipboard.hasDataMatchingFlavors(["text/plain"], clipboard.kGlobalClipboard)) return "";
+      const transfer = Cc["@mozilla.org/widget/transferable;1"].createInstance(Ci.nsITransferable);
+      transfer.init(null);
+      transfer.addDataFlavor("text/plain");
+      clipboard.getData(transfer, clipboard.kGlobalClipboard);
+      const value = {};
+      transfer.getTransferData("text/plain", value);
+      return value.value.QueryInterface(Ci.nsISupportsString).data;
+    }
+
+    async function performClipboard(browser, args) {
+      const source = controlledSource(browser);
+      const check = context => {
+        operation?.check();
+        ownership.check(source.browserId, activeSession);
+        assertSiteAccess(browser);
+        if (context && (!samePermissionContext(context.policy, permissionContext(source)) ||
+            browser.browsingContext.currentWindowGlobal !== context.document)) {
+          throw new Error("The clipboard target or permission settings changed while awaiting approval; nothing was done.");
+        }
+      };
+      const surface = operation?.extensionSurface;
+      const panel = surface?.browser === browser
+        ? extensionPanels.get(source, activeSession, surface.tabId, surface.extensionId).popup.panel : null;
+      const noAutoHide = panel?.getAttribute("noautohide");
+      if (panel) panel.setAttribute("noautohide", "true");
+      const access = new ClipboardAccess({
+        check,
+        prepare: async input => {
+          const context = { policy: permissionContext(source), document: browser.browsingContext.currentWindowGlobal };
+          if (["copy", "paste", "cut"].includes(input.action)) {
+            context.frame = input.ref ? frameOf(browser, input.ref) : await focusedFrame(browser);
+            context.frameDocument = context.frame.currentWindowGlobal;
+            context.target = (await query(browser, "clipboard_prepare", { action: input.action, ref: input.ref && longRef(input.ref) }, 5000, context.frame)).value;
+          }
+          check(context);
+          return context;
+        },
+        ask: async input => {
+          const what = {
+            read: L("read text from your system clipboard", "sistem panondaki metni okumak"),
+            write: L(`replace your system clipboard with ${input.text?.length ?? 0} characters`, `sistem panonun üzerine ${input.text?.length ?? 0} karakter yazmak`),
+            copy: L("copy the target selection to your system clipboard", "hedefteki seçimi sistem panona kopyalamak"),
+            paste: L("paste your system clipboard into the target", "sistem panondakini hedefe yapıştırmak"),
+            cut: L("cut the target selection to your system clipboard", "hedefteki seçimi kesip sistem panona almak"),
+          }[input.action];
+          const result = await askIsland(source, L("System clipboard permission", "Sistem panosu izni") + ` · ${hostOf(source) || source.contentTitle || source.currentURI.spec}`,
+            L(`${activeAgent.name} wants to ${what}. This clipboard is shared with your other applications.`, `${activeAgent.name} şunu yapmak istiyor: ${what}. Bu pano diğer uygulamalarınla ortaktır.`),
+            { ok: L("Allow once", "Bir kez izin ver"), cancel: L("Deny", "Verme") });
+          return result === "done";
+        },
+        read: readClipboardText,
+        write: value => Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value),
+        command: async (input, context) => {
+          if (context.frame.currentWindowGlobal !== context.frameDocument) throw new Error("The clipboard target frame changed; nothing was done.");
+          await query(browser, "clipboard_execute", { token: context.target.token, action: input.action }, 5000, context.frame);
+        },
+      });
+      try {
+        return await access.run(args);
+      } finally {
+        if (panel) {
+          if (noAutoHide === null) panel.removeAttribute("noautohide");
+          else panel.setAttribute("noautohide", noAutoHide);
+        }
+      }
+    }
+
     // ---- tool'lar: hepsi MCP içerik dizisi döner ----
 
     // tek satır JSON: girinti her çağrıda boşuna token
@@ -1879,6 +1957,22 @@ function logError(where, e) {
 
     const tools = {
       async tab_work(args) { return coordinateTab(args, activeSession); },
+      async clipboard(args) {
+        const source = browserFor(args.tabId);
+        if (!args.extensionId) return text(await performClipboard(source, args));
+        if (!["copy", "paste"].includes(args.action)) throw new Error("extensionId is only needed for panel copy/paste; read/write use the system clipboard.");
+        const entry = extensionPanels.get(source, activeSession, args.tabId, args.extensionId);
+        const bc = entry.popup.browser.browsingContext;
+        const prefix = `panel_${bc.id}_${bc.currentWindowGlobal.innerWindowId}:`;
+        let ref = args.ref;
+        if (ref) {
+          if (!ref.startsWith(prefix)) throw new Error("Use a ref from the current extension panel.");
+          ref = ref.slice(prefix.length);
+        }
+        operation.extensionSurface = { source, browser: entry.popup.browser, tabId: args.tabId, extensionId: args.extensionId };
+        try { return text(await performClipboard(entry.popup.browser, { ...args, ref })); }
+        finally { delete operation.extensionSurface; }
+      },
       async extensions(args) {
         if (args.action === "list") return text({ extensions: await extensionPanels.list() });
         if (args.tabId == null || !args.extensionId) throw new Error("tabId and extensionId are required except for list.");
@@ -2398,7 +2492,7 @@ function logError(where, e) {
       }
       const browser = !["request_tab", "tab_work"].includes(tool) && state.tabs.has(args.tabId) ? findTab(args.tabId)?.linkedBrowser : null;
       const entry = { t: new Date().toISOString(), tool };
-      if (args.action && tool === "computer") entry.action = args.action;
+      if (args.action && ["computer", "clipboard"].includes(tool)) entry.action = args.action;
       if (browser) {
         ownership.touch(args.tabId, activeSession);
         operation?.tabs?.add(args.tabId);
@@ -2419,7 +2513,7 @@ function logError(where, e) {
             assertSiteURL(destination.spec);
           }
         }
-        if (browser && tool !== "browser_batch" && !cleanup) {
+        if (browser && !["browser_batch", "clipboard"].includes(tool) && !cleanup) {
           const what = await describeWrite(tool, args, browser);
           if (what) entry.what = what;
           let grant = approvals?.get(browser);

@@ -34,7 +34,7 @@ for (const name of ['codex-mcp-client', 'claude-code', 'Example Agent']) {
     await client.connect(clientTransport);
     try {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 21);
+      assert.equal(tools.length, 22);
       const computer = tools.find(t => t.name === 'computer');
       const schema = computer.inputSchema;
       for (const key of ['coordinate', 'start_coordinate']) {
@@ -66,7 +66,7 @@ for (const name of ['codex-mcp-client', 'claude-code', 'Example Agent']) {
       assert.equal(received[1][0], 'browser_batch');
       assert.deepEqual(received[1][3], identifyAgent(name));
       const inputs = {
-        extensions: { action: "list" }, tab_work: { action: "list" }, tabs_context_mcp: {}, tabs_create_mcp: {}, tabs_close_mcp: { tabId: 1 },
+        clipboard: { action: "read", tabId: 1 }, extensions: { action: "list" }, tab_work: { action: "list" }, tabs_context_mcp: {}, tabs_create_mcp: {}, tabs_close_mcp: { tabId: 1 },
         navigate: { tabId: 1, url: 'https://example.test' },
         computer: { tabId: 1, action: 'screenshot', scale: 0.5 },
         read_page: { tabId: 1 }, find: { tabId: 1, query: 'Submit' },

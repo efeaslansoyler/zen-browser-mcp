@@ -212,6 +212,11 @@ export class ZenMcpChild extends JSWindowActorChild {
           this.#assertHit(el, data.x, data.y, "Target iframe");
           return { value: true };
         }
+        case "clipboard_prepare":
+          return { value: this.#clipboardPrepare(data) };
+        case "clipboard_execute":
+          scope.check();
+          return { value: this.#clipboardExecute(data) };
         case "input":
           return { value: await this.#input(data, scope) };
         case "console":
@@ -273,6 +278,40 @@ export class ZenMcpChild extends JSWindowActorChild {
     let value = Cu.evalInSandbox(code, sandbox, null, "zen-mcp", 1);
     if (value && typeof value.then === "function") value = await value;
     return describe(value);
+  }
+
+  #clipboardPending = new Map();
+  #clipboardSequence = 0;
+  #clipboardState(element) {
+    const selection = this.contentWindow.getSelection();
+    return { element, value: element.value, start: element.selectionStart, end: element.selectionEnd,
+      anchor: selection?.anchorNode, anchorOffset: selection?.anchorOffset,
+      focus: selection?.focusNode, focusOffset: selection?.focusOffset };
+  }
+  #clipboardPrepare({ action, ref }) {
+    if (!["copy", "paste", "cut"].includes(action)) throw new Error("Unsupported clipboard command.");
+    const element = ref ? this.#element(ref) : this.document.activeElement;
+    if (!element) throw new Error("No clipboard target.");
+    if ((action === "paste" || action === "cut") &&
+        (!(element.localName === "input" || element.localName === "textarea" || element.isContentEditable) || element.disabled || element.readOnly)) {
+      throw new Error("Clipboard target must be an editable field.");
+    }
+    const token = `clipboard_${++this.#clipboardSequence}`;
+    this.#clipboardPending.clear();
+    this.#clipboardPending.set(token, { action, ref, state: this.#clipboardState(element) });
+    return { token };
+  }
+  #clipboardExecute({ action, token }) {
+    const pending = this.#clipboardPending.get(token);
+    this.#clipboardPending.delete(token);
+    if (!pending || pending.action !== action) throw new Error("Clipboard approval target expired; try again.");
+    const expected = pending.state;
+    if (!expected.element.isConnected || (!pending.ref && this.document.activeElement !== expected.element)) throw new Error("Clipboard focus changed; nothing was done.");
+    const current = this.#clipboardState(expected.element);
+    if (Object.keys(expected).some(key => current[key] !== expected[key])) throw new Error("Clipboard target/selection changed; nothing was done.");
+    if (pending.ref) expected.element.focus({ preventScroll: true });
+    if (!this.document.execCommand(action)) throw new Error(`Native clipboard ${action} was not available.`);
+    return "done";
   }
 
   // ---- ref'ler ----
