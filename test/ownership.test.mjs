@@ -36,7 +36,7 @@ function harness() {
   const store = new Map();
   let next = 1, timerId = 0, started;
   const first = new Promise(resolve => { started = resolve; });
-  const context = vm.createContext({
+  const context = vm.createContext({ controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
     assertSiteAccess() {}, ruleFor: () => "default",
     Ownership, Cancellation, agentTheme, activeAgent: agentTheme({ id: 'codex' }), activeSession: null,
     readSnapshots: new ReadSnapshots(), ownership: new Ownership(), sessions: new Map(), sessionVersions: new Map(),

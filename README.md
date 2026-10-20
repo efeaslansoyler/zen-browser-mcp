@@ -193,6 +193,39 @@ never silently sent to another chat. Double-clicking Send does not duplicate del
 Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
 if it needs live access, and you approve or decline in the browser.
 
+## Browser extensions
+
+The agent discovers installed extensions in `tabs_context_mcp` or with `extensions list`.
+It can use their real toolbar UI with one generic tool; there are no extension-specific
+APIs, rules or integrations.
+
+```json
+{"action":"open","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+{"action":"read","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+{"action":"computer","computerAction":"left_click","ref":"<panel ref from read>","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+{"action":"close","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+```
+
+`read`, `text`, `find`, `computer` (including screenshots, scrolling, typing and keys), and
+`form_input` operate on the panel. Panel refs include a panel/document prefix and cannot
+be confused with source-page refs. An extension with a toolbar action but no popup can
+still be invoked with `open`; the response states that no panel exists.
+
+Opening a panel selects the source tab in the existing window, because extensions use
+the active tab. The tab must belong to the caller. Site rules and approvals apply to the
+source site; a panel cannot be used as another session's tab handle. Switching tabs,
+navigation, ownership changes or dismissal require reopening and fresh refs. Stop,
+session end and bridge reload close tracked panels.
+
+The agent is instructed to track temporary setting changes and restore the original
+state through the UI when finished. There is no automatic rollback after interruption.
+This first version controls toolbar panels, not arbitrary browser settings, extension
+background code or sidebar-only interfaces. Extension-created tabs follow normal tab
+ownership rules; clipboard/download outputs still use the existing host/file workflow.
+
+After installing this update, reconnect the MCP client to discover the new `extensions`
+tool; reloading the browser bridge alone does not refresh an existing MCP server.
+
 ## Modes and site rules
 
 The general mode is **auto** (act without asking) or **ask** (request approval before

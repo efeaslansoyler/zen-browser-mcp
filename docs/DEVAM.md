@@ -53,6 +53,22 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
   `check-permissions.ts` canlı testleri (eski onaylar, block, yönlendirme, iframe, menü) geçti;
   mevcut auto ayarı geri yüklendi.
 
+- **Genel eklenti arayüzü** (2026-10-20): `extensions` aracı list/open/read/text/find/
+  computer/form_input/close. Kurulu eklentiler `tabs_context_mcp` cevabında da gelir.
+  Firefox'un gerçek toolbar action/popup'ı kullanılır; eklentiye özel API/kural yok.
+  Panel açılırken kaynak sekme seçilir (activeTab için); mevcut pencere kullanılır.
+  `browser/ExtensionPanels.sys.mjs` oturum+sekme+belge+sahiplik sürümüne göre doğrular.
+  `panel_<bc>_<innerWindow>:ref_N` ref'leri sayfa ve eski panellerle karışmaz.
+  Sayfa kuralları/izinler korunur; panel eylemleri mevcut actor ile gerçek girdi üretir.
+  Durdur, devir, oturum sonu, reload paneli kapatır. Geçici ayarları geri almak ajanın
+  talimatıdır; otomatik rollback yok. Sidebar veya keyfi background API erişimi yok.
+  Eklentinin açtığı yeni sekmeler otomatik sahiplenilmez; pano/indirme çıktıları host
+  araçlarıyla alınır. Yeni tool/agent talimatları için MCP reconnect gerekir.
+  `check-extensions.ts`: geçici yerel eklentiyle gerçek MCP → popup → trusted click /
+  activeTab / Markdown çıktısı / form / klavye / screenshot; mevcut uBlock paneli
+  ayarı değiştirilmeden okundu. Test eklentisi kaldırılır, önceki seçili sekme geri gelir.
+  `npm test`: 135/135; canlı extensions ve permissions kontrolleri geçti.
+
 **CLI + skill deneyi → `cli-prototype` dalı** (main'e alınmadı). Kalıcı broker'lı CLI
 (`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16
 çağrıda MCP 322 ms, CLI 785 ms, metin aynı. Gerçek ajan pilotu (Codex + Claude, 3 görev ×
@@ -65,15 +81,16 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** Dal yalnız ileride lazım
    Gerçek seçim → otomatik alıcı → queue → bu sohbete öğe bağlamı ulaştı. Eksik Codex
    `default_permissions` ayarı yedeklenip `:workspace` ile düzeltildi. Tekrar kontrol:
    `node scripts/check-pick-delivery.ts --automatic` (gerçek sohbete mesaj gönderir).
-2. Efe'nin sırada konuşmak istediği yeni bir özellik fikri var. Diğer adaylar React/axe,
-   Quickshell göstergesi, isim + npm; ayrı izinli alan adları yerine site kuralları seçildi.
+2. Efe'nin eklenti fikri uygulandı. Yeni `extensions` aracı için MCP reconnect ve günlük
+   kullanım geri bildirimi bekleniyor. Diğer adaylar React/axe, Quickshell göstergesi,
+   isim + npm; ayrı izinli alan adları yerine site kuralları seçildi.
 3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.
 
 ## Çalışma yöntemi
 
 - `npm test` (build + soketsiz/soketli birim testleri; sahte DOM ile gerçek actor/ana süreç kodu).
 - Canlı: `node scripts/check-<özellik>.ts` (compat, cancellation, permissions, ownership,
-  coordination, hit-test, read-diff, multi-pick). Köprüyü reload eder, yalnız kendi test
+  coordination, hit-test, read-diff, multi-pick, extensions). Köprüyü reload eder, yalnız kendi test
   sekmelerini kapatır, mevcut `mode: auto` ister; config'i geçici değiştirenler geri yükler.
   Sonrasında `~/.config/zen-mcp/config.json`'un `mode: auto` kaldığını kontrol et.
   `check-pick-delivery.ts` GERÇEK sohbete mesaj yollar, rastgele çalıştırma.

@@ -19,7 +19,7 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
   navigate(site);
   const ownership = new Ownership();
   ownership.assign(1, 'test-session');
-  const context = vm.createContext({
+  const context = vm.createContext({ controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
     siteRule, framesOf: () => [], Services: { uriFixup: { getFixupURIInfo: url => ({ preferredURI: { spec: new URL(url).href } }) }, io: { newURI: url => ({ host: new URL(url).hostname }) } },
     ownership, activeSession: 'test-session',
     browserFor: id => { ownership.check(id, 'test-session'); return browser; },
@@ -36,6 +36,7 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
     tools: {
       navigate: async args => { navigate(args.url); return []; },
       javascript_tool: async args => { effects.push(args.text); return []; },
+      extensions: async args => { effects.push(args.action); return []; },
       read_page: async () => [],
       get_page_text: async () => [],
       computer: async () => [],
@@ -207,4 +208,17 @@ test('blocked iframe prevents parent reads and screenshots', async () => {
   assert(result.isError);
   assert.match(result[0].text, /blocked/);
   assert.deepEqual(h.effects, []);
+});
+
+
+test('extension UI writes use source-site approvals; reads are free and block denies opening', async () => {
+  const h = harness({ sites: { 'ordinary.test': 'ask' } });
+  for (const input of [{ action: 'open', extensionId: 'fixture' }, { action: 'read' },
+    { action: 'computer', computerAction: 'screenshot' }, { action: 'computer', computerAction: 'left_click', ref: 'panel_1:ref_1' }]) {
+    await h.batch([h.action('extensions', input)]);
+  }
+  assert.equal(h.prompts.length, 2, 'Open and click ask; panel read/screenshot do not');
+  const denied = harness({ sites: { 'ordinary.test': 'block' } });
+  const result = await denied.batch([denied.action('extensions', { action: 'open', extensionId: 'fixture' })]);
+  assert(result.isError); assert.deepEqual(denied.effects, []); assert.equal(denied.prompts.length, 0);
 });

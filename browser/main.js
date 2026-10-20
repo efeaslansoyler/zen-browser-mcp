@@ -85,6 +85,10 @@ function logError(where, e) {
     const ownership = new Ownership(state.owners ||= new Map(), state.ownerVersions ||= new Map(),
       state.tabWork ||= new Map(), state.tabQueues ||= new Map(), state.tabHandoffs ||= new Map());
     const { normalizeConfig, siteRule } = ChromeUtils.importESModule(`resource://zenmcp/SiteRules.sys.mjs?v=${version}`);
+    const { ExtensionPanels } = ChromeUtils.importESModule(`resource://zenmcp/ExtensionPanels.sys.mjs?v=${version}`);
+    const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
+    const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+    const { ViewPopup, isGloballyBlockingOpenPopup } = ChromeUtils.importESModule("resource:///modules/ExtensionPopups.sys.mjs");
     const { ReadSnapshots } = ChromeUtils.importESModule(`resource://zenmcp/ReadSnapshots.sys.mjs?v=${version}`);
     const readSnapshots = new ReadSnapshots(); // Reload deliberately invalidates previous snapshot IDs.
     const sessions = state.sessions ||= new Map();
@@ -104,10 +108,12 @@ function logError(where, e) {
     }
 
     function cancelTabWork(tabId) {
+      extensionPanels.releaseTab(tabId);
       if (operation?.tabs?.has(tabId)) operation.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
     }
 
     function endOwnerSession(id) {
+      extensionPanels.releaseSession(id);
       clearTimeout(disconnectTimers.get(id));
       disconnectTimers.delete(id);
       sessionVersions.set(id, (sessionVersions.get(id) || 0) + 1);
@@ -247,6 +253,11 @@ function logError(where, e) {
       }
       ownership.check(tabId, activeSession);
       operation?.tabs?.add(tabId);
+      if (operation?.extensionSurface?.tabId === tabId) {
+        const surface = operation.extensionSurface;
+        extensionPanels.get(tab.linkedBrowser, activeSession, tabId, surface.extensionId);
+        return surface.browser;
+      }
       return tab.linkedBrowser;
     }
 
@@ -291,6 +302,7 @@ function logError(where, e) {
       const id = tab.linkedBrowser.browserId;
       const changed = ownership.assign(id, session);
       if (changed) {
+        extensionPanels.releaseTab(id);
         readSnapshots.clearTab(id);
         if (cancel) cancelTabWork(id);
         state.scale.delete(id);
@@ -310,6 +322,7 @@ function logError(where, e) {
       const browser = tab.linkedBrowser;
       const id = browser.browserId;
       ownership.release(id);
+      extensionPanels.releaseTab(id);
       readSnapshots.clearTab(id);
       if (cancel) cancelTabWork(id);
       tabRequests.get(browser)?.("cancelled");
@@ -1419,6 +1432,7 @@ function logError(where, e) {
     }
 
     function stopClaude() {
+      extensionPanels.destroy();
       if (state.paused) return;
       state.paused = true;
       stopGeneration++;
@@ -1531,6 +1545,7 @@ function logError(where, e) {
         request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
         tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
         wait_for: () => L("waiting", "bekliyor"),
+        extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
       }[tool]?.() ?? L("working", "çalışıyor");
       return host ? `${host} — ${what}` : what;
     }
@@ -1539,7 +1554,7 @@ function logError(where, e) {
     async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
       if (state.paused) throw new Stopped();
       operation?.check();
-      ownership.check(browser.browserId, activeSession);
+      ownership.check(controlledSource(browser).browserId, activeSession);
       assertSiteAccess(browser);
       const scope = operation;
       const wg = frame?.currentWindowGlobal;
@@ -1559,7 +1574,7 @@ function logError(where, e) {
           if (done) return;
           throwIfDialog(browser);
           if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
-          ownership.check(browser.browserId, scope?.session || activeSession);
+          ownership.check(controlledSource(browser).browserId, scope?.session || activeSession);
           assertSiteAccess(browser);
         }
       })();
@@ -1670,6 +1685,32 @@ function logError(where, e) {
       island?.setMode(config.mode);
     }
 
+    const extensionPanels = new ExtensionPanels({
+      list: async () => (await AddonManager.getAddonsByTypes(["extension"]))
+        .filter(addon => !addon.isSystem && !addon.hidden)
+        .map(addon => ({ id: addon.id, name: addon.name, enabled: addon.isActive,
+          hasToolbarAction: !!ExtensionParent.apiManager.global.browserActionFor?.(ExtensionParent.GlobalManager.extensionMap.get(addon.id)) })),
+      extension: id => ExtensionParent.GlobalManager.extensionMap.get(id),
+      action: extension => ExtensionParent.apiManager.global.browserActionFor?.(extension),
+      popup: (extension, win) => ViewPopup.for(extension, win),
+      panelAllowed: (popup, id) => popup.browser?.currentURI?.scheme === "moz-extension" &&
+        ExtensionParent.WebExtensionPolicy.getByURI(popup.browser.currentURI)?.id === id,
+      busy: win => isGloballyBlockingOpenPopup(win),
+      check: (source, session) => {
+        operation?.check();
+        ownership.check(source.browserId, session);
+        assertSiteAccess(source);
+      },
+      version: source => ownership.version(source.browserId),
+      wait: operationSleep,
+    });
+    function controlledSource(browser) {
+      const surface = operation?.extensionSurface;
+      if (surface?.browser !== browser) return browser;
+      extensionPanels.get(surface.source, activeSession, surface.tabId, surface.extensionId);
+      return surface.source;
+    }
+
     const hostOf = browser => {
       try { return browser.currentURI.host; } catch { return ""; }
     };
@@ -1684,11 +1725,14 @@ function logError(where, e) {
       assertSiteHost(host);
     }
     function assertSiteAccess(browser) {
-      assertSiteHost(hostOf(browser));
-      // A screenshot or parent-page script can expose embedded content, too.
-      for (const frame of framesOf(browser)) {
-        const uri = frame.currentWindowGlobal?.documentURI;
-        if (uri) assertSiteURL(uri.spec);
+      const source = controlledSource(browser);
+      assertSiteHost(hostOf(source));
+      // Both the source page and extension UI may embed remote content.
+      for (const root of source === browser ? [source] : [source, browser]) {
+        for (const frame of framesOf(root)) {
+          const uri = frame.currentWindowGlobal?.documentURI;
+          if (uri) assertSiteURL(uri.spec);
+        }
       }
     }
 
@@ -1717,6 +1761,11 @@ function logError(where, e) {
       };
       const quote = (t, n = 80) => `"${String(t).length > n ? String(t).slice(0, n - 1) + "…" : t}"`;
       switch (tool) {
+        case "extensions":
+          if (args.action === "open") return L(`open extension ${args.extensionId} for this tab`, `bu sekme için ${args.extensionId} eklentisini açmak`);
+          if (args.action === "computer") return describeWrite("computer", { ...args, action: args.computerAction, ref: undefined, coordinate: undefined }, browser);
+          if (args.action === "form_input") return L(`fill extension field ${args.ref}`, `eklenti alanını doldurmak: ${args.ref}`);
+          return null;
         case "computer": {
           const verb = actionVerb(args.action);
           if (!verb) return null;
@@ -1806,7 +1855,7 @@ function logError(where, e) {
     function readOutput(browser, scope, context, value, diff, since) {
       assertSiteAccess(browser);
       operation?.check();
-      ownership.check(browser.browserId, activeSession);
+      ownership.check(controlledSource(browser).browserId, activeSession);
       return text(readSnapshots.render({ session: activeSession, tabId: browser.browserId,
         scope, context, currentContext: readContext(browser), text: value, diff, since }));
     }
@@ -1818,11 +1867,44 @@ function logError(where, e) {
 
     const tools = {
       async tab_work(args) { return coordinateTab(args, activeSession); },
+      async extensions(args) {
+        if (args.action === "list") return text({ extensions: await extensionPanels.list() });
+        if (args.tabId == null || !args.extensionId) throw new Error("tabId and extensionId are required except for list.");
+        const source = browserFor(args.tabId);
+        if (args.action === "close") {
+          extensionPanels.close(source, activeSession, args.tabId, args.extensionId);
+          return text("Extension panel closed. Temporary setting changes must be restored through the extension UI before closing.");
+        }
+        if (args.action === "open") {
+          const entry = await extensionPanels.open(source, activeSession, args.tabId, args.extensionId);
+          return text({ extensionId: args.extensionId, tabId: args.tabId, opened: !!entry.popup,
+            invoked: !!entry.invoked, note: entry.popup ? "Read the panel with extensions read; its refs are separate from the page. The target tab is now selected."
+              : "Toolbar action invoked; this extension has no popup. Inspect the target page or extension output." });
+        }
+        const entry = extensionPanels.get(source, activeSession, args.tabId, args.extensionId);
+        operation.extensionSurface = { source, browser: entry.popup.browser, tabId: args.tabId, extensionId: args.extensionId };
+        const panelContext = entry.popup.browser.browsingContext;
+        const prefix = `panel_${panelContext.id}_${panelContext.currentWindowGlobal.innerWindowId}:`;
+        try {
+          const handlers = { read: "read_page", text: "get_page_text", find: "find", computer: "computer", form_input: "form_input" };
+          const name = handlers[args.action];
+          if (!name) throw new Error("Unknown extension action.");
+          if (name === "computer" && !args.computerAction) throw new Error("computerAction is required.");
+          let ref = args.ref;
+          if (ref) {
+            if (!ref.startsWith(prefix)) throw new Error("This ref is not from the current extension panel. Use extensions read/find for fresh panel refs.");
+            ref = ref.slice(prefix.length);
+          }
+          const result = await tools[name]({ ...args, ref, action: args.computerAction });
+          return result.map(item => item.type === "text"
+            ? { ...item, text: item.text.replace(/\bref_\d+(?:_f\d+)?\b/g, ref => prefix + ref) } : item);
+        } finally { delete operation.extensionSurface; }
+      },
       async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs().filter(tab => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
-        if (!tabs.length) return text(`This session (${sessions.get(activeSession)?.name || activeSession}) has no tabs. Open one with createIfEmpty: true or tabs_create_mcp, or ask the user to give a tab to this session.`);
-        return text({ session: sessions.get(activeSession), tabs: tabs.map(tab => ({ ...describeTab(tab), coordination: coordinationStatus(tab.linkedBrowser.browserId, activeSession) })) });
+        if (!tabs.length) return text({ session: sessions.get(activeSession), tabs: [], extensions: await extensionPanels.list(), note: "No owned tabs. Open one with createIfEmpty: true or tabs_create_mcp, or ask the user to give a tab to this session." });
+        return text({ session: sessions.get(activeSession), extensions: await extensionPanels.list(), tabs: tabs.map(tab => ({ ...describeTab(tab), coordination: coordinationStatus(tab.linkedBrowser.browserId, activeSession) })) });
       },
 
       async tabs_create_mcp() {
@@ -2316,15 +2398,16 @@ function logError(where, e) {
         island?.working(browser, `${describeAction(tool, args, browser)} · ${activeSession.slice(-6)}`);
         activeCalls++;
       }
+      const cleanup = tool === "tabs_close_mcp" || (tool === "extensions" && args.action === "close");
       try {
-        if (browser && tool !== "tabs_close_mcp") {
+        if (browser && !cleanup) {
           assertSiteAccess(browser);
           if (tool === "navigate" && !["back", "forward"].includes(args.url)) {
             const destination = Services.uriFixup.getFixupURIInfo(args.url, Services.uriFixup.FIXUP_FLAG_FIX_SCHEME_TYPOS).preferredURI;
             assertSiteURL(destination.spec);
           }
         }
-        if (browser && !["browser_batch", "tabs_close_mcp"].includes(tool)) {
+        if (browser && tool !== "browser_batch" && !cleanup) {
           const what = await describeWrite(tool, args, browser);
           if (what) entry.what = what;
           let grant = approvals?.get(browser);
@@ -2340,7 +2423,7 @@ function logError(where, e) {
         operation?.check();
         if (browser) ownership.check(args.tabId, activeSession);
         const result = await tools[tool](args);
-        if (browser && tool !== "tabs_close_mcp") assertSiteAccess(browser);
+        if (browser && !cleanup) assertSiteAccess(browser);
         // Preserve completed steps and the cancellation error from a partial batch.
         if (!result?.isError) operation?.check();
         if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
@@ -2553,6 +2636,7 @@ function logError(where, e) {
 
     function stop() {
       shuttingDown = true;
+      extensionPanels.destroy();
       clearTimeout(sessionSweep);
       operation?.cancel(new Stopped());
       try { endPick(); } catch {}

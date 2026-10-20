@@ -146,7 +146,7 @@ function parentHarness() {
   browser.browsingContext.id = 1;
   const snapshots = new ReadSnapshots();
   let page = longText;
-  const context = vm.createContext({
+  const context = vm.createContext({ controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
     assertSiteAccess() {}, readSnapshots: snapshots, activeSession: 'A', operation: null,
     ownership: { version: () => 1, check() {} }, MAX_PAGE_TEXT: 100000,
     browserFor: () => browser, framesOf: () => [browser.browsingContext], frameOf: () => browser.browsingContext,

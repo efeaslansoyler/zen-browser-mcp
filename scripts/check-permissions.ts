@@ -92,6 +92,12 @@ try {
   assert(!result.error && !result.value?.isError, 'Same-document writes failed after approval');
   assert(text(await command('get_page_text', { tabId })).includes(token));
   console.log('✓ Approval allows grouped writes on the unchanged destination document');
+  const extensionAttempt = settle(command('extensions', { tabId, action: 'open', extensionId: token }));
+  await answer('cancelled');
+  const extensionDenied = await extensionAttempt;
+  assert(extensionDenied.error && /denied/.test(String(extensionDenied.error)), 'Extension invocation must use source-site approval');
+  console.log('✓ Extension toolbar invocation respects source-site approval and denial');
+
   // Switch the same local fixture from legacy sensitive to the unified blocked rule.
   const ordinaryTab = JSON.parse(text(await command('tabs_create_mcp'))).tabId;
   const embeddedTab = JSON.parse(text(await command('tabs_create_mcp'))).tabId;
@@ -106,6 +112,10 @@ try {
       assert(result.error && /blocked/.test(String(result.error)), `${tool} must reject blocked page`);
     }
     console.log('✓ Blocked page rejects text/tree reads, JavaScript and screenshots');
+    const blockedExtension = await settle(command('extensions', { tabId, action: 'open', extensionId: 'uBlock0@raymondhill.net' }));
+    assert(blockedExtension.error && /blocked/.test(String(blockedExtension.error)));
+    console.log('✓ Blocked source site cannot be accessed through an extension panel');
+
     const embedded = await settle(command('computer', { tabId: embeddedTab, action: 'screenshot' }));
     assert(embedded.error && /blocked/.test(String(embedded.error)), 'A blocked iframe must prevent parent screenshots');
     console.log('✓ Loaded blocked iframe prevents screenshot access to its ordinary parent page');

@@ -192,6 +192,39 @@ Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;
 adadan onaylar veya reddedersin.
 
+## Tarayıcı eklentileri
+
+Ajan kurulu eklentileri `tabs_context_mcp` cevabında veya `extensions list` ile görür.
+Tek bir genel araçla eklentinin gerçek araç çubuğu panelini kullanır; eklentiye özel
+API, kural veya entegrasyon yoktur.
+
+```json
+{"action":"open","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+{"action":"read","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+{"action":"computer","computerAction":"left_click","ref":"<read cevabındaki panel ref'i>","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+{"action":"close","tabId":12,"extensionId":"uBlock0@raymondhill.net"}
+```
+
+`read`, `text`, `find`, `computer` (ekran görüntüsü, kaydırma, yazma ve tuşlar dahil) ve
+`form_input` panel üzerinde çalışır. Panel ref'leri panel/belge kimliği taşır; sayfa
+ref'leriyle karışmaz. Paneli olmayan ama araç çubuğu düğmesi olan eklenti de `open` ile
+çalıştırılır; cevap panel olmadığını belirtir.
+
+Eklentiler aktif sekmeyi kullandığından panel açılınca hedef sekme mevcut pencerede
+seçilir. Sekme çağıran oturuma ait olmalıdır. Site kuralları ve izinler kaynak siteye
+uygulanır. Sekme değişimi, gezinme, sahiplik değişimi veya panelin kapatılması sonrası
+yeniden açıp yeni ref almak gerekir. Durdur, oturum sonu ve köprü reload'u izlenen
+panelleri kapatır.
+
+Ajana geçici ayar değişikliklerini takip edip işi bitince arayüzden eski hâline döndürme
+talimatı verilir. Oturum kesilirse otomatik geri alma garantisi yoktur. İlk sürüm araç
+çubuğu panellerini kapsar; eklenti arka plan kodu, genel tarayıcı ayarları veya yalnız
+kenar çubuğu sunan arayüzleri kapsamaz. Eklentinin açtığı yeni sekmeler normal sahiplik
+kurallarına uyar; pano/indirme çıktıları mevcut host/dosya araçlarıyla alınır.
+
+Yeni `extensions` aracının görünmesi için MCP istemcisinin bağlantısı yenilenmelidir;
+yalnız tarayıcı köprüsünü reload etmek çalışan MCP sunucusunu yenilemez.
+
 ## Modlar ve site kuralları
 
 Genel mod **auto / otomatik** (sormadan işlem) veya **ask / onaylı** (işlemden önce onay)

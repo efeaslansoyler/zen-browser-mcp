@@ -11,6 +11,14 @@ okumada diff, çoklu öğe seçimi). CLI + skill denendi, ölçüldü; MCP ana y
 Codex otomatik alıcı doğrulaması ve site kuralları tamamlandı.
 Sıradaki adaylar: React/axe araçları, Quickshell göstergesi; en sonda isim + npm + MCP Registry.
 
+## Eklenti arayüzü (2026-10-20, Efe) ✅
+
+Kurulu eklentiler ajana bildirilir; gerçek toolbar panelini okuyup fare/klavyeyle kullanır.
+Eklentiye özel API/kural yazılmaz. Geçici değişiklikleri geri almak genel ajan talimatıdır;
+otomatik rollback yok. Kaynak sekme oturuma ait olmalı ve site kuralları korunmalı.
+Eklentinin aktif sekme bağlamı için hedef sekme aynı pencerede seçilir. İlk sürüm toolbar
+panellerini kapsar; sidebar/background entegrasyonları ayrı kapsamdır.
+
 ## Ada (2026-10-19)
 
 Efe compact mode kullanıyor; sekmedeki turuncu çizgiyi görmüyor. Çözüm: Zen penceresinin
