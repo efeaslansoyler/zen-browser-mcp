@@ -2,75 +2,16 @@
 
 ## Güncel öncelik — 2026-10-20
 
-Çoklu öğe seçimi kodlandı: aynı sayfada Shift+tık ile en fazla 8 öğe, Enter ile
-bitirme, tek not, öğe başına bağlam/PNG, hedefi sabitleme ve receipt. Canlı test
-ilk denemede seçim/gönderim/receipt/tek seçim/8 sınırı/Backspace/Esc adımlarını geçti.
-Son gezinme kontrolünün test sürücüsündeki string→JSON hatası düzeltildi;
-`node scripts/check-multi-pick.ts` son tekrarı bekliyor. Kod bu kayıtla birlikte
-commit edildi. Bu betik gerçek
-AI oturumlarına mesaj göndermez; yerel receipt fixture'larını kullanır.
-EPERM shell sandbox'ına özgü görünüyor; standart Zen MCP burada çalıştı.
-Ayrıntılar DEVAM.md başında ve CODEX-SOCKET.md'de. Sonraki aday CLI+skill ölçümü.
+Güncel durum ve açık işler [DEVAM.md](DEVAM.md) başında; burada yalnız kararlar ve fikirler.
+2026-10-20'de çoklu ajan altyapısı bitti (kimlik/tema, Codex gönderimi, gerçek iptal,
+batch izinleri, oturuma özel sahiplik, `tab_work` devir kuyruğu, örtülü öğe kontrolü,
+okumada diff, çoklu öğe seçimi). CLI + skill denendi, ölçüldü; MCP ana yol kaldı
+(`cli-prototype` dalı).
 
+Sıradaki adaylar: Codex hook güveninin uçtan uca doğrulanması, izinli alan adları,
+React/axe araçları, Quickshell göstergesi; en sonda isim + npm + MCP Registry.
 
-Koordinasyon ve örtülü öğe kontrolü `9d13f3c` ile commit edildi; push yapılmadı.
-Şimdi read_page/get_page_text için isteğe bağlı diff/since, snapshot kimlikleri,
-oturuma/okuma kapsamına özel sınırlı cache ve full fallback kodlandı. 15 yeni test
-dahil 103 soketsiz test ve Efe terminalindeki gerçek Codex/Claude canlı testi geçti:
-fixture çıktısı 26.176 → 250 karakter, yeni ref ile tıklama ve baz/oturum yalıtımı
-doğrulandı. Test sekmeleri kapandı, ayarlar değişmedi. Ayrıntılar DEVAM.md başındadır.
-Okuma/diff değişiklikleri bu plan kaydıyla birlikte commit edildi. Sıradaki öneri:
-gelişmiş öğe seçimi — birden çok öğeyi seçip tek kullanıcı notuyla hedef oturuma
-göndermek. Sonrasında CLI+skill ölçümü. Yeni özellik henüz uygulanmadı.
-
-
-Örtülü öğe kontrolü kodlandı: ref tıklamasında hedef/üst iframe hit-test,
-hareket sonrasında tekrar kontrol, engelleyici etiketi/ref'i ve çoklu tıklamayı kesme.
-14 yeni test dahil 87 soketsiz test geçti; screenshot gerçek oranı regresyonuyla
-hit-test dosyasındaki toplam 15 test de geçti. Efe terminalindeki düzeltilmiş
-`node scripts/check-hit-test.ts` canlı testi tüm adımlarıyla geçti: örtü, hover,
-koordinat, çoklu tıklama, disabled, shadow ve çapraz origin/iç içe iframe.
-Test sekmesi kapandı; izin ayarları değişmedi.
-Koordinatın amaçlanan gizli hedefi çıkaramayacağı ve çapraz süreç son-kontrol yarış
-aralığı DEVAM.md başında kayıtlıdır. Sıradaki özellik çıktı/diff verimliliği.
-
-
-Görev durumu ve bağlamlı devir kuyruğu kodlandı: `tab_work`, FIFO istekleri,
-explicit finish sonrası auto devir, izinli modda ada onayı ve devir notu.
-18 yeni test dahil 73 soketsiz test ve Efe terminalindeki canlı doğrulama geçti:
-Codex/Codex, Claude/Claude ve karma çiftte bekleme/auto devir/bağlam; izinli modda
-gerçek Verme/Ver düğmeleri doğrulandı. Özgün ayarlar geri yüklendi, test sekmeleri
-kapatıldı. Ayrıntılar DEVAM.md başındadır.
-Bekleyen ajan polling yapar; otomatik sohbet uyandırma yoktur.
-
-
-Önce [DEVAM.md](DEVAM.md) başındaki güncel devir özetini oku. Çoklu ajan teması,
-Codex standart MCP araçları ve queue gönderimi tamamlandı. Otomatik Codex hook
-alıcısı kuruldu; Efe’nin `/hooks` güven onayı ve yeni sohbette gerçekten otomatik
-bağlanma doğrulaması bekleniyor. Sonraki geliştirme planı Efe ile birlikte belirlenecek.
-
-Gerçek Durdur/Devam iptali tamamlandı. Modül yolu regresyonu dahil 25 otomatik test
-ve Efe'nin terminalindeki canlı Zen testi geçti: reload, batch/bekleme iptali,
-hızlı Durdur/Devam ve gerçek yazmanın 240/50000 karakterde kesilmesi doğrulandı.
-Ayrıntılar DEVAM.md'de.
-
-Batch/site değişiminde izin kontrolü tamamlandı. 10 yeni izin testi dahil 35
-soketsiz otomatik test ve Efe'nin terminalindeki canlı test geçti: doğrudan gezinme,
-HTTP yönlendirmesi, red sonrasında kalan yazmaların engellenmesi ve aynı hedef
-belgede toplu onay doğrulandı. Özgün izin yapılandırması geri yüklendi.
-Detaylar DEVAM.md'nin güncel çalışma bölümünde.
-
-MCP oturumuna özel sekme sahipliği tamamlandı. 19 sahiplik testi ve bir wire testiyle
-soketsiz toplam 55 test ve Efe'nin terminalindeki gerçek iki MCP istemcili canlı test geçti:
-ayrı listeler, yabancı erişim engeli, menüden devir/geri alma, eski kuyruğun reddi ve
-MCP kapanışında açık sekmenin sahipliğinin temizlenmesi doğrulandı. MCP süreç kimliği
-ile Codex sohbet kimliği karıştırılmaz; aynı MCP sürecini paylaşan sohbetler bu katmanda
-ayrılamaz.
-Ayrıntılar DEVAM.md'nin güncel sahiplik bölümünde.
-
-Sıradaki adaylar: çıktı/diff verimliliği, gelişmiş öğe seçimi ve CLI+skill ölçümü.
-Aşağıdaki bölümler önceki planın tarihçesidir.
-
+## Ada (2026-10-19)
 
 Efe compact mode kullanıyor; sekmedeki turuncu çizgiyi görmüyor. Çözüm: Zen penceresinin
 üst ortasında, sayfanın üzerinde duran bir "ada" (Dynamic Island gibi). Claude'un ne
@@ -112,7 +53,7 @@ kendiliğinden öne getirilmez.
 
 İsteğe bağlı, sonra: Quickshell barında Claude göstergesi.
 
-## Zen'den öğe seçip Claude'a iş verme (Efe'nin fikri, 2026-10-19) ✅ (birden fazla öğe seçme hariç)
+## Zen'den öğe seçip Claude'a iş verme (Efe'nin fikri, 2026-10-19) ✅ (çoklu seçim 2026-10-20)
 
 Yapıldı: Ctrl+Shift+F (Ctrl+Shift+E Zen'de ağ izleyicisi) ve sayfa sağ tık menüsü, adada not,
 kanal yoksa pano. Gerçek bir `claude-zen` oturumuyla uçtan uca deneme Efe'de (aşağıda).
@@ -155,9 +96,9 @@ agent-browser Chromium/Safari için CDP/WebDriver tabanlı ajan CLI'si; Firefox/
 birlikte çalışma (ada, durdurma, sekme verme) yok. Bizim konum: kendi Firefox/Zen tarayıcında
 Claude ile birlikte çalışma. Alınabilecekler:
 
-- Örtülü öğe kontrolü: tıklama noktasında başka öğe varsa (çerez bandı, modal) tıklamadan hata
+- ✅ Örtülü öğe kontrolü: tıklama noktasında başka öğe varsa (çerez bandı, modal) tıklamadan hata
   ve örten öğeyi bildir.
 - İzinli alan adları: Claude yalnız belirli sitelere gidebilsin (hassas sitelerin tersi).
-- CLI + skill modu: MCP tool tanımları her turda bağlamda; CLI'yi skill ile kullanmak daha az
-  token harcayabilir, ölçülmeli.
+- ✅ CLI + skill modu: denendi ve ölçüldü (2026-10-20). Token farkı anlamsız, CLI daha yavaş;
+  MCP ana yol. Kod `cli-prototype` dalında.
 - React araçları (bileşen ağacı, props) ve erişilebilirlik denetimi (axe-core).

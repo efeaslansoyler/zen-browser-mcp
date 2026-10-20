@@ -1,5 +1,9 @@
 # Codex terminalindeki EPERM teşhisi
 
+**Durum (2026-10-20):** Codex `:danger-full-access` + `approval_policy=never` ile
+açıldığında doğrudan soket erişimi ve soketli testler sorunsuz çalışıyor. Aşağıdaki teşhis
+varsayılan sandbox'lı oturum içindir; Zen kodunda değişiklik gerekmedi.
+
 2026-10-20 incelemesi, Codex CLI 0.163.0:
 
 - Zen soketi `/run/user/1000/zen-mcp.sock`, sahibi efe/efe, modu 0600;

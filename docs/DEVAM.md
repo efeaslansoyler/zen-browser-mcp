@@ -1,453 +1,82 @@
 # zen-mcp: kaldığımız yer
 
-Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.md).
+Yeni oturumda önce bunu oku; kararlar ve fikirler [`PLAN.md`](PLAN.md)'de.
 
-## Güncel devir özeti — 2026-10-20
+**Bu bölüm tek güncel özettir.** İş bitince yeni "güncel" bölüm ekleme; ilgili maddeyi
+güncelle, eskiyen bilgiyi sil. Ayrıntılı geliştirme günlüğü git geçmişinde: commit
+mesajları ve `git log -p docs/DEVAM.md` (2026-10-20 öncesi uzun devir kayıtları orada).
 
-### Güncel çalışma — çoklu öğe seçimi ve EPERM teşhisi (2026-10-20)
+## Durum — 2026-10-20
 
-**Kod ve ilk canlı kontroller hazır; düzeltilmiş betiğin son tekrarı BEKLİYOR.**
-Önceki diff işi `f252db4`, koordinasyon/tıklama işi `9d13f3c` ile commit edildi.
-Çoklu seçim değişiklikleri bu devir kaydıyla birlikte commit edildi.
+Faz 1–5 ve öğe seçimi 2026-10-19'da bitti. 2026-10-20'de (Codex ile) proje Claude'a özel
+olmaktan çıkıp birden çok ajanın aynı Zen'i paylaşmasına hazırlandı. Hepsi main'de
+commit'li, `npm test` geçiyor; her özelliğin canlı betiği Efe'nin terminalinde geçti.
+Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
 
-Efe ilk canlı testi çalıştırdı (v5 → reload): Codex ve Claude yerel fixture'larında
-trusted Shift/toggle/Enter, iki bağlam/görsel, ortak not, sabit hedef ve receipt geçti.
-Tek seçim uyumu, 8 sınırı, Backspace ve Esc geçti. Son gezinme kontrolünde uygulama
-beklenen "Error: The page changed..." hatasını verdi; test sürücüsü bu düz metni
-JSON.parse etmeye çalıştığından hata verdi. Sürücü artık hata metnini `{error: ...}`
-nesnesiyle döndürüyor. Uygulama mantığı değiştirilmedi. Son iki assertion'ın canlı
-tekrarı bekliyor; önceki test sekmesi/alıcıları temizlendi, ayarlar değişmedi.
+- **Çoklu ajan kimliği** (`f024be4`): MCP initialize'daki istemci adına göre Claude turuncu,
+  Codex mint (bulut SVG `browser/assets/codex.svg`), diğerleri mavi. Kimlik yetki vermez.
+  Codex'e öğe gönderimi `codex queue` ile; otomatik alıcı SessionStart/UserPromptSubmit/
+  SessionEnd hook'larıyla (`src/codex-hooks.ts`, `src/codex-relay.ts`, `~/.codex/hooks.json`).
+  `connect_session` elle yedek. Ada hedefi compose açılırken sabitlenir, receipt gelmeden
+  "gönderildi" denmez.
+- **Gerçek Durdur/Devam** (`f101d33`, `browser/Cancellation.sys.mjs`): süren bekleme, yazma,
+  sürükleme, gezinme kesilir; Durdur öncesi kuyruk nesil kontrolüyle reddedilir. Yapılmış
+  tıklama/ağ isteği geri alınmaz, sayfanın kendi JS'i durdurulmaz.
+- **İzinler her batch adımında** (`8010ae7`): güncel belge/origin/ayarla yeniden kontrol;
+  yönlendirme, yeni belge ya da ayar değişimi eski onayı geçersiz kılar.
+- **Oturuma özel sekme sahipliği** (`5ea5e74`, `browser/Ownership.sys.mjs`): her oturum yalnız
+  kendi sekmelerini görür; sağ tık menüsünde hedef oturum açıkça seçilir. Devir/geri alma
+  çalışan işi iptal eder. MCP kopunca 5 sn pay, sonra sekme açık kalarak kullanıcıya döner.
+  **Sınır:** MCP süreç UUID'si ≠ sohbet UUID'si; aynı MCP sürecini paylaşan sohbetler ayrılmaz.
+- **`tab_work` ve devir kuyruğu** (`9d13f3c`): list/status/start/update/finish/request/cancel.
+  Sahip açıkça `finish` der; auto modda ilk bekleyene devir notuyla geçer, ask modunda adada
+  Ver/Verme. Bekleyen ajan polling yapar (~5 sn), push yok. 15 dk güncellenmeyen görev `stale`.
+- **Örtülü öğe kontrolü** (`9d13f3c`): `computer` tıklamalarında, her mouse-down öncesi hit-test;
+  örtülüyse örten öğenin etiketi/ref'iyle hata, zorla tıklama yok. Çapraz süreç iframe'lerde
+  dar bir yarış aralığı kalır; salt koordinat amaçlanan gizli hedefi bilemez (ref tercih et).
+- **Okumada diff** (`f252db4`, `browser/ReadSnapshots.sys.mjs`): `read_page`/`get_page_text`
+  `diff: true` + `since: <snapshot>`; değişmediyse `unchanged`, değiştiyse unified hunk.
+  Kapsam oturum+sekme+seçeneklere özel, yanlış/eski ID tam metne düşer, reload hepsini siler.
+  Deneme sayfasında 26.176 → 250 karakter.
+- **Çoklu öğe seçimi** (`5e013b0`): seçicide Shift+tık ekle/çıkar, Enter bitir, Backspace geri
+  al, Esc iptal; aynı üst sayfada en fazla 8 öğe, tek not, öğe başına bağlam ve PNG.
 
-- Seçici açıkken Shift+tık öğe ekler/çıkarır; Enter mevcut seçimleri bitirir.
-  Normal tık tek öğede eski akışı korur, çoklu seçimde tıklananı ekleyip bitirir.
-  Backspace son seçimi çıkarır, Esc hepsini iptal eder. Aynı sayfada en fazla 8 öğe;
-  numaralı çerçeveler konum değişimini takip eder. Sınırda dokuzuncuyu tıklamak
-  sessizce sekizi göndermez; seçim açık kalır ve sınır mesajı gösterilir.
-- Üst sayfadaki öğeler desteklenir (mevcut seçicinin kapsamı). Sekmeler/iframe'ler
-  arasında çoklu sepet eklenmedi. Gezinme/actor kapanışı ve Esc temizler; bir seçilmiş
-  öğe kaldırıldıysa kalanlarını sessizce göndermek yerine yeniden seçim istenir.
-- Tek ortak kullanıcı notu; her öğe için numaralı selector/HTML/stil/metin/bileşen
-  bağlamı ve görünürse ayrı PNG. Metadata element_count ve JSON-string screenshots
-  taşır; ilk screenshot alanı ve tek seçim biçimi geriye uyumludur.
-- Hedef oturum sabit kalır, tek gönderim ve receipt bekleme korunur. Yabancı sahibin
-  sekmesi source_tab kalır; seçim sahiplik/onay vermez. Hazırlık bitmeden gönderim
-  engellenir; gönderim öncesi belge kimliği tekrar kontrol edilir.
-- Codex mesaj adaptörü tek notu ve çoklu görselleri korur; Claude channels aynı
-  tek olay gövdesini alır. Mevcut Node süreçleri değişen adaptör/yönerge için MCP
-  reconnect; tarayıcı tarafı reload ister. Zen restart gerekmez.
-- 12 picker testi + 1 delivery testi eklendi; önceki testlerle **116 soketsiz test
-  geçti** (hook dosyası hariç); build/syntax/diff geçti. Sahte DOM ile gerçek actor,
-  ana süreç, animasyon-frame çizimi ve adaptör çalıştırıldı; canlı sonuç değildir.
-- Canlı sürücü: `node scripts/check-multi-pick.ts`. Gerçek EventUtils girdiyle
-  Shift/toggle/Enter, 8 sınırı, Backspace/Esc, normal tek seçim, PNG'ler ve belge
-  değişince gönderimin reddi sınanır. Codex/Claude görünümlü **yalnız yerel receipt
-  fixture'ları** kullanılır; gerçek bir AI sohbetine mesaj/queue göndermez. Ada hedef
-  seçimi, gerçek Gönder düğmesi, wire receipt ve tek ortak not doğrulanır.
-  Mevcut auto modunu ister, ayar değiştirmez; yalnız test sekmesini kapatır.
-- Bu ortamda canlı betik ilk socket bağlantısında EPERM verdi; reload yapılmadı.
-  **İlk kalan iş: düzeltilen `node scripts/check-multi-pick.ts` betiğinin kullanıcı
-  terminalindeki son tekrarı.**
+**CLI + skill deneyi → `cli-prototype` dalı** (main'e alınmadı). Kalıcı broker'lı CLI
+(`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16
+çağrıda MCP 322 ms, CLI 785 ms, metin aynı. Gerçek ajan pilotu (Codex + Claude, 3 görev ×
+2 yol, her biri tek deneme): hepsi başarılı; CLI %10–15 fazla token (gürültü sınırında),
+süre olarak belirgin yavaş. **Karar: MCP ana yol.** Dal yalnız ileride lazım olursa diye duruyor.
 
-**EPERM bulgusu:** komut sandbox'ı hem Zen connect hem /tmp'de bağımsız Unix bind
-çağrısını EPERM ile engelliyor; UID ve soket izinleri normal, Seccomp=2/NoNewPrivs=1.
-Buna karşılık **bu sohbetin standart Zen MCP tabs_context_mcp aracı çalıştı**.
-Yani sorun genel MCP değil; sandbox'lı shell komutunun doğrudan soket erişimi.
-Claude'un etkin politikası ölçülmedi; farklı sandbox kullanması olasıdır.
-Kullanıcı config'ine/sandbox politikasına müdahale edilmedi; yükseltme onayları bu
-ortamda kapalı. Resmî profile özgü unix_sockets allowlist'i ve sınırları
-[`CODEX-SOCKET.md`](CODEX-SOCKET.md)'de. Kullanıcıya CLI/masaüstü/IDE açılışı soruldu;
-cevabıyla doğru aktif profil ayar yeri belirlenecek. Native MCP'ye debug eval ekleyip
-sandbox aşılmayacak. Kalıcı hafıza salt okunurdu; güncel kaynak bu bölümdür.
+## Açık işler
 
+1. **Codex hook güveni:** Efe Codex'te `/hooks` ekranından üç Zen MCP hook'una güvendi mi,
+   doğrulanmadı. Güvendiyse temiz bir Codex sohbetinin `connect_session` çağırmadan ada hedef
+   listesine düştüğünü uçtan uca dene. Eski sohbet UUID'si kullanma.
+2. PLAN.md'deki adaylar (izinli alan adları, React/axe, Quickshell göstergesi, isim + npm).
+3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.
 
-### Güncel çalışma — sayfa okuma diff / çıktı verimliliği (2026-10-20)
+## Çalışma yöntemi
 
-**Önceki tamamlanan işler `9d13f3c` ile commit edildi** (koordinasyon ve korumalı
-tıklamalar; commit öncesi 88 soketsiz test geçti). Push yapılmadı. Aşağıdaki yeni
-okuma/diff değişiklikleri bu devir kaydıyla birlikte commit edildi.
+- `npm test` (build + soketsiz/soketli birim testleri; sahte DOM ile gerçek actor/ana süreç kodu).
+- Canlı: `node scripts/check-<özellik>.ts` (compat, cancellation, permissions, ownership,
+  coordination, hit-test, read-diff, multi-pick). Köprüyü reload eder, yalnız kendi test
+  sekmelerini kapatır, mevcut `mode: auto` ister; config'i geçici değiştirenler geri yükler.
+  Sonrasında `~/.config/zen-mcp/config.json`'un `mode: auto` kaldığını kontrol et.
+  `check-pick-delivery.ts` GERÇEK sohbete mesaj yollar, rastgele çalıştırma.
+- Codex'in komut sandbox'ı Unix soketine EPERM verebilir; Full Access oturumunda sorun yok.
+  Ayrıntı: [`CODEX-SOCKET.md`](CODEX-SOCKET.md).
+- `node scripts/zenctl.ts reload` tarayıcı kodunu Zen'i kapatmadan yeniler; Node MCP sürecini
+  yenilemez. Node/şema değişince MCP istemcisi reconnect; Zen restart gerekmez.
+- Dosyalar: `src/server.ts` (şemalar, kimlik), `src/zen.ts`/`paths.ts` (soket, receipt),
+  `src/delivery.ts` (Codex queue), `browser/main.js` (köprü, araçlar), `Island.sys.mjs` (ada),
+  `Agent.sys.mjs` (kimlik/tema), `Ownership`/`Cancellation`/`ReadSnapshots.sys.mjs`, `actors/`.
 
-**Güncel sonuç: canlı read-diff doğrulaması GEÇTİ.** Efe terminalinde
-`node scripts/check-read-diff.ts` çalıştırdı (v4 → reload). Gerçek Codex/Claude
-MCP istemcileriyle plain/full/unchanged/diff akışı geçti; iki uzak satır düzenlemesinde
-çıktı **26.176 → 250 karakter** oldu (bu fixture'da yaklaşık %99 daha az karakter;
-gerçek token ölçümü değildir). Tree diff'inden alınan yeni ref ile tıklama çalıştı.
-Seçenek/eski kimlik fallback, aynı URL'de belge yenilenmesi, iframe silme ve devir
-sonrasında oturuma özel yeni baz doğrulandı. Yabancı sekme okuması engellendi.
-Test sekmeleri kapatıldı; izin ayarları değişmedi. Aşağıdaki EPERM kaydı bu başarılı
-kullanıcı denemesinden öncedir. Yeni diff kodu bu devir kaydıyla birlikte commit edildi.
+## Amaç ve kararlar
 
-`read_page` ve `get_page_text` artık
-isteğe bağlı `diff: true` ve `since: <snapshot ID>` alır. Varsayılan düz metin
-formatı korunur. Sunucu yönergeleri tekrar okumalarda diff kullanımını anlatır.
-
-- İlk diff okuması `snapshot: ...`, `mode: full` ve tam mevcut çıktıyı verir.
-  Sonraki çağrı aynı tool/seçeneklerle önceki ID'yi `since` olarak geçirir.
-  Değişmediyse aynı ID ile kısa `mode: unchanged`; değiştiyse yeni ID, `base`
-  ve unified satır hunk'ları (`mode: diff`) döner. Kimliksiz diff çağrısı tamdır.
-- Karşılaştırma yalnız gerçekten dönen metnin kapsamındadır: filter/depth/ref_id/
-  max_chars ve get_page_text kendi ayrı kapsamıdır. Kesilme işaretleri ve ref'ler
-  metnin parçasıdır; görünmeyen/kesilmiş alanların değişmediği iddia edilmez.
-- Cache oturum + sekme + okuma kapsamına özeldir. Yanlış/eski/atılmış since veya
-  başka kapsam tam yanıta düşer. Böylece kaybolmuş bir yanıt istemcinin bazını
-  sessizce değiştirmez. Önceki kimlik yeni bazla eşleşmiyorsa tam metin verilir.
-- Ana belge, URL, iframe ekleme/silme/yeni belge ve sahiplik nesli değişirse baz
-  yenilenir. Okuma sırasında belge/çerçeve değişirse sonuç cache'lenmeden hata
-  verilir. Çıktı kaydından hemen önce iptal ve sahiplik tekrar kontrol edilir.
-- `ReadSnapshots.sys.mjs`: bounded Myers satır diff'i; hesap bütçesi aşılırsa
-  veya delta tam yanıttan uzunsa full fallback. Maksimum 32 kayıt / 2 milyon metin
-  karakteri; tek kayıt en çok 200 bin karakter. Daha büyük sonuç cache'lenmeden
-  tam döner. LRU tahliye, oturum kapanışı ve devir/geri alma/sekme kapanışında
-  temizlik vardır. Bridge reload tüm snapshot ID'lerini geçersiz kılar; disk kaydı yok.
-- Uzun ilk satırda read_page max_chars kesiminin newline bulunamayınca `slice(0,-1)`
-  ile neredeyse tam metni döndürmesi de düzeltildi; artık karakter sınırında keser.
-- 15 yeni test dahil **103 soketsiz test geçti** (hook dosyası hariç). 500 sabit
-  tohumlu rastgele değişiklikte patch eski metne uygulanıp yeni metin birebir
-  doğrulandı. Gerçek ana süreç read araçları ve üç istemci kimliğiyle MCP şeması/
-  parametre aktarımı sınandı. Build/syntax/diff kontrolleri geçti.
-- Canlı sürücü: `node scripts/check-read-diff.ts`. Gerçek Codex ve Claude stdio
-  MCP istemcileri; plain/ilk full/unchanged/uzak satır düzenlemesi ve boyut kazanımı,
-  tree diff'inden çıkan yeni ref ile gerçek tıklama, seçenek/stale ID fallback,
-  aynı URL'ye gezinme, iframe silme, yabancı okuma engeli ve gerçek fixture menüsü
-  ile devir sonrası yeni baz sınanır. Yalnız test sekmeleri kapatılır; ayar değişmez.
-  Mevcut auto modu ister; ask modunu düşürmez.
-- Bu ortamda canlı betik ilk `/run/user/1000/zen-mcp.sock` bağlantısında EPERM
-  ile engellendi; bu ortamda reload/canlı doğrulama gerçekleşmedi. Ardından
-  Efe terminalindeki canlı test yukarıdaki gibi tüm adımlarıyla geçti.
-- Node araç şeması/yönergeleri değişti: mevcut MCP istemcileri reconnect ister;
-  Zen restart gerekmez. Canlı betik reload ve kendi yeni MCP süreçlerini açar.
-- Kalıcı hafıza dosyası salt okunur olduğu için güncel kaynak bu devir bölümüdür.
-
-
-### Güncel çalışma — örtülü öğe / tıklama kontrolü (2026-10-20)
-
-**Güncel sonuç: canlı hit-test doğrulaması GEÇTİ.** Efe düzeltilen
-`node scripts/check-hit-test.ts` betiğini terminalinde çalıştırdı (v3 → reload).
-Dört ref click türünde örtünün engellenmesi, kısmi batch çıktısı ve kalan yazmanın
-kesilmesi, span/shadow çocuklar, pointer-events:none, mousemove sırasında açılan
-örtü, gerçek screenshot oranıyla koordinat, çoklu tıklamada hedef değişimi,
-devre dışı kontrol, çapraz origin ve iç içe iframe üstündeki modal sınamaları geçti.
-Test sekmesi kapatıldı; izin ayarları değişmedi. Aşağıdaki ilk başarısız deneme ve
-EPERM/bekleyen kayıtları bu başarılı sonucun öncesindedir. Kod henüz commit değil.
-
-
-İlk kullanıcı canlı denemesinde dört click türünün örtüyle engellenmesi, batch'in
-kalan yazmayı durdurması, span/pointer-events:none ve hover katmanı kontrolleri geçti.
-Ölçekli koordinat adımında sayaç `2 !== 3` oldu. Test betiği istenen screenshot
-scale=0.5'i gerçek oran sanıyordu; MAX_EDGE/MAX_PIXELS sınırları gerçek oranı daha
-küçük yapabilir. Betik artık o screenshot için kaydedilmiş gerçek `state.scale`
-oranını kullanır. Büyük viewport + otomatik boyut sınırı regresyon testi eklendi;
-15 hit-test testi geçti. Bu düzeltme test sürücüsündedir, üretim koordinat dönüşümü
-aynı kaldı. Düzeltilen canlı testin ardından yapılan tekrarı yukarıdaki gibi geçti.
-Önceki test sekmesi kapandı, ayarlar değişmedi.
-
-
-`computer` içindeki left/right/double/triple
-click yollarında hit-test eklendi. Ref hedefi locate aşamasında ve içerik actor'ında
-fare düğmesine basılmadan önce doğrulanır. Örtülüyse hata engelleyen öğenin kısa
-etiketini ve ref'ini verir; katman gizlenmez, zorla tıklama yapılmaz.
-
-- Ref'in çocuğu (ikon/span), shadow/slotted alt öğesi kabul edilir. Tarayıcı hit testi
-  pointer-events:none katmanları doğal olarak atlar. Devre dışı, kopmuş ve viewport
-  dışındaki hedefler reddedilir. Büyük hedeflerde görünür kesişimin merkezi kullanılır.
-- İmleç hareketi ve gerçek mousemove sonrasında, her mouse-down öncesinde yeniden
-  kontrol vardır. İlk tıklama hedefi değiştirirse double/triple kalan tıklamaları
-  göndermez; ilk tıklamanın yapılmış etkisi geri alınmaz. Hata halinde press görünümü
-  temizlenir. İptal davranışı korunur.
-- Ref iframe içindeyse her üst iframe kutusu hit-test edilir; en içteki hit çerçevesi
-  ref'in çerçevesiyle eşleşmiyorsa input gönderilmez. Çapraz süreç kontrolleri atomik
-  değildir; üst sayfanın son kontrolden sonra değişmesi için dar bir yarış aralığı kalır.
-- Salt koordinat ilk anda vurulan öğeyi sabitler ve hareket sırasında değişirse keser;
-  çağrıdan önce örtülmüş, ajanın amaçladığı gizli hedefi koordinattan çıkaramaz.
-  Kontrollerde ref tercih edilir. Merkez örtülüyse açık kenarı kendiliğinden seçmez.
-- Hover/scroll_to örtülü öğeye konumlanabilir. Bu katman `computer` tıklamalarını
-  kapsar; javascript_tool ve programatik form_input davranışına görünürlük şartı eklemez.
-- 14 yeni hit-test testiyle **87 soketsiz test geçti** (hook test dosyası hariç),
-  build/syntax/diff kontrolleri geçti. Gerçek actor ve ana süreç fonksiyonları platform
-  sınırlarında sahte DOM ile çalıştırıldı; bu canlı tarayıcı sonucu değildir.
-- Canlı sürücü: `node scripts/check-hit-test.ts`. Mevcut auto modu ister; ayarları
-  değiştirmez. Köprüyü reload eder, yalnız bir disposable sekmede gerçek tıklamalarla
-  dört click türü/örtü, kısmi batch hatası, span/shadow çocuklar, pointer-events:none,
-  hover katmanı, ölçekli koordinat, çoklu tıklamada hedef değişimi, disabled kontrol,
-  cross-origin ve iç içe iframe'de üst modalı sınar. Sonunda yalnız test sekmesini kapatır.
-- Bu ortamda canlı betik ilk soket bağlantısında `/run/user/1000/zen-mcp.sock` EPERM
-  hatasına takıldı; bu ortamda reload ve canlı deneme gerçekleşmedi. Sonrasında
-  Efe terminalindeki düzeltilmiş testin tamamı yukarıdaki gibi geçti.
-- Yeni araç eklenmedi; computer açıklaması güncellendi (istemci reconnect ile alır).
-  Tarayıcı kodu reload gerektirir; Zen restart gerekmez. Kod commit edilmedi. Önceki
-  koordinasyon testinin canlı başarısı bu yeni özelliğin doğrulaması sayılmaz.
-- Kalıcı hafıza dosyası önceki denemede salt okunurdu; güncel kaynak bu bölümdür.
-
-
-### Güncel çalışma — görev durumu ve bağlamlı devir kuyruğu (2026-10-20)
-
-**Güncel sonuç: canlı koordinasyon doğrulaması GEÇTİ.** Efe terminalinde
-`node scripts/check-coordination.ts` çalıştırdı (v1 → reload). Gerçek MCP
-istemcileriyle Codex/Codex, Claude/Claude ve Codex/Claude çiftlerinde canlı durum,
-kuyrukta bekleme, erken devir yapılmaması, otomatik devir ve bağlam aktarımı geçti.
-İzinli modda görev bitince kendiliğinden devir olmadı; gerçek Verme düğmesi sahibi
-korudu, Ver düğmesi bağlamla devretti. Betik başarıyla tamamlandı; özgün izin
-ayarları geri yüklendi ve geçici test sekmeleri kapatıldı. Aşağıdaki EPERM kaydı
-bu başarılı kullanıcı denemesinden öncedir.
-
-`tab_work` aracı eklendi:
-`list/status/start/update/finish/request/cancel`. Paylaşılan bilgiler yalnız ajanların
-bilerek yazdığı görev/ilerleme/devir notları, sahip oturum ve FIFO kuyruğudur;
-başka oturumun sayfası, URL'si veya sohbet geçmişi okunmaz.
-
-- Her yeni sahiplik meşgul başlar. Tek araç çağrısı bitince görev bitmiş sayılmaz;
-  sahip açıkça `finish` gönderir. `start/update` görev özetini günceller. Normal tarayıcı
-  işlemleri görevi meşgul tutar; bekleyen varsa araç yanıtına kuyruk hatırlatması eklenir.
-- `status/list/request/cancel`, çalışan tarayıcı aracı kuyruğunun arkasında beklemez ve
-  etkin işlemin ajan/oturum kimliğini değiştirmez. Meşgul yabancı sekmeye `request_tab`
-  çağrısı da hemen FIFO isteği olarak döner; devam eden işi kesmez.
-- Auto modda `finish`, ilk bağlı bekleyene sahipliği ve devir notunu aktarır; eski
-  sahibin kuyruktaki işleri nesil kontrolüyle reddedilir. Sonradan gelen istek de hazır
-  sekmeyi devralır. Yeni sahibin görevi istek açıklamasıyla meşgul başlar.
-- İzinli modda görev hazır kalır; ilk bekleyen `request_tab` ile gerçek ada Ver/Verme
-  onayını ister. Red sahibi değiştirmez. Onay beklerken sekme/kuyruk değişirse eski
-  onayla devir yapılmaz. Kullanıcıya ait sekmeler auto modda da açık onay ister.
-- `ownedByCaller: true` görülmeden sayfa araçları kullanılamaz. Bekleyen ajan durum
-  sorgulayarak takip eder (sunucu yönergesi yaklaşık 5 saniye aralık önerir); otomatik
-  sohbet uyandırma/push yok. İstekler 10 dakikalık, yenilenebilir ve tekil FIFO kaydıdır.
-- 15 dakikadır güncellenmeyen görev `stale` görünür, otomatik bitirilmez. Kopan/takılan
-  iş başarıyla bitmiş sayılmaz. Var olan kapanış/geri alma/elle devir temizliği korunur;
-  kullanıcı sağ tık menüsünden müdahale edebilir. Durum bridge reload boyunca korunur.
-- 18 yeni koordinasyon testi dahil **73 soketsiz test geçti** (hook test dosyası hariç),
-  derleme, JS/TS sözdizimi ve diff kontrolü geçti. Codex/Codex, Claude/Claude ve karma
-  kimlikler gerçek dispatcher üzerinde sınandı; bunlar canlı tarayıcı testi değildir.
-- Tam `npm test` denemesinde eski relay yaşam döngüsü testi Unix soketi açarken
-  `listen EPERM` ile engellendi; aynı dosyanın iki soketsiz testi geçti. Sonradan eklenen
-  dört test ayrıca ve 73 testlik soketsiz kümede doğrulandı.
-- Canlı betik: `node scripts/check-coordination.ts`. Gerçek stdio MCP istemcileriyle
-  Codex/Codex, Claude/Claude ve Codex/Claude; çalışan araç sırasında durum/istek,
-  araç arası sahipliği koruma, auto devir, devir notu ve eski sahibin engellenmesini
-  dener. Ardından izinli modu geçici açar, fixture'a ait gerçek ada Verme/Ver
-  düğmelerini tıklar. Özgün config yedeği /tmp'ye alınır ve finally'de aynen geri
-  yüklenir; dışarıdan değiştirilmişse üzerine yazılmaz. Yalnız test sekmeleri kapatılır.
-  Betik başlangıçta mevcut auto modu ister; kullanıcının ask modunu düşürmez.
-- Bu ortamda betik ilk tarayıcı soketi bağlantısında `/run/user/1000/zen-mcp.sock`
-  `EPERM` hatasına takıldı; reload veya canlı test gerçekleşmedi, ayarlar değişmedi.
-  Efe'nin ardından kendi terminalinde yaptığı canlı doğrulama yukarıdaki gibi geçti.
-- Yeni tool/schema/yönergeler için mevcut normal MCP istemcilerine reconnect gerekir;
-  tarayıcıyı kapatmak gerekmez. Canlı betik reload ve kendi yeni MCP süreçlerini açar.
-- Kalıcı hafıza dosyası bu ortamda salt okunur olduğu için güncellenemedi; güncel
-  kaynak bu bölümdür.
-- Bu değişiklikler commit edilmedi. Yeni koordinasyon katmanının canlı testi de geçti.
-  MCP süreç UUID'si / sohbet UUID'si sınırı sürer.
-
-
-Bu bölüm güncel durumdur; aşağıdaki tarihli bölümler geliştirme geçmişidir.
-
-### Güncel çalışma — MCP oturumuna özel sekme sahipliği (2026-10-20)
-
-**Güncel sonuç: canlı sahiplik doğrulaması GEÇTİ.** Efe terminalinde düzeltilen
-`node scripts/check-ownership.ts` betiğini çalıştırdı (v14 → yeni sürüm).
-İki gerçek Codex MCP istemcisinin ayrı listeleri ve yabancı okuma/yazma/kapatma
-engeli doğrulandı. Gerçek devir menüsü çalışan işi iptal etti; sekme eski sahibine
-dönünce eski kuyruk istekleri reddedildi. Yeni sahibi işlem yapabildi, eski sahibi
-engellendi. Geri alma işi iptal etti ve sekmeyi açık bıraktı. Gerçek MCP kapanışında
-yeniden bağlantı payı sonunda sahiplik temizlendi, sekme açık kaldı.
-Test sekmeleri kapatıldı; izin ayarları değişmedi. 55 soketsiz otomatik test geçti.
-Aşağıdaki bekleyen canlı test ve başarısız ilk deneme kayıtları bu sonuçtan öncedir.
-Değişiklikler henüz commit edilmedi. MCP süreci/sohbet UUID'si sınırı hâlâ geçerli.
-
-
-- İlk kullanıcı canlı denemesinde iki gerçek Codex istemcisinin ayrı listeleri ve
-  yabancı okuma/yazma/kapatma engeli geçti. Devir menüsü adımında test başarısız oldu.
-  Yerel Zen kaynaklarında `TabContextMenu.updateContextMenu`'nün yapay popup olayı
-  sonrasında contextTab'i seçili sekmeye çevirdiği görüldü. Test artık native popup
-  başlangıcını taklit etmez; geliştirme yardımcısı `h.prepareTabMenu(win,[testTab])`
-  gerçek menüyü yalnız açıkça verilen fixture için kurar ve XUL `doCommand()` çağırır.
-  Menüde geri alma da hazırlanırken sabitlenen sekmelere bağlıdır. Bu bağlam kayması
-  için regresyon testi geçti; düzeltilen canlı denemenin tekrarı BEKLİYOR.
-
-
-- Önceki izin işi `8010ae7` ile commit edildi; push kullanıcıda. Sahiplik değişiklikleri
-  henüz commit değil.
-- `browser/Ownership.sys.mjs`: sekme → MCP sunucu oturumu, devir nesilleri ve kuyruk
-  biletleri. Ajan adı/rengi yetki vermez. `browserFor`, ortak `runTool` ve actor sorguları
-  sahipliği kontrol eder. `tabs_context_mcp` yalnız çağıran oturumun sekmelerini listeler.
-- Sağ tık menüsünde `Oturuma ver…` / `Oturuma devret…` hedefi açıkça seçilir; listede
-  ajan/proje/MCP kimliğinin son altı karakteri bulunur. Ada ve etkinlik günlüğü de oturumu
-  belirtir. Eski, son kullanılan ajanı sessizce seçen verme davranışı kaldırıldı.
-- Devir/geri alma/TabClose çalışan işi hemen iptal eder. Sekme eski sahibine dönse bile
-  eski kuyruk istekleri ve batch'in gelecekteki adımları nesil kontrolüyle reddedilir.
-  Aynı batch'teki açık request_tab onayı yalnız verilen sekmenin biletini yeniler.
-- MCP server initialize sonrasında `toolsOnly` yaşam döngüsü aboneliği açar; araç çağrıları
-  ile aynı süreç UUID'sini taşır. Bunlar öğe gönderim hedef listesine EKLENMEZ.
-  Son bağlantı kopunca aktif iş kesilir; aynı süreç için 5 saniye yeniden bağlantı payı
-  verilir. Geri dönmezse sekmeler açık kalarak kullanıcıya iade edilir. Bridge reload
-  sahiplik durumunu korur, yaşam döngüsü bağlantılarını kapatıp yeniden bağlatır.
-- Bu güncelleme Node MCP kodunu da değiştirir: normal istemcide yaşam döngüsü takibi için
-  MCP reconnect gerekir; Zen restart gerekmez. Önceden açık eski sunucu süreçleri araç
-  çağrılarıyla kaydolur, yaşam döngüsü izlenemiyorsa 24 saat etkinliksizlikte temizlenir.
-- Browser restart sonrası yalnız SessionStore görsel işareti erişimi geri vermez;
-  oturumu olmayan eski işaretler silinir, kullanıcı sekmeyi yeniden açıkça verir.
-- ÖNEMLİ SINIR: MCP süreç UUID'si ile Codex hook/queue sohbet UUID'si aynı şey değildir.
-  Cwd/ajan adından eşleme tahmin edilmez. Aynı MCP sürecini paylaşan sohbetler tek erişim
-  oturumudur; bunlar arasında sohbet düzeyinde yalıtım sağlandığı iddia edilmez.
-  Gönderim hedefi sekme sahibi olarak doğrulanamıyorsa seçim `source_tab` taşır ve canlı
-  erişim `request_tab` onayı ister. Claude/Codex gönderim yolları korunur.
-- Doğrulama: 19 yeni sahiplik testi + yeni wire yaşam döngüsü testi ile soketsiz 55 test
-  geçti. Derleme, JS/TS sözdizimi ve diff kontrolleri geçti. Relay Unix soketi testleri
-  bu ortamda daha önce EPERM nedeniyle çalışmamıştı; bu sonuç onları kapsamaz.
-- Canlı betik: `node scripts/check-ownership.ts`. Aynı türde iki GERÇEK stdio MCP süreci
-  açar, ayrı listeler/erişim engeli, gerçek sağ tık menüsüyle devir/geri alma, kuyruk
-  geçersizliği ve gerçek MCP kapanışında sahiplik temizliğini test eder. Yalnız kendi
-  geçici sekmelerini kapatır, kullanıcı ayarlarını değiştirmez. Mevcut auto modu gerektirir.
-- Canlı deneme burada tarayıcı soketi EPERM engelinde kaldı. Kullanıcı terminalindeki
-  canlı doğrulama BEKLİYOR; yapılmış gibi raporlama. Önceki canlı betiklerin ayrıcalıklı
-  fixture erişimleri h.findTab(...).linkedBrowser olarak güncellendi.
-
-### Güncel çalışma — batch/site değişiminde izinler (2026-10-20)
-
-**Güncel sonuç: canlı izin doğrulaması GEÇTİ.** Efe terminalinde
-`node scripts/check-permissions.ts` çalıştırdı. Doğrudan hassas siteye gezinme ve
-HTTP yönlendirmesi sonrasında izin istendi; red kalan yazmaları engelledi.
-Onay aynı değişmeyen hedef belgede toplu yazmalara izin verdi. Betik başarılı
-bitti ve özgün izin yapılandırmasını geri yükledi. Aşağıdaki EPERM/bekleyen
-canlı test kayıtları bu başarılı denemeden öncedir. Değişiklikler henüz commit değil.
-
-
-- Önceki gerçek iptal işi `f101d33` ile commit edildi; push kullanıcıda.
-- Batch'in baştan aldığı koşulsuz `approved: true` kaldırıldı. İzin her adımda güncel
-  belge, origin ve izin ayarlarıyla karşılaştırılır. Toplu onay yalnız aynı batch'teki
-  listelenmiş adımlar için geçerlidir; otomatik modda izinsiz geçiş onay olarak saklanmaz.
-- Gezinme adımının ötesindeki işlemler başlangıç sayfasında onaylatılmaz. Yönlendirme,
-  aynı origin'de yeni belge, origin değişimi ve ayar değişimi önceki onayı geçersiz kılar.
-  İzin sorusu hazırlanırken veya cevap beklerken sayfa değişirse istek yeniden kurulur.
-- Red/timeout kalan batch'i durdurur ve tamamlanan adımların çıktısı korunur.
-- Yeni 10 izin testi ve önceki 25 soketsiz test geçti; derleme/sözdizimi/diff kontrolleri geçti.
-- Canlı test sürücüsü: `node scripts/check-permissions.ts`. Yeni kodu reload eder,
-  yalnız localhost/127.0.0.1 test sunucusunu kullanır. 127.0.0.1 geçici hassas site yapılır;
-  test sonunda ayar dosyası eski içeriğine döner ve yalnız test sekmesi kapatılır.
-  Kullanıcının mevcut modu auto olmalı; ask modunu düşürmez. Test kendi benzersiz
-  işaretini taşıyan izin kutularında gerçek ada düğmelerini kullanarak onay/red dener.
-- Canlı çalışma bu ortamda yine soket EPERM hatasında kaldı; kullanıcı terminalinde
-  doğrudan gezinme, HTTP yönlendirmesi, red ve aynı belgede toplu onay doğrulaması bekliyor.
-- Değişiklikler henüz commit edilmedi. Bir sonraki özellik çoklu oturum sekme sahipliği.
-
-### Son çalışma — gerçek Durdur / Devam (2026-10-20)
-
-**Güncel sonuç: canlı doğrulama GEÇTİ.** Efe kendi terminalinde
-`node scripts/check-cancellation.ts` çalıştırdı: yeni köprü Zen yeniden başlatılmadan
-yüklendi; aktif bekleme/batch iptali ve durdurulmuşken yeni işlerin reddi geçti;
-hızlı Durdur/Devam eski işi canlandırmadı. Gerçek yazma 240/50000 karakterde kesildi,
-gecikmiş girdi gelmedi ve yeni yazma çalıştı. Test sekmesi kapatıldı.
-Güvenilir modül yolu regresyonu dahil soket gerektirmeyen 25 otomatik test geçti.
-Aşağıdaki EPERM ve ilk reload hatası kayıtları bu sonucun öncesindeki denemelerdir.
-
-
-- Kullanıcının ilk canlı testinde reload başarısız oldu: günlükte "System modules must
-  be loaded from a trusted scheme". Ana süreç Cancellation import'u file:// yerine
-  resource://zenmcp/ olarak düzeltildi; güvenilir şema regresyon testi eklendi.
-  Bu düzeltmeden sonra kullanıcı terminalinde canlı testi tekrar çalıştırmak gerekiyor.
-
-
-- Önceki çoklu ajan/Codex değişiklikleri `f024be4` ile commit edildi. Push bu ortamda
-  GitHub DNS çözümlemesi engellendiği için tamamlanmadı; commit yerelde.
-- Yeni `browser/Cancellation.sys.mjs` ana süreç ve actor için iptal kapsamı sağlar.
-  Durdur aktif kapsamı iptal eder; bekleme zamanlayıcıları temizlenir, gezinme yüklemesi
-  durur ve dinleyicisi kaldırılır. Actor sorgularına istek kimliğiyle iptal iletilir.
-- Yazma küçük Unicode parçaları arasında, tuş dizileri ve sürükleme adımları arasında
-  olay döngüsüne döner. İptal kalan girdiyi keser; sürükleme fareyi bırakır; kaydırmanın
-  gecikmeli fallback'i çalışmaz. İmleç hareketinde iptal edilen tıklama gönderilmez.
-- Durdur öncesi kuyruk istekleri nesil kontrolüyle reddedilir; hızlı Devam eski işleri
-  canlandırmaz. Batch tamamlanan adımları ve iptal hatasını korur. Yeni istekler çalışır.
-- Doğrulama: derleme, sözdizimi ve diff kontrolü geçti. Yeni 9 iptal testi dahil soket
-  gerektirmeyen 24 test geçti. Testler gerçek actor sınıfını ve ana süreçteki batch,
-  kuyruk, Durdur/Devam, gezinme kodunu sahte platform sınırlarıyla çalıştırır.
-- `scripts/check-cancellation.ts` canlı test sürücüsü eklendi. Yerel terminalde
-  `node scripts/check-cancellation.ts` yeni kodu reload eder; gerçek batch/bekleme,
-  hızlı Durdur/Devam, gerçek yazma iptali ve yeni girdi kabulünü test eder; yalnız
-  kendi geçici sekmesini kapatır. Sözdizimi kontrolü geçti, canlı çalışma EPERM'de kaldı.
-- Standart Zen MCP erişimi çalışıyor; fakat `reload` ve `chrome_eval` geliştirme
-  komutları MCP'ye açık değil. Dolayısıyla MCP bağlantısını doğrulamak bu yeni kodun
-  yüklendiğini veya iptal testinin canlı geçtiğini kanıtlamaz.
-- Canlı Zen doğrulaması ve reload YAPILAMADI: bu ortam tarayıcı soketine bağlantıyı
-  `EPERM` ile engelliyor. Hook relay yaşam döngüsü testi de Unix soketi açamadığından
-  çalışmıyor. Soket erişimli ortamda reload + gerçek Durdur/Devam denemesi bekliyor.
-- İptal yapılmış tıklama/ağ isteğini geri almaz; sayfanın kendi başlattığı JS/timer işleri
-  ve senkron çalışan JavaScript zorla sonlandırılmaz. Yeni değişiklikler henüz commit değil.
-- Bu sohbette kullanıcının seaskablo.com üzerinden öğe gönderimi başarıyla ulaştı.
-  Bu, hook güven onayının veya temiz oturum otomatik kaydının ayrıca doğrulandığı anlamına gelmez.
-
-### Amaç ve kararlar
-
-- Zen MCP artık yalnız Claude'a özel değil: günlük Zen/Firefox penceresinde farklı AI
-  ajanlarıyla birlikte çalışma. Efe'de gerçek test istemcileri Claude Code ve Codex.
-- Aynı pencere/oturumlar, arka plan sekmeleri, gerçek girdi, ada, global Durdur/Devam ve
-  sekme verme/geri alma korunur. Ayrı pencere veya gerçek container istenmiyor.
-- Repo private kalacak; yayın, npm/MCP Registry ve isim değişikliği henüz yapılmayacak.
-- agent-browser referans; onun tüm özelliklerini kopyalamak yerine güvenilirlik ve
-  kullanıcıyla birlikte çalışma akışı geliştirilecek. CLI+MCP birlikte değerlendirilebilir.
-
-### Tamamlananlar
-
-- Codex bağlantısı: XDG_RUNTIME_DIR aktarılmadığında Linux kullanıcı runtime klasörü
-  bulunuyor; hata mesajları soket yolu/gerçek hata kodunu gösteriyor.
-- computer koordinat şeması standart iki sayılık dizi oldu; Codex'te doğrudan tool artık
-  görünür. Gerçek Codex MCP üzerinden açma/okuma/form/tıklama/klavye/screenshot/kapatma geçti.
-- Yeni sekmenin about:blank STOP olayının navigate'i erken bitirmesi düzeltildi.
-- MCP initialize istemci adıyla tema: Claude turuncu, Codex mint, diğer ajanlar mavi.
-  Ada, sekme çizgisi, cursor/ripple/ask çerçevesi birlikte değişir; kimlik yetki vermez.
-- Efe'nin gönderdiği Codex görselinden esinlenen net SVG: browser/assets/codex.svg.
-  Mor-mavi bulut simgesi Codex menü/adasında, eski >_ genel ajanlarda. Menüler her açılışta
-  güncellenir; Zen yeniden başlatılmaz. Sekme menüsü sekmenin mevcut ajanını izler.
-- Claude channels korunuyor. Codex seçimleri execFile(codex queue) ile tam UUID'ye gider;
-  shell yok. Kullanıcı notu, güvenilmeyen sayfa içeriğinden ayrılır; görüntü yolu ve
-  tab_id/source_tab korunur. Gerçek seçim mesajı bu sohbete geldi, kullanıcı girdisi olarak
-  alındığı doğrulandı. Çalışan turda queue girdisi tur bittikten sonra geldi.
-- Ada hedef listesi ajan/proje/oturum son ekini gösterir. Hedef compose açılırken sabitlenir;
-  başka oturuma sessiz geçiş yok. Çift gönderim engellenir; kopma/hata panoya düşer.
-  İki yönlü receipt ile queue kabul edilmeden başarı yazılmaz.
-- Otomatik Codex alıcısı: SessionStart/UserPromptSubmit/SessionEnd hook'ları gerçek host
-  session_id ve cwd ile bir yerel relay yönetir. MCP sürecinde CODEX_THREAD_ID yok;
-  kimliği tahmin etme. connect_session artık elle yedektir, normal yol hook'lardır.
-  Aynı UUID tek receiver; resume/compact/eşzamanlı başlatma/ölü soket toparlanması testli.
-  Normal kapanışta temizlenir; anormal kapanışta 24 saat etkinlik yoksa kapanır.
-- Codex hook tanımları ~/.codex/hooks.json'a kuruldu. Mevcut sohbet relay'i doğrudan
-  başlatıldı ve Zen'de tek codex:<UUID> kaydı görüldü. Güven onayı bypass edilmedi.
-
-### Yeni sohbette ilk iş / açık kalan doğrulama
-
-1. Efe'nin Codex'te /hooks ekranından üç Zen MCP hook'una bir kez güvenip güvenmediğini
-   doğrula. Henüz onayladığına dair kullanıcı mesajı yok. Onay yoksa otomatik tetikleme
-   beklenmez; kod/kurulum hazır olmakla bu onay ayrı şeylerdir.
-2. Güven sonrası gerçekten yeni/açılıp-devam eden sohbetin, connect_session çağırmadan ve
-   ilk browser aracını beklemeden hedef listesine düştüğünü uçtan uca doğrula.
-3. Eski sohbet UUID'sini kopyalama. Gerektiğinde yeni komut ortamındaki CODEX_THREAD_ID
-   okunur veya güvenilir hook input'u kullanılır. Sahiplik/izin ile görsel kimliği karıştırma.
-4. Sonra Efe ile geliştirme planına dön: batch içinde site değişince yeniden izin kontrolü,
-   gerçek işlem iptali, çoklu oturum sekme sahipliği/çakışmalar, örtülü öğe kontrolü,
-   çıktı/diff verimliliği, CLI+skill ölçümü. Bunlar bu oturumda çözülmedi.
-
-### Testler ve çalışma ağacı
-
-- Son npm test: build + 18 test geçti. Bellek içi MCP matrisi, ada, wire/receipt,
-  hook kurulumunu koruma/tekilleştirme ve gerçek alt süreçlerle relay yaşam döngüsü dahil.
-- Canlı check-compat üç ajan kimliğiyle geçti. check-pick-delivery gerçek seçim + görüntü
-  bağlamını Codex queue'ya taşıdı ve mesajın sohbete ulaşması ayrıca gözlendi.
-- Kullanıcı tarayıcısındaki test sekmeleri kapatıldı; mode/sensitive ayarları değiştirilmedi.
-- Çok sayıda tracked/untracked değişiklik var; henüz commit/push yapılmadı. Bunlar bu
-  çalışmanın ürünüdür; silme/resetleme veya istenmeden yayınlama.
-- Sadece belge güncellemesi için testleri tekrar çalıştırmak gerekmez.
-
-### İlgili dosyalar ve komutlar
-
-- src/server.ts, src/zen.ts, src/paths.ts: MCP şema, kimlik, soket, receipt.
-- src/delivery.ts: Codex queue gönderimi.
-- src/codex-hooks.ts, src/codex-relay.ts: kurulum ve otomatik alıcı.
-- browser/Agent.sys.mjs, browser/assets/codex.svg, Island.sys.mjs, main.js, actors/: UI/köprü.
-- npm test
-- node scripts/zenctl.ts reload (Zen'i kapatmadan browser kodu yenileme)
-- node scripts/check-compat.ts --reload (yalnız test sekmeleri)
-- node scripts/check-pick-delivery.ts (GERÇEKTEN mevcut sohbete test mesajı yollar)
-- node dist/cli.js codex-hooks install|uninstall
-- node scripts/zenctl.ts eval '[...h.subscribers.values()].map(s=>({name:s.name,relay:s.relay}))'
-
-Browser reload Node MCP sürecindeki modülleri yenilemez; Node/schema değişince MCP
-istemcisini yeniden bağlamak gerekir. Sadece browser UI değişikliğinde Zen'i kapatma.
+- Günlük Zen penceresinde, Efe'nin oturumlarıyla, farklı AI ajanlarıyla birlikte çalışma.
+  Gerçek test istemcileri Claude Code ve Codex. Ayrı pencere ya da container yok.
+- Repo private; yayın, npm/MCP Registry ve isim sonra.
+- agent-browser referans; onu kopyalamak yerine güvenilirlik ve kullanıcıyla birlikte çalışma.
 
 ## Ne bu
 
@@ -495,15 +124,16 @@ Claude Code ──stdio MCP──▶ src/server.ts ──Unix soket──▶ bro
   açılan oturumda `server.ts` bunu `/proc` üzerinden komut satırından anlar
   (`ZEN_MCP_CHANNEL=1/0` geçersiz kılar), `claude/channel` yeteneğini bildirir ve köprüye
   kalıcı bir `subscribe` bağlantısı açar (köprü reload'da kapatır, 3 sn'de yeniden bağlanır).
-  Her istek `session` kimliği taşır; olay Zen'i en son kullanan ya da en son bağlanan oturuma
-  gider. Abone yoksa metin panoya kopyalanır. Bayraksız oturumlar abone olmaz.
+  Her istek `session` kimliği taşır; olay adada seçilen hedef oturuma gider (Codex'e
+  `codex queue` ile). Abone yoksa metin panoya kopyalanır. Bayraksız oturumlar abone olmaz.
 
 ## Tool'lar (Claude in Chrome adlarıyla uyumlu)
 
 `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp`, `navigate`, `computer` (screenshot, tıklamalar, hover,
 drag, scroll, scroll_to, type, key, wait; koordinat ya da ref), `read_page`, `find`,
 `form_input`, `get_page_text`, `javascript_tool`, `read_console_messages`,
-`read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`, `request_tab`, `browser_batch`.
+`read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`, `request_tab`, `browser_batch`,
+`wait_for`, `tab_work`, `connect_session` (Codex için elle yedek).
 
 Davranış notları:
 
