@@ -202,7 +202,7 @@ test('scaled screenshot coordinates round-trip with size caps rather than the re
     drawSnapshot: async () => ({ width: 2400, height: 1600, close() {} }),
     getActor: () => ({ sendAsyncMessage() {} }),
   } } };
-  const context = vm.createContext({ state, query: async () => {}, MAX_EDGE: 1568, MAX_PIXELS: 1150000 });
+  const context = vm.createContext({ assertSiteAccess() {}, state, query: async () => {}, MAX_EDGE: 1568, MAX_PIXELS: 1150000 });
   vm.runInContext(block('    function toPagePoint(', '    // ---- iframe') +
     block('    async function screenshot(', '    // ---- içerik süreci'), context);
   await context.screenshot(browser, 0.5);

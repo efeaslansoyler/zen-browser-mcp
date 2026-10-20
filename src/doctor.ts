@@ -53,7 +53,7 @@ export async function doctor() {
   }
 
   const config = readConfig();
-  ok(L(`mode ${config.mode}, ${config.sensitive.length} sensitive site(s) (${CONFIG_FILE})`, `mod ${config.mode}, ${config.sensitive.length} hassas site (${CONFIG_FILE})`));
+  ok(L(`mode ${config.mode}, ${Object.keys(config.sites).length} site rule(s) (${CONFIG_FILE})`, `mod ${config.mode}, ${Object.keys(config.sites).length} site kuralı (${CONFIG_FILE})`));
 
   console.log(L(`\nIn Claude Code: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}`, `\nClaude Code'da: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}`));
   console.log(`Codex: codex mcp add ${SERVER_NAME} -- npx -y ${NAME}`);

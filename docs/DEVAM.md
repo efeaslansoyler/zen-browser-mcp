@@ -41,6 +41,18 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
 - **Çoklu öğe seçimi** (`5e013b0`): seçicide Shift+tık ekle/çıkar, Enter bitir, Backspace geri
   al, Esc iptal; aynı üst sayfada en fazla 8 öğe, tek not, öğe başına bağlam ve PNG.
 
+- **Site kuralları** (2026-10-20): tek `sites` haritası; varsayılan genel moda uyar,
+  `ask` işlem öncesi onay, `block` okuma/ekran görüntüsü/işlem/gezinmeyi reddeder.
+  Sekme sağ tık → Site kuralları veya `config site ask|block|default <domain>` / `list`.
+  Alt alanlar kapsanır, block önceliklidir, alt alan üst kuralı gevşetemez (menü mirası
+  gösterir). Eski sensitive kayıtları okunur ve ilk yazımda taşınır; eski CLI uyumlu.
+  Engelli iframe varsa üst sayfa erişimi de reddedilir. Ajan çağrısı sırasında engelli
+  HTTP istekleri/yönlendirmeler iptal edilir; kullanıcı gezinmesine genel ağ filtresi yok.
+  Engelli sekme listesinde yalnız ID + blocked döner, kapatma/geri verme serbest.
+  Ortak politika `browser/SiteRules.sys.mjs`; `npm test`: 126/126 başarılı.
+  `check-permissions.ts` canlı testleri (eski onaylar, block, yönlendirme, iframe, menü) geçti;
+  mevcut auto ayarı geri yüklendi.
+
 **CLI + skill deneyi → `cli-prototype` dalı** (main'e alınmadı). Kalıcı broker'lı CLI
 (`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16
 çağrıda MCP 322 ms, CLI 785 ms, metin aynı. Gerçek ajan pilotu (Codex + Claude, 3 görev ×
@@ -49,15 +61,12 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** Dal yalnız ileride lazım
 
 ## Açık işler
 
-1. **Codex otomatik alıcı:** Üç hook'un güven kaydı mevcut; bu sohbetin otomatik alıcısı
-   `connect_session` çağrılmadan Zen'e kayıtlı bulundu. Efe'nin gerçek seçiminde gönderim
-   başarısızdı: Codex config'inde `[permissions]` varken `default_permissions` yoktu.
-   `~/.codex/config.toml` yedeklenip köküne `default_permissions = ":workspace"` eklendi;
-   `codex doctor --summary`: 21 başarılı. `node scripts/check-pick-delivery.ts --automatic`
-   otomatik alıcıyla gerçek seçici → queue → ada receipt testini geçti. Kuyruğa alınan öğe bağlamı
-   sohbet girdisi olarak ulaştı; otomatik alıcı uçtan uca doğrulaması tamamlandı. Eski sohbet
-   UUID'si kullanma; `--automatic` elle bağlama yapmaz.
-2. PLAN.md'deki adaylar (izinli alan adları, React/axe, Quickshell göstergesi, isim + npm).
+1. Codex hook güveni ve otomatik alıcı uçtan uca doğrulandı; kalan doğrulama yok.
+   Gerçek seçim → otomatik alıcı → queue → bu sohbete öğe bağlamı ulaştı. Eksik Codex
+   `default_permissions` ayarı yedeklenip `:workspace` ile düzeltildi. Tekrar kontrol:
+   `node scripts/check-pick-delivery.ts --automatic` (gerçek sohbete mesaj gönderir).
+2. Efe'nin sırada konuşmak istediği yeni bir özellik fikri var. Diğer adaylar React/axe,
+   Quickshell göstergesi, isim + npm; ayrı izinli alan adları yerine site kuralları seçildi.
 3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.
 
 ## Çalışma yöntemi
@@ -156,15 +165,11 @@ Davranış notları:
   gider (`deepest`): üst sayfadan gönderilen olay site dışı (ayrı süreçteki) iframe'e ulaşmıyor.
   Tuşlar odaktaki çerçeveye (`focusedFrame`). Ref koordinatı iframe kutuları toplanarak üst
   sayfaya çevrilir (`toTop`). Konsol ve `javascript_tool` yalnız üst çerçevede.
-- **Modlar ve izin (Faz 5, Efe'nin kararı):** `~/.config/zen-mcp/config.json`
-  `{"mode": "auto" | "ask", "sensitive": ["alan.adı", …]}`; hazır hassas site listesi yok.
-  `auto`: sormadan işlem; `ask`: her işlemde adada "İzin ver / Verme". Hassas sitede (alt alan
-  adları dahil) mod ne olursa olsun işlemlerde sorulur, gezinme serbest. İşlem: tıklamalar,
-  sürükleme, yazma, tuş, form_input, file_upload, javascript_tool, handle_dialog; `ask`
-  modunda navigate da. Okuma, kaydırma, hover, bekleme serbest. Soru öğeyi tarif eder
-  (`describe`: 'button "Gönder": tıklamak'). `browser_batch` sekme başına tek soruda listeler.
-  Mod adadaki "otomatik/onaylı" düğmesinden (yalnız çalışırken görünür) ya da sekme sağ tık
-  menüsündeki "Claude her işlemde izin istesin" ile değişir; dosya değişince kendiliğinden okunur.
+- **Modlar ve site kuralları:** `~/.config/zen-mcp/config.json`:
+  `{"mode":"auto"|"ask","sites":{"alan.adı":"ask"|"block"}}`. Ayrıntı yukarıdaki güncel
+  Site kuralları maddesinde ve README.tr.md'de. Genel ask modunda navigate da sorulur;
+  site ask kuralında gezinme serbest, yazma işlemleri onaylıdır. Okuma, kaydırma, hover,
+  bekleme block yoksa serbest. Batch onayı belge/origin/politika değişince geçersiz olur.
 - **Etkinlik günlüğü:** `~/.local/state/zen-mcp/activity.jsonl` (5 MB'ta `.1`'e taşınır); her
   tool çağrısı: zaman, tool, sekme, site, işlemlerde tarif, gezinmede varılan adres, hata.
   "Claude dün ne yaptı" sorusunda bu dosyayı oku.

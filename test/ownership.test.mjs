@@ -37,6 +37,7 @@ function harness() {
   let next = 1, timerId = 0, started;
   const first = new Promise(resolve => { started = resolve; });
   const context = vm.createContext({
+    assertSiteAccess() {}, ruleFor: () => "default",
     Ownership, Cancellation, agentTheme, activeAgent: agentTheme({ id: 'codex' }), activeSession: null,
     readSnapshots: new ReadSnapshots(), ownership: new Ownership(), sessions: new Map(), sessionVersions: new Map(),
     ownerConnections: new Map(), disconnectTimers: new Map(),
@@ -51,7 +52,7 @@ function harness() {
       deleteCustomTabValue(tab, key) { store.delete(`${tab.linkedBrowser.browserId}:${key}`); },
     },
     applyTheme(tab, theme) { tab.setAttribute('data-zen-agent', theme.id); return theme; },
-    readConfig: () => ({ mode: "auto" }),
+    readConfig: () => ({ mode: "auto", sites: {} }),
     cancelAsk() {}, describeWrite: async () => undefined,
     requirePermission: async () => ({ context: {}, asked: false }),
     permissionContext: () => ({}), samePermissionContext: () => true,
@@ -291,7 +292,7 @@ test('session menu pins explicit fixture tabs even when native context points el
   Object.assign(h.context, {
     MENU_ID: 'zen-mcp-context-give', tabMenuBuilders: new WeakMap(), contextTabs: () => context,
     menuAgent: () => agentTheme({ id: 'codex' }), paintMenuIcon() {},
-    readConfig: () => ({ mode: 'auto' }), toggleMode() {},
+    readConfig: () => ({ mode: 'auto', sites: {} }), toggleMode() {},
   });
   vm.runInContext(block('    function attachMenu(', '    // ---- Claude Code oturumları:'), h.context);
   vm.runInContext(block('    function prepareTabMenu(', '    function menuAgent('), h.context);

@@ -5,14 +5,15 @@ import path from "node:path";
 import { L } from "./i18n.ts";
 import { CONFIG_FILE, NAME } from "./paths.ts";
 
-type Config = { mode: "auto" | "ask"; sensitive: string[] };
+import { normalizeConfig, normalizeDomain, type Config } from "../browser/SiteRules.sys.mjs";
 
 export function readConfig(): Config {
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
-    return { mode: raw.mode === "ask" ? "ask" : "auto", sensitive: Array.isArray(raw.sensitive) ? raw.sensitive.map(String) : [] };
-  } catch {
-    return { mode: "auto", sensitive: [] };
+    return normalizeConfig(raw);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return normalizeConfig();
   }
 }
 
@@ -21,19 +22,16 @@ function writeConfig(config: Config) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 
-// "https://www.garanti.com.tr/x" → "garanti.com.tr": şema, yol ve www. atılır
-const domain = (s: string) => s.trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/\/.*$/, "").replace(/^\*?\./, "").replace(/^www\./, "");
-
 export function configCommand(args: string[]) {
   const config = readConfig();
   const [cmd, ...rest] = args;
   if (!cmd) {
     console.log(`${CONFIG_FILE}\n`);
-    console.log(L(`mode: ${config.mode}  (${config.mode === "ask" ? "Claude asks before every action" : "Claude acts without asking"})`,
-      `mod: ${config.mode}  (${config.mode === "ask" ? "Claude her işlemden önce izin ister" : "Claude sormadan işlem yapar"})`));
-    console.log(L("sensitive sites (always ask):", "hassas siteler (her işlemde sorulur):"), config.sensitive.length ? config.sensitive.join(", ") : L("none", "yok"));
-    console.log(L(`\nUsage:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config sensitive add|remove <domain>…`,
-      `\nKullanım:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config sensitive add|remove <alan-adı>…`));
+    console.log(L(`mode: ${config.mode}  (${config.mode === "ask" ? "Agent asks before every action" : "Agent acts without asking"})`,
+      `mod: ${config.mode}  (${config.mode === "ask" ? "Ajan her işlemden önce izin ister" : "Ajan sormadan işlem yapar"})`));
+    console.log(L("site rules:", "site kuralları:"), config.sites);
+    console.log(L(`\nUsage:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <domain>…\n  npx ${NAME} config site list`,
+      `\nKullanım:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <alan-adı>…\n  npx ${NAME} config site list`));
     return;
   }
   if (cmd === "mode") {
@@ -43,15 +41,21 @@ export function configCommand(args: string[]) {
     console.log(L(`✓ mode: ${mode}`, `✓ mod: ${mode}`));
     return;
   }
-  if (cmd === "sensitive") {
-    const [action, ...domains] = rest;
-    const list = new Set(config.sensitive);
-    const items = domains.map(domain).filter(Boolean);
-    if (action === "add") items.forEach((d) => list.add(d));
-    else if (action === "remove") items.forEach((d) => list.delete(d));
-    else if (action !== "list" && action !== undefined) throw new Error(L("Use: sensitive add|remove <domain>…", "Kullanım: sensitive add|remove <alan-adı>…"));
-    writeConfig({ ...config, sensitive: [...list].sort() });
-    console.log(L("sensitive sites:", "hassas siteler:"), list.size ? [...list].sort().join(", ") : L("none", "yok"));
+  if (cmd === "site" || cmd === "sensitive") {
+    const [action = "list", ...domains] = rest;
+    // Keep old commands working; all writes migrate to the single sites map.
+    const rule = cmd === "sensitive" ? ({ add: "ask", remove: "default", list: "list" } as Record<string, string>)[action] : action;
+    if (!["ask", "block", "default", "list"].includes(rule)) throw new Error("Use: config site ask|block|default <domain>… or config site list");
+    if (rule !== "list") {
+      if (!domains.length) throw new Error("At least one site domain is required.");
+      const items = domains.map(normalizeDomain);
+      for (const domain of items) {
+        if (rule === "default") delete config.sites[domain];
+        else config.sites[domain] = rule as "ask" | "block";
+      }
+      writeConfig(config);
+    }
+    console.log(L("site rules:", "site kuralları:"), config.sites);
     return;
   }
   throw new Error(L(`Unknown config command: ${cmd}`, `Bilinmeyen config komutu: ${cmd}`));

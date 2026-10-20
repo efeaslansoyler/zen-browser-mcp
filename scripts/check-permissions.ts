@@ -17,6 +17,7 @@ const original = fs.existsSync(configFile) ? fs.readFileSync(configFile) : undef
 let sensitiveURL = '';
 const server = http.createServer((request, response) => {
   if (request.url === '/redirect') { response.writeHead(302, { Location: sensitiveURL }); response.end(); return; }
+  if (request.url === '/embed') { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><title>Embedded fixture</title><iframe src="${sensitiveURL}"></iframe>`); return; }
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
   response.end('<!doctype html><title>Zen permission test</title><h1>Disposable permission test</h1><p id="result">untouched</p>');
 });
@@ -91,7 +92,46 @@ try {
   assert(!result.error && !result.value?.isError, 'Same-document writes failed after approval');
   assert(text(await command('get_page_text', { tabId })).includes(token));
   console.log('✓ Approval allows grouped writes on the unchanged destination document');
-  console.log('All live permission checks passed.');
+  // Switch the same local fixture from legacy sensitive to the unified blocked rule.
+  const ordinaryTab = JSON.parse(text(await command('tabs_create_mcp'))).tabId;
+  const embeddedTab = JSON.parse(text(await command('tabs_create_mcp'))).tabId;
+  try {
+    await command('navigate', { tabId: ordinaryTab, url: ordinaryURL });
+    await command('navigate', { tabId: embeddedTab, url: ordinaryURL + 'embed' });
+    temporary = JSON.stringify({ ...settings, sites: { ...settings.sites, '127.0.0.1': 'block' } }, null, 2) + '\n';
+    await sleep(20);
+    fs.writeFileSync(configFile, temporary, { mode: 0o600 });
+    for (const tool of ['get_page_text', 'read_page', 'javascript_tool', 'computer']) {
+      const result = await settle(command(tool, { tabId, text: 'document.title', action: 'screenshot' }));
+      assert(result.error && /blocked/.test(String(result.error)), `${tool} must reject blocked page`);
+    }
+    console.log('✓ Blocked page rejects text/tree reads, JavaScript and screenshots');
+    const embedded = await settle(command('computer', { tabId: embeddedTab, action: 'screenshot' }));
+    assert(embedded.error && /blocked/.test(String(embedded.error)), 'A blocked iframe must prevent parent screenshots');
+    console.log('✓ Loaded blocked iframe prevents screenshot access to its ordinary parent page');
+    for (const url of [sensitiveURL, ordinaryURL + 'redirect']) {
+      const result = await settle(command('navigate', { tabId: ordinaryTab, url }));
+      assert(result.error && /blocked/.test(String(result.error)), `Navigation must reject ${url}: ${result.error}`);
+    }
+    console.log('✓ Direct navigation and HTTP redirect to blocked site rejected');
+    const listing = JSON.parse(text(await command('tabs_context_mcp')));
+    const blocked = listing.tabs.find((tab: any) => tab.tabId === tabId);
+    assert(blocked.blocked && !blocked.title && !blocked.url);
+    console.log('✓ Blocked tab title and URL are redacted from agent tab list');
+    const menu = await chrome(`(() => {
+      const tab=h.findTab(${tabId}); const win=tab.ownerDocument.defaultView;
+      h.prepareTabMenu(win,[tab]);
+      const menu=win.document.getElementById('tabContextMenu');
+      const labels=[...menu.querySelectorAll('menu')].find(el=>el.getAttribute('label')?.includes('127.0.0.1'));
+      return labels ? [...labels.querySelectorAll('menuitem')].map(el=>({label:el.getAttribute('label'),checked:el.getAttribute('checked')})) : null;
+    })()`);
+    assert(menu?.length === 3 && menu[2].checked === 'true', JSON.stringify(menu));
+    console.log('✓ Real tab context menu shows three site rules and selected block');
+  } finally {
+    await command('tabs_close_mcp', { tabId: embeddedTab });
+    await command('tabs_close_mcp', { tabId: ordinaryTab });
+  }
+  console.log('All live permission and site-rule checks passed.');
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;

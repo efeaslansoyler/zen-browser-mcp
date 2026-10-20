@@ -21,7 +21,7 @@ Usage:
   npx ${NAME} uninstall       remove it
   npx ${NAME} doctor          check the setup
   npx ${NAME} codex-hooks install|uninstall  manage automatic Codex chat connection
-  npx ${NAME} config          show or change settings (mode, sensitive sites)`,
+  npx ${NAME} config          show or change settings (mode, site rules)`,
 `${NAME} ${VERSION}: AI ajanlarının Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
 
 Kullanım:

@@ -8,8 +8,8 @@ batch izinleri, oturuma özel sahiplik, `tab_work` devir kuyruğu, örtülü ö�
 okumada diff, çoklu öğe seçimi). CLI + skill denendi, ölçüldü; MCP ana yol kaldı
 (`cli-prototype` dalı).
 
-Sıradaki adaylar: Codex hook güveninin uçtan uca doğrulanması, izinli alan adları,
-React/axe araçları, Quickshell göstergesi; en sonda isim + npm + MCP Registry.
+Codex otomatik alıcı doğrulaması ve site kuralları tamamlandı.
+Sıradaki adaylar: React/axe araçları, Quickshell göstergesi; en sonda isim + npm + MCP Registry.
 
 ## Ada (2026-10-19)
 
@@ -98,7 +98,9 @@ Claude ile birlikte çalışma. Alınabilecekler:
 
 - ✅ Örtülü öğe kontrolü: tıklama noktasında başka öğe varsa (çerez bandı, modal) tıklamadan hata
   ve örten öğeyi bildir.
-- İzinli alan adları: Claude yalnız belirli sitelere gidebilsin (hassas sitelerin tersi).
+- ✅ Site kuralları (2026-10-20, Efe): ayrı izinli/yasaklı/hassas listeleri yerine tek
+  liste. Genel ayarı kullan / her işlemde sor / ajan erişimini engelle. Eski hassas
+  siteler ask kuralına taşınır; alt alanlar kapsanır, engelleme önceliklidir.
 - ✅ CLI + skill modu: denendi ve ölçüldü (2026-10-20). Token farkı anlamsız, CLI daha yavaş;
   MCP ana yol. Kod `cli-prototype` dalında.
 - React araçları (bileşen ağacı, props) ve erişilebilirlik denetimi (axe-core).

@@ -193,30 +193,50 @@ never silently sent to another chat. Double-clicking Send does not duplicate del
 Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
 if it needs live access, and you approve or decline in the browser.
 
-## Modes and sensitive sites
+## Modes and site rules
 
-| | |
+The general mode is **auto** (act without asking) or **ask** (request approval before
+an action). Each site can have one rule in the tab context menu → **Site rules**:
+
+| Site rule | Behavior |
 |---|---|
-| **auto** (default) | Claude acts without asking |
-| **ask** | Claude asks in the island before every action: *button "Send": click*, *type "hello"* |
-| **sensitive sites** | always ask, whatever the mode. There is no built-in list; add your own |
+| **Use general setting** | Follow auto/ask; removes this site's explicit rule |
+| **Ask before every action** | Require approval even in auto mode |
+| **Block agent access** | Deny page reads, screenshots, actions and agent navigation |
+
+Rules cover subdomains. Blocking wins over asking; a child domain cannot weaken a
+parent-domain rule. The menu indicates inherited restrictions. There is no built-in list.
+Blocked embedded frames also prevent access to the parent page, including screenshots.
+A blocked tab can still be closed or returned to the user.
 
 Actions are clicks, dragging, typing, key presses, filling forms, uploading files, running
-JavaScript, answering dialogs and, in ask mode, navigating. Reading, screenshots, scrolling and
-waiting are always allowed. Batch actions on an unchanged page share one approval. Navigation,
-redirects, page reloads or permission-setting changes invalidate that approval; subsequent
-actions are checked again against the current site. Destination-page actions are requested
-after navigation. Denying permission stops the remaining batch steps.
+JavaScript and answering dialogs. In general ask mode, navigation also requires approval;
+a site's ask rule retains the old sensitive-site behavior (navigation and reads are free).
+Reading, screenshots, scrolling and waiting require no approval unless site access is blocked.
+Batch actions on an unchanged page share one approval; navigation, redirects, reloads or
+policy edits invalidate it. Denying approval stops the remaining batch steps.
 
-Switch modes from the island (while Claude works) or from the tab context menu (**Claude asks
-before every action**), or:
+Switch the general mode from the island or the tab context menu. CLI equivalents:
 
 ```sh
 npx zen-mcp config mode ask
-npx zen-mcp config sensitive add mybank.com accounts.google.com
+npx zen-mcp config site ask accounts.google.com
+npx zen-mcp config site block mybank.com
+npx zen-mcp config site default accounts.google.com
+npx zen-mcp config site list
 ```
 
-Settings live in `~/.config/zen-mcp/config.json` and apply immediately.
+Settings live in `~/.config/zen-mcp/config.json` and apply immediately:
+
+```json
+{"mode":"auto","sites":{"accounts.google.com":"ask","mybank.com":"block"}}
+```
+
+Old `sensitive` entries are read as ask rules and migrated on the next settings write;
+`config sensitive add|remove` remains supported. Rules govern Zen MCP access, not the
+user's browsing or a system-wide network firewall. During an agent call, HTTP requests
+and redirects to blocked hosts are cancelled; the browser's independent background
+activity is not globally filtered.
 
 Every tool call is logged to `~/.local/state/zen-mcp/activity.jsonl` (time, site, what was
 done). Ask Claude *"what did you do in the browser yesterday?"*.

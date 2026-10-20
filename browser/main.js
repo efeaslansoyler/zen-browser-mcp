@@ -84,6 +84,7 @@ function logError(where, e) {
     const { Ownership } = ChromeUtils.importESModule(`resource://zenmcp/Ownership.sys.mjs?v=${version}`);
     const ownership = new Ownership(state.owners ||= new Map(), state.ownerVersions ||= new Map(),
       state.tabWork ||= new Map(), state.tabQueues ||= new Map(), state.tabHandoffs ||= new Map());
+    const { normalizeConfig, siteRule } = ChromeUtils.importESModule(`resource://zenmcp/SiteRules.sys.mjs?v=${version}`);
     const { ReadSnapshots } = ChromeUtils.importESModule(`resource://zenmcp/ReadSnapshots.sys.mjs?v=${version}`);
     const readSnapshots = new ReadSnapshots(); // Reload deliberately invalidates previous snapshot IDs.
     const sessions = state.sessions ||= new Map();
@@ -251,6 +252,7 @@ function logError(where, e) {
 
     function describeTab(tab) {
       const b = tab.linkedBrowser;
+      if (ruleFor(hostOf(b)) === "block") return { tabId: b.browserId, blocked: true };
       const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
       const owner = ownership.owner(b.browserId);
       if (owner) info.owner = { session: owner, name: sessions.get(owner)?.name || owner.slice(-6) };
@@ -444,6 +446,10 @@ function logError(where, e) {
       const targets = win.document.createXULElement("menupopup");
       give.append(targets);
       menu.insertBefore(give, modeItem);
+      const siteMenu = win.document.createXULElement("menu");
+      const sitePopup = win.document.createXULElement("menupopup");
+      siteMenu.append(sitePopup);
+      menu.insertBefore(siteMenu, modeItem);
       let shownTabs = [];
       const build = inputTabs => {
         const tabs = shownTabs = inputTabs.filter(t => t.isConnected && !t.hasAttribute("zen-empty-tab"));
@@ -480,6 +486,34 @@ function logError(where, e) {
         const owner = tab && sessions.get(ownership.owner(tab.linkedBrowser.browserId));
         item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner.name}` : ""));
         modeItem.setAttribute("checked", readConfig().mode === "ask");
+        const host = tab && hostOf(tab.linkedBrowser);
+        siteMenu.hidden = tabs.length !== 1 || !host;
+        siteMenu.setAttribute("label", L("Site rules", "Site kuralları") + (host ? ` · ${host}` : ""));
+        const effectiveRule = ruleFor(host);
+        if (host && (readConfig().sites[host] || "default") !== effectiveRule) {
+          siteMenu.setAttribute("label", siteMenu.getAttribute("label") + " · " +
+            (effectiveRule === "block" ? L("blocked by parent domain", "üst alan adı engelliyor") : L("parent domain requires approval", "üst alan adı onay istiyor")));
+        }
+        sitePopup.replaceChildren();
+        for (const [rule, label] of [
+          ["default", L("Use general setting", "Genel ayarı kullan")],
+          ["ask", L("Ask before every action", "Her işlemde sor")],
+          ["block", L("Block agent access", "Ajan erişimini engelle")],
+        ]) {
+          const choice = win.document.createXULElement("menuitem");
+          choice.setAttribute("type", "radio");
+          choice.setAttribute("name", "zen-mcp-site-rule");
+          choice.setAttribute("label", label);
+          choice.setAttribute("checked", (readConfig().sites[host] || "default") === rule);
+          choice.addEventListener("command", () => {
+            const sites = { ...readConfig().sites };
+            if (rule === "default") delete sites[host];
+            else sites[host] = rule;
+            writeConfig({ sites });
+          });
+          sitePopup.append(choice);
+        }
+
       };
       tabMenuBuilders.set(win, build);
       const onShowing = event => {
@@ -496,6 +530,7 @@ function logError(where, e) {
         item.remove();
         give.remove();
         modeItem.remove();
+        siteMenu.remove();
       });
     }
     const menuCleanups = new Set();
@@ -626,6 +661,7 @@ function logError(where, e) {
     // Ctrl+Shift+F (seçim sürerken yeniden basmak vazgeçer) ya da sağ tık menüsü
     // (fromContext: seçim sağ tıklanan öğeden başlar)
     async function startPick(win, { browser = win.gBrowser.selectedBrowser, fromContext = false } = {}) {
+      assertSiteAccess(browser);
       if (pick && !fromContext) {
         endPick();
         return;
@@ -680,6 +716,7 @@ function logError(where, e) {
 
     async function sendPick(note, targetId = pick?.targetId) {
       const current = pick;
+      if (current) assertSiteAccess(current.browser);
       if (!current?.info || current.sending || current.preparing) return;
       if (current.document && current.browser.browsingContext?.currentWindowGlobal !== current.document) {
         endPick();
@@ -748,6 +785,7 @@ function logError(where, e) {
     let pickShotId = 0;
 
     async function elementShot(browser, { rect, viewport }) {
+      assertSiteAccess(browser);
       const wg = browser.browsingContext?.currentWindowGlobal;
       if (!wg) return null;
       const pad = 12;
@@ -839,6 +877,11 @@ function logError(where, e) {
         const bc = channel.loadInfo?.browsingContext;
         const browserId = bc?.browserId;
         if (!browserId || !state.tabs.has(browserId)) return;
+        if (topic === "http-on-modify-request" && operation?.tabs?.has(browserId) && ruleFor(channel.URI.host) === "block") {
+          channel.cancel(Cr.NS_ERROR_ABORT);
+          operation.cancel(new Error(`Site access blocked by user rule: ${channel.URI.host}`));
+          return;
+        }
         let log = network.get(browserId);
         if (!log) network.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
         // reload'dan önceki sürümün kaydı: numarasız girdiler
@@ -1256,6 +1299,7 @@ function logError(where, e) {
     // scale (0,1–1): görüntüyü ayrıca küçültür, token ~scale² ile azalır; koordinatlar yine
     // dönen görüntünün pikselleri
     async function screenshot(browser, scale = 1) {
+      assertSiteAccess(browser);
       const wg = browser.browsingContext?.currentWindowGlobal;
       if (!wg) throw new Error("The page has not loaded yet.");
       // sanal imleç ve tıklama halkası Claude'un gördüğü görüntüde sayfayı kapatmasın
@@ -1267,6 +1311,7 @@ function logError(where, e) {
       } finally {
         try { wg.getActor("ZenMcp").sendAsyncMessage("overlays", { hidden: false }); } catch {}
       }
+      assertSiteAccess(browser);
       const { width: w, height: h } = bitmap;
       const s = Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h))) * Math.min(1, Math.max(0.1, scale));
       const canvas = browser.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
@@ -1472,6 +1517,7 @@ function logError(where, e) {
       if (state.paused) throw new Stopped();
       operation?.check();
       ownership.check(browser.browserId, activeSession);
+      assertSiteAccess(browser);
       const scope = operation;
       const wg = frame?.currentWindowGlobal;
       if (!wg) throw new Error("The page has not loaded yet.");
@@ -1491,6 +1537,7 @@ function logError(where, e) {
           throwIfDialog(browser);
           if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
           ownership.check(browser.browserId, scope?.session || activeSession);
+          assertSiteAccess(browser);
         }
       })();
       try {
@@ -1544,21 +1591,26 @@ function logError(where, e) {
     // ---- ayarlar: ~/.config/<ad>/config.json ----
     //
     // mode: "auto" (Claude sormadan işlem yapar) ya da "ask" (her işlemde adadan izin ister).
-    // sensitive: alan adları; bu sitelerde mod ne olursa olsun her işlemde izin istenir
+    // sites: alan adı → ask (işlemde onay) veya block (ajan erişimi yok). Eski sensitive taşınır.
     // ("garanti.com.tr" alt alan adlarını da kapsar). Dosya değişince kendiliğinden okunur.
     const CONFIG_PATH = `${Services.env.get("XDG_CONFIG_HOME") || Services.env.get("HOME") + "/.config"}/${zenMcpApp}/config.json`;
-    const DEFAULT_CONFIG = { mode: "auto", sensitive: [] };
+    const DEFAULT_CONFIG = { mode: "auto", sites: {} };
     let config = { ...DEFAULT_CONFIG };
     let configTime = -1;
+    let configError = null;
 
     function readConfig() {
       const file = localFile(CONFIG_PATH);
       if (!file.exists()) {
         config = { ...DEFAULT_CONFIG };
         configTime = 0;
+        configError = null;
         return config;
       }
-      if (file.lastModifiedTime === configTime) return config;
+      if (file.lastModifiedTime === configTime) {
+        if (configError) throw configError;
+        return config;
+      }
       configTime = file.lastModifiedTime;
       try {
         const stream = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
@@ -1566,13 +1618,13 @@ function logError(where, e) {
         const raw = NetUtil.readInputStreamToString(stream, stream.available(), { charset: "UTF-8" });
         stream.close();
         const parsed = JSON.parse(raw);
-        config = {
-          mode: parsed.mode === "ask" ? "ask" : "auto",
-          sensitive: Array.isArray(parsed.sensitive) ? parsed.sensitive.map(s => String(s).toLowerCase().replace(/^\*?\./, "")) : [],
-        };
+        config = normalizeConfig(parsed);
+        configError = null;
         island?.setMode(config.mode);
       } catch (e) {
+        configError = e;
         logError("ayarlar", e);
+        throw e;
       }
       return config;
     }
@@ -1598,7 +1650,24 @@ function logError(where, e) {
     const hostOf = browser => {
       try { return browser.currentURI.host; } catch { return ""; }
     };
-    const isSensitive = host => !!host && readConfig().sensitive.some(d => host === d || host.endsWith("." + d));
+    const ruleFor = host => siteRule(host, readConfig().sites);
+    const isSensitive = host => ruleFor(host) === "ask";
+    function assertSiteHost(host) {
+      if (ruleFor(host) === "block") throw new Error(`Site access blocked by user rule: ${host}`);
+    }
+    function assertSiteURL(url) {
+      let host = "";
+      try { host = Services.io.newURI(url).host; } catch {}
+      assertSiteHost(host);
+    }
+    function assertSiteAccess(browser) {
+      assertSiteHost(hostOf(browser));
+      // A screenshot or parent-page script can expose embedded content, too.
+      for (const frame of framesOf(browser)) {
+        const uri = frame.currentWindowGlobal?.documentURI;
+        if (uri) assertSiteURL(uri.spec);
+      }
+    }
 
     // ---- izin: onaylı modda ya da hassas sitede işlem öncesi adadan sorulur ----
 
@@ -1663,7 +1732,7 @@ function logError(where, e) {
       return {
         document: browser.browsingContext?.currentWindowGlobal,
         origin: browser.currentURI?.prePath || browser.currentURI?.spec,
-        policy: JSON.stringify([settings.mode, settings.sensitive]),
+        policy: JSON.stringify([settings.mode, settings.sites]),
         ownerVersion: ownership.version(browser.browserId),
       };
     }
@@ -1677,6 +1746,7 @@ function logError(where, e) {
     async function requirePermission(browser, steps) {
       for (;;) {
         operation?.check();
+        assertSiteAccess(browser);
         const context = permissionContext(browser);
         const lines = [];
         for (const { tool, args } of steps) {
@@ -1711,6 +1781,7 @@ function logError(where, e) {
     }
 
     function readOutput(browser, scope, context, value, diff, since) {
+      assertSiteAccess(browser);
       operation?.check();
       ownership.check(browser.browserId, activeSession);
       return text(readSnapshots.render({ session: activeSession, tabId: browser.browserId,
@@ -1809,6 +1880,7 @@ function logError(where, e) {
           });
         }
         await guard(loaded);
+        assertSiteAccess(browser);
         const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
         return text(describeTab(tab));
       },
@@ -2090,9 +2162,12 @@ function logError(where, e) {
         if (id != null) {
           const r = log?.list.find(r => r.id === id);
           if (!r) return text(`No request #${id} (the log is cleared when the page moves to another site); take ids from the list.`);
+          assertSiteURL(r.url);
           return requestDetails(browser, r, max_chars).then(text);
         }
-        let list = log?.list ?? [];
+        let list = (log?.list ?? []).filter(r => {
+          try { assertSiteURL(r.url); return true; } catch { return false; }
+        });
         if (urlPattern) list = list.filter(r => r.url.includes(urlPattern));
         const lines = list.slice(-limit).map(r => {
           const status = r.error ?? (r.status ?? (r.duration == null ? "pending" : "no response"));
@@ -2219,7 +2294,14 @@ function logError(where, e) {
         activeCalls++;
       }
       try {
-        if (browser && tool !== "browser_batch") {
+        if (browser && tool !== "tabs_close_mcp") {
+          assertSiteAccess(browser);
+          if (tool === "navigate" && !["back", "forward"].includes(args.url)) {
+            const destination = Services.uriFixup.getFixupURIInfo(args.url, Services.uriFixup.FIXUP_FLAG_FIX_SCHEME_TYPOS).preferredURI;
+            assertSiteURL(destination.spec);
+          }
+        }
+        if (browser && !["browser_batch", "tabs_close_mcp"].includes(tool)) {
           const what = await describeWrite(tool, args, browser);
           if (what) entry.what = what;
           let grant = approvals?.get(browser);
@@ -2235,6 +2317,7 @@ function logError(where, e) {
         operation?.check();
         if (browser) ownership.check(args.tabId, activeSession);
         const result = await tools[tool](args);
+        if (browser && tool !== "tabs_close_mcp") assertSiteAccess(browser);
         // Preserve completed steps and the cancellation error from a partial batch.
         if (!result?.isError) operation?.check();
         if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;

@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { siteRule, normalizeConfig } from '../browser/SiteRules.sys.mjs';
 import { Ownership } from '../browser/Ownership.sys.mjs';
 const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 
-function harness({ mode = 'auto', sensitive = [], site = 'https://ordinary.test', answer } = {}) {
-  const settings = { mode, sensitive };
+function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://ordinary.test', answer } = {}) {
+  const settings = normalizeConfig({ mode, sensitive, sites });
   const prompts = [], effects = [];
   const browser = { browserId: 1, browsingContext: {} };
   const navigate = (url, document = {}) => {
@@ -19,6 +20,7 @@ function harness({ mode = 'auto', sensitive = [], site = 'https://ordinary.test'
   const ownership = new Ownership();
   ownership.assign(1, 'test-session');
   const context = vm.createContext({
+    siteRule, framesOf: () => [], Services: { uriFixup: { getFixupURIInfo: url => ({ preferredURI: { spec: new URL(url).href } }) }, io: { newURI: url => ({ host: new URL(url).hostname }) } },
     ownership, activeSession: 'test-session',
     browserFor: id => { ownership.check(id, 'test-session'); return browser; },
     readConfig: () => settings, operation: null, state: { paused: false, tabs: new Set([1]) },
@@ -34,6 +36,9 @@ function harness({ mode = 'auto', sensitive = [], site = 'https://ordinary.test'
     tools: {
       navigate: async args => { navigate(args.url); return []; },
       javascript_tool: async args => { effects.push(args.text); return []; },
+      read_page: async () => [],
+      get_page_text: async () => [],
+      computer: async () => [],
       redirect: async args => { navigate(args.url); return []; },
       changePolicy: async args => { Object.assign(settings, args.settings); return []; },
     },
@@ -125,7 +130,7 @@ test('approved grants are invalidated by policy edits and do not leak across bat
   const h = harness({ mode: 'ask' });
   await h.batch([
     h.action('javascript_tool', { text: 'one' }),
-    h.action('changePolicy', { settings: { sensitive: ['ordinary.test'] } }),
+    h.action('changePolicy', { settings: { sites: { 'ordinary.test': 'ask' } } }),
     h.action('javascript_tool', { text: 'two' }),
   ]);
   assert.equal(h.prompts.length, 2);
@@ -165,4 +170,41 @@ test('navigation while describing a target discards the old permission descripti
   assert.equal(h.prompts[0].host, 'other.test');
   assert(!h.prompts[0].message.includes('ordinary.test'));
   assert.deepEqual(h.effects, ['typed']);
+});
+
+test('block overrides auto and ask, denying reads and writes without a prompt', async () => {
+  for (const mode of ['auto', 'ask']) {
+    const h = harness({ mode, sites: { 'ordinary.test': 'block' } });
+    for (const name of ['javascript_tool', 'read_page', 'computer', 'get_page_text']) {
+      const result = await h.batch([h.action(name, { action: 'screenshot', text: 'forbidden' })]);
+      assert(result.isError);
+      assert.match(result[0].text, /blocked/);
+    }
+    assert.deepEqual(h.effects, []);
+    assert.equal(h.prompts.length, 0);
+  }
+});
+
+test('blocked destination stops navigation before effect or permission prompt', async () => {
+  const h = harness({ mode: 'ask', sites: { 'blocked.test': 'block' } });
+  const result = await h.batch([h.action('navigate', { url: 'https://sub.blocked.test/path' }), h.action('javascript_tool', { text: 'never' })]);
+  assert(result.isError);
+  assert.equal(h.browser.currentURI.host, 'ordinary.test');
+  assert.equal(h.prompts.length, 0);
+});
+
+test('blocking a site midway through a batch stops remaining steps', async () => {
+  const h = harness();
+  const result = await h.batch([h.action('javascript_tool', { text: 'before' }), h.action('changePolicy', { settings: { sites: { 'ordinary.test': 'block' } } }), h.action('javascript_tool', { text: 'never' })]);
+  assert(result.isError);
+  assert.deepEqual(h.effects, ['before']);
+});
+
+test('blocked iframe prevents parent reads and screenshots', async () => {
+  const h = harness({ sites: { 'blocked.test': 'block' } });
+  h.context.framesOf = () => [{ currentWindowGlobal: { documentURI: { spec: 'https://blocked.test/embed' } } }];
+  const result = await h.batch([h.action('javascript_tool', { text: 'never' })]);
+  assert(result.isError);
+  assert.match(result[0].text, /blocked/);
+  assert.deepEqual(h.effects, []);
 });

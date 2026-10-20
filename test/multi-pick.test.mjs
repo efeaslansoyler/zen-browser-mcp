@@ -173,7 +173,7 @@ test('send guards navigation and preparation; successful delivery waits for rece
   const deliveries = [], notifications = [], clipboard = [];
   let receipt;
   const acknowledged = new Promise(resolve => { receipt = resolve; });
-  const context = vm.createContext({ pick: current, subscribers: new Map([['chosen', { name: 'Chosen session', agent: { id: 'codex' } }]]),
+  const context = vm.createContext({ assertSiteAccess() {}, pick: current, subscribers: new Map([['chosen', { name: 'Chosen session', agent: { id: 'codex' } }]]),
     state: { pickedTabs: new Set() }, island: { sent: message => notifications.push(message) }, L: en => en,
     pickMessage: () => ({ content: 'two contexts and one note', meta: { element_count: '2' } }),
     deliver: async (target, event) => { deliveries.push({ target, event }); return acknowledged; }, logError() {},

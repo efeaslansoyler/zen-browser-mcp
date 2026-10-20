@@ -192,30 +192,50 @@ Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;
 adadan onaylar veya reddedersin.
 
-## Modlar ve hassas siteler
+## Modlar ve site kuralları
 
-| | |
+Genel mod **auto / otomatik** (sormadan işlem) veya **ask / onaylı** (işlemden önce onay)
+olabilir. Sekme sağ tık menüsü → **Site kuralları** üzerinden siteye özel kural seçilir:
+
+| Site kuralı | Davranış |
 |---|---|
-| **auto / otomatik** (varsayılan) | Claude sormadan işlem yapar |
-| **ask / onaylı** | Claude her işlemden önce adada sorar: *button "Gönder": tıklamak*, *"merhaba" yazmak* |
-| **hassas siteler** | mod ne olursa olsun her işlemde sorulur. Hazır liste yok, kendin eklersin |
+| **Genel ayarı kullan** | auto/ask moduna uyar; siteye özel kuralı kaldırır |
+| **Her işlemde sor** | auto modda da işlem öncesinde onay ister |
+| **Ajan erişimini engelle** | Sayfa okuma, ekran görüntüsü, işlem ve ajanın gezinmesini engeller |
+
+Kurallar alt alan adlarını kapsar. Engelleme onay istemekten önceliklidir; alt alan adı
+üst alan adının kuralını gevşetemez. Menü miras alınan kısıtlamayı gösterir. Hazır site
+listesi yoktur. Engelli bir iframe içeren sayfaya da erişilemez; ekran görüntüsü de buna
+dahildir. Engelli sekme yine kapatılabilir veya kullanıcıya geri verilebilir.
 
 İşlemler: tıklama, sürükleme, yazma, tuşa basma, form doldurma, dosya yükleme, JavaScript
-çalıştırma, diyalog cevaplama ve onaylı modda başka adrese gitme. Okuma, ekran görüntüsü,
-kaydırma ve bekleme her zaman serbest. Aynı sayfadaki toplu işlemler tek onayı paylaşır.
-Gezinme, yönlendirme, sayfa yenileme veya izin ayarı değişikliği bu onayı geçersiz kılar;
-sonraki adımlar güncel siteye göre yeniden kontrol edilir. Hedef sayfadaki işlemlerin izni
-gezinmeden sonra istenir. İzin reddedilirse kalan toplu işlem adımları çalışmaz.
+çalıştırma ve diyalog cevaplama. Genel onaylı modda gezinme de izin ister. Siteye özel
+“Her işlemde sor” eski hassas site davranışını korur: gezinme ve okumada onay istemez.
+Erişim engellenmediyse okuma, ekran görüntüsü, kaydırma ve bekleme onay gerektirmez.
+Aynı sayfadaki toplu işlemler tek onayı paylaşır. Gezinme, yönlendirme, yenileme ve kural
+değişiklikleri onayı geçersiz kılar; izin reddedilirse kalan adımlar çalışmaz.
 
-Modu adadan (Claude çalışırken), sekme sağ tık menüsünden (**Claude her işlemde izin
-istesin**) ya da komutla değiştir:
+Genel modu adadan veya sekme sağ tık menüsünden değiştirebilirsin. CLI karşılıkları:
 
 ```sh
 npx zen-mcp config mode ask
-npx zen-mcp config sensitive add bankam.com accounts.google.com
+npx zen-mcp config site ask accounts.google.com
+npx zen-mcp config site block bankam.com
+npx zen-mcp config site default accounts.google.com
+npx zen-mcp config site list
 ```
 
-Ayarlar `~/.config/zen-mcp/config.json` dosyasında durur ve hemen geçerli olur.
+Ayarlar `~/.config/zen-mcp/config.json` dosyasında durur ve hemen geçerli olur:
+
+```json
+{"mode":"auto","sites":{"accounts.google.com":"ask","bankam.com":"block"}}
+```
+
+Eski `sensitive` kayıtları onay kuralı olarak okunur, ilk ayar yazımında yeni yapıya taşınır.
+`config sensitive add|remove` komutları uyumluluk için çalışır. Bu kurallar Zen MCP erişimini
+yönetir; kullanıcının gezinmesini veya sistemin bütün ağını filtrelemez. Ajan çağrısı
+sırasında engelli alan adlarına HTTP istekleri ve yönlendirmeler iptal edilir; tarayıcının
+bağımsız arka plan etkinliği genel olarak filtrelenmez.
 
 Her tool çağrısı `~/.local/state/zen-mcp/activity.jsonl` dosyasına yazılır (zaman, site, ne
 yapıldığı). Claude'a *"dün tarayıcıda ne yaptın?"* diye sorabilirsin.
