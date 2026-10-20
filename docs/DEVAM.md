@@ -43,7 +43,7 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
 
 - **Site kuralları** (2026-10-20): tek `sites` haritası; varsayılan genel moda uyar,
   `ask` işlem öncesi onay, `block` okuma/ekran görüntüsü/işlem/gezinmeyi reddeder.
-  Sekme sağ tık → Site kuralları veya `config site ask|block|default <domain>` / `list`.
+  Sekme sağ tık → Ajan izinleri (Genel mod / Bu site) veya `config site ask|block|default <domain>` / `list`.
   Alt alanlar kapsanır, block önceliklidir, alt alan üst kuralı gevşetemez (menü mirası
   gösterir). Eski sensitive kayıtları okunur ve ilk yazımda taşınır; eski CLI uyumlu.
   Engelli iframe varsa üst sayfa erişimi de reddedilir. Ajan çağrısı sırasında engelli

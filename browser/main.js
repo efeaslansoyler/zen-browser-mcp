@@ -434,22 +434,17 @@ function logError(where, e) {
       // Firefox'un yapay zekâ bölümünün sonuna; yoksa menünün sonuna
       const anchor = win.document.getElementById("context_aiSeparator");
       menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
-      // onaylı mod: Claude her işlemde adadan izin ister
-      const modeItem = win.document.createXULElement("menuitem");
-      modeItem.id = MENU_ID + "-mode";
-      modeItem.setAttribute("type", "checkbox");
-      modeItem.setAttribute("label", L("Ask before every agent action", "Ajan her işlemde izin istesin"));
-      menu.insertBefore(modeItem, item.nextSibling);
-      modeItem.addEventListener("command", toggleMode);
+      const permissionsMenu = win.document.createXULElement("menu");
+      permissionsMenu.id = MENU_ID + "-permissions";
+      permissionsMenu.setAttribute("label", L("Agent permissions", "Ajan izinleri"));
+      const permissionsPopup = win.document.createXULElement("menupopup");
+      permissionsMenu.append(permissionsPopup);
+      menu.insertBefore(permissionsMenu, item.nextSibling);
       const give = win.document.createXULElement("menu");
       give.className = "menu-iconic";
       const targets = win.document.createXULElement("menupopup");
       give.append(targets);
-      menu.insertBefore(give, modeItem);
-      const siteMenu = win.document.createXULElement("menu");
-      const sitePopup = win.document.createXULElement("menupopup");
-      siteMenu.append(sitePopup);
-      menu.insertBefore(siteMenu, modeItem);
+      menu.insertBefore(give, permissionsMenu);
       let shownTabs = [];
       const build = inputTabs => {
         const tabs = shownTabs = inputTabs.filter(t => t.isConnected && !t.hasAttribute("zen-empty-tab"));
@@ -485,17 +480,43 @@ function logError(where, e) {
           : menuAgent());
         const owner = tab && sessions.get(ownership.owner(tab.linkedBrowser.browserId));
         item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner.name}` : ""));
-        if (readConfig().mode === "ask") modeItem.setAttribute("checked", "true");
-        else modeItem.removeAttribute("checked");
-        const host = tab && hostOf(tab.linkedBrowser);
-        siteMenu.hidden = tabs.length !== 1 || !host;
-        siteMenu.setAttribute("label", L("Site rules", "Site kuralları") + (host ? ` · ${host}` : ""));
-        const effectiveRule = ruleFor(host);
-        if (host && (readConfig().sites[host] || "default") !== effectiveRule) {
-          siteMenu.setAttribute("label", siteMenu.getAttribute("label") + " · " +
-            (effectiveRule === "block" ? L("blocked by parent domain", "üst alan adı engelliyor") : L("parent domain requires approval", "üst alan adı onay istiyor")));
+        permissionsPopup.replaceChildren();
+        const heading = label => {
+          const item = win.document.createXULElement("menuitem");
+          item.setAttribute("label", label);
+          item.setAttribute("disabled", "true");
+          permissionsPopup.append(item);
+          return item;
+        };
+        heading(L("General mode · all sites", "Genel mod · tüm siteler"));
+        for (const [mode, label] of [
+          ["auto", L("Automatic", "Otomatik")],
+          ["ask", L("Ask before every action", "Her işlemde sor")],
+        ]) {
+          const choice = win.document.createXULElement("menuitem");
+          choice.setAttribute("type", "radio");
+          choice.setAttribute("name", "zen-mcp-general-mode");
+          choice.setAttribute("data-zen-mode", mode);
+          choice.setAttribute("label", label);
+          if (readConfig().mode === mode) choice.setAttribute("checked", "true");
+          choice.addEventListener("command", () => {
+            writeConfig({ mode });
+            island?.setMode(mode);
+          });
+          permissionsPopup.append(choice);
         }
-        sitePopup.replaceChildren();
+        permissionsPopup.append(win.document.createXULElement("menuseparator"));
+        const host = tab && hostOf(tab.linkedBrowser);
+        const hasSite = tabs.length === 1 && !!host;
+        let siteLabel = hasSite ? L(`This site · ${host}`, `Bu site · ${host}`)
+          : L("This site · select one web tab", "Bu site · tek bir web sekmesi seç");
+        const effectiveRule = ruleFor(host);
+        if (hasSite && (readConfig().sites[host] || "default") !== effectiveRule) {
+          siteLabel += " · " + (effectiveRule === "block"
+            ? L("blocked by parent domain", "üst alan adı engelliyor")
+            : L("parent domain requires approval", "üst alan adı onay istiyor"));
+        }
+        heading(siteLabel);
         for (const [rule, label] of [
           ["default", L("Use general setting", "Genel ayarı kullan")],
           ["ask", L("Ask before every action", "Her işlemde sor")],
@@ -504,15 +525,17 @@ function logError(where, e) {
           const choice = win.document.createXULElement("menuitem");
           choice.setAttribute("type", "radio");
           choice.setAttribute("name", "zen-mcp-site-rule");
+          choice.setAttribute("data-zen-site-rule", rule);
+          if (!hasSite) choice.setAttribute("disabled", "true");
           choice.setAttribute("label", label);
-          if ((readConfig().sites[host] || "default") === rule) choice.setAttribute("checked", "true");
+          if (hasSite && (readConfig().sites[host] || "default") === rule) choice.setAttribute("checked", "true");
           choice.addEventListener("command", () => {
             const sites = { ...readConfig().sites };
             if (rule === "default") delete sites[host];
             else sites[host] = rule;
             writeConfig({ sites });
           });
-          sitePopup.append(choice);
+          permissionsPopup.append(choice);
         }
 
       };
@@ -530,8 +553,7 @@ function logError(where, e) {
         menu.removeEventListener("popupshowing", onShowing);
         item.remove();
         give.remove();
-        modeItem.remove();
-        siteMenu.remove();
+        permissionsMenu.remove();
       });
     }
     const menuCleanups = new Set();

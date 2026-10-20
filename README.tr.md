@@ -195,7 +195,7 @@ adadan onaylar veya reddedersin.
 ## Modlar ve site kuralları
 
 Genel mod **auto / otomatik** (sormadan işlem) veya **ask / onaylı** (işlemden önce onay)
-olabilir. Sekme sağ tık menüsü → **Site kuralları** üzerinden siteye özel kural seçilir:
+olabilir. Sekme sağ tık menüsü → **Ajan izinleri** → **Bu site** üzerinden siteye özel kural seçilir:
 
 | Site kuralı | Davranış |
 |---|---|

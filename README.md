@@ -196,7 +196,7 @@ if it needs live access, and you approve or decline in the browser.
 ## Modes and site rules
 
 The general mode is **auto** (act without asking) or **ask** (request approval before
-an action). Each site can have one rule in the tab context menu → **Site rules**:
+an action). Each site can have one rule in the tab context menu → **Agent permissions** → **This site**:
 
 | Site rule | Behavior |
 |---|---|

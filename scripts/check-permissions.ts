@@ -122,8 +122,8 @@ try {
       const tab=h.findTab(${tabId}); const win=tab.ownerDocument.defaultView;
       h.prepareTabMenu(win,[tab]);
       const menu=win.document.getElementById('tabContextMenu');
-      const labels=[...menu.querySelectorAll('menu')].find(el=>el.getAttribute('label')?.includes('127.0.0.1'));
-      return labels ? [...labels.querySelectorAll('menuitem')].map(el=>({label:el.getAttribute('label'),checked:el.getAttribute('checked')})) : null;
+      const labels=menu.querySelector('#zen-mcp-context-give-permissions');
+      return labels ? [...labels.querySelectorAll('[data-zen-site-rule]')].map(el=>({label:el.getAttribute('label'),checked:el.getAttribute('checked')})) : null;
     })()`);
     assert(menu?.length === 3 && menu[2].checked === 'true', JSON.stringify(menu));
     assert.equal(menu.filter((item: any) => item.checked !== null).length, 1, 'Only the selected XUL item may have a checked attribute');
