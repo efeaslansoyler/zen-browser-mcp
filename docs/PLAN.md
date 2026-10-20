@@ -16,7 +16,8 @@ Sıradaki adaylar: React/axe araçları, Quickshell göstergesi; en sonda isim +
 Kurulu eklentiler ajana bildirilir; gerçek toolbar panelini okuyup fare/klavyeyle kullanır.
 Eklentiye özel API/kural yazılmaz. Geçici değişiklikleri geri almak genel ajan talimatıdır;
 otomatik rollback yok. Kaynak sekme oturuma ait olmalı ve site kuralları korunmalı.
-Eklentinin aktif sekme bağlamı için hedef sekme aynı pencerede seçilir. İlk sürüm toolbar
+Eklentinin aktif sekme bağlamı için hedef sekme aynı pencerede seçilir; sekme değişimi
+auto modda da island üzerinden açık onay ister. İlk sürüm toolbar
 panellerini kapsar; sidebar/background entegrasyonları ayrı kapsamdır.
 
 ## Ada (2026-10-19)

@@ -210,8 +210,10 @@ API, kural veya entegrasyon yoktur.
 ref'leriyle karışmaz. Paneli olmayan ama araç çubuğu düğmesi olan eklenti de `open` ile
 çalıştırılır; cevap panel olmadığını belirtir.
 
-Eklentiler aktif sekmeyi kullandığından panel açılınca hedef sekme mevcut pencerede
-seçilir. Sekme çağıran oturuma ait olmalıdır. Site kuralları ve izinler kaynak siteye
+Hedef sekme seçili değilse, auto modda da sekme değiştirmeden önce adadan açık onay
+istenir. Ret veya zaman aşımında sekme değişmez ve eklenti çalıştırılmaz. Hedef zaten
+seçiliyse sekme geçiş onayı gerekmez; normal site/işlem izinleri geçerlidir. Eklenti
+aktif sekmeyi kullandığından geçiş mevcut pencerede yapılır. Sekme çağıran oturuma ait olmalıdır. Site kuralları ve izinler kaynak siteye
 uygulanır. Sekme değişimi, gezinme, sahiplik değişimi veya panelin kapatılması sonrası
 yeniden açıp yeni ref almak gerekir. Durdur, oturum sonu ve köprü reload'u izlenen
 panelleri kapatır.

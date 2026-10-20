@@ -43,7 +43,23 @@ try {
   tabId = JSON.parse(text(await tool('tabs_create_mcp'))).tabId;
   await tool('navigate', { tabId, url: `http://127.0.0.1:${address.port}/` });
   const ext = (action: string, args: object = {}) => tool('extensions', { action, tabId, extensionId, ...args });
-  assert(JSON.parse(text(await ext('open'))).opened);
+  async function answerSwitch(allow: boolean) {
+    for (let i = 0; i < 100; i++) {
+      const answered = await chrome(`(()=>{if(h.island.state!=="ask")return false;const node=h.findTab(${tabId}).ownerDocument.getElementById('zen-mcp-island');if(!node.textContent.includes('Zen disposable UI fixture'))return false;node.querySelector(${JSON.stringify(allow ? '.ok' : '.cancel')}).click();return true;})()`);
+      if (answered) return;
+      await sleep(50);
+    }
+    throw new Error('Expected tab-switch permission did not appear');
+  }
+  const denied = ext('open').then(() => null, error => error);
+  await answerSwitch(false);
+  assert.match(String(await denied), /denied switching/);
+  assert.equal(await chrome('Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.browserId'), originalSelected);
+  console.log('✓ Auto mode still asks before switching; denial preserves the selected tab');
+  const opening = ext('open');
+  await answerSwitch(true);
+  assert(JSON.parse(text(await opening)).opened);
+  console.log('✓ Explicit island approval allows the switch and extension invocation');
   const tree = text(await ext('read'));
   const ref = tree.match(/button "Mark target" \[([^\]]+)\]/)?.[1]; assert(ref, tree);
   assert(ref.startsWith('panel_'), 'Panel refs must be isolated from page refs');

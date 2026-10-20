@@ -1702,6 +1702,18 @@ function logError(where, e) {
         assertSiteAccess(source);
       },
       version: source => ownership.version(source.browserId),
+      confirmSwitch: async (source, extension) => {
+        const context = permissionContext(source);
+        const title = source.contentTitle || hostOf(source) || source.currentURI.spec;
+        const result = await askIsland(source,
+          L("Switch tab for extension?", "Eklenti için sekme değiştirilsin mi?"),
+          L(`${activeAgent.name} needs to select “${title}” to use ${extension.name}. This will change the tab you are viewing.`,
+            `${activeAgent.name}, ${extension.name} eklentisini kullanmak için “${title}” sekmesine geçmek istiyor. Baktığın sekme değişecek.`),
+          { ok: L("Switch tab", "Sekmeye geç"), cancel: L("Stay here", "Burada kal") });
+        operation?.check();
+        if (!samePermissionContext(context, permissionContext(source))) throw new Error("The target or permission settings changed during the switch request; nothing was switched.");
+        return result === "done";
+      },
       wait: operationSleep,
     });
     function controlledSource(browser) {

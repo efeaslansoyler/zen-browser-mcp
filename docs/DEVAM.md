@@ -56,7 +56,9 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
 - **Genel eklenti arayüzü** (2026-10-20): `extensions` aracı list/open/read/text/find/
   computer/form_input/close. Kurulu eklentiler `tabs_context_mcp` cevabında da gelir.
   Firefox'un gerçek toolbar action/popup'ı kullanılır; eklentiye özel API/kural yok.
-  Panel açılırken kaynak sekme seçilir (activeTab için); mevcut pencere kullanılır.
+  Kaynak sekme seçili değilse auto modda da island üzerinden açık sekme geçiş onayı
+  gerekir; ret/zaman aşımında sekme değişmez ve eklenti çalıştırılmaz. Zaten seçiliyse
+  ek geçiş sorusu yok; site/işlem izinleri geçerli. Mevcut pencere kullanılır.
   `browser/ExtensionPanels.sys.mjs` oturum+sekme+belge+sahiplik sürümüne göre doğrular.
   `panel_<bc>_<innerWindow>:ref_N` ref'leri sayfa ve eski panellerle karışmaz.
   Sayfa kuralları/izinler korunur; panel eylemleri mevcut actor ile gerçek girdi üretir.
@@ -67,7 +69,7 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
   `check-extensions.ts`: geçici yerel eklentiyle gerçek MCP → popup → trusted click /
   activeTab / Markdown çıktısı / form / klavye / screenshot; mevcut uBlock paneli
   ayarı değiştirilmeden okundu. Test eklentisi kaldırılır, önceki seçili sekme geri gelir.
-  `npm test`: 135/135; canlı extensions ve permissions kontrolleri geçti.
+  `npm test`: 138/138; canlı extensions ve permissions kontrolleri geçti.
 
 **CLI + skill deneyi → `cli-prototype` dalı** (main'e alınmadı). Kalıcı broker'lı CLI
 (`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16

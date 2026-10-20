@@ -211,8 +211,10 @@ APIs, rules or integrations.
 be confused with source-page refs. An extension with a toolbar action but no popup can
 still be invoked with `open`; the response states that no panel exists.
 
-Opening a panel selects the source tab in the existing window, because extensions use
-the active tab. The tab must belong to the caller. Site rules and approvals apply to the
+If the source tab is not selected, opening a panel always asks in the island before
+switching tabs, even in auto mode. Denial or timeout leaves the selected tab unchanged.
+An already selected target needs no switch approval; normal site/action rules still apply.
+The existing window is used because extensions act on the active tab. The tab must belong to the caller. Site rules and approvals apply to the
 source site; a panel cannot be used as another session's tab handle. Switching tabs,
 navigation, ownership changes or dismissal require reopening and fresh refs. Stop,
 session end and bridge reload close tracked panels.

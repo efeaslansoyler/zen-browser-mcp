@@ -42,7 +42,23 @@ export class ExtensionPanels {
     if (!action) throw new Error('This extension has no toolbar action; there is no panel/button to use.');
     if (this.env.busy(window)) throw new Error('A browser menu or panel is already open. Close it before opening an extension.');
     // Extensions use the selected tab for tabs.query({active:true}) and activeTab grants.
-    window.gBrowser.selectedTab = window.gBrowser.getTabForBrowser(source);
+    if (window.gBrowser.selectedBrowser !== source) {
+      const selected = window.gBrowser.selectedBrowser;
+      const document = source.browsingContext.currentWindowGlobal;
+      const ownerVersion = this.env.version(source);
+      if (!await this.env.confirmSwitch(source, extension)) throw new Error('The user denied switching tabs; the extension was not invoked.');
+      this.env.check(source, session);
+      if (window.gBrowser.selectedBrowser !== selected || source.browsingContext.currentWindowGlobal !== document ||
+          this.env.version(source) !== ownerVersion || this.env.busy(window)) {
+        throw new Error('The tab or browser UI changed during the switch request. Nothing was switched; retry if still needed.');
+      }
+      window.gBrowser.selectedTab = window.gBrowser.getTabForBrowser(source);
+      // Let native tab/focus handlers finish before opening the toolbar popup.
+      await this.env.wait(50);
+      this.env.check(source, session);
+      if (window.gBrowser.selectedBrowser !== source || source.browsingContext.currentWindowGlobal !== document ||
+          this.env.version(source) !== ownerVersion) throw new Error('Target changed after the approved switch; the extension was not invoked.');
+    }
     this.env.check(source, session);
     const document = source.browsingContext.currentWindowGlobal;
     const popupURL = action.action.getPopupUrl(window.gBrowser.selectedTab);

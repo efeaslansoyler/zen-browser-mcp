@@ -12,7 +12,7 @@ function fixture({ noPopup = false, busy = false, wait } = {}) {
     list: async () => [{ id: 'fixture', name: 'Fixture' }], extension: id => id === 'fixture' ? {} : null,
     action: () => ({ action: { getPopupUrl: () => noPopup ? '' : 'moz-extension://fixture/popup.html' },
       triggerAction() { clicks++; popup = { shown: true, browser: { isConnected: true, browsingContext: { currentWindowGlobal: {} } }, closePopup() { closes++; this.destroyed = true; this.shown = false; } }; } }),
-    panelAllowed: () => true, popup: () => popup, busy: () => busy,
+    confirmSwitch: async () => true, panelAllowed: () => true, popup: () => popup, busy: () => busy,
     check: (_, session) => { if (denied || owner !== session) throw new Error('access denied'); },
     version: () => version, wait: wait || (async () => {}),
   };
@@ -82,4 +82,31 @@ test('session end and bridge shutdown close only tracked panels', async () => {
 test('panel navigation outside its own extension invalidates access', async () => {
   const h = fixture(); await h.open(); h.env.panelAllowed = () => false;
   assert.throws(() => h.get(), /closed|changed/); assert.equal(h.closes, 1);
+});
+
+
+test('switching tabs always requires approval, including toolbar-only actions', async () => {
+  for (const noPopup of [false, true]) {
+    const h = fixture({ noPopup }); const previous = {}; h.win.gBrowser.selectedBrowser = previous;
+    let prompts = 0; h.env.confirmSwitch = async () => { prompts++; return false; };
+    await assert.rejects(h.open(), /denied switching/);
+    assert.equal(prompts, 1); assert.equal(h.clicks, 0); assert.equal(h.win.gBrowser.selectedBrowser, previous);
+    h.env.confirmSwitch = async () => { prompts++; return true; };
+    await h.open(); assert.equal(prompts, 2); assert.equal(h.win.gBrowser.selectedBrowser, h.source);
+  }
+});
+
+test('already selected target does not request a tab switch', async () => {
+  const h = fixture(); h.win.gBrowser.selectedBrowser = h.source;
+  h.env.confirmSwitch = async () => { assert.fail('No switch is needed'); };
+  await h.open(); assert.equal(h.clicks, 1);
+});
+
+test('changes while waiting cannot reuse tab-switch approval', async () => {
+  for (const mutate of [h => { h.win.gBrowser.selectedBrowser = {}; },
+    h => { h.source.browsingContext.currentWindowGlobal = {}; }, h => { h.transfer('B'); h.transfer('A'); },
+    h => { h.deny(); }]) {
+    const h = fixture(); h.env.confirmSwitch = async () => { mutate(h); return true; };
+    await assert.rejects(h.open(), /changed|denied/); assert.equal(h.clicks, 0);
+  }
 });
