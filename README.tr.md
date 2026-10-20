@@ -84,17 +84,42 @@ değiştiremez veya kapatamazlar. İşlemler ortak kuyrukta yürür; Durdur/Deva
 otomatik/onaylı mod bütün ajanlar için ortaktır. Öğeyi sohbete gönderme Claude channels
 veya Codex queue ile çalışır; diğer istemcilerde pano kullanılabilir.
 
-Sahiplikteki MCP sunucu oturum kimliği, Codex sohbet UUID'sinden farklıdır. Ajan adı veya
-proje klasöründen aralarında ilişki tahmin edilmez. Gönderim hedefinin sekme sahibi olduğu
-doğrulanamıyorsa seçim `source_tab` taşır; canlı erişim için açık `request_tab` onayı gerekir.
-Aynı MCP sunucu sürecini paylaşan sohbetler tek sahiplik oturumudur; bu sohbetler arasında
-yalıtım sağlandığı iddia edilmez.
+Sahiplikteki MCP sunucu oturum kimliği, Codex sohbet UUID'sinden farklıdır. Ajan adı
+veya proje klasöründen ilişki tahmin edilmez. Aynı MCP sunucu sürecini paylaşan sohbetler
+tek sahiplik oturumudur; bu sohbetler arasında yalıtım sağlandığı iddia edilmez.
+
+Ajanlar `tab_work` ile koordine olur: `list`/`status` ajanlara verilmiş sekmeleri,
+yayınlanan görev özetlerini, çalışan işlem durumunu ve FIFO devir kuyruğunu gösterir.
+Sayfa içeriği ve sohbet geçmişi paylaşılmaz. Sahip `start`, `update`, ardından devir
+notuyla `finish` çağırır. Tek bir araç çağrısının bitmesi görevi bitirmez. Bekleyen
+oturum varsa sahibin normal araç yanıtına kuyruk hatırlatması eklenir.
+
+İkinci oturum `request` ile işi kesmeden sıraya girer. **Auto** modda görev açıkça
+bitirildiğinde sekme devir notuyla ilk bağlı bekleyene geçer. **İzinli** modda ilk
+bekleyen, görev hazır olunca `request_tab` çağırır; adada Ver/Verme onayı gerekir.
+Bekleyen ajan `status` sorgular ve yalnız `ownedByCaller: true` olduğunda işlem yapar;
+sohbeti kendiliğinden uyandırma yoktur. İstekler on dakikada sona erer, sıra kaybetmeden
+yenilenebilir. On beş dakika görev güncellemesi gelmezse görev eski olarak işaretlenir,
+bitmiş sayılmaz. Bağlantısı kopan veya takılan ajanın sekmesi sessizce devralınmaz;
+kullanıcı sağ tık menüsünden devredebilir veya geri alabilir. Kullanıcının kendi
+sekmesine erişim auto modda da seçilmiş `source_tab` ve açık `request_tab` onayı ister.
 
 ## Kullanım
 
 Claude'dan tarayıcıda bir şey yapmasını iste: *"seaskablo.com'u aç, fiyat listesini bul"*.
 Claude arka planda kendi sekmesini açar; sekmede ajanın renginde bir çizgi belirir, ada ne olduğunu
 gösterir. Sekmeye gitmek için adaya tıkla.
+
+### Tıklama hedefi kontrolü
+
+`computer` ref tıklamaları fare düğmesine basmadan önce seçilen noktayı kontrol eder;
+üstünü kapatan öğenin ref'ini bildirir. İçteki simge kabul edilir, üst iframe'ler de
+kontrol edilir. Hedef değişir veya örtülürse tıklama durur; ilk tıklamanın ardından başka
+öğe açılırsa çoklu tıklamanın kalanı gönderilmez. Hover/scroll_to kullanılabilir;
+örtü kendiliğinden kaldırılmaz. Koordinat, imleç hareketindeki değişimi yakalar fakat
+çağrıdan önce örtülmüş amaçlanan kontrolü bilemez; ref tercih edilir. Çapraz süreç iframe
+kontrolleri atomik değildir. Kontrol computer tıklamalarını kapsar; programatik JS/form
+alanı değişikliklerine uygulanmaz.
 
 ### Ada
 
@@ -177,6 +202,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 
 | Tool | |
 |---|---|
+| `tab_work` | ortak görev durumu, FIFO devir istekleri ve bağlam |
 | `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp` | Claude'un sekmeleri |
 | `navigate` | adrese gitme, geri, ileri |
 | `computer` | ekran görüntüsü (`scale` ile), tıklamalar, hover, sürükleme, kaydırma, yazma, tuşlar, bekleme; koordinat ya da öğe ref'iyle |

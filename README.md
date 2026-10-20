@@ -82,17 +82,41 @@ Tool calls share a queue and the global Stop/Resume and auto/ask controls.
 Element-to-chat delivery uses Claude channels or Codex queue as described below; other
 clients can use the clipboard fallback.
 
-Ownership uses the MCP server's session ID, which is distinct from a Codex conversation UUID.
-We do not infer a relationship from the agent name or project folder. When a delivery target
-cannot be verified as the tab owner, the pick carries `source_tab` and live access requires
-an explicit `request_tab` grant. Multiple conversations sharing one MCP server process are
-one ownership session; this does not claim isolation between those conversations.
+Ownership uses the MCP server's session ID, distinct from a Codex conversation UUID.
+We do not infer a relationship from agent names or project folders. Multiple conversations
+sharing one MCP server process remain one ownership session.
+
+Agents coordinate with `tab_work`: `list`/`status` show agent-owned tabs, published task
+summaries, execution state and a FIFO request queue; page contents and chat histories stay
+private. The owner calls `start`, `update`, then `finish` with a handoff summary. Individual
+tool calls ending never count as the task finishing. Ordinary tool replies remind owners
+when another session is waiting.
+
+A second session calls `request` to queue without interrupting the owner. In **auto** mode,
+explicit task completion transfers the tab to the first connected waiter with the handoff
+note. In **ask** mode, the first waiter calls `request_tab` once the task is ready; the island
+requires Allow/Deny. Waiters poll `status` and only act when `ownedByCaller` is true; there
+is no automatic chat wake-up. Requests expire after ten minutes and can be renewed without
+jumping the queue. After fifteen minutes without a task update the task is marked stale,
+not completed. A disconnected or stalled owner never grants implicit permission to take over;
+the user can transfer or take back the tab from the context menu. User-owned tabs still
+require a picked `source_tab` and explicit `request_tab` approval even in auto mode.
 
 ## Using it
 
 Ask Claude to do something in the browser: *"open seaskablo.com and find the price list"*.
 Claude opens its own tab in the background; the tab gets an agent-colored line and the island shows
 what's happening. Click the island to jump to the tab.
+
+### Click target checks
+
+`computer` ref clicks check the selected point before mouse-down and report a covering
+node with its ref. Child icons are accepted; parent iframes are checked too. Moving or
+covered targets stop the click, and multi-click stops if an earlier click exposes another
+element. Hover and scroll-to remain available. No overlay is automatically removed.
+Coordinate clicks detect changes during cursor movement but cannot identify an intended
+control that was already covered before the call; prefer refs. Cross-process iframe checks
+are not atomic. These checks apply to computer clicks, not programmatic JavaScript/form edits.
 
 ### The island
 
@@ -178,6 +202,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 
 | Tool | |
 |---|---|
+| `tab_work` | shared task status, FIFO handoff requests and context |
 | `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp` | Claude's tabs |
 | `navigate` | go to a URL, back, forward |
 | `computer` | screenshot (with `scale`), clicks, hover, drag, scroll, type, keys, wait; by coordinate or element ref |

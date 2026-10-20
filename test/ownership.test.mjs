@@ -50,6 +50,7 @@ function harness() {
       deleteCustomTabValue(tab, key) { store.delete(`${tab.linkedBrowser.browserId}:${key}`); },
     },
     applyTheme(tab, theme) { tab.setAttribute('data-zen-agent', theme.id); return theme; },
+    readConfig: () => ({ mode: "auto" }),
     cancelAsk() {}, describeWrite: async () => undefined,
     requirePermission: async () => ({ context: {}, asked: false }),
     permissionContext: () => ({}), samePermissionContext: () => true,
@@ -87,10 +88,11 @@ function harness() {
     block('    async function handle(', '    function onConnection(') +
     'Object.assign(tools, ({' + block('      async tabs_context_mcp(', '      // Birkaç tool çağrısı') + '}));' +
     'tools.browser_batch = ({' + block('      async browser_batch(', '      async navigate(') + '}).browser_batch;' +
+    'tools.tab_work = async args => coordinateTab(args, activeSession);' +
     'tools.request_tab = ({' + block('      async request_tab(', '      async file_upload(') + '}).request_tab;', context);
-  const request = async (session, tool, args = {}) => {
+  const request = async (session, tool, args = {}, agent = "codex") => {
     const output = {};
-    await context.handle(JSON.stringify({ session, agent: { id: 'codex' }, tool, args }), null, output);
+    await context.handle(JSON.stringify({ session, agent: { id: agent }, tool, args }), null, output);
     return output.result;
   };
   const register = id => context.sessionInfo(id, agentTheme({ id: 'codex' }));
@@ -213,6 +215,8 @@ test('request_tab requires an explicit answer and can transfer a picked foreign 
   const h = harness();
   const tabId = h.own('A');
   h.context.state.pickedTabs.add(tabId);
+  h.context.readConfig = () => ({ mode: 'ask' });
+  h.context.ownership.report(tabId, 'A', 'finish', 'Safe to transfer');
   h.context.askIsland = async () => 'cancelled';
   let result = await h.request('B', 'request_tab', { tabId, reason: 'test transfer' });
   assert.equal(result.ok, true);
@@ -330,6 +334,8 @@ test('an explicit grant inside a batch refreshes only that tab authorization', a
   const h = harness();
   const tabId = h.own('A');
   h.context.state.pickedTabs.add(tabId);
+  h.context.readConfig = () => ({ mode: 'ask' });
+  h.context.ownership.report(tabId, 'A', 'finish', 'Safe to transfer');
   h.context.askIsland = async () => 'done';
   const result = await h.request('B', 'browser_batch', { actions: [
     { name: 'request_tab', input: { tabId, reason: 'explicit test grant' } },
@@ -359,3 +365,236 @@ test('bridge reload closes lifecycle transports without discarding runtime owner
   assert.equal(h.context.ownership.owner(tabId), 'A');
   assert(h.context.sessions.has('A'));
 });
+
+const parsed = result => {
+  assert.equal(result.ok, true, result.error);
+  return JSON.parse(result.content[0].text);
+};
+
+test('coordination status and requests respond while another session is executing', async () => {
+  const h = harness(), tabId = h.own('A');
+  parsed(await h.request('A', 'tab_work', { action: 'start', tabId, summary: 'Fill form; not submitted' }));
+  const pending = h.request('A', 'wait', { tabId });
+  await h.first;
+  const status = parsed(await h.request('B', 'tab_work', { action: 'status', tabId }));
+  assert.equal(status.executing, true);
+  assert.equal(status.task.summary, 'Fill form; not submitted');
+  assert.equal(h.context.activeSession, 'A');
+  assert.equal(h.context.activeAgent.id, 'codex');
+  const queued = parsed(await h.request('B', 'request_tab', { tabId, reason: 'Inspect form after completion' }));
+  assert.equal(queued.position, 1);
+  assert.equal(queued.owner.session, 'A');
+  assert.equal(h.context.activeSession, 'A');
+  h.context.operation.cancel(new Error('fixture cleanup'));
+  await pending;
+});
+
+test('auto handoff waits across tool gaps and transfers with context only after finish', async () => {
+  const h = harness(), tabId = h.own('A');
+  parsed(await h.request('A', 'tab_work', { action: 'start', tabId, summary: 'Editing form' }));
+  parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Check prices' }));
+  assert.equal((await h.request('A', 'write', { tabId })).ok, true);
+  assert.equal(parsed(await h.request('B', 'tab_work', { action: 'status', tabId })).task.state, 'busy');
+  assert.equal((await h.request('B', 'read', { tabId })).ok, false);
+  const ticket = h.context.ownership.ticket([tabId]);
+  const finished = parsed(await h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'Saved form. Submit button not pressed.' }));
+  assert.equal(finished.owner.session, 'B');
+  assert.equal(finished.handoff.summary, 'Saved form. Submit button not pressed.');
+  assert.equal(finished.task.state, 'busy', 'New owner must explicitly complete its own task');
+  assert.throws(() => h.context.ownership.checkTicket(ticket), /changed/);
+  assert.equal((await h.request('A', 'write', { tabId })).ok, false);
+  assert.equal((await h.request('B', 'write', { tabId })).ok, true);
+});
+
+test('FIFO order survives successive handoffs and request renewal does not jump the queue', async () => {
+  const h = harness(), tabId = h.own('A');
+  for (const session of ['B', 'C', 'B']) parsed(await h.request(session, 'tab_work', { action: 'request', tabId, summary: `${session} task` }));
+  let status = parsed(await h.request('C', 'tab_work', { action: 'status', tabId }));
+  assert.deepEqual(status.queue.map(item => item.session), ['B', 'C']);
+  parsed(await h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'A done' }));
+  status = parsed(await h.request('C', 'tab_work', { action: 'status', tabId }));
+  assert.equal(status.position, 1);
+  assert.equal(status.owner.session, 'B');
+  status = parsed(await h.request('B', 'tab_work', { action: 'finish', tabId, summary: 'B done' }));
+  assert.equal(status.owner.session, 'C');
+  assert.equal(status.handoff.summary, 'B done');
+});
+
+test('ask mode waits for approval, denial preserves owner and successful claim includes handoff', async () => {
+  const h = harness(), tabId = h.own('A');
+  h.context.readConfig = () => ({ mode: 'ask' });
+  parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Review result' }));
+  parsed(await h.request('C', 'tab_work', { action: 'request', tabId, summary: 'Third task' }));
+  parsed(await h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'Ready; no submit' }));
+  assert.equal(h.context.ownership.owner(tabId), 'A');
+  let prompts = 0;
+  h.context.askIsland = async () => { prompts++; return 'cancelled'; };
+  parsed(await h.request('C', 'request_tab', { tabId, reason: 'Third task' }));
+  assert.equal(prompts, 0, 'Later waiters cannot ask ahead of the first');
+  assert.equal((await h.request('B', 'request_tab', { tabId, reason: 'Review result' })).ok, true);
+  assert.equal(h.context.ownership.owner(tabId), 'A');
+  h.context.askIsland = async () => 'done';
+  const result = parsed(await h.request('B', 'request_tab', { tabId, reason: 'Review result' }));
+  assert.equal(h.context.ownership.owner(tabId), 'B');
+  assert.equal(result.coordination.handoff.summary, 'Ready; no submit');
+});
+
+test('foreign sessions cannot publish task completion; cancel and disconnect remove requests', async () => {
+  const h = harness(), tabId = h.own('A');
+  assert.equal((await h.request('B', 'tab_work', { action: 'finish', tabId, summary: 'Steal' })).ok, false);
+  assert.equal((await h.request('B', 'tab_work', { action: 'start', tabId, summary: 'Steal' })).ok, false);
+  for (const session of ['B', 'C']) parsed(await h.request(session, 'tab_work', { action: 'request', tabId, summary: 'Wait' }));
+  parsed(await h.request('B', 'tab_work', { action: 'cancel', tabId }));
+  h.context.endOwnerSession('C');
+  const status = parsed(await h.request('A', 'tab_work', { action: 'status', tabId }));
+  assert.deepEqual(status.queue, []);
+});
+
+test('stale busy owner is visible and is never automatically preempted', async () => {
+  const h = harness(), tabId = h.own('A');
+  h.context.ownership.work.get(tabId).updated = Date.now() - 1_000_000;
+  const status = parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Wait' }));
+  assert.equal(status.task.stale, true);
+  assert.equal(status.owner.session, 'A');
+  h.context.sessions.get('A').disconnected = true;
+  assert.equal(parsed(await h.request('B', 'tab_work', { action: 'status', tabId })).owner.disconnected, true);
+  h.context.endOwnerSession('A');
+  assert.equal(h.context.ownership.owner(tabId), undefined);
+  assert.deepEqual(h.context.ownership.queue(tabId), []);
+  assert(h.tabs.has(tabId));
+});
+
+test('request leases expire and can be renewed without losing their FIFO position', () => {
+  const ownership = new Ownership();
+  ownership.assign(1, 'A');
+  ownership.request(1, 'B', 'first', 1000);
+  ownership.request(1, 'C', 'second', 2000);
+  ownership.request(1, 'B', 'renewed', 3000);
+  assert.deepEqual(ownership.queue(1, 602001).map(item => item.session), ['B']);
+  assert.deepEqual(ownership.queue(1, 603001), []);
+});
+
+test('user take-back and explicit transfer clear the old queue, notes and task', async () => {
+  const h = harness(), tabId = h.own('A');
+  parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Wait' }));
+  h.register('C');
+  h.context.mark(h.tabs.get(tabId), 'true', 'C');
+  assert.deepEqual(h.context.ownership.queue(tabId), []);
+  assert.equal(h.context.ownership.handoffs.has(tabId), false);
+  h.context.unmark(h.tabs.get(tabId));
+  assert.equal(h.context.ownership.work.has(tabId), false);
+});
+
+test('a ready tab transfers on a later auto request; disconnected waiters are skipped', async () => {
+  const h = harness(), tabId = h.own('A');
+  parsed(await h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'Done before a request arrived' }));
+  const status = parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Next' }));
+  assert.equal(status.owner.session, 'B');
+  assert.equal(status.handoff.summary, 'Done before a request arrived');
+  parsed(await h.request('C', 'tab_work', { action: 'request', tabId, summary: 'Gone' }));
+  h.context.sessions.get('C').disconnected = true;
+  parsed(await h.request('D', 'tab_work', { action: 'request', tabId, summary: 'Next live waiter' }));
+  assert.equal(parsed(await h.request('B', 'tab_work', { action: 'finish', tabId, summary: 'B done' })).owner.session, 'D');
+});
+
+test('shared discovery excludes unassigned user tabs and page contents', async () => {
+  const h = harness(), tabId = h.own('A');
+  const userTab = h.own("C");
+  h.context.unmark(h.tabs.get(userTab));
+  const status = parsed(await h.request('B', 'tab_work', { action: 'list' }));
+  assert.equal(status.tabs.length, 1);
+  assert.equal(status.tabs[0].tabId, tabId);
+  assert(!JSON.stringify(status).includes('https://fixture.test'));
+  assert(!JSON.stringify(status).includes('tab-1'));
+});
+
+test('auto mode still requires explicit approval for user-owned picked tabs', async () => {
+  const h = harness(), tabId = h.own('A');
+  h.context.unmark(h.tabs.get(tabId));
+  h.context.state.pickedTabs.add(tabId);
+  assert.equal((await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Cannot queue a user tab' })).ok, false);
+  h.context.askIsland = async () => 'cancelled';
+  await h.request('B', 'request_tab', { tabId, reason: 'Inspect user tab' });
+  assert.equal(h.context.ownership.owner(tabId), undefined);
+  h.context.askIsland = async () => 'done';
+  await h.request('B', 'request_tab', { tabId, reason: 'Inspect user tab' });
+  assert.equal(h.context.ownership.owner(tabId), 'B');
+});
+
+test('approval cannot grant a tab after user transfer or queue cancellation during the prompt', async () => {
+  for (const change of ['transfer', 'cancel']) {
+    const h = harness(), tabId = h.own('A');
+    h.context.readConfig = () => ({ mode: 'ask' });
+    parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Review' }));
+    parsed(await h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'Ready' }));
+    h.context.askIsland = async () => {
+      if (change === 'transfer') { h.register('C'); h.context.mark(h.tabs.get(tabId), 'true', 'C'); }
+      else parsed(await h.request('B', 'tab_work', { action: 'cancel', tabId }));
+      return 'done';
+    };
+    const result = await h.request('B', 'request_tab', { tabId, reason: 'Review' });
+    assert.equal(result.ok, false);
+    assert.notEqual(h.context.ownership.owner(tabId), 'B');
+  }
+});
+
+test('task and queue state survive a bridge module reconstruction without granting restored access', () => {
+  const maps = Array.from({ length: 5 }, () => new Map());
+  const before = new Ownership(...maps);
+  before.assign(1, 'A');
+  before.report(1, 'A', 'update', 'Waiting for validation');
+  before.request(1, 'B', 'Review afterwards');
+  const after = new Ownership(...maps);
+  assert.equal(after.work.get(1).summary, 'Waiting for validation');
+  assert.equal(after.queue(1)[0].session, 'B');
+  after.release(1);
+  assert.equal(after.work.has(1), false);
+  assert.deepEqual(after.queue(1), []);
+});
+
+test('task summaries are validated and coordination cannot be hidden inside a batch', async () => {
+  const h = harness(), tabId = h.own('A');
+  for (const summary of ['', ' ', 'x'.repeat(2001)]) {
+    assert.equal((await h.request('A', 'tab_work', { action: 'finish', tabId, summary })).ok, false);
+  }
+  assert.equal((await h.request('A', 'tab_work', { action: 'status' })).ok, false);
+  const batch = await h.request('A', 'browser_batch', { actions: [
+    { name: 'tab_work', input: { action: 'finish', tabId, summary: 'Done' } },
+    { name: 'write', input: { tabId } },
+  ] });
+  assert(batch.isError);
+  assert.deepEqual(h.effects, []);
+  assert.equal(h.context.ownership.work.get(tabId).state, 'busy');
+});
+
+test('automatic handoff invalidates actual old-owner requests queued after finish', async () => {
+  const h = harness(), tabId = h.own('A');
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  h.context.tools.hold = async ({ tabId }) => { h.context.browserFor(tabId); await held; return []; };
+  const active = h.request('A', 'hold', { tabId });
+  await new Promise(resolve => setImmediate(resolve));
+  const finished = h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'Done' });
+  const stale = h.request('A', 'write', { tabId });
+  parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Next task' }));
+  release();
+  await active;
+  assert.equal(parsed(await finished).owner.session, 'B');
+  assert.match((await stale).error, /changed after this request was queued/);
+  assert.deepEqual(h.effects, []);
+});
+
+for (const [first, second] of [['codex', 'codex'], ['claude', 'claude'], ['codex', 'claude']]) {
+  test(`coordination is session-specific with ${first} and ${second}`, async () => {
+    const h = harness(), tabId = h.own('A');
+    parsed(await h.request('A', 'tab_work', { action: 'start', tabId, summary: 'First task' }, first));
+    assert.equal(parsed(await h.request('B', 'tab_work', { action: 'request', tabId, summary: 'Second task' }, second)).ownedByCaller, false);
+    const done = parsed(await h.request('A', 'tab_work', { action: 'finish', tabId, summary: 'First task complete' }, first));
+    assert.equal(done.ownedByCaller, false);
+    const status = parsed(await h.request('B', 'tab_work', { action: 'status', tabId }, second));
+    assert.equal(status.ownedByCaller, true);
+    assert.equal(status.task.summary, 'Second task');
+    assert.equal(status.handoff.summary, 'First task complete');
+    assert.equal(h.context.sessions.get('B').agent.id, second);
+  });
+}

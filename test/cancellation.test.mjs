@@ -150,7 +150,11 @@ test('cancel navigation stops loading and removes its listener and timeout', asy
 for (const kind of ['drag', 'wheel', 'click']) {
   test(`actor cancellation cleans up ${kind} without subsequent input`, async () => {
     const { actor, events, first } = actorHarness();
-    if (kind === 'click') actor.document.hidden = false;
+    if (kind === 'click') {
+      actor.document.hidden = false;
+      const hit = { isConnected: true };
+      actor.document.elementFromPoint = () => hit;
+    }
     const pending = actor.receiveMessage({ name: 'input', data: {
       requestId: 7, kind, x: 10, y: 10, to: [80, 80], dx: 0, dy: 100,
     } });

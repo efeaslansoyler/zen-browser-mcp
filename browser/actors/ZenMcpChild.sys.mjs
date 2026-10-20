@@ -205,7 +205,13 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "form_input":
           return { value: this.#formInput(data.ref, data.value) };
         case "locate":
-          return this.#locate(data.ref);
+          return this.#locate(data.ref, data.forClick);
+        case "frame_hit": {
+          const el = this.#frameElement(data.bcId);
+          if (!el) throw new Error("Target iframe is gone; refresh read_page.");
+          this.#assertHit(el, data.x, data.y, "Target iframe");
+          return { value: true };
+        }
         case "input":
           return { value: await this.#input(data, scope) };
         case "console":
@@ -869,7 +875,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   // silent: sanal imleç ve halka yok (geliştirme/demo: kullanıcının tıklaması gibi)
-  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false }, scope) {
+  async #input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false, ref }, scope) {
     const win = this.contentWindow;
     const eu = this.#eu();
     scope.onCancel(() => {
@@ -883,19 +889,30 @@ export class ZenMcpChild extends JSWindowActorChild {
       eu.synthesizeMouseAtPoint(px, py, { ...modifiers, ...event }, win);
     };
     switch (kind) {
-      case "click":
-        if (!silent) {
-          await this.#moveCursor(x, y, scope);
-          this.#press();
+      case "click": {
+        // Keep the expected node, not just its coordinates, across cursor animation.
+        const expected = ref ? this.#element(ref) : this.#hitAt(x, y);
+        const label = ref || "Coordinate target";
+        this.#assertHit(expected, x, y, label);
+        try {
+          if (!silent) {
+            await this.#moveCursor(x, y, scope);
+            this.#press();
+          }
+          mouse(x, y, { type: "mousemove" });
+          for (let i = 1; i <= count; i++) {
+            scope.check();
+            this.#assertHit(expected, x, y, label);
+            mouse(x, y, { type: "mousedown", button, clickCount: i });
+            mouse(x, y, { type: "mouseup", button, clickCount: i });
+          }
+          if (button === 0) this.#focusAt(x, y);
+          if (!silent) this.#ripple(x, y);
+          return "done";
+        } finally {
+          this.#cursor?.pointer.classList.remove("press");
         }
-        mouse(x, y, { type: "mousemove" });
-        for (let i = 1; i <= count; i++) {
-          mouse(x, y, { type: "mousedown", button, clickCount: i });
-          mouse(x, y, { type: "mouseup", button, clickCount: i });
-        }
-        if (button === 0) this.#focusAt(x, y);
-        if (!silent) this.#ripple(x, y);
-        return "done";
+      }
       case "hover":
         await this.#moveCursor(x, y, scope);
         mouse(x, y, { type: "mousemove" });
@@ -1102,12 +1119,42 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   // ---- locate: ref ile tıklama için öğeyi görünür yap, merkezini ver (CSS px, görünür alan) ----
 
-  #locate(ref) {
+  #locate(ref, forClick = false) {
     const el = this.#element(ref);
     if (!this.#fullyInViewport(el)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) throw new Error(`${ref} is not visible (no size).`);
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    // Center of the visible portion, so large elements do not target outside the viewport.
+    const x = (Math.max(0, r.left) + Math.min(this.contentWindow.innerWidth, r.right)) / 2;
+    const y = (Math.max(0, r.top) + Math.min(this.contentWindow.innerHeight, r.bottom)) / 2;
+    if (forClick) this.#assertHit(el, x, y, ref);
+    return { x, y };
+  }
+
+  #hitAt(x, y) {
+    let hit = this.document.elementFromPoint(x, y);
+    for (let depth = 0; depth < 16 && hit?.shadowRoot?.elementFromPoint; depth++) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === hit) break;
+      hit = inner;
+    }
+    return hit;
+  }
+
+  #assertHit(expected, x, y, label) {
+    const win = this.contentWindow;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= win.innerWidth || y >= win.innerHeight) {
+      throw new Error(`Click blocked: ${label} is outside the viewport. Refresh screenshot/read_page.`);
+    }
+    if (!expected?.isConnected) throw new Error(`Click blocked: ${label} is gone or has no hit target. Refresh screenshot/read_page.`);
+    if (expected.matches?.(":disabled")) throw new Error(`Click blocked: ${label} is disabled.`);
+    const hit = this.#hitAt(x, y);
+    // Follow composed ancestry so an icon or shadow child inside a button is legitimate.
+    for (let node = hit; node; node = node.assignedSlot || node.parentNode || node.getRootNode?.().host) {
+      if (node === expected) return;
+    }
+    const blocker = hit ? `${elementLabel(hit)} [${this.#ref(hit)}]` : "no element";
+    throw new Error(`Click blocked: ${label} is covered or moved at (${Math.round(x)}, ${Math.round(y)}); hit ${blocker}. Refresh screenshot/read_page and resolve the obstruction before retrying. No click was sent to the blocker.`);
   }
 
   #fullyInViewport(el) {

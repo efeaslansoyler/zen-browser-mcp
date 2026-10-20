@@ -4,6 +4,124 @@ Yeni oturumda önce bunu oku. Kararlar ve fazlar için ayrıca [`PLAN.md`](PLAN.
 
 ## Güncel devir özeti — 2026-10-20
 
+### Güncel çalışma — örtülü öğe / tıklama kontrolü (2026-10-20)
+
+**Güncel sonuç: canlı hit-test doğrulaması GEÇTİ.** Efe düzeltilen
+`node scripts/check-hit-test.ts` betiğini terminalinde çalıştırdı (v3 → reload).
+Dört ref click türünde örtünün engellenmesi, kısmi batch çıktısı ve kalan yazmanın
+kesilmesi, span/shadow çocuklar, pointer-events:none, mousemove sırasında açılan
+örtü, gerçek screenshot oranıyla koordinat, çoklu tıklamada hedef değişimi,
+devre dışı kontrol, çapraz origin ve iç içe iframe üstündeki modal sınamaları geçti.
+Test sekmesi kapatıldı; izin ayarları değişmedi. Aşağıdaki ilk başarısız deneme ve
+EPERM/bekleyen kayıtları bu başarılı sonucun öncesindedir. Kod henüz commit değil.
+
+
+İlk kullanıcı canlı denemesinde dört click türünün örtüyle engellenmesi, batch'in
+kalan yazmayı durdurması, span/pointer-events:none ve hover katmanı kontrolleri geçti.
+Ölçekli koordinat adımında sayaç `2 !== 3` oldu. Test betiği istenen screenshot
+scale=0.5'i gerçek oran sanıyordu; MAX_EDGE/MAX_PIXELS sınırları gerçek oranı daha
+küçük yapabilir. Betik artık o screenshot için kaydedilmiş gerçek `state.scale`
+oranını kullanır. Büyük viewport + otomatik boyut sınırı regresyon testi eklendi;
+15 hit-test testi geçti. Bu düzeltme test sürücüsündedir, üretim koordinat dönüşümü
+aynı kaldı. Düzeltilen canlı testin ardından yapılan tekrarı yukarıdaki gibi geçti.
+Önceki test sekmesi kapandı, ayarlar değişmedi.
+
+
+`computer` içindeki left/right/double/triple
+click yollarında hit-test eklendi. Ref hedefi locate aşamasında ve içerik actor'ında
+fare düğmesine basılmadan önce doğrulanır. Örtülüyse hata engelleyen öğenin kısa
+etiketini ve ref'ini verir; katman gizlenmez, zorla tıklama yapılmaz.
+
+- Ref'in çocuğu (ikon/span), shadow/slotted alt öğesi kabul edilir. Tarayıcı hit testi
+  pointer-events:none katmanları doğal olarak atlar. Devre dışı, kopmuş ve viewport
+  dışındaki hedefler reddedilir. Büyük hedeflerde görünür kesişimin merkezi kullanılır.
+- İmleç hareketi ve gerçek mousemove sonrasında, her mouse-down öncesinde yeniden
+  kontrol vardır. İlk tıklama hedefi değiştirirse double/triple kalan tıklamaları
+  göndermez; ilk tıklamanın yapılmış etkisi geri alınmaz. Hata halinde press görünümü
+  temizlenir. İptal davranışı korunur.
+- Ref iframe içindeyse her üst iframe kutusu hit-test edilir; en içteki hit çerçevesi
+  ref'in çerçevesiyle eşleşmiyorsa input gönderilmez. Çapraz süreç kontrolleri atomik
+  değildir; üst sayfanın son kontrolden sonra değişmesi için dar bir yarış aralığı kalır.
+- Salt koordinat ilk anda vurulan öğeyi sabitler ve hareket sırasında değişirse keser;
+  çağrıdan önce örtülmüş, ajanın amaçladığı gizli hedefi koordinattan çıkaramaz.
+  Kontrollerde ref tercih edilir. Merkez örtülüyse açık kenarı kendiliğinden seçmez.
+- Hover/scroll_to örtülü öğeye konumlanabilir. Bu katman `computer` tıklamalarını
+  kapsar; javascript_tool ve programatik form_input davranışına görünürlük şartı eklemez.
+- 14 yeni hit-test testiyle **87 soketsiz test geçti** (hook test dosyası hariç),
+  build/syntax/diff kontrolleri geçti. Gerçek actor ve ana süreç fonksiyonları platform
+  sınırlarında sahte DOM ile çalıştırıldı; bu canlı tarayıcı sonucu değildir.
+- Canlı sürücü: `node scripts/check-hit-test.ts`. Mevcut auto modu ister; ayarları
+  değiştirmez. Köprüyü reload eder, yalnız bir disposable sekmede gerçek tıklamalarla
+  dört click türü/örtü, kısmi batch hatası, span/shadow çocuklar, pointer-events:none,
+  hover katmanı, ölçekli koordinat, çoklu tıklamada hedef değişimi, disabled kontrol,
+  cross-origin ve iç içe iframe'de üst modalı sınar. Sonunda yalnız test sekmesini kapatır.
+- Bu ortamda canlı betik ilk soket bağlantısında `/run/user/1000/zen-mcp.sock` EPERM
+  hatasına takıldı; bu ortamda reload ve canlı deneme gerçekleşmedi. Sonrasında
+  Efe terminalindeki düzeltilmiş testin tamamı yukarıdaki gibi geçti.
+- Yeni araç eklenmedi; computer açıklaması güncellendi (istemci reconnect ile alır).
+  Tarayıcı kodu reload gerektirir; Zen restart gerekmez. Kod commit edilmedi. Önceki
+  koordinasyon testinin canlı başarısı bu yeni özelliğin doğrulaması sayılmaz.
+- Kalıcı hafıza dosyası önceki denemede salt okunurdu; güncel kaynak bu bölümdür.
+
+
+### Güncel çalışma — görev durumu ve bağlamlı devir kuyruğu (2026-10-20)
+
+**Güncel sonuç: canlı koordinasyon doğrulaması GEÇTİ.** Efe terminalinde
+`node scripts/check-coordination.ts` çalıştırdı (v1 → reload). Gerçek MCP
+istemcileriyle Codex/Codex, Claude/Claude ve Codex/Claude çiftlerinde canlı durum,
+kuyrukta bekleme, erken devir yapılmaması, otomatik devir ve bağlam aktarımı geçti.
+İzinli modda görev bitince kendiliğinden devir olmadı; gerçek Verme düğmesi sahibi
+korudu, Ver düğmesi bağlamla devretti. Betik başarıyla tamamlandı; özgün izin
+ayarları geri yüklendi ve geçici test sekmeleri kapatıldı. Aşağıdaki EPERM kaydı
+bu başarılı kullanıcı denemesinden öncedir.
+
+`tab_work` aracı eklendi:
+`list/status/start/update/finish/request/cancel`. Paylaşılan bilgiler yalnız ajanların
+bilerek yazdığı görev/ilerleme/devir notları, sahip oturum ve FIFO kuyruğudur;
+başka oturumun sayfası, URL'si veya sohbet geçmişi okunmaz.
+
+- Her yeni sahiplik meşgul başlar. Tek araç çağrısı bitince görev bitmiş sayılmaz;
+  sahip açıkça `finish` gönderir. `start/update` görev özetini günceller. Normal tarayıcı
+  işlemleri görevi meşgul tutar; bekleyen varsa araç yanıtına kuyruk hatırlatması eklenir.
+- `status/list/request/cancel`, çalışan tarayıcı aracı kuyruğunun arkasında beklemez ve
+  etkin işlemin ajan/oturum kimliğini değiştirmez. Meşgul yabancı sekmeye `request_tab`
+  çağrısı da hemen FIFO isteği olarak döner; devam eden işi kesmez.
+- Auto modda `finish`, ilk bağlı bekleyene sahipliği ve devir notunu aktarır; eski
+  sahibin kuyruktaki işleri nesil kontrolüyle reddedilir. Sonradan gelen istek de hazır
+  sekmeyi devralır. Yeni sahibin görevi istek açıklamasıyla meşgul başlar.
+- İzinli modda görev hazır kalır; ilk bekleyen `request_tab` ile gerçek ada Ver/Verme
+  onayını ister. Red sahibi değiştirmez. Onay beklerken sekme/kuyruk değişirse eski
+  onayla devir yapılmaz. Kullanıcıya ait sekmeler auto modda da açık onay ister.
+- `ownedByCaller: true` görülmeden sayfa araçları kullanılamaz. Bekleyen ajan durum
+  sorgulayarak takip eder (sunucu yönergesi yaklaşık 5 saniye aralık önerir); otomatik
+  sohbet uyandırma/push yok. İstekler 10 dakikalık, yenilenebilir ve tekil FIFO kaydıdır.
+- 15 dakikadır güncellenmeyen görev `stale` görünür, otomatik bitirilmez. Kopan/takılan
+  iş başarıyla bitmiş sayılmaz. Var olan kapanış/geri alma/elle devir temizliği korunur;
+  kullanıcı sağ tık menüsünden müdahale edebilir. Durum bridge reload boyunca korunur.
+- 18 yeni koordinasyon testi dahil **73 soketsiz test geçti** (hook test dosyası hariç),
+  derleme, JS/TS sözdizimi ve diff kontrolü geçti. Codex/Codex, Claude/Claude ve karma
+  kimlikler gerçek dispatcher üzerinde sınandı; bunlar canlı tarayıcı testi değildir.
+- Tam `npm test` denemesinde eski relay yaşam döngüsü testi Unix soketi açarken
+  `listen EPERM` ile engellendi; aynı dosyanın iki soketsiz testi geçti. Sonradan eklenen
+  dört test ayrıca ve 73 testlik soketsiz kümede doğrulandı.
+- Canlı betik: `node scripts/check-coordination.ts`. Gerçek stdio MCP istemcileriyle
+  Codex/Codex, Claude/Claude ve Codex/Claude; çalışan araç sırasında durum/istek,
+  araç arası sahipliği koruma, auto devir, devir notu ve eski sahibin engellenmesini
+  dener. Ardından izinli modu geçici açar, fixture'a ait gerçek ada Verme/Ver
+  düğmelerini tıklar. Özgün config yedeği /tmp'ye alınır ve finally'de aynen geri
+  yüklenir; dışarıdan değiştirilmişse üzerine yazılmaz. Yalnız test sekmeleri kapatılır.
+  Betik başlangıçta mevcut auto modu ister; kullanıcının ask modunu düşürmez.
+- Bu ortamda betik ilk tarayıcı soketi bağlantısında `/run/user/1000/zen-mcp.sock`
+  `EPERM` hatasına takıldı; reload veya canlı test gerçekleşmedi, ayarlar değişmedi.
+  Efe'nin ardından kendi terminalinde yaptığı canlı doğrulama yukarıdaki gibi geçti.
+- Yeni tool/schema/yönergeler için mevcut normal MCP istemcilerine reconnect gerekir;
+  tarayıcıyı kapatmak gerekmez. Canlı betik reload ve kendi yeni MCP süreçlerini açar.
+- Kalıcı hafıza dosyası bu ortamda salt okunur olduğu için güncellenemedi; güncel
+  kaynak bu bölümdür.
+- Bu değişiklikler commit edilmedi. Yeni koordinasyon katmanının canlı testi de geçti.
+  MCP süreç UUID'si / sohbet UUID'si sınırı sürer.
+
+
 Bu bölüm güncel durumdur; aşağıdaki tarihli bölümler geliştirme geçmişidir.
 
 ### Güncel çalışma — MCP oturumuna özel sekme sahipliği (2026-10-20)

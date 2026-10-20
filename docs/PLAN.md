@@ -2,6 +2,26 @@
 
 ## Güncel öncelik — 2026-10-20
 
+Örtülü öğe kontrolü kodlandı: ref tıklamasında hedef/üst iframe hit-test,
+hareket sonrasında tekrar kontrol, engelleyici etiketi/ref'i ve çoklu tıklamayı kesme.
+14 yeni test dahil 87 soketsiz test geçti; screenshot gerçek oranı regresyonuyla
+hit-test dosyasındaki toplam 15 test de geçti. Efe terminalindeki düzeltilmiş
+`node scripts/check-hit-test.ts` canlı testi tüm adımlarıyla geçti: örtü, hover,
+koordinat, çoklu tıklama, disabled, shadow ve çapraz origin/iç içe iframe.
+Test sekmesi kapandı; izin ayarları değişmedi.
+Koordinatın amaçlanan gizli hedefi çıkaramayacağı ve çapraz süreç son-kontrol yarış
+aralığı DEVAM.md başında kayıtlıdır. Sıradaki özellik çıktı/diff verimliliği.
+
+
+Görev durumu ve bağlamlı devir kuyruğu kodlandı: `tab_work`, FIFO istekleri,
+explicit finish sonrası auto devir, izinli modda ada onayı ve devir notu.
+18 yeni test dahil 73 soketsiz test ve Efe terminalindeki canlı doğrulama geçti:
+Codex/Codex, Claude/Claude ve karma çiftte bekleme/auto devir/bağlam; izinli modda
+gerçek Verme/Ver düğmeleri doğrulandı. Özgün ayarlar geri yüklendi, test sekmeleri
+kapatıldı. Ayrıntılar DEVAM.md başındadır.
+Bekleyen ajan polling yapar; otomatik sohbet uyandırma yoktur.
+
+
 Önce [DEVAM.md](DEVAM.md) başındaki güncel devir özetini oku. Çoklu ajan teması,
 Codex standart MCP araçları ve queue gönderimi tamamlandı. Otomatik Codex hook
 alıcısı kuruldu; Efe’nin `/hooks` güven onayı ve yeni sohbette gerçekten otomatik
@@ -26,8 +46,7 @@ ile Codex sohbet kimliği karıştırılmaz; aynı MCP sürecini paylaşan sohbe
 ayrılamaz.
 Ayrıntılar DEVAM.md'nin güncel sahiplik bölümünde.
 
-Sıradaki adaylar: örtülü öğe kontrolü,
-çıktı/diff verimliliği, gelişmiş öğe seçimi ve CLI+skill ölçümü.
+Sıradaki adaylar: çıktı/diff verimliliği, gelişmiş öğe seçimi ve CLI+skill ölçümü.
 Aşağıdaki bölümler önceki planın tarihçesidir.
 
 
