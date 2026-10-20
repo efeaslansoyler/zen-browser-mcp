@@ -102,11 +102,12 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
   Test sekmeleri kapandı, eski seçili sekme/pano/auto ayarı geri yüklendi.
   [Güncel özellik karşılaştırması](FEATURE-COMPARISON.md). Yeni şema/tool için MCP reconnect.
 
-**CLI + skill deneyi → `cli-prototype` dalı** (main'e alınmadı). Kalıcı broker'lı CLI
+**CLI + skill deneyi arşivlendi** (main'e alınmadı). Kalıcı broker'lı CLI
 (`src/browser-cli.ts`), repo skill'i ve iki ölçüm (`docs/benchmarks/`). Taşıma testi: 16
 çağrıda MCP 322 ms, CLI 785 ms, metin aynı. Gerçek ajan pilotu (Codex + Claude, 3 görev ×
 2 yol, her biri tek deneme): hepsi başarılı; CLI %10–15 fazla token (gürültü sınırında),
-süre olarak belirgin yavaş. **Karar: MCP ana yol.** Dal yalnız ileride lazım olursa diye duruyor.
+süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026-10-20'de silindi; tam geçmişi doğrulanmış
+`/home/efe/Archives/zen-mcp-cli-prototype.bundle` arşivinde (uç commit: `1693ff4`).
 
 ## Açık işler
 

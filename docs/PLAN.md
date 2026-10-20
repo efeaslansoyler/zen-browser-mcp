@@ -6,7 +6,7 @@ Güncel durum ve açık işler [DEVAM.md](DEVAM.md) başında; burada yalnız ka
 2026-10-20'de çoklu ajan altyapısı bitti (kimlik/tema, Codex gönderimi, gerçek iptal,
 batch izinleri, oturuma özel sahiplik, `tab_work` devir kuyruğu, örtülü öğe kontrolü,
 okumada diff, çoklu öğe seçimi). CLI + skill denendi, ölçüldü; MCP ana yol kaldı
-(`cli-prototype` dalı).
+(deney arşivlendi; bkz. DEVAM.md).
 
 Codex otomatik alıcı doğrulaması ve site kuralları tamamlandı.
 Sıradaki adaylar: React/axe araçları, Quickshell göstergesi; en sonda isim + npm + MCP Registry.
@@ -127,5 +127,5 @@ Claude ile birlikte çalışma. Alınabilecekler:
   liste. Genel ayarı kullan / her işlemde sor / ajan erişimini engelle. Eski hassas
   siteler ask kuralına taşınır; alt alanlar kapsanır, engelleme önceliklidir.
 - ✅ CLI + skill modu: denendi ve ölçüldü (2026-10-20). Token farkı anlamsız, CLI daha yavaş;
-  MCP ana yol. Kod `cli-prototype` dalında.
+  MCP ana yol. Dal silindi; kod doğrulanmış Git bundle arşivinde (bkz. DEVAM.md).
 - React araçları (bileşen ağacı, props) ve erişilebilirlik denetimi (axe-core).
