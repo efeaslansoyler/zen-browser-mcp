@@ -306,23 +306,26 @@ function logError(where, e) {
       const target = sessions.get(session);
       if (!target || target.disconnected) throw new Error("The selected browser session is no longer connected. Choose a session again.");
       const id = tab.linkedBrowser.browserId;
-      const changed = ownership.assign(id, session);
-      if (changed) {
-        releaseInputs(id);
-        browserSettings.restoreTab(id);
-        extensionPanels.releaseTab(id);
-        readSnapshots.clearTab(id);
-        if (cancel) cancelTabWork(id);
-        state.scale.delete(id);
-        network.delete(id);
-        cancelAsk(tab.linkedBrowser, "taken_back");
-        const question = tabRequests.get(tab.linkedBrowser);
-        if (question) question("cancelled");
-      }
+      if (ownership.assign(id, session)) releaseTabState(tab.linkedBrowser, { cancel });
       tab.setAttribute(MARK, origin);
       state.tabs.add(id);
       paintTab(tab, target.agent);
       try { SessionStore.setCustomTabValue(tab, MARK, origin); } catch {}
+    }
+
+    // sahip değişince ya da sekme geri alınınca: önceki sahibin girdileri, ayarları, panelleri,
+    // okuma/ağ kayıtları ve bekleyen soruları bırakılır; cancel ise süren işlemi de keser
+    function releaseTabState(browser, { cancel = true } = {}) {
+      const id = browser.browserId;
+      releaseInputs(id);
+      browserSettings.restoreTab(id);
+      extensionPanels.releaseTab(id);
+      readSnapshots.clearTab(id);
+      if (cancel) cancelTabWork(id);
+      state.scale.delete(id);
+      network.delete(id);
+      cancelAsk(browser, "taken_back");
+      tabRequests.get(browser)?.("cancelled");
     }
 
     // kullanıcı sekmeyi geri aldı: işaret, takip ve kayıtlar silinir; süren işlem kesilir
@@ -330,22 +333,14 @@ function logError(where, e) {
       const browser = tab.linkedBrowser;
       const id = browser.browserId;
       ownership.release(id);
-      releaseInputs(id);
-      browserSettings.restoreTab(id);
-      extensionPanels.releaseTab(id);
-      readSnapshots.clearTab(id);
-      if (cancel) cancelTabWork(id);
-      tabRequests.get(browser)?.("cancelled");
+      releaseTabState(browser, { cancel });
       tab.removeAttribute(MARK);
       tab.removeAttribute("data-zen-agent");
       tab.removeAttribute("zen-mcp-agent-name");
       for (const key of ["accent", "hover", "rgb", "foreground"]) tab.style.removeProperty(`--zen-agent-${key}`);
       try { SessionStore.deleteCustomTabValue(tab, "zen-mcp-agent"); } catch {}
       state.tabs.delete(id);
-      state.scale.delete(id);
-      network.delete(id);
       try { SessionStore.deleteCustomTabValue(tab, MARK); } catch {}
-      cancelAsk(browser, "taken_back");
       island?.release(browser);
     }
 
@@ -390,7 +385,7 @@ function logError(where, e) {
     const onWindowReady = win => {
       watchWindow(win);
       island?.attach(win);
-      attachMenu(win);
+      tabMenu.attach(win);
       attachPageMenu(win);
       for (const delay of [0, 2000, 5000, 10000, 20000]) {
         setTimeout(() => {
@@ -419,20 +414,13 @@ function logError(where, e) {
     `));
     const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
 
-    // ---- "Claude'a ver / Claude'dan geri al": sekme sağ tık menüsünde ----
+    // ---- "Ajandan geri al / Oturuma ver", ajan izinleri: sekme sağ tık menüsünde (TabMenu.sys.mjs) ----
 
-    const MENU_ID = "zen-mcp-context-give";
-    const tabMenuBuilders = new WeakMap();
-    function prepareTabMenu(win, tabs) {
-      const build = tabMenuBuilders.get(win);
-      if (!build) throw new Error("The session handoff menu is not attached to this window.");
-      if (tabs.some(tab => tab.ownerDocument.defaultView !== win)) throw new Error("Menu tabs must belong to the same window.");
-      build(tabs);
-    }
     function menuAgent() {
       return pick?.agent ?? channelTarget()?.agent ?? activeAgent;
     }
 
+    // sayfa menüsündeki "Claude'a göster…" öğesi de kullanır
     function paintMenuIcon(item, agent) {
       const theme = agentTheme(agent);
       item.setAttribute("image", agentIcon(theme));
@@ -440,145 +428,19 @@ function logError(where, e) {
       item.setAttribute("tooltiptext", theme.name);
     }
 
-    // menünün açıldığı sekme; o sekme çoklu seçimin parçasıysa seçili sekmelerin hepsi
-    function contextTabs(win) {
-      const tab = win.TabContextMenu?.contextTab;
-      if (!tab) return [];
-      return tab.multiselected ? win.gBrowser.selectedTabs : [tab];
-    }
-
-    function attachMenu(win) {
-      const menu = win.document.getElementById("tabContextMenu");
-      if (!menu || win.document.getElementById(MENU_ID)) return;
-      const item = win.document.createXULElement("menuitem");
-      item.id = MENU_ID;
-      item.className = "menuitem-iconic";
-      paintMenuIcon(item, menuAgent());
-      // Firefox'un yapay zekâ bölümünün sonuna; yoksa menünün sonuna
-      const anchor = win.document.getElementById("context_aiSeparator");
-      menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
-      const permissionsMenu = win.document.createXULElement("menu");
-      permissionsMenu.id = MENU_ID + "-permissions";
-      permissionsMenu.setAttribute("label", L("Agent permissions", "Ajan izinleri"));
-      const permissionsPopup = win.document.createXULElement("menupopup");
-      permissionsMenu.append(permissionsPopup);
-      menu.insertBefore(permissionsMenu, item.nextSibling);
-      const give = win.document.createXULElement("menu");
-      give.className = "menu-iconic";
-      const targets = win.document.createXULElement("menupopup");
-      give.append(targets);
-      menu.insertBefore(give, permissionsMenu);
-      let shownTabs = [];
-      const build = inputTabs => {
-        const tabs = shownTabs = inputTabs.filter(t => t.isConnected && !t.hasAttribute("zen-empty-tab"));
-        item.hidden = !tabs.some(t => t.hasAttribute(MARK));
-        give.hidden = !tabs.length;
-        give.setAttribute("label", tabs.some(t => t.hasAttribute(MARK))
-          ? L("Transfer to session…", "Oturuma devret…") : L("Give to session…", "Oturuma ver…"));
-        targets.replaceChildren();
-        let targetCount = 0;
-        for (const target of sessions.values()) {
-          if (target.disconnected) continue;
-          targetCount++;
-          const choice = win.document.createXULElement("menuitem");
-          choice.className = "menuitem-iconic";
-          choice.setAttribute("label", target.name);
-          choice.setAttribute("data-zen-session", target.id);
-          paintMenuIcon(choice, target.agent);
-          choice.addEventListener("command", () => {
-            if (!sessions.has(target.id) || sessions.get(target.id).disconnected) return;
-            for (const tab of tabs) if (tab.isConnected) mark(tab, tab.getAttribute(MARK) || "user", target.id);
-          });
-          targets.append(choice);
-        }
-        if (!targetCount) {
-          const empty = win.document.createXULElement("menuitem");
-          empty.setAttribute("label", L("No browser session connected", "Bağlı tarayıcı oturumu yok"));
-          empty.setAttribute("disabled", "true");
-          targets.append(empty);
-        }
-        const tab = tabs[0];
-        paintMenuIcon(item, tab?.hasAttribute(MARK)
-          ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
-          : menuAgent());
-        const owner = tab && sessions.get(ownership.owner(tab.linkedBrowser.browserId));
-        item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner.name}` : ""));
-        permissionsPopup.replaceChildren();
-        const heading = label => {
-          const item = win.document.createXULElement("menuitem");
-          item.setAttribute("label", label);
-          item.setAttribute("disabled", "true");
-          permissionsPopup.append(item);
-          return item;
-        };
-        heading(L("General mode · all sites", "Genel mod · tüm siteler"));
-        for (const [mode, label] of [
-          ["auto", L("Automatic", "Otomatik")],
-          ["ask", L("Ask before every action", "Her işlemde sor")],
-        ]) {
-          const choice = win.document.createXULElement("menuitem");
-          choice.setAttribute("type", "radio");
-          choice.setAttribute("name", "zen-mcp-general-mode");
-          choice.setAttribute("data-zen-mode", mode);
-          choice.setAttribute("label", label);
-          if (readConfig().mode === mode) choice.setAttribute("checked", "true");
-          choice.addEventListener("command", () => {
-            writeConfig({ mode });
-            island?.setMode(mode);
-          });
-          permissionsPopup.append(choice);
-        }
-        permissionsPopup.append(win.document.createXULElement("menuseparator"));
-        const host = tab && hostOf(tab.linkedBrowser);
-        const hasSite = tabs.length === 1 && !!host;
-        let siteLabel = hasSite ? L(`This site · ${host}`, `Bu site · ${host}`)
-          : L("This site · select one web tab", "Bu site · tek bir web sekmesi seç");
-        const effectiveRule = ruleFor(host);
-        if (hasSite && (readConfig().sites[host] || "default") !== effectiveRule) {
-          siteLabel += " · " + (effectiveRule === "block"
-            ? L("blocked by parent domain", "üst alan adı engelliyor")
-            : L("parent domain requires approval", "üst alan adı onay istiyor"));
-        }
-        heading(siteLabel);
-        for (const [rule, label] of [
-          ["default", L("Use general setting", "Genel ayarı kullan")],
-          ["ask", L("Ask before every action", "Her işlemde sor")],
-          ["block", L("Block agent access", "Ajan erişimini engelle")],
-        ]) {
-          const choice = win.document.createXULElement("menuitem");
-          choice.setAttribute("type", "radio");
-          choice.setAttribute("name", "zen-mcp-site-rule");
-          choice.setAttribute("data-zen-site-rule", rule);
-          if (!hasSite) choice.setAttribute("disabled", "true");
-          choice.setAttribute("label", label);
-          if (hasSite && (readConfig().sites[host] || "default") === rule) choice.setAttribute("checked", "true");
-          choice.addEventListener("command", () => {
-            const sites = { ...readConfig().sites };
-            if (rule === "default") delete sites[host];
-            else sites[host] = rule;
-            writeConfig({ sites });
-          });
-          permissionsPopup.append(choice);
-        }
-
-      };
-      tabMenuBuilders.set(win, build);
-      const onShowing = event => {
-        if (event.target === menu) build(contextTabs(win));
-      };
-      const onCommand = () => {
-        for (const tab of shownTabs) if (tab.isConnected && tab.hasAttribute(MARK)) unmark(tab);
-      };
-      menu.addEventListener("popupshowing", onShowing);
-      item.addEventListener("command", onCommand);
-      menuCleanups.add(() => {
-        tabMenuBuilders.delete(win);
-        menu.removeEventListener("popupshowing", onShowing);
-        item.remove();
-        give.remove();
-        permissionsMenu.remove();
-      });
-    }
+    const { TabMenu } = ChromeUtils.importESModule(`resource://zenmcp/TabMenu.sys.mjs?v=${version}`);
+    const tabMenu = new TabMenu({
+      L, mark: MARK, menuAgent, paintIcon: paintMenuIcon,
+      sessions: () => sessions.values(),
+      ownerName: tab => sessions.get(ownership.owner(tab.linkedBrowser.browserId))?.name,
+      give: (tab, session) => {
+        if (!sessions.has(session) || sessions.get(session).disconnected) return;
+        mark(tab, tab.getAttribute(MARK) || "user", session);
+      },
+      takeBack: tab => unmark(tab),
+      readConfig, writeConfig, setMode: mode => island?.setMode(mode),
+      hostOf: browser => hostOf(browser), ruleFor: host => ruleFor(host),
+    });
     const menuCleanups = new Set();
 
     // ---- Claude Code oturumları: Zen'den Claude'a olay itmek için (channels) ----
@@ -2418,7 +2280,7 @@ function logError(where, e) {
         sandbox.Services = Services;
         sandbox.h = {
           version, state, tools, browserFor, findTab, liveTabs, toPagePoint, screenshot, query,
-          stopClaude, resumeClaude, ownership, sessions, prepareTabMenu,
+          stopClaude, resumeClaude, ownership, sessions, prepareTabMenu: (win, tabs) => tabMenu.prepare(win, tabs),
           island, subscribers, channelTarget, startPick, sendPick, endPick, pageQuery, target, mark, input,
           get pick() { return pick; },
         };
@@ -2653,7 +2515,7 @@ function logError(where, e) {
       );
       for (const win of browserWindows()) {
         island.attach(win);
-        attachMenu(win);
+        tabMenu.attach(win);
         attachPageMenu(win);
       }
       if (state.paused) island.stopped();
@@ -2730,6 +2592,7 @@ function logError(where, e) {
       try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
       try { island?.destroy(); } catch {}
       island = null;
+      tabMenu.destroy();
       for (const cleanup of menuCleanups) {
         try { cleanup(); } catch {}
       }

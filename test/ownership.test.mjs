@@ -6,6 +6,7 @@ import { ReadSnapshots } from '../browser/ReadSnapshots.sys.mjs';
 import { Ownership } from '../browser/Ownership.sys.mjs';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import { agentTheme } from '../browser/Agent.sys.mjs';
+import { TabMenu } from '../browser/TabMenu.sys.mjs';
 const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const timers = { setTimeout, clearTimeout };
@@ -289,14 +290,20 @@ test('session menu pins explicit fixture tabs even when native context points el
     find(check) { if (check(this)) return this; for(const child of this.children) { const found=child.find(check); if(found)return found; } }
   }
   const menu = new Node(); menu.id = 'tabContextMenu';
-  const win = { document: { createXULElement: () => new Node(), getElementById: id => menu.find(node => node.id === id) } };
-  Object.assign(h.context, {
-    MENU_ID: 'zen-mcp-context-give', tabMenuBuilders: new WeakMap(), contextTabs: () => context,
-    menuAgent: () => agentTheme({ id: 'codex' }), paintMenuIcon() {},
-    readConfig: () => ({ mode: 'auto', sites: {} }), toggleMode() {},
+  const win = { document: { createXULElement: () => new Node(), getElementById: id => menu.find(node => node.id === id) },
+    get TabContextMenu() { return { contextTab: context[0] }; } };
+  const c = h.context;
+  const tabMenu = new TabMenu({
+    L: en => en, mark: c.MARK, menuAgent: () => agentTheme({ id: 'codex' }), paintIcon() {},
+    sessions: () => c.sessions.values(),
+    ownerName: tab => c.sessions.get(c.ownership.owner(tab.linkedBrowser.browserId))?.name,
+    give: (tab, session) => c.mark(tab, tab.getAttribute(c.MARK) || 'user', session),
+    takeBack: tab => c.unmark(tab),
+    readConfig: () => ({ mode: 'auto', sites: {} }), writeConfig() {}, setMode() {},
+    hostOf: () => 'fixture.test', ruleFor: () => 'default',
   });
-  vm.runInContext(block('    function attachMenu(', '    // ---- Claude Code oturumları:'), h.context);
-  vm.runInContext(block('    function prepareTabMenu(', '    function menuAgent('), h.context);
+  h.context.attachMenu = win => tabMenu.attach(win);
+  h.context.prepareTabMenu = (win, tabs) => tabMenu.prepare(win, tabs);
   h.tabs.get(tabId).ownerDocument.defaultView = win;
   h.context.attachMenu(win);
   menu.listeners.get('popupshowing')({ target: menu });
@@ -362,7 +369,7 @@ test('bridge reload closes lifecycle transports without discarding runtime owner
   Object.assign(h.context, {
     shuttingDown: false, sessionSweep: null, subscribers: new Map(), pendingDeliveries: new Map(),
     sss: { unregisterSheet() {}, USER_SHEET: 1 }, markSheet: {}, menuCleanups: new Set(),
-    Services: { obs: { removeObserver() {} } },
+    Services: { obs: { removeObserver() {} } }, tabMenu: { destroy() {} },
     onWindowReady() {}, browserWindows: () => [], server: null,
     ChromeUtils: { unregisterWindowActor() {} }, localFile: () => ({ remove() {} }),
     socketPath: '/fixture.sock', Cr: { NS_OK: 0 },
