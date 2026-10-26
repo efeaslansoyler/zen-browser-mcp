@@ -55,7 +55,7 @@ try {
       const select=el.querySelector('.target');select.value=${JSON.stringify(target)};
       select.dispatchEvent(new win.Event('change',{bubbles:true}));
       if(h.pick.targetId!==${JSON.stringify(target)})throw new Error('Destination was not pinned');
-      el.querySelector('textarea').value=${JSON.stringify(note)};
+      el.querySelector('.compose textarea').value=${JSON.stringify(note)};
       el.querySelector('.compose-footer button.primary').click();return true;
     })()`);
     await until(async () => events.some(item => item.target === target && item.event.note === note), 'Local receipt did not receive the selection.');

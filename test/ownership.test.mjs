@@ -7,6 +7,7 @@ import { Ownership } from '../browser/Ownership.sys.mjs';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import { agentTheme } from '../browser/Agent.sys.mjs';
 import { TabMenu } from '../browser/TabMenu.sys.mjs';
+import { Channels } from '../browser/Channels.sys.mjs';
 const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const timers = { setTimeout, clearTimeout };
@@ -232,10 +233,12 @@ test('request_tab requires an explicit answer and can transfer a picked foreign 
 
 test('tool lifecycle subscriptions never become element-delivery targets', () => {
   const h = harness();
-  h.context.subscribers = new Map();
-  h.context.pendingDeliveries = new Map();
-  h.context.shuttingDown = false;
-  vm.runInContext(block('    function subscribe(', '    function channelTarget('), h.context);
+  const c = h.context;
+  const channels = new Channels(new Map(), { theme: agentTheme,
+    connectOwner: (...args) => c.connectOwnerSession(...args), disconnectOwner: (...args) => c.disconnectOwnerSession(...args) });
+  c.subscribers = channels.subscribers;
+  c.subscribe = (...args) => channels.subscribe(...args);
+  c.unsubscribe = (...args) => channels.unsubscribe(...args);
   const transport = {};
   const id = h.context.subscribe({ session: 'A', toolsOnly: true, agent: { id: 'codex' }, cwd: '/project' }, transport, {});
   assert.equal(id, 'A');
@@ -367,7 +370,7 @@ test('bridge reload closes lifecycle transports without discarding runtime owner
   let closed = 0;
   h.context.connectOwnerSession('A', { close() { closed++; } }, agentTheme({ id: 'codex' }), '/project');
   Object.assign(h.context, {
-    shuttingDown: false, sessionSweep: null, subscribers: new Map(), pendingDeliveries: new Map(),
+    shuttingDown: false, sessionSweep: null, channels: { closeAll() {} },
     sss: { unregisterSheet() {}, USER_SHEET: 1 }, markSheet: {}, menuCleanups: new Set(),
     Services: { obs: { removeObserver() {} } }, tabMenu: { destroy() {} },
     onWindowReady() {}, browserWindows: () => [], server: null,

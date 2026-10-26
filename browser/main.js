@@ -443,85 +443,21 @@ function logError(where, e) {
     });
     const menuCleanups = new Set();
 
-    // ---- Claude Code oturumları: Zen'den Claude'a olay itmek için (channels) ----
-    //
-    // Kanal olarak açılmış her Claude Code oturumunun MCP sunucusu kalıcı bir "subscribe"
-    // bağlantısı açar; olaylar bu bağlantıya satır satır yazılır. Birden fazla oturum varsa
-    // olay Zen'i en son kullanan (ya da en son açılan) oturuma gider.
-    const subscribers = new Map(); // session → { name, transport, output, since, queue }
+    // ---- ajan oturumlarına olay itme: channels (Channels.sys.mjs) ----
+
+    const { Channels, ascii } = ChromeUtils.importESModule(`resource://zenmcp/Channels.sys.mjs?v=${version}`);
     const lastUse = (globalThis.zenMcpLastUse ||= new Map()); // session → son tool çağrısı
-
-    function subscribe({ session, cwd, agent, label, threadId, ack = false, toolsOnly = false }, transport, output) {
-      if (!session) throw new Error("session is required.");
-      const theme = agentTheme(agent ?? { id: "claude" });
-      if (toolsOnly) {
-        connectOwnerSession(session, transport, theme, cwd);
-        return session;
-      }
-      const relay = theme.id === "codex" && session === `codex:${threadId}`;
-      const key = theme.id === "codex" && threadId ? `codex:${threadId}` : session;
-      const old = subscribers.get(key);
-      if (old?.relay && !relay) throw new Error("This Codex thread already has an automatic receiver.");
-      if (old) try { old.transport.close(Cr.NS_OK); } catch {}
-      const project = String(label || cwd || "").split("/").filter(Boolean).pop() || "session";
-      const name = `${theme.name} · ${project}${" · " + String(threadId || session).slice(-6)}`;
-      subscribers.set(key, { id: key, name, agent: theme, ack, relay, threadId, transport, output, since: Date.now(), queue: Promise.resolve(true) });
-      return key;
-    }
-
-    function unsubscribe(session, transport) {
-      if (!shuttingDown) disconnectOwnerSession(session, transport);
-      if (subscribers.get(session)?.transport === transport) subscribers.delete(session);
-      for (const pending of pendingDeliveries.values()) {
-        if (pending.session === session && pending.transport === transport) pending.finish(false);
-      }
-    }
-
-    function channelTarget() {
-      let best = null;
-      let bestTime = -1;
-      for (const [session, sub] of subscribers) {
-        const time = Math.max(lastUse.get(session) ?? 0, sub.since);
-        if (time > bestTime) [best, bestTime] = [sub, time];
-      }
-      return best;
-    }
-
-    // tek satır yazar, bağlantı açık kalır (NetUtil.asyncCopy soketi de kapatırdı)
-    function push(sub, message) {
-      const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
-      stream.setByteStringData(ascii(JSON.stringify(message)) + "\n");
-      sub.queue = sub.queue.then(() => new Promise(resolve => {
-        const copier = Cc["@mozilla.org/network/async-stream-copier;1"].createInstance(Ci.nsIAsyncStreamCopier);
-        copier.init(stream, sub.output, null, true, false, 0x8000, true, false);
-        copier.asyncCopy({ onStartRequest() {}, onStopRequest: (_request, status) => resolve(Components.isSuccessCode(status)) }, null);
-      }));
-      return sub.queue;
-    }
-
-    const pendingDeliveries = new Map();
-    function acknowledge(session, transport, event) {
-      const pending = pendingDeliveries.get(event?.id);
-      if (event?.event !== "delivery" || !pending || pending.session !== session || pending.transport !== transport) return;
-      if (!event.ok) logError("pick delivery", new Error(String(event.error || "Delivery rejected")));
-      pending.finish(event.ok === true);
-    }
-
-    async function deliver(sub, message) {
-      if (!sub.ack) return push(sub, message); // legacy Claude channel processes
-      const id = Services.uuid.generateUUID().toString();
-      return new Promise(resolve => {
-        let timer;
-        const finish = ok => {
-          clearTimeout(timer);
-          pendingDeliveries.delete(id);
-          resolve(ok);
-        };
-        pendingDeliveries.set(id, { session: sub.id, transport: sub.transport, finish });
-        timer = setTimeout(() => finish(false), 40_000);
-        push(sub, { ...message, id }).then(ok => { if (!ok) finish(false); }, () => finish(false));
-      });
-    }
+    const channels = new Channels(lastUse, {
+      theme: agentTheme,
+      connectOwner: (...args) => connectOwnerSession(...args),
+      disconnectOwner: (session, transport) => { if (!shuttingDown) disconnectOwnerSession(session, transport); },
+      logError: (where, e) => logError(where, e),
+      setTimeout, clearTimeout,
+      uuid: () => Services.uuid.generateUUID().toString(),
+    });
+    const subscribers = channels.subscribers;
+    const channelTarget = () => channels.target();
+    const deliver = (sub, message) => channels.deliver(sub, message);
 
     // ---- öğe seçip Claude'a iş verme ----
     //
@@ -2292,7 +2228,6 @@ function logError(where, e) {
     // ---- soket ----
 
     // JSON'u saf ASCII'ye çevir: iki uçta da karakter kodlamasıyla uğraşmayalım
-    const ascii = s => s.replace(/[\u007f-￿]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 
     function reply(transport, output, message) {
       const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
@@ -2469,19 +2404,19 @@ function logError(where, e) {
             buffer = buffer.slice(end + 1);
             let request = null;
             try { request = JSON.parse(line); } catch {}
-            if (session) { acknowledge(session, transport, request); continue; }
+            if (session) { channels.acknowledge(session, transport, request); continue; }
             if (handled) return;
             handled = true;
             if (request?.tool !== "subscribe") { handle(line, transport, output); return; }
             try {
-              session = subscribe(request.args ?? {}, transport, output);
+              session = channels.subscribe(request.args ?? {}, transport, output);
             } catch (e) {
               reply(transport, output, { ok: false, error: String(e?.message ?? e) });
             }
           }
         },
         onStopRequest() {
-          if (session) unsubscribe(session, transport);
+          if (session) channels.unsubscribe(session, transport);
         },
       });
     }
@@ -2575,11 +2510,7 @@ function logError(where, e) {
       clearTimeout(sessionSweep);
       operation?.cancel(new Stopped());
       try { endPick(); } catch {}
-      // aboneler yeni sürüme yeniden bağlansın
-      for (const sub of subscribers.values()) {
-        try { sub.transport.close(Cr.NS_OK); } catch {}
-      }
-      subscribers.clear();
+      channels.closeAll();
       for (const connections of ownerConnections.values()) {
         for (const transport of connections) {
           try { transport.close(Cr.NS_OK); } catch {}
@@ -2588,7 +2519,6 @@ function logError(where, e) {
       ownerConnections.clear();
       for (const timer of disconnectTimers.values()) clearTimeout(timer);
       disconnectTimers.clear();
-      for (const pending of pendingDeliveries.values()) pending.finish(false);
       try { sss.unregisterSheet(markSheet, sss.USER_SHEET); } catch {}
       try { island?.destroy(); } catch {}
       island = null;
