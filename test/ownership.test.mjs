@@ -43,7 +43,7 @@ function harness() {
     ownerConnections: new Map(), disconnectTimers: new Map(),
     operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
-    network: new Map(), tabRequests: new Map(), MARK: 'zen-mcp',
+    network: { delete() {}, stop() {} }, tabRequests: new Map(), MARK: 'zen-mcp',
     lastUse: new Map(), activeCalls: 0, island: null, commands: {},
     findTab: id => tabs.get(id), browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }], restoreMarks() {},
     SessionStore: {
@@ -362,7 +362,7 @@ test('bridge reload closes lifecycle transports without discarding runtime owner
   Object.assign(h.context, {
     shuttingDown: false, sessionSweep: null, subscribers: new Map(), pendingDeliveries: new Map(),
     sss: { unregisterSheet() {}, USER_SHEET: 1 }, markSheet: {}, menuCleanups: new Set(),
-    NETWORK_TOPICS: [], Services: { obs: { removeObserver() {} } },
+    Services: { obs: { removeObserver() {} } },
     onWindowReady() {}, browserWindows: () => [], server: null,
     ChromeUtils: { unregisterWindowActor() {} }, localFile: () => ({ remove() {} }),
     socketPath: '/fixture.sock', Cr: { NS_OK: 0 },
