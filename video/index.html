@@ -15,12 +15,16 @@
       .clip { position: absolute; inset: 0; }
       .bg { position: absolute; inset: 0; background: #0b0a09; overflow: hidden; }
       .glow { position: absolute; width: 1400px; height: 1400px; border-radius: 50%; background: radial-gradient(circle, rgba(217, 119, 87, 0.42) 0%, rgba(217, 119, 87, 0.12) 35%, rgba(217, 119, 87, 0) 65%); }
-      .glow.b { background: radial-gradient(circle, rgba(255, 170, 120, 0.22) 0%, rgba(255, 170, 120, 0) 60%); }
+      .glow.b { background: radial-gradient(circle, rgba(167, 232, 208, 0.2) 0%, rgba(167, 232, 208, 0) 60%); }
       #main { perspective: 2200px; }
+
+      /* kinetic headlines */
       .kin { position: absolute; left: 0; top: 0; width: 1920px; text-align: center; opacity: 0; }
       .kin .lab { display: inline-block; padding: 12px 34px 18px; border-radius: 18px; background: rgba(16, 13, 11, 0.88); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-family: "Bricolage", sans-serif; font-size: 68px; font-weight: 800; letter-spacing: -2px; color: #fff; }
       .kin.solid .lab { background: #d97757; box-shadow: 0 20px 60px rgba(217, 119, 87, 0.45); color: #1a0d07; }
       .kin.solid b { color: #fff; text-shadow: none; }
+      .kin.mint .lab { background: #a7e8d0; box-shadow: 0 20px 60px rgba(167, 232, 208, 0.35); color: #10251d; }
+      .kin.mint b { color: #0b5c43; text-shadow: none; }
       .kin.bare .lab { background: none; box-shadow: none; font-size: 96px; letter-spacing: -3.5px; text-shadow: 0 8px 40px rgba(0, 0, 0, 0.8); }
       .kin.light .lab { background: #f6efe9; color: #1d1a17; }
       .kin.light b { color: #b4502c; text-shadow: none; }
@@ -29,12 +33,15 @@
       .kin.huge .lab { font-size: 116px; letter-spacing: -4.5px; padding: 6px 44px 18px; border-radius: 26px; }
       .kin .w { display: inline-block; margin: 0 9px; }
       .kin b { color: #ff9a72; text-shadow: 0 0 28px rgba(217, 119, 87, 0.75); }
+      .kin i { font-style: normal; color: #a7e8d0; text-shadow: 0 0 28px rgba(167, 232, 208, 0.6); }
 
       /* title and end */
       .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+      .marks { display: flex; gap: 22px; align-items: center; }
       .spark { width: 64px; height: 64px; }
       .t-big { font-family: "Bricolage", sans-serif; font-size: 84px; font-weight: 800; letter-spacing: -3px; }
       .t-big em { font-style: normal; color: #d97757; }
+      .t-big u { text-decoration: none; color: #a7e8d0; }
       .t-sub { font-size: 28px; color: #b9aea6; font-weight: 500; }
       .code { font-family: "Mono", monospace; font-size: 34px; background: #1b1715; border: 1px solid #3a2e27; padding: 18px 30px; border-radius: 14px; color: #f3e9e2; }
       .code b { color: #d97757; font-weight: 400; }
@@ -51,65 +58,66 @@
       .tab .fav { position: absolute; left: 12px; top: 12px; width: 16px; height: 16px; border-radius: 4px; }
       .tab .name { position: absolute; left: 38px; top: 10px; font-size: 15px; color: #d6d0cb; white-space: nowrap; width: 180px; overflow: hidden; }
       .tab .line { position: absolute; left: 0; top: 8px; width: 3px; height: 24px; border-radius: 2px; background: #d97757; opacity: 0; }
+      .tab .line.cx { background: #a7e8d0; }
+      .tab .who { position: absolute; right: 10px; top: 11px; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 999px; opacity: 0; }
+      .who.cl { background: #d97757; color: #fff; }
+      .who.cx { background: #a7e8d0; color: #10251d; }
       .content { position: absolute; left: 248px; top: 8px; width: 1344px; height: 884px; border-radius: 12px; background: #fff; overflow: hidden; color: #1d1a17; }
       .page { position: absolute; inset: 0; opacity: 0; }
       .abs { position: absolute; }
 
-      /* docs page */
-      .docs-top { left: 0; top: 0; width: 1344px; height: 60px; background: #1b1b1b; }
-      .docs-top span { position: absolute; left: 32px; top: 18px; color: #fff; font-weight: 700; font-size: 18px; }
-      .docs h1 { left: 80px; top: 110px; font-size: 44px; font-weight: 700; letter-spacing: -1px; }
-      .bar { position: absolute; left: 80px; height: 14px; border-radius: 7px; background: #e7e3df; }
-      .codebox { left: 80px; top: 420px; width: 760px; height: 150px; border-radius: 10px; background: #f6f3f0; }
-
-      /* shop */
-      .shop { background: #faf6f1; }
-      .s-head { left: 0; top: 0; width: 1344px; height: 64px; background: #fff; border-bottom: 1px solid #eadfd3; }
-      .logo { position: absolute; left: 48px; top: 18px; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #2b2118; }
-      .logo b { color: #b4562f; }
-      .cart { position: absolute; left: 1180px; top: 15px; width: 116px; height: 34px; border-radius: 17px; background: #2b2118; color: #fff; font-size: 15px; font-weight: 600; }
-      .cart span { position: absolute; left: 0; width: 116px; top: 7px; text-align: center; }
-      .s-hero { left: 48px; top: 104px; font-size: 52px; font-weight: 750; letter-spacing: -1.6px; line-height: 1.08; width: 760px; color: #2b2118; }
-      .prod { position: absolute; top: 290px; width: 400px; height: 300px; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(60, 30, 10, 0.07); }
-      .prod .art { position: absolute; left: 20px; top: 20px; width: 360px; height: 140px; border-radius: 14px; }
-      .prod h3 { position: absolute; left: 22px; top: 176px; font-size: 20px; color: #2b2118; }
-      .prod p { position: absolute; left: 22px; top: 206px; font-size: 14px; color: #7d6b5d; }
-      .prod .price { position: absolute; left: 22px; top: 248px; font-size: 19px; font-weight: 700; color: #2b2118; }
-      .btn { position: absolute; border-radius: 12px; background: #b4562f; color: #fff; font-weight: 650; font-size: 15px; text-align: center; }
-      .prod .btn { left: 250px; top: 236px; width: 130px; height: 42px; line-height: 42px; }
-      .btn .ok { position: absolute; inset: 0; border-radius: 12px; background: #3d7a4f; opacity: 0; }
-
-      /* checkout */
-      .panel { position: absolute; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(60, 30, 10, 0.07); }
-      .lbl { position: absolute; font-size: 14px; font-weight: 650; color: #2b2118; }
-      .field { position: absolute; width: 696px; height: 48px; border-radius: 12px; border: 1px solid #eadfd3; background: #fffdfb; font-size: 17px; color: #2b2118; }
-      .field span { position: absolute; left: 16px; top: 13px; white-space: nowrap; }
-      .field .ph { color: #b3a79c; }
-      .line { position: absolute; left: 32px; width: 392px; font-size: 16px; color: #7d6b5d; }
-      .line b { position: absolute; right: 0; color: #2b2118; }
-      .pay { position: absolute; left: 872px; top: 360px; width: 392px; height: 186px; border-radius: 16px; background: #1d2433; color: #fff; }
-      .pay .t { position: absolute; left: 22px; top: 18px; font-size: 13px; opacity: 0.7; }
-      .pay .amt { position: absolute; left: 22px; top: 44px; font-size: 32px; font-weight: 750; }
-      .pay .pb { position: absolute; left: 22px; top: 112px; width: 348px; height: 50px; border-radius: 11px; background: #4560e0; font-weight: 700; text-align: center; line-height: 50px; font-size: 17px; }
-      .pay .pb .ok { position: absolute; inset: 0; border-radius: 11px; background: #3d7a4f; opacity: 0; }
-      .outline { position: absolute; border: 3px solid #d97757; border-radius: 14px; box-shadow: 0 0 0 5px rgba(217, 119, 87, 0.22), 0 0 30px rgba(217, 119, 87, 0.55); opacity: 0; }
-
-      /* user's own site */
-      .site { background: #fff; }
-      .nav { left: 0; top: 0; width: 1344px; height: 70px; border-bottom: 1px solid #eee; }
-      .nav .brand { position: absolute; left: 96px; top: 22px; font-weight: 800; font-size: 20px; color: #18181b; }
-      .nav .links { position: absolute; left: 980px; top: 25px; font-size: 15px; color: #71717a; word-spacing: 26px; }
-      .s-h1 { left: 96px; top: 210px; font-size: 68px; font-weight: 800; letter-spacing: -2.4px; color: #18181b; white-space: nowrap; }
-      .s-h1 .green { position: absolute; left: 0; top: 0; color: #16a34a; opacity: 0; white-space: nowrap; }
-      .s-p { left: 96px; top: 320px; font-size: 22px; color: #71717a; width: 720px; }
-      .s-btn { left: 96px; top: 420px; width: 170px; height: 52px; border-radius: 12px; background: #18181b; color: #fff; font-weight: 650; text-align: center; line-height: 52px; }
-      .pickframe { position: absolute; border: 2px solid #d97757; border-radius: 6px; background: rgba(217, 119, 87, 0.1); opacity: 0; }
+      /* Acme dashboard (React dev app) */
+      .app { background: #f6f7f9; }
+      .a-nav { left: 0; top: 0; width: 220px; height: 884px; background: #111827; }
+      .a-nav .brand { position: absolute; left: 28px; top: 26px; color: #fff; font-weight: 800; font-size: 20px; }
+      .a-nav .it { position: absolute; left: 16px; width: 188px; height: 36px; border-radius: 8px; color: #9ca3af; font-size: 15px; padding: 8px 14px; }
+      .a-nav .it.on { background: #1f2937; color: #fff; }
+      .a-h1 { left: 260px; top: 52px; font-size: 34px; font-weight: 750; letter-spacing: -0.8px; color: #111827; }
+      .a-sub { left: 260px; top: 100px; font-size: 17px; color: #6b7280; }
+      .plan { position: absolute; top: 160px; width: 300px; height: 400px; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 1px #e5e7eb; }
+      .plan h3 { position: absolute; left: 24px; top: 24px; font-size: 20px; color: #111827; }
+      .plan .pr { position: absolute; left: 24px; top: 62px; font-size: 40px; font-weight: 800; color: #111827; letter-spacing: -1px; }
+      .plan .pr small { font-size: 16px; color: #6b7280; font-weight: 500; letter-spacing: 0; }
+      .plan .ft { position: absolute; left: 24px; height: 10px; border-radius: 5px; background: #e5e7eb; }
+      .ubtn { position: absolute; width: 252px; height: 46px; border-radius: 10px; text-align: center; line-height: 46px; font-weight: 650; font-size: 16px; }
+      .ubtn.solid { background: #4f46e5; color: #fff; }
+      .ubtn.ghost { background: #eef0f3; color: #c3c8d0; }
+      .ubtn .fix { position: absolute; inset: 0; border-radius: 10px; background: #4f46e5; color: #fff; opacity: 0; }
+      .badge { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: #d97757; color: #fff; font-size: 14px; font-weight: 800; text-align: center; line-height: 26px; opacity: 0; box-shadow: 0 0 0 3px #fff; }
+      .pickframe { position: absolute; border: 2px solid #d97757; border-radius: 12px; background: rgba(217, 119, 87, 0.1); opacity: 0; }
       .picklbl { position: absolute; padding: 2px 9px; border-radius: 999px; background: #d97757; color: #fff; font-size: 13px; font-weight: 650; opacity: 0; white-space: nowrap; }
+      .axe { position: absolute; border: 3px solid #ef4444; border-radius: 12px; box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.2); opacity: 0; }
+      .axel { position: absolute; padding: 3px 10px; border-radius: 8px; background: #ef4444; color: #fff; font-size: 14px; font-weight: 700; opacity: 0; white-space: nowrap; }
+      .rtree { position: absolute; width: 420px; border-radius: 12px; background: #1e1e2e; color: #cdd6f4; font-family: "Mono", monospace; font-size: 15px; line-height: 1.7; padding: 14px 18px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); opacity: 0; }
+      .rtree .k { color: #89b4fa; }
+      .rtree .p { color: #f9e2af; }
+      .rtree .s { color: #a6e3a1; }
+      .rtree .h { background: rgba(217, 119, 87, 0.25); border-radius: 4px; padding: 0 4px; margin-left: -4px; }
       .flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+
+      /* mobile preview */
+      .mob { background: #e5e7eb; }
+      .phone { position: absolute; left: 477px; top: 30px; width: 390px; height: 824px; border-radius: 28px; background: #f6f7f9; box-shadow: 0 0 0 10px #111827, 0 20px 50px rgba(0, 0, 0, 0.3); overflow: hidden; }
+      .phone .bar { position: absolute; left: 0; top: 0; width: 390px; height: 56px; background: #111827; }
+      .phone .bar span { position: absolute; left: 20px; top: 16px; color: #fff; font-weight: 800; font-size: 18px; }
+      .phone .plan { left: 20px; width: 350px; height: 190px; }
+      .phone .ubtn { width: 302px; }
+      .devlbl { position: absolute; left: 900px; top: 60px; padding: 8px 14px; border-radius: 10px; background: #111827; color: #fff; font-family: "Mono", monospace; font-size: 15px; line-height: 1.6; }
+
+      /* issue tracker (user's own tab) */
+      .trk { background: #fff; }
+      .t-top { left: 0; top: 0; width: 1344px; height: 60px; background: #24292f; }
+      .t-top span { position: absolute; left: 32px; top: 18px; color: #fff; font-weight: 700; font-size: 18px; }
+      .t-h { left: 80px; top: 100px; font-size: 32px; font-weight: 600; color: #1f2328; letter-spacing: -0.5px; }
+      .t-h span { color: #8c959f; font-weight: 400; }
+      .t-open { left: 80px; top: 156px; padding: 5px 14px; border-radius: 999px; background: #1f883d; color: #fff; font-size: 15px; font-weight: 600; }
+      .t-body { left: 80px; top: 220px; width: 860px; height: 420px; border-radius: 10px; border: 1px solid #d0d7de; }
+      .t-body .bar { position: absolute; left: 24px; height: 12px; border-radius: 6px; background: #eaeef2; }
+      .t-body .lbl { position: absolute; left: 24px; font-size: 17px; font-weight: 650; color: #1f2328; }
 
       /* island */
       .isl { position: absolute; left: 920px; top: 22px; width: 380px; height: 40px; border-radius: 20px; background: rgba(14, 14, 14, 0.95); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.12); overflow: hidden; opacity: 0; color: #f3f3f3; font-size: 15px; }
-      .ist { position: absolute; left: 0; top: 0; width: 640px; height: 200px; opacity: 0; }
+      .ist { position: absolute; left: 0; top: 0; width: 640px; height: 220px; opacity: 0; }
       .isp { position: absolute; left: 14px; top: 12px; width: 16px; height: 16px; }
       .ihost { position: absolute; left: 40px; top: 10px; opacity: 0.5; white-space: nowrap; }
       .iact { position: absolute; top: 10px; font-weight: 600; white-space: nowrap; }
@@ -119,180 +127,223 @@
       .imsg { position: absolute; left: 40px; top: 44px; font-weight: 500; line-height: 1.45; white-space: nowrap; }
       .ibtn { position: absolute; height: 30px; border-radius: 15px; padding: 0 16px; line-height: 30px; font-size: 14px; font-weight: 650; background: rgba(255, 255, 255, 0.12); }
       .ibtn.p { background: #d97757; color: #fff; }
-      .inote { position: absolute; left: 40px; top: 44px; width: 460px; height: 60px; border-radius: 11px; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.7); }
-      .inote span { position: absolute; left: 12px; top: 9px; white-space: nowrap; }
-      .prev { position: absolute; left: 10px; top: 46px; width: 360px; height: 220px; border-radius: 12px; background: #faf6f1; overflow: hidden; }
-      .prev i { position: absolute; display: block; border-radius: 6px; }
+      .inote { position: absolute; left: 40px; width: 500px; border-radius: 11px; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.7); }
+      .inote span { position: absolute; left: 12px; top: 7px; white-space: nowrap; }
+      .itarget { position: absolute; left: 40px; height: 30px; border-radius: 8px; padding: 0 12px 0 32px; line-height: 30px; font-size: 14px; background: rgba(255, 255, 255, 0.08); white-space: nowrap; }
+      .itarget svg { position: absolute; left: 10px; top: 8px; width: 14px; height: 14px; }
+      .imenu { position: absolute; left: 40px; width: 250px; border-radius: 10px; background: #232120; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.1); opacity: 0; }
+      .imenu div { position: relative; height: 36px; line-height: 36px; padding-left: 36px; font-size: 14px; }
+      .imenu div svg { position: absolute; left: 12px; top: 11px; width: 14px; height: 14px; }
+      .imenu .on { background: rgba(217, 119, 87, 0.25); border-radius: 8px; }
 
       /* cursors, ripples */
       .cur { position: absolute; left: 0; top: 0; width: 26px; height: 26px; }
       .clabel { position: absolute; left: 16px; top: 22px; padding: 2px 9px; border-radius: 999px; background: #b4502c; color: #fff; font-size: 13px; font-weight: 650; white-space: nowrap; }
-      .clabel span { opacity: 0; }
+      .clabel.cx { background: #a7e8d0; color: #10251d; }
       .rip { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; border: 2px solid #d97757; background: rgba(217, 119, 87, 0.18); opacity: 0; }
 
-      /* terminal, captions, keys */
-      .term { position: absolute; left: 1060px; top: 330px; width: 780px; height: 440px; border-radius: 14px; background: #121110; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08); opacity: 0; font-family: "Mono", monospace; font-size: 18px; color: #e8e2dc; }
-      .term .tt { position: absolute; left: 0; top: 0; width: 780px; height: 40px; border-bottom: 1px solid #2a2725; font-family: "Inter", sans-serif; font-size: 14px; color: #9a918a; }
+      /* side panels: terminal, tab_work */
+      .term { position: absolute; left: 1060px; top: 300px; width: 800px; height: 500px; border-radius: 14px; background: #121110; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08); opacity: 0; font-family: "Mono", monospace; font-size: 18px; color: #e8e2dc; }
+      .term .tt { position: absolute; left: 0; top: 0; width: 100%; height: 40px; border-bottom: 1px solid #2a2725; font-family: "Inter", sans-serif; font-size: 14px; color: #9a918a; }
       .term .tt span { position: absolute; left: 20px; top: 12px; }
       .tl { position: absolute; left: 24px; white-space: pre; opacity: 0; }
       .tl.o { color: #d97757; }
       .tl.d { color: #f87171; }
       .tl.a { color: #4ade80; }
       .tl.m { color: #9a918a; }
-      .cap { position: absolute; left: 0; top: 968px; width: 1920px; text-align: center; font-size: 30px; font-weight: 600; color: #f3ece6; opacity: 0; letter-spacing: -0.3px; }
-      .cap b { color: #d97757; font-weight: 600; }
+      .tl.c { color: #a7e8d0; }
+      .work { position: absolute; left: 1180px; top: 560px; width: 660px; border-radius: 14px; background: #121110; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08); opacity: 0; padding: 16px 0 10px; }
+      .work .wh { font-size: 14px; color: #9a918a; padding: 0 22px 10px; border-bottom: 1px solid #2a2725; font-family: "Mono", monospace; }
+      .wr { position: relative; height: 62px; padding: 10px 22px 0 60px; }
+      .wr .ic { position: absolute; left: 22px; top: 16px; width: 24px; height: 24px; border-radius: 7px; }
+      .wr .n { font-size: 17px; font-weight: 650; }
+      .wr .s { font-size: 15px; color: #b9aea6; margin-top: 3px; }
+      .wr .st { position: absolute; right: 22px; top: 18px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+      .st.run { background: rgba(217, 119, 87, 0.2); color: #ff9a72; }
+      .st.q { background: rgba(255, 255, 255, 0.1); color: #d6d0cb; }
+      .st.done { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+      .st.cxrun { background: rgba(167, 232, 208, 0.2); color: #a7e8d0; }
       .keys { position: absolute; left: 768px; top: 700px; display: flex; gap: 10px; opacity: 0; }
       .keys span { padding: 10px 18px; border-radius: 10px; background: #1d1a17; color: #fff; font-size: 24px; font-weight: 650; box-shadow: 0 4px 0 #000; }
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="33">
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="54">
       <div class="bg"><div class="glow" id="g1" style="left: 260px; top: -300px"></div><div class="glow b" id="g2" style="left: 900px; top: 200px"></div></div>
 
       <!-- 1. title -->
-      <section id="title" class="clip" data-start="0" data-duration="3.2" data-track-index="1">
+      <section id="title" class="clip" data-start="0" data-duration="3.4" data-track-index="1">
         <div class="card" id="title-in">
-          <svg class="spark" id="title-spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
-          <div class="t-big" id="tt1">Your browser. Your logins.</div>
-          <div class="t-big" id="tt2">Now with <em>Claude</em>.</div>
+          <div class="marks">
+            <svg class="spark" id="title-spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
+            <svg class="spark" id="title-cx" viewBox="0 0 16 16" fill="none"><path stroke="#a7e8d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m2 4 4 4-4 4M9 12h5"/></svg>
+          </div>
+          <div class="t-big" id="tt1">Your dev browser.</div>
+          <div class="t-big" id="tt2">Shared with <em>Claude</em> and <u>Codex</u>.</div>
         </div>
       </section>
 
       <!-- 2-6. the browser -->
-      <section id="main" class="clip" data-start="2.8" data-duration="26.6" data-track-index="2">
+      <section id="main" class="clip" data-start="3.0" data-duration="44.6" data-track-index="2">
         <div class="win" id="win">
           <div class="side">
             <div class="tools"><i></i><i></i><i></i></div>
-            <div class="url"><span id="u-docs">developer.mozilla.org/…/map</span><span id="u-shop">brewandbean.com</span><span id="u-site">localhost:3000</span></div>
-            <div class="tab" id="tab-docs" style="top: 104px"><div class="hl" id="hl-docs"></div><div class="fav" style="background: #1b1b1b"></div><div class="name">Array.map() – MDN</div></div>
-            <div class="tab" id="tab-site" style="top: 148px"><div class="hl" id="hl-site"></div><div class="fav" style="background: #18181b"></div><div class="name">Acme — localhost:3000</div></div>
-            <div class="tab" id="tab-shop" style="top: 192px"><div class="hl" id="hl-shop"></div><div class="line" id="tab-shop-line"></div><div class="fav" style="background: #b4562f"></div><div class="name">Brew &amp; Bean</div></div>
+            <div class="url"><span id="u-app">localhost:5173/billing</span><span id="u-sb">localhost:6006/?path=/story</span><span id="u-trk">tracker.local/acme/issues/142</span></div>
+            <div class="tab" id="tab-app" style="top: 104px"><div class="hl" id="hl-app"></div><div class="line" id="ln-app"></div><div class="line cx" id="ln-app-cx"></div><div class="fav" style="background: #4f46e5"></div><div class="name">Acme · localhost:5173</div></div>
+            <div class="tab" id="tab-sb" style="top: 148px"><div class="hl" id="hl-sb"></div><div class="line cx" id="ln-sb"></div><div class="fav" style="background: #ff4785"></div><div class="name">Storybook · Button</div></div>
+            <div class="tab" id="tab-trk" style="top: 192px"><div class="hl" id="hl-trk"></div><div class="line" id="ln-trk"></div><div class="fav" style="background: #24292f"></div><div class="name">#142 Pro button…</div></div>
           </div>
           <div class="content">
-            <div class="page docs" id="p-docs">
-              <div class="abs docs-top"><span>MDN Web Docs</span></div>
-              <h1 class="abs">Array.prototype.map()</h1>
-              <div class="bar" style="top: 200px; width: 980px"></div>
-              <div class="bar" style="top: 230px; width: 920px"></div>
-              <div class="bar" style="top: 260px; width: 760px"></div>
-              <div class="bar" style="top: 320px; width: 960px"></div>
-              <div class="bar" style="top: 350px; width: 600px"></div>
-              <div class="abs codebox"></div>
-              <div class="bar" style="top: 620px; width: 900px"></div>
-              <div class="bar" style="top: 650px; width: 820px"></div>
-            </div>
-
-            <div class="page shop" id="p-shop">
-              <div class="abs s-head"><div class="logo">Brew <b>&amp;</b> Bean</div><div class="cart"><span id="cart0">Cart (0)</span><span id="cart1" style="opacity: 0">Cart (1)</span><span id="cart2" style="opacity: 0">Cart (2)</span></div></div>
-              <div class="abs s-hero">Fresh roasted coffee, delivered weekly.</div>
-              <div class="prod" style="left: 48px"><div class="art" style="background: #f4e3d3"></div><h3>Ethiopia Yirgacheffe</h3><p>Jasmine, bergamot, honey</p><div class="price">$18</div><div class="btn">Add to cart<div class="ok" id="ok1">Added ✓</div></div></div>
-              <div class="prod" style="left: 472px"><div class="art" style="background: #e3ead6"></div><h3>Colombia Huila</h3><p>Red apple, caramel, cocoa</p><div class="price">$16</div><div class="btn">Add to cart</div></div>
-              <div class="prod" style="left: 896px"><div class="art" style="background: #e9dcef"></div><h3>House Espresso</h3><p>Dark chocolate, hazelnut</p><div class="price">$24</div><div class="btn">Add to cart<div class="ok" id="ok3">Added ✓</div></div></div>
-            </div>
-
-            <div class="page shop" id="p-checkout">
-              <div class="abs s-head"><div class="logo">Brew <b>&amp;</b> Bean</div></div>
-              <div class="panel" style="left: 48px; top: 96px; width: 760px; height: 600px"></div>
-              <div class="lbl" style="left: 80px; top: 128px; font-size: 22px">Delivery</div>
-              <div class="lbl" style="left: 80px; top: 180px">Full name</div>
-              <div class="field" style="left: 80px; top: 204px"><span class="ph" id="ph-name">Jane Doe</span><span id="t-name"></span></div>
-              <div class="lbl" style="left: 80px; top: 272px">Email</div>
-              <div class="field" style="left: 80px; top: 296px"><span class="ph" id="ph-mail">jane@example.com</span><span id="t-mail"></span></div>
-              <div class="lbl" style="left: 80px; top: 364px">Address</div>
-              <div class="field" style="left: 80px; top: 388px"><span>12 Analytical Street, London</span></div>
-              <div class="btn" style="left: 80px; top: 600px; width: 696px; height: 54px; line-height: 54px; font-size: 17px">Place order</div>
-              <div class="panel" style="left: 840px; top: 96px; width: 456px; height: 600px"></div>
-              <div class="lbl" style="left: 872px; top: 128px; font-size: 22px">Your order</div>
-              <div class="line" style="left: 872px; top: 182px">Ethiopia Yirgacheffe<b>$18</b></div>
-              <div class="line" style="left: 872px; top: 214px">House Espresso<b>$24</b></div>
-              <div class="line" style="left: 872px; top: 268px; color: #2b2118; font-weight: 700; font-size: 19px">Total<b>$42</b></div>
-              <div class="pay"><div class="t">🔒 SecurePay · Visa •••• 4242</div><div class="amt">$42</div><div class="pb">Pay now<div class="ok" id="paid">Paid ✓</div></div></div>
-              <div class="outline" id="pay-outline" style="left: 886px; top: 464px; width: 364px; height: 62px"></div>
-            </div>
-
-            <div class="page shop" id="p-done">
-              <div class="abs s-head"><div class="logo">Brew <b>&amp;</b> Bean</div></div>
-              <div class="abs" style="left: 0; top: 330px; width: 1344px; text-align: center; font-size: 54px; font-weight: 800; color: #2b2118; letter-spacing: -1.5px">Order placed ☕</div>
-              <div class="abs" style="left: 0; top: 410px; width: 1344px; text-align: center; font-size: 20px; color: #7d6b5d">Your beans ship tomorrow.</div>
-            </div>
-
-            <div class="page site" id="p-site">
-              <div class="abs nav"><div class="brand">Acme</div><div class="links">Product Pricing Docs</div></div>
-              <div class="abs s-h1" id="h1">Ship features, not boilerplate.<span class="green" id="h1g">Ship features, not boilerplate.</span></div>
-              <div class="abs s-p">Acme turns your ideas into production apps in an afternoon.</div>
-              <div class="abs s-btn">Get started</div>
-              <div class="pickframe" id="pf1" style="left: 92px; top: 316px; width: 728px; height: 38px"></div>
-              <div class="pickframe" id="pf" style="left: 90px; top: 206px; width: 1064px; height: 92px"></div>
-              <div class="picklbl" id="pl" style="left: 90px; top: 178px">h1.hero-title  1052×82</div>
+            <!-- Acme billing page -->
+            <div class="page app" id="p-app">
+              <div class="abs a-nav"><div class="brand">Acme</div><div class="it" style="top: 90px">Overview</div><div class="it" style="top: 132px">Projects</div><div class="it on" style="top: 174px">Billing</div><div class="it" style="top: 216px">Settings</div></div>
+              <div class="abs a-h1">Plans</div>
+              <div class="abs a-sub">Upgrade anytime. Cancel anytime.</div>
+              <div class="plan" style="left: 260px"><h3>Starter</h3><div class="pr">$0<small> /mo</small></div><div class="ft" style="top: 140px; width: 200px"></div><div class="ft" style="top: 166px; width: 170px"></div><div class="ft" style="top: 192px; width: 220px"></div></div>
+              <div class="plan" style="left: 590px"><h3>Pro</h3><div class="pr">$19<small> /mo</small></div><div class="ft" style="top: 140px; width: 210px"></div><div class="ft" style="top: 166px; width: 180px"></div></div>
+              <div class="plan" style="left: 920px"><h3>Team</h3><div class="pr">$49<small> /mo</small></div><div class="ft" style="top: 140px; width: 200px"></div><div class="ft" style="top: 166px; width: 230px"></div><div class="ft" style="top: 192px; width: 160px"></div></div>
+              <div class="ubtn solid" style="left: 284px; top: 488px">Current plan</div>
+              <div class="ubtn ghost" id="b-pro" style="left: 614px; top: 400px">Upgrade<div class="fix" id="b-pro-fix">Upgrade</div></div>
+              <div class="ubtn solid" id="b-team" style="left: 944px; top: 488px">Upgrade</div>
+              <div class="pickframe" id="pf-hover" style="left: 586px; top: 156px; width: 308px; height: 408px"></div>
+              <div class="pickframe" id="pf1" style="left: 608px; top: 394px; width: 264px; height: 58px"></div>
+              <div class="pickframe" id="pf2" style="left: 938px; top: 482px; width: 264px; height: 58px"></div>
+              <div class="badge" id="bd1" style="left: 856px; top: 380px">1</div>
+              <div class="badge" id="bd2" style="left: 1186px; top: 468px">2</div>
+              <div class="picklbl" id="pl1" style="left: 608px; top: 366px">button.upgrade 252×46</div>
+              <div class="axe" id="axe" style="left: 606px; top: 392px; width: 268px; height: 62px"></div>
+              <div class="axel" id="axel" style="left: 606px; top: 462px">color-contrast · 1.5:1 (needs 4.5:1)</div>
+              <div class="rtree" id="rtree" style="left: 260px; top: 590px">
+                <div><span class="k">&lt;BillingPage&gt;</span></div>
+                <div>&nbsp;&nbsp;<span class="k">&lt;PlanGrid</span> <span class="p">plans</span>=<span class="s">{3}</span><span class="k">&gt;</span></div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">&lt;PricingCard</span> <span class="p">plan</span>=<span class="s">"pro"</span><span class="k">&gt;</span></div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="h"><span class="k">&lt;UpgradeButton</span> <span class="p">variant</span>=<span class="s">"ghost"</span><span class="k">&gt;</span></span></div>
+              </div>
               <div class="flash" id="flash"></div>
+            </div>
+
+            <!-- the same page on a phone -->
+            <div class="page mob" id="p-mob">
+              <div class="phone">
+                <div class="bar"><span>Acme</span></div>
+                <div class="plan" style="top: 76px"><h3>Pro</h3><div class="pr">$19<small> /mo</small></div><div class="ubtn solid" style="left: 24px; top: 124px">Upgrade</div></div>
+                <div class="plan" style="top: 286px"><h3>Team</h3><div class="pr">$49<small> /mo</small></div><div class="ubtn solid" style="left: 24px; top: 124px">Upgrade</div></div>
+                <div class="plan" style="top: 496px"><h3>Starter</h3><div class="pr">$0<small> /mo</small></div><div class="ubtn solid" style="left: 24px; top: 124px">Current plan</div></div>
+              </div>
+              <div class="devlbl">390×844 · dpr 3 · touch<br />Android 15; Mobile</div>
+            </div>
+
+            <!-- Storybook (Codex's tab) -->
+            <div class="page" id="p-sb" style="background: #f6f9fc">
+              <div class="abs" style="left: 0; top: 0; width: 260px; height: 884px; background: #fff; border-right: 1px solid #e6e9ed"></div>
+              <div class="abs" style="left: 24px; top: 24px; font-weight: 800; font-size: 18px; color: #ff4785">Storybook</div>
+              <div class="abs" style="left: 24px; top: 80px; font-size: 15px; color: #333; line-height: 2.2">Button<br />&nbsp;&nbsp;Primary<br />&nbsp;&nbsp;Ghost<br />PricingCard</div>
+              <div class="abs" style="left: 520px; top: 380px; width: 252px; height: 46px; border-radius: 10px; background: #4f46e5; color: #fff; font-weight: 650; text-align: center; line-height: 46px">Primary</div>
+            </div>
+
+            <!-- issue tracker (the user's tab) -->
+            <div class="page trk" id="p-trk">
+              <div class="abs t-top"><span>tracker</span></div>
+              <div class="abs t-h">Pro upgrade button misaligned on mobile <span>#142</span></div>
+              <div class="abs t-open">Open</div>
+              <div class="abs t-body">
+                <div class="lbl" style="top: 24px">Steps to reproduce</div>
+                <div class="bar" style="top: 66px; width: 640px"></div>
+                <div class="bar" style="top: 94px; width: 560px"></div>
+                <div class="bar" style="top: 122px; width: 700px"></div>
+                <div class="lbl" style="top: 176px">Expected</div>
+                <div class="bar" style="top: 218px; width: 600px"></div>
+                <div class="bar" style="top: 246px; width: 480px"></div>
+              </div>
             </div>
           </div>
 
           <!-- island -->
-          <div class="isl" id="isl">
-            <div class="ist" id="i-shop"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">adding to cart</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span>
-              <div class="prev"><i style="left: 0; top: 0; width: 360px; height: 22px; background: #fff"></i><i style="left: 14px; top: 34px; width: 190px; height: 18px; background: #2b2118"></i><i style="left: 14px; top: 92px; width: 104px; height: 108px; background: #fff"></i><i style="left: 128px; top: 92px; width: 104px; height: 108px; background: #fff"></i><i style="left: 242px; top: 92px; width: 104px; height: 108px; background: #fff"></i><i style="left: 20px; top: 98px; width: 92px; height: 50px; background: #f4e3d3"></i><i style="left: 134px; top: 98px; width: 92px; height: 50px; background: #e3ead6"></i><i style="left: 248px; top: 98px; width: 92px; height: 50px; background: #e9dcef"></i><i style="left: 66px; top: 176px; width: 44px; height: 14px; background: #3d7a4f"></i></div>
+          <div class="isl" id="isl" data-layout-allow-overlap data-layout-allow-overflow>
+            <div class="ist" id="i-work"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">reading the page</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-pick"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Select elements (up to 8)</span><span class="ihost" style="left: 250px">Shift+click · Enter</span></div>
+            <div class="ist" id="i-compose"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">2 elements</span>
+              <div class="inote" style="top: 44px; height: 34px"><span id="note" style="color: #f3f3f3"></span><span id="note-ph" style="opacity: 0.45">What should the agent do?</span></div>
+              <div class="itarget" style="top: 90px"><svg viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>Claude · acme-app ▾</div>
+              <span class="ibtn" style="left: 386px; top: 90px">Cancel</span><span class="ibtn p" style="left: 474px; top: 90px">Send</span>
+              <div class="imenu" id="imenu" style="top: 124px">
+                <div class="on"><svg viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>Claude · acme-app</div>
+                <div><svg viewBox="0 0 16 16" fill="none"><path stroke="#a7e8d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m2 4 4 4-4 4M9 12h5"/></svg>Codex · acme-app</div>
+              </div>
             </div>
-            <div class="ist" id="i-type"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">typing</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
-            <div class="ist" id="i-perm"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">asks for permission</span><span class="imsg">Claude wants to: button “Place order”: click</span><span class="ibtn" style="left: 374px; top: 82px">Deny</span><span class="ibtn p" style="left: 444px; top: 82px">Allow</span></div>
-            <div class="ist" id="i-ask"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">brewandbean.com</span><span class="iact" style="left: 178px">needs you</span><span class="imsg">Check the total, then press Pay now.</span><span class="ibtn" style="left: 418px; top: 82px">Cancel</span></div>
-            <div class="ist" id="i-pick"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Click an element to show Claude</span><span class="ihost" style="left: 300px; opacity: 0.5">↑ parent · Esc</span></div>
-            <div class="ist" id="i-compose"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">heading “Ship features, not…”</span><div class="inote"><span id="note" style="color: #f3f3f3"></span><span id="note-ph" style="opacity: 0.45">What should Claude do?</span></div><span class="ihost" style="left: 40px; top: 120px; font-size: 13px">→ my-site</span><span class="ibtn" style="left: 336px; top: 114px">Cancel</span><span class="ibtn p" style="left: 424px; top: 114px">Send</span></div>
-            <div class="ist" id="i-sent"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Sent to my-site ✓</span></div>
-            <div class="ist" id="i-check"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">checking the change</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
-            <div class="ist" id="i-stopped"><svg class="isp" viewBox="0 0 16 16" style="filter: grayscale(1); opacity: 0.5"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Claude is stopped</span><span class="ibtn p" style="left: 196px; top: 5px">Resume</span></div>
+            <div class="ist" id="i-sent"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="iact" style="left: 40px">Sent to Claude ✓</span></div>
+            <div class="ist" id="i-react"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">inspecting React</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-axe"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">running axe</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-mob"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">emulating a phone</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-req"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">tracker.local</span><span class="iact" style="left: 150px">asks for this tab</span>
+              <span class="imsg">Claude: “Read the repro steps in #142.”</span>
+              <div class="inote" style="top: 80px; height: 34px"><span id="anote" style="color: #f3f3f3"></span><span id="anote-ph" style="opacity: 0.45">Note for the agent (optional)</span></div>
+              <span class="ibtn" style="left: 386px; top: 126px">Deny</span><span class="ibtn p" style="left: 460px; top: 126px">Allow</span>
+            </div>
+            <div class="ist" id="i-read"><svg class="isp" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg><span class="ihost">tracker.local</span><span class="iact" style="left: 150px">reading the page</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
+            <div class="ist" id="i-cx"><svg class="isp" viewBox="0 0 16 16" fill="none"><path stroke="#a7e8d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m2 4 4 4-4 4M9 12h5"/></svg><span class="ihost">localhost</span><span class="iact" style="left: 116px">running e2e checks</span><span class="ichip" style="left: 298px">auto</span><span class="istop" style="left: 342px"><i></i></span></div>
           </div>
 
           <!-- cursors and ripples (window coordinates) -->
           <div class="rip" id="rip"></div>
-          <div class="cur" id="ccur"><svg width="26" height="26" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#d97757" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><div class="clabel"><span id="cl-claude" style="opacity: 1">Claude</span></div><div class="clabel" id="cl-type" style="opacity: 0">typing…</div></div>
+          <div class="cur" id="ccur"><svg width="26" height="26" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#d97757" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><div class="clabel">Claude</div></div>
+          <div class="cur" id="xcur"><svg width="26" height="26" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#a7e8d0" stroke="#10251d" stroke-width="1.4" stroke-linejoin="round"/></svg><div class="clabel cx">Codex</div></div>
           <div class="cur" id="ucur"><svg width="26" height="26" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
         </div>
 
         <div class="keys" id="keys"><span>Ctrl</span><span>Shift</span><span>F</span></div>
-        <div class="term" id="term">
-          <div class="tt"><span>claude — ~/projects/my-site</span></div>
-          <div class="tl o" id="tl1" style="top: 64px">← zen: Make this heading green</div>
-          <div class="tl m" id="tl2" style="top: 104px">  (h1.hero-title · HeroSection › Title)</div>
-          <div class="tl" id="tl3" style="top: 152px">● Update(src/components/Hero.tsx)</div>
-          <div class="tl d" id="tl4" style="top: 190px">  - &lt;h1 className="text-zinc-900 …"&gt;</div>
-          <div class="tl a" id="tl5" style="top: 222px">  + &lt;h1 className="text-green-600 …"&gt;</div>
-          <div class="tl" id="tl6" style="top: 270px">● zen · navigate localhost:3000</div>
-          <div class="tl" id="tl7" style="top: 308px">● zen · screenshot</div>
-          <div class="tl a" id="tl8" style="top: 356px">  The heading is green now. ✓</div>
+
+        <div class="work" id="work">
+          <div class="wh">tab_work list</div>
+          <div class="wr"><div class="ic" style="background: #d97757"></div><div class="n">Claude · acme-app</div><div class="s" id="w-cl-s">Fixing the pricing cards</div><div class="st run" id="w-cl-run">working</div><div class="st done" id="w-cl-done" style="opacity: 0">finished</div></div>
+          <div class="wr"><div class="ic" style="background: #a7e8d0"></div><div class="n">Codex · acme-app</div><div class="s" id="w-cx-s">Visual tests on Storybook</div><div class="st cxrun" id="w-cx-run">working</div><div class="st q" id="w-cx-q" style="opacity: 0">queued for localhost:5173</div><div class="st cxrun" id="w-cx-got" style="opacity: 0">got the tab</div></div>
         </div>
 
-        <div class="kin" id="c1"><span class="lab">Claude gets <b>its own tab</b>.</span></div>
-        <div class="kin solid" id="c2"><span class="lab">Peek <b>live</b>. Jump in anytime.</span></div>
-        <div class="kin bare" id="c3"><span class="lab"><b>Real</b> clicks. <b>Real</b> typing.</span></div>
-        <div class="kin light" id="c4"><span class="lab">You approve <b>what matters</b>.</span></div>
-        <div class="kin" id="c4b"><span class="lab">Payment stays <b>yours</b>.</span></div>
-        <div class="kin solid huge" id="c5"><span class="lab"><b>Point</b> at it.</span></div>
-        <div class="kin ring" id="c6"><span class="lab">Claude <b>fixes it</b>. Then <b>checks</b>.</span></div>
-        <div class="kin" id="c7"><span class="lab"><b>Stop</b> anytime.</span></div>
+        <div class="term" id="term">
+          <div class="tt"><span>claude — ~/projects/acme-app</span></div>
+          <div class="tl o" id="tl1" style="top: 60px">← zen: Align these buttons and fix the contrast</div>
+          <div class="tl m" id="tl2" style="top: 96px">  2 elements · button.upgrade ×2</div>
+          <div class="tl" id="tl3" style="top: 140px">● zen · react inspect</div>
+          <div class="tl m" id="tl4" style="top: 174px">  PricingCard › UpgradeButton variant="ghost"</div>
+          <div class="tl" id="tl5" style="top: 218px">● zen · accessibility (axe)</div>
+          <div class="tl d" id="tl6" style="top: 252px">  color-contrast: 1.5:1, needs 4.5:1</div>
+          <div class="tl" id="tl7" style="top: 296px">● Update(src/billing/PricingCard.tsx)</div>
+          <div class="tl d" id="tl8" style="top: 330px">  - &lt;UpgradeButton variant="ghost" /&gt;</div>
+          <div class="tl a" id="tl9" style="top: 362px">  + &lt;UpgradeButton className="mt-auto" /&gt;</div>
+          <div class="tl" id="tl10" style="top: 406px">● zen · browser_settings device: "mobile"</div>
+          <div class="tl a" id="tl11" style="top: 446px">  Aligned, 7.1:1, fine on mobile. ✓</div>
+        </div>
+
+        <div class="kin" id="c1" data-layout-allow-overlap><span class="lab">Two agents. <b>Their own</b> <i>tabs</i>.</span></div>
+        <div class="kin solid huge" id="c2" data-layout-allow-overlap><span class="lab"><b>Point</b> at the bug.</span></div>
+        <div class="kin light" id="c3" data-layout-allow-overlap><span class="lab">Pick <b>who</b> gets it.</span></div>
+        <div class="kin bare" id="c4" data-layout-allow-overlap><span class="lab">Reads your <b>React</b> tree.</span></div>
+        <div class="kin ring" id="c5" data-layout-allow-overlap><span class="lab">Runs <b>axe</b>. Checks <b>mobile</b>.</span></div>
+        <div class="kin" id="c6" data-layout-allow-overlap><span class="lab">Your tabs stay <b>yours</b>.</span></div>
+        <div class="kin light" id="c7" data-layout-allow-overlap><span class="lab">…until you <b>say so</b>. With a note.</span></div>
+        <div class="kin mint" id="c8" data-layout-allow-overlap><span class="lab">Agents <b>hand off</b>. No collisions.</span></div>
       </section>
 
       <!-- 7. end -->
-      <section id="end" class="clip" data-start="29.2" data-duration="3.8" data-track-index="1">
+      <section id="end" class="clip" data-start="47.4" data-duration="6.6" data-track-index="1">
         <div class="card" id="end-in">
-          <svg class="spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
+          <div class="marks">
+            <svg class="spark" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>
+            <svg class="spark" viewBox="0 0 16 16" fill="none"><path stroke="#a7e8d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m2 4 4 4-4 4M9 12h5"/></svg>
+          </div>
           <div class="t-big" style="font-size: 110px">zen-mcp</div>
           <div class="code"><b>$</b> npx zen-mcp install</div>
-          <div class="t-sub">Zen · Firefox · Claude Code</div>
+          <div class="t-sub">Zen · Firefox · Claude Code · Codex</div>
         </div>
       </section>
     </div>
 
     <script>
       const tl = gsap.timeline({ paused: true });
-      const W = { x: 0, y: 0 }; // cursor coordinates are window-relative
       const C = (x, y) => ({ x: 248 + x, y: 8 + y }); // content → window coordinates
       const show = (sel, t, d = 0.25) => tl.to(sel, { opacity: 1, duration: d }, t);
       const hide = (sel, t, d = 0.2) => tl.to(sel, { opacity: 0, duration: d }, t);
-      // kinetic headline: tilted label pops in, words flip up one by one
-      // Kinetic headline. Every headline has its own position, angle and entrance:
-      // flip (words flip up), pop (label bounces in), slide (words slide in from the left),
-      // drop (words fall from above), swipe (label slides in), punch (big to normal), type, bounce
+      // kinetic headline, each with its own position, angle and entrance (same set as the first video)
       const IR = { immediateRender: false };
       const cap = (sel, a, b, { x = 0, y = 64, rot = -2.5, fx = "flip" } = {}) => {
         const lab = `${sel} .lab`, w = `${sel} .w`;
@@ -322,11 +373,11 @@
         }
         tl.to(sel, { opacity: 0, y: y - 24, duration: 0.25 }, b);
       };
-      // camera: the window moves in 3D; zooms bring the island or a control to the front
+      // camera: the window moves in 3D; zooms bring a control to the front
       const cam = (t, v, d = 0.6) => tl.to("#win", { ...v, duration: d, ease: "power3.inOut" }, t);
       const OV = (rx, ry, x = 0, y = 70, scale = 0.8) => ({ rotationX: rx, rotationY: ry, x, y, scale });
-      const Z = (scale, x, y) => ({ rotationX: 0, rotationY: 0, scale, x, y });
-      // island: switch to a state with a given size
+      // zoom so that window point (px, py) lands near the frame center
+      const ZA = (s, px, py) => ({ rotationX: 0, rotationY: 0, scale: s, x: -(px - 800) * s, y: -(py - 450) * s + 50 });
       let islState = null;
       const isl = (state, t, w, h = 40) => {
         if (islState) hide(islState, t, 0.12);
@@ -341,150 +392,176 @@
         const o = { n: 0 };
         tl.to(o, { n: text.length, duration: d, ease: "none", onUpdate: () => { document.querySelector(sel).textContent = text.slice(0, Math.round(o.n)); } }, t);
       };
+      const TABS = ["app", "sb", "trk"];
       const tab = (name, t) => {
-        for (const n of ["docs", "shop", "site"]) tl.set(`#hl-${n}`, { opacity: n === name ? 1 : 0 }, t);
-        for (const n of ["docs", "shop", "site"]) tl.set(`#u-${n}`, { opacity: n === name ? 1 : 0 }, t);
+        for (const n of TABS) tl.set(`#hl-${n}`, { opacity: n === name ? 1 : 0 }, t);
+        for (const n of TABS) tl.set(`#u-${n}`, { opacity: n === name ? 1 : 0 }, t);
       };
       const page = (from, to, t) => { if (from) hide(from, t, 0.2); show(to, t + 0.05, 0.25); };
 
       for (const el of document.querySelectorAll(".kin .lab, #tt1, #tt2")) {
-        const html = el.innerHTML.replace(/<(b|em)>([^<]*)<\/\1>/g, (m, tag, t) => t.split(" ").map((w) => `<${tag}>${w}</${tag}>`).join(" "));
+        const html = el.innerHTML.replace(/<(b|em|i|u)>([^<]*)<\/\1>/g, (m, tag, t) => t.split(" ").map((w) => `<${tag}>${w}</${tag}>`).join(" "));
         el.innerHTML = html.split(/\s+/).filter(Boolean).map((w) => `<span class="w">${w}</span>`).join(" ");
       }
       gsap.set("#isl", { xPercent: -50 });
-      gsap.set(["#ccur", "#ucur"], { x: 1100, y: 640, opacity: 0 });
+      gsap.set(["#ccur", "#xcur", "#ucur"], { x: 1100, y: 640, opacity: 0 });
       gsap.set("#rip", { x: 0, y: 0 });
 
       // 1. title
       tl.fromTo("#title-in", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.1);
       tl.fromTo("#tt1 .w", { y: 60, opacity: 0, rotationX: -80 }, { y: 0, opacity: 1, rotationX: 0, duration: 0.5, stagger: 0.12, ease: "back.out(1.8)" }, 0.2);
-      tl.fromTo("#tt2 .w", { y: 60, opacity: 0, scale: 0.6 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, stagger: 0.12, ease: "back.out(2.2)" }, 1.15);
-      tl.fromTo("#title-in", { rotation: 0 }, { rotation: -2, duration: 2.6, ease: "none", immediateRender: false }, 0.1);
-      tl.to("#g1", { x: 360, y: 260, duration: 33, ease: "none" }, 0);
-      tl.to("#g2", { x: -520, y: -120, duration: 33, ease: "none" }, 0);
-      tl.fromTo("#title-spark", { rotation: 0 }, { rotation: 180, duration: 3, ease: "none" }, 0);
-      tl.to("#title-in", { opacity: 0, duration: 0.4 }, 2.75);
+      tl.fromTo("#tt2 .w", { y: 60, opacity: 0, scale: 0.6 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, stagger: 0.1, ease: "back.out(2.2)" }, 1.0);
+      tl.fromTo("#title-in", { rotation: 0 }, { rotation: -2, duration: 2.8, ease: "none", immediateRender: false }, 0.1);
+      tl.to("#g1", { x: 360, y: 260, duration: 54, ease: "none" }, 0);
+      tl.to("#g2", { x: -520, y: -120, duration: 54, ease: "none" }, 0);
+      tl.fromTo("#title-spark", { rotation: 0 }, { rotation: 180, duration: 3.4, ease: "none" }, 0);
+      tl.to("#title-in", { opacity: 0, duration: 0.4 }, 2.95);
 
-      // 2. user reads docs; Claude works in a background tab
-      tl.fromTo("#win", { opacity: 0, rotationX: 30, rotationY: -24, scale: 0.5, y: 240 }, { opacity: 1, ...OV(8, -10), duration: 1.0, ease: "power3.out" }, 2.85);
-      cam(5.6, Z(1.55, -186, 475));
-      cam(7.4, OV(6, 9), 0.7);
-      cam(9.8, OV(4, 3));
-      cam(10.9, Z(1.35, 280, 339));
-      cam(13.6, Z(1.45, -174, 426), 0.5);
-      cam(15.7, Z(1.12, -288, 60));
-      cam(18.4, OV(6, -8), 0.7);
-      cam(19.4, OV(5, 8));
-      cam(21.4, Z(1.45, -174, 398), 0.5);
-      cam(23.3, { rotationX: 4, rotationY: 14, scale: 0.72, x: -300, y: 70 }, 0.7);
-      cam(27.3, OV(4, 0), 0.45);
-      cam(27.8, Z(1.6, -192, 546), 0.45);
-      tab("docs", 2.85);
-      show("#p-docs", 2.85, 0.01);
-      show("#ucur", 3.0, 0.2);
-      move("#ucur", { x: 700, y: 420 }, 3.0, 0.8);
-      show("#tab-shop-line", 3.7, 0.3);
-      tl.fromTo("#tab-shop", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.35 }, 3.6);
-      tl.to("#isl", { opacity: 1, duration: 0.3 }, 3.8);
-      isl("#i-shop", 3.8, 380);
-      cap("#c1", 3.9, 6.2, { rot: -3, fx: "flip" });
-      // hover the island: live preview, then go to the tab
-      move("#ucur", { x: 950, y: 44 }, 5.2, 0.7);
-      tl.to("#isl", { height: 278, duration: 0.4, ease: "back.out(1.3)" }, 5.9);
-      cap("#c2", 6.35, 8.4, { x: 420, y: 40, rot: 4, fx: "pop" });
-      press("#ucur", 7.2);
-      tl.to("#isl", { height: 40, duration: 0.3 }, 7.4);
-      tab("shop", 7.4);
-      page("#p-docs", "#p-shop", 7.35);
+      // 2. Claude and Codex, each in its own tab (3.0 – 9.0)
+      tl.fromTo("#win", { opacity: 0, rotationX: 30, rotationY: -24, scale: 0.5, y: 240 }, { opacity: 1, ...OV(8, -10), duration: 1.0, ease: "power3.out" }, 3.05);
+      tab("sb", 3.05);
+      show("#p-sb", 3.05, 0.01);
+      show(["#ln-app", "#ln-sb"], 3.6, 0.3);
+      tl.to("#isl", { opacity: 1, duration: 0.3 }, 3.7);
+      isl("#i-cx", 3.7, 380);
+      show("#xcur", 3.9, 0.2); tl.set("#xcur", { x: 900, y: 520 }, 3.85);
+      move("#xcur", C(646, 403), 4.1, 0.6); ripple(C(646, 403), 4.75);
+      cap("#c1", 4.2, 7.0, { rot: -3, y: 40, fx: "flip" });
+      // tab_work: who is doing what
+      cam(5.4, { rotationX: 4, rotationY: 14, scale: 0.72, x: -300, y: 60 }, 0.7);
+      tl.fromTo("#work", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", immediateRender: false }, 5.6);
+      hide("#work", 8.6, 0.3);
+      hide("#xcur", 8.6, 0.2);
 
-      // 3. real input
-      show("#ccur", 7.9, 0.2);
-      tl.set("#ccur", { x: 900, y: 420 }, 7.85);
-      move("#ucur", { x: 1500, y: 700 }, 7.7, 0.6);
-      move("#ccur", C(316, 548), 8.0, 0.55);
-      ripple(C(316, 548), 8.6); show("#ok1", 8.62, 0.15); tl.set("#cart0", { opacity: 0 }, 8.65); tl.set("#cart1", { opacity: 1 }, 8.65);
-      move("#ccur", C(1164, 548), 8.9, 0.6);
-      ripple(C(1164, 548), 9.55); show("#ok3", 9.57, 0.15); tl.set("#cart1", { opacity: 0 }, 9.6); tl.set("#cart2", { opacity: 1 }, 9.6);
-      cap("#c3", 8.7, 12.3, { x: -330, y: 40, rot: 0, fx: "slide" });
-      move("#ccur", C(1238, 32), 9.9, 0.45); ripple(C(1238, 32), 10.4);
-      page("#p-shop", "#p-checkout", 10.5);
-      move("#ccur", C(300, 228), 10.8, 0.5); ripple(C(300, 228), 11.3);
-      isl("#i-type", 11.3, 380);
-      tl.set("#cl-claude", { opacity: 0 }, 11.35); show("#cl-type", 11.35, 0.1);
-      hide("#ph-name", 11.35, 0.05); type("#t-name", "Ada Lovelace", 11.4, 0.7);
-      move("#ccur", C(300, 320), 12.2, 0.35); ripple(C(300, 320), 12.55);
-      hide("#ph-mail", 12.6, 0.05); type("#t-mail", "ada@example.com", 12.62, 0.75);
-      hide("#cl-type", 13.4, 0.1); tl.set("#cl-claude", { opacity: 1 }, 13.45);
+      // 3. the user points at two buttons and picks who gets them (9.0 – 17.6)
+      cam(8.7, OV(4, 2), 0.7);
+      tab("app", 9.0);
+      page("#p-sb", "#p-app", 8.95);
+      tl.to("#isl", { opacity: 0, duration: 0.2 }, 9.0);
+      show("#ucur", 9.1, 0.2);
+      move("#ucur", { x: 900, y: 560 }, 9.1, 0.5);
+      tl.fromTo("#keys", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.25 }, 9.4);
+      hide("#keys", 10.4, 0.25);
+      tl.to("#isl", { opacity: 1, duration: 0.2 }, 9.6);
+      isl("#i-pick", 9.6, 420);
+      cap("#c2", 9.7, 12.0, { y: 800, rot: -5, fx: "punch" });
+      cam(10.2, ZA(1.35, 1000, 360), 0.7);
+      // hover the card, then the button: click 1
+      move("#ucur", C(740, 250), 10.0, 0.5);
+      show("#pf-hover", 10.4, 0.1);
+      move("#ucur", C(740, 424), 10.7, 0.45);
+      hide("#pf-hover", 10.95, 0.1); show(["#pf1", "#pl1"], 10.95, 0.12);
+      press("#ucur", 11.3); show("#bd1", 11.35, 0.15); hide("#pl1", 11.5, 0.15);
+      // shift-click 2
+      move("#ucur", C(1070, 512), 11.6, 0.55);
+      show("#pf2", 12.05, 0.12);
+      press("#ucur", 12.35); show("#bd2", 12.4, 0.15);
+      // compose: note + destination
+      cam(12.7, ZA(1.25, 920, 200), 0.6);
+      isl("#i-compose", 12.75, 580, 128);
+      hide("#note-ph", 13.05, 0.05);
+      type("#note", "Align these buttons and fix the contrast", 13.05, 1.3);
+      cap("#c3", 14.0, 16.6, { x: 440, y: 880, rot: 3, fx: "pop" });
+      move("#ucur", { x: 760, y: 113 }, 14.3, 0.5);
+      press("#ucur", 14.9);
+      tl.to("#isl", { height: 216, duration: 0.25 }, 14.95);
+      show("#imenu", 15.0, 0.15);
+      move("#ucur", { x: 770, y: 147 }, 15.3, 0.3);
+      press("#ucur", 15.75);
+      hide("#imenu", 15.85, 0.1);
+      tl.to("#isl", { height: 128, duration: 0.25 }, 15.9);
+      move("#ucur", { x: 1176, y: 113 }, 16.0, 0.45);
+      press("#ucur", 16.55);
+      isl("#i-sent", 16.65, 230);
+      hide(["#pf1", "#pf2", "#bd1", "#bd2"], 16.7, 0.2);
+      move("#ucur", { x: 1450, y: 760 }, 16.8, 0.5);
 
-      // 4. ask mode, then the payment is handed to the user
-      move("#ccur", C(428, 627), 13.4, 0.5);
-      isl("#i-perm", 13.9, 540, 124);
-      cap("#c4", 14.0, 15.6, { y: 60, rot: 2, fx: "drop" });
-      cap("#c4b", 16.1, 18.9, { x: -360, y: 880, rot: -4, fx: "swipe" });
-      move("#ucur", { x: 1122, y: 117 }, 14.3, 0.8);
-      press("#ucur", 15.3);
-      isl("#i-type", 15.5, 380);
-      ripple(C(428, 627), 15.6);
-      isl("#i-ask", 16.0, 540, 124);
-      tl.fromTo("#pay-outline", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 16.1);
-      tl.to("#pay-outline", { opacity: 0.55, duration: 0.5, yoyo: true, repeat: 3 }, 16.4);
-      move("#ucur", C(1068, 495), 16.6, 0.9);
-      press("#ucur", 17.8);
-      show("#paid", 17.85, 0.15);
-      hide("#pay-outline", 17.9, 0.2);
-      isl("#i-type", 18.0, 380);
-      page("#p-checkout", "#p-done", 18.6);
-      hide("#isl", 19.2, 0.25);
-      hide("#ccur", 19.2, 0.2);
+      // 4. Claude inspects React, runs axe, fixes it, checks mobile (17.4 – 30.0)
+      cam(17.2, { rotationX: 4, rotationY: 14, scale: 0.72, x: -300, y: 60 }, 0.7);
+      tl.fromTo("#term", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 17.4);
+      show(["#tl1", "#tl2"], 17.6, 0.15);
+      tl.set("#tl2", { opacity: 1 }, 17.9);
+      isl("#i-react", 18.2, 380);
+      show("#ccur", 18.2, 0.2); tl.set("#ccur", { x: 1000, y: 620 }, 18.15);
+      move("#ccur", C(740, 424), 18.3, 0.5);
+      show("#tl3", 18.4, 0.15);
+      tl.fromTo("#rtree", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35 }, 18.7);
+      show("#tl4", 19.0, 0.15);
+      cap("#c4", 18.9, 21.4, { x: -360, y: 20, rot: -2, fx: "slide" });
+      isl("#i-axe", 21.2, 380);
+      show("#tl5", 21.3, 0.15);
+      show(["#axe", "#axel"], 21.6, 0.2);
+      show("#tl6", 21.8, 0.15);
+      cap("#c5", 21.9, 26.6, { x: -330, y: 830, rot: 2, fx: "type" });
+      show("#tl7", 22.7, 0.15); show("#tl8", 23.0, 0.15); show("#tl9", 23.3, 0.15);
+      // hot reload: the button is fixed and aligned
+      hide(["#axe", "#axel", "#rtree"], 23.7, 0.2);
+      tl.to("#flash", { opacity: 0.85, duration: 0.12, yoyo: true, repeat: 1 }, 23.8);
+      tl.set("#b-pro", { top: 488 }, 23.9);
+      tl.set("#b-pro-fix", { opacity: 1 }, 23.9);
+      tl.set("#b-pro", { color: "#fff", background: "#4f46e5" }, 23.9);
+      // mobile emulation
+      isl("#i-mob", 24.6, 380);
+      show("#tl10", 24.7, 0.15);
+      page("#p-app", "#p-mob", 24.9);
+      tl.fromTo(".phone", { scale: 0.85 }, { scale: 1, duration: 0.5, ease: "back.out(1.6)", immediateRender: false }, 24.95);
+      show("#tl11", 26.4, 0.15);
+      hide("#term", 27.2, 0.35);
+      cam(27.2, OV(4, 0), 0.6);
+      page("#p-mob", "#p-app", 27.4);
+      hide("#ccur", 27.4, 0.2);
 
-      // 5. point at an element on your own site, Claude fixes it and checks
-      tab("site", 19.5);
-      page("#p-done", "#p-site", 19.45);
-      move("#ucur", { x: 900, y: 600 }, 19.5, 0.5);
-      tl.fromTo("#keys", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.25 }, 19.9);
-      hide("#keys", 20.9, 0.25);
-      tl.to("#isl", { opacity: 1, duration: 0.2 }, 20.1);
-      isl("#i-pick", 20.1, 430);
-      cap("#c5", 20.2, 23.3, { y: 40, rot: -5, fx: "punch" });
-      // hover the paragraph, then the heading
-      show("#pf1", 20.5, 0.1);
-      move("#ucur", C(400, 334), 20.3, 0.4);
-      move("#ucur", C(520, 250), 20.9, 0.4);
-      hide("#pf1", 21.1, 0.1); show("#pf", 21.1, 0.12); show("#pl", 21.15, 0.12);
-      press("#ucur", 21.55);
-      tl.to("#pf", { borderWidth: 3, boxShadow: "0 0 0 4px rgba(217,119,87,.25), 0 0 24px rgba(217,119,87,.5)", background: "rgba(0,0,0,0)", duration: 0.2 }, 21.6);
-      isl("#i-compose", 21.65, 540, 158);
-      hide("#note-ph", 21.95, 0.05);
-      type("#note", "Make this heading green", 21.95, 0.95);
-      move("#ucur", { x: 1102, y: 149 }, 22.6, 0.45);
-      press("#ucur", 23.15);
-      isl("#i-sent", 23.25, 230);
-      hide(["#pf", "#pl"], 23.3, 0.2);
-      // terminal: the event lands in Claude Code
-      tl.fromTo("#term", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 23.6);
-      cap("#c6", 23.8, 27.3, { x: -40, y: 70, rot: 3, fx: "type" });
-      ["#tl1", "#tl2", "#tl3", "#tl4", "#tl5", "#tl6"].forEach((s, i) => show(s, 23.95 + i * 0.32, 0.15));
-      // Claude goes to the tab itself and reloads
-      isl("#i-check", 25.75, 380);
-      show("#ccur", 25.8, 0.2); tl.set("#ccur", { x: 700, y: 560 }, 25.75);
-      tl.to("#flash", { opacity: 0.9, duration: 0.12, yoyo: true, repeat: 1 }, 26.0);
-      show("#h1g", 26.15, 0.3);
-      show("#tl7", 26.4, 0.15);
-      show("#tl8", 26.85, 0.15);
-      hide("#term", 27.4, 0.35);
+      // 5. Claude asks for the user's issue tab, the user approves with a note (28.0 – 36.2)
+      tab("trk", 28.0);
+      page("#p-app", "#p-trk", 27.95);
+      isl("#i-req", 28.3, 580, 166);
+      cap("#c6", 28.5, 30.8, { y: 60, rot: -2, fx: "bounce" });
+      cam(28.7, ZA(1.35, 920, 120), 0.7);
+      move("#ucur", { x: 760, y: 112 }, 29.6, 0.6);
+      press("#ucur", 30.3);
+      hide("#anote-ph", 30.4, 0.05);
+      type("#anote", "Read only, please don't comment", 30.45, 1.2);
+      cap("#c7", 31.0, 34.0, { x: 360, y: 820, rot: 3, fx: "drop" });
+      move("#ucur", { x: 1173, y: 163 }, 31.9, 0.5);
+      press("#ucur", 32.5);
+      isl("#i-read", 32.6, 380);
+      show("#ln-trk", 32.65, 0.3);
+      cam(32.9, OV(4, 2), 0.7);
+      show("#ccur", 33.2, 0.2); tl.set("#ccur", { x: 700, y: 560 }, 33.15);
+      move("#ccur", C(400, 300), 33.3, 0.6);
+      move("#ccur", C(400, 420), 34.0, 0.6);
+      move("#ucur", { x: 1450, y: 760 }, 33.2, 0.5);
+      hide("#ccur", 35.4, 0.2);
 
-      // 6. stop
-      isl("#i-check", 27.5, 380);
-      move("#ucur", { x: 1094, y: 42 }, 27.4, 0.6);
-      cap("#c7", 27.55, 29.1, { y: 60, rot: -2, fx: "bounce" });
-      press("#ucur", 28.1);
-      isl("#i-stopped", 28.2, 300);
-      hide("#ccur", 28.25, 0.2);
-      tl.to("#win", { opacity: 0, scale: 0.98, duration: 0.4 }, 29.0);
+      // 6. Codex queues for the app tab, Claude finishes, the tab moves over (35.6 – 47.2)
+      tab("app", 35.6);
+      page("#p-trk", "#p-app", 35.55);
+      isl("#i-work", 35.7, 380);
+      cam(35.8, { rotationX: 4, rotationY: 14, scale: 0.72, x: -300, y: 60 }, 0.7);
+      tl.fromTo("#work", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", immediateRender: false }, 36.0);
+      tl.set("#w-cl-s", { textContent: "Verifying #142 on /billing" }, 36.0);
+      tl.set("#w-cx-s", { textContent: "Wants to run e2e on /billing" }, 36.0);
+      hide("#w-cx-run", 36.9, 0.15); show("#w-cx-q", 37.0, 0.2);
+      cap("#c8", 37.4, 43.4, { y: 40, rot: -3, fx: "swipe" });
+      // Claude finishes with a handoff summary
+      tl.set("#w-cl-s", { textContent: "Done: aligned, 7.1:1, mobile OK" }, 39.0);
+      hide("#w-cl-run", 39.0, 0.15); show("#w-cl-done", 39.1, 0.2);
+      hide("#w-cx-q", 40.0, 0.15); show("#w-cx-got", 40.1, 0.2);
+      hide("#ln-app", 40.2, 0.2); show("#ln-app-cx", 40.25, 0.3);
+      isl("#i-cx", 40.3, 380);
+      show("#xcur", 40.6, 0.2); tl.set("#xcur", { x: 900, y: 600 }, 40.55);
+      move("#xcur", C(1070, 512), 40.8, 0.6); ripple(C(1070, 512), 41.45);
+      move("#xcur", C(740, 512), 41.8, 0.6); ripple(C(740, 512), 42.45);
+      hide("#work", 43.6, 0.3);
+      cam(43.6, OV(4, 0), 0.6);
+      hide("#xcur", 45.8, 0.2);
+      tl.to("#win", { opacity: 0, scale: 0.7, duration: 0.5 }, 46.6);
+      hide("#isl", 46.6, 0.3);
 
       // 7. end card
-      tl.fromTo("#end-in", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 29.3);
+      tl.fromTo("#end-in", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 47.6);
 
+      window.__timelines = window.__timelines || {};
       window.__timelines["main"] = tl;
     </script>
   </body>
