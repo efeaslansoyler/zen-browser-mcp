@@ -44,7 +44,8 @@ test('island switches clients, confirmation, pause and Claude selection without 
     const browser = { ownerDocument: { defaultView: win }, currentURI: { host: 'example.test' } };
     const sent = [];
     const selections = [];
-    const island = new Island({ send: (...args) => sent.push(args), selectTarget: value => selections.push(value) }, { setTimeout: () => 1, clearTimeout() {} });
+    const answers = [];
+    const island = new Island({ answer: (...args) => answers.push(args), send: (...args) => sent.push(args), selectTarget: value => selections.push(value) }, { setTimeout: () => 1, clearTimeout() {} });
     island.attach(win);
     const el = documentElement.children[0];
     const expectTheme = (name, color) => {
@@ -60,6 +61,16 @@ test('island switches clients, confirmation, pause and Claude selection without 
     island.ask(browser, 'permission', 'Test confirmation', true);
     expectTheme('Codex', '#a7e8d0');
     assert.equal(el.querySelector('.message').textContent, 'Test confirmation');
+    el.querySelector('.answer-note').value = '  Use another tab  ';
+    el.querySelector('.cancel').listeners.get('click')();
+    assert.deepEqual(answers.pop(), [browser, 'cancelled', 'Use another tab']);
+    island.ask(browser, 'permission', 'Next question', true);
+    assert.equal(el.querySelector('.answer-note').value, '');
+    el.querySelector('.ok').listeners.get('click')();
+    assert.deepEqual(answers.pop(), [browser, 'done', '']);
+    el.querySelector('.answer-note').value = 'Only read the title';
+    el.querySelector('.ok').listeners.get('click')();
+    assert.deepEqual(answers.pop(), [browser, 'done', 'Only read the title']);
     island.askEnded();
     island.stopped();
     expectTheme('Codex', '#a7e8d0');

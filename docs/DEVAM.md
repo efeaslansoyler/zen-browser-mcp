@@ -6,7 +6,7 @@ Yeni oturumda önce bunu oku; kararlar ve fikirler [`PLAN.md`](PLAN.md)'de.
 güncelle, eskiyen bilgiyi sil. Ayrıntılı geliştirme günlüğü git geçmişinde: commit
 mesajları ve `git log -p docs/DEVAM.md` (2026-10-20 öncesi uzun devir kayıtları orada).
 
-## Durum — 2026-10-20
+## Durum — 2026-10-21
 
 Faz 1–5 ve öğe seçimi 2026-10-19'da bitti. 2026-10-20'de (Codex ile) proje Claude'a özel
 olmaktan çıkıp birden çok ajanın aynı Zen'i paylaşmasına hazırlandı. Hepsi main'de
@@ -126,6 +126,15 @@ Push edilmemiş commit'ler olabilir (`git status -sb`); push Efe isteyince.
 2 yol, her biri tek deneme): hepsi başarılı; CLI %10–15 fazla token (gürültü sınırında),
 süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026-10-20'de silindi; tam geçmişi doğrulanmış
 `/home/efe/Archives/zen-mcp-cli-prototype.bundle` arşivinde (uç commit: `1693ff4`).
+
+- **Sekme keşfi + ada notu** (2026-10-21, 2026-10-26): `tabs_context_mcp` artık `userTabs` içinde
+  kullanıcı sekmelerinin ID/başlık/URL metadatasını döndürür (block yalnız ID + blocked).
+  `request_tab` bu sekmeleri öğe seçimi olmadan da isteyebilir; auto dahil açık ada onayı
+  gerekir, onaydan önce içerik/işlem erişimi yok. Başka ajanın sekmeleri mevcut FIFO yolunda.
+  Tüm ada sorularında tek satırlık isteğe bağlı "Ajana not" (2000 karakter), iki düğmeyle de
+  gider: ret → araç hatasında, onay → sonuca eklenen `userMessage`, ask_user → yanıtta.
+  Hepsi untrusted kullanıcı metni. (İlk hâlinde yalnız retle gidiyordu; Efe yazıp OK'e
+  basınca not kayboldu, kafa karıştırıcıydı.) Not her soruda sıfırlanır. Zen'de doğrulandı (2026-10-26).
 
 ## Açık işler
 

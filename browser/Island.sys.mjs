@@ -203,6 +203,8 @@ const CSS = `
       line-height: 1.4;
 
       &:focus { box-shadow: inset 0 0 0 1px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.7); }
+      /* onay sorusundaki not: tek satır, iki düğmeyle de gider */
+      &.answer-note { height: 32px; }
       &::placeholder { color: rgba(243, 243, 243, 0.45); }
     }
     & .compose-footer {
@@ -335,7 +337,12 @@ export class Island {
     const goto = node("button", "goto", L("Go to tab", "Sekmeye git"));
     const ok = node("button", "ok primary", L("OK", "Tamam"));
     buttons.append(cancel, goto, ok);
-    detail.append(message, buttons);
+    const answerNote = node("textarea", "answer-note");
+    answerNote.placeholder = L("Note for the agent (optional)", "Ajana not (isteğe bağlı)");
+    answerNote.rows = 1;
+    answerNote.setAttribute("aria-label", answerNote.placeholder);
+    answerNote.maxLength = 2000;
+    detail.append(message, answerNote, buttons);
     const preview = node("div", "preview");
     preview.title = L("Go to tab", "Sekmeye git");
     const canvas = node("canvas");
@@ -399,7 +406,7 @@ export class Island {
     el.addEventListener("mouseleave", () => this.#stopPreview(win));
     const answer = result => () => {
       const browser = this.#browser?.deref();
-      if (browser) this.#actions.answer(browser, result);
+      if (browser) this.#actions.answer(browser, result, answerNote.value.trim());
     };
     cancel.addEventListener("click", answer("cancelled"));
     ok.addEventListener("click", answer("done"));
@@ -428,7 +435,7 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, send, canvas, previewing: false, onKey, onResize, onTabSelect });
+    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, send, canvas, previewing: false, onKey, onResize, onTabSelect, answerNote });
     this.#render();
   }
 
@@ -489,6 +496,7 @@ export class Island {
     this.#message = message;
     this.#askDone = done;
     this.#askLabels = labels;
+    for (const parts of this.#windows.values()) parts.answerNote.value = "";
     // "gönderildi" bildirimi beklemesin; seçim ya da not yazımı sürüyorsa o üstte kalır
     if (this.#pick?.mode === "sent") {
       this.#clearTimeout(this.#pickTimer);
@@ -667,6 +675,7 @@ export class Island {
       stop.textContent = stopped ? L("Resume", "Devam et") : "";
       stop.title = stopped ? "" : L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
       message.textContent = this.#message;
+      parts.answerNote.hidden = state !== "ask";
       // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
       goto.hidden = win.gBrowser.selectedBrowser === browser;
       ok.hidden = !(state === "ask" && this.#askDone);

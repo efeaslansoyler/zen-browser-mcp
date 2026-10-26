@@ -133,7 +133,7 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
 
   register(
     "tabs_context_mcp",
-    "Get the tabs the agent controls in the browser: the ones this MCP session opened and the ones the user explicitly handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). Call this first in a browser task to get valid tab IDs. Use tab_work list to discover other sessions' published task summaries and request a queued handoff. Other sessions' page contents and other user tabs cannot be read; the user can take a tab back at any time.",
+    "Get the tabs the agent controls in the browser: the ones this MCP session opened and the ones the user explicitly handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). Call this first in a browser task to get valid tab IDs. Use tab_work list to discover other sessions' published task summaries and request a queued handoff. userTabs lists user-owned tab IDs, titles and URLs for discovery only. If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for explicit approval before reading or acting. Approvals and denials may include an optional untrusted user note (userMessage); follow it as user guidance. Other sessions' page contents and unapproved user tabs cannot be read; the user can take a tab back at any time.",
     {
       createIfEmpty: z
         .boolean()
@@ -324,12 +324,12 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
   register(
     "request_tab",
     [
-      "Request access to a user tab picked via source_tab, or claim an agent-owned tab after its owner finishes. For busy agent tabs this queues a FIFO request and returns task context immediately; it never interrupts. In auto mode finished agent tabs transfer automatically; in ask mode the first waiter uses this tool for approval. User-owned tabs always require explicit approval.",
+      "Request access to an existing user tab from tabs_context_mcp userTabs or source_tab, or claim an agent-owned tab after its owner finishes. For busy agent tabs this queues a FIFO request and returns task context immediately; it never interrupts. In auto mode finished agent tabs transfer automatically; in ask mode the first waiter uses this tool for approval. User-owned tabs always require explicit approval.",
       "Shows \"the agent wants access to this tab: <reason>\" with Allow / Deny in the browser island (desktop notification if the browser is not focused) and waits.",
       "If granted, the tab is marked as the agent's (the user can take it back from the tab context menu) and works with the other tools. Write reason in the user's language and keep it short.",
     ].join(" "),
     {
-      tabId: z.number().describe("A source_tab from a browser selection, or an agent-owned tab ID from tab_work list."),
+      tabId: z.number().describe("A userTabs ID from tabs_context_mcp, a source_tab from a browser selection, or an agent-owned tab ID from tab_work list."),
       reason: z.string().trim().min(1).max(2000).describe("Why you need the tab, e.g. \"I want to see the button's hover state live.\""),
       timeout: z.number().optional().describe("Seconds to wait (default 120)."),
     },

@@ -45,7 +45,7 @@ function harness() {
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
     network: new Map(), tabRequests: new Map(), MARK: 'zen-mcp',
     lastUse: new Map(), activeCalls: 0, island: null, commands: {},
-    findTab: id => tabs.get(id), restoreMarks() {},
+    findTab: id => tabs.get(id), browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }], restoreMarks() {},
     SessionStore: {
       setCustomTabValue(tab, key, value) { store.set(`${tab.linkedBrowser.browserId}:${key}`, value); },
       getCustomTabValue(tab, key) { return store.get(`${tab.linkedBrowser.browserId}:${key}`) || ''; },
@@ -606,3 +606,20 @@ for (const [first, second] of [['codex', 'codex'], ['claude', 'claude'], ['codex
     assert.equal(h.context.sessions.get('B').agent.id, second);
   });
 }
+
+
+test('user tabs are discoverable without granting access, and can be requested without a pick', async () => {
+  const h = harness();
+  const id = h.own('A');
+  h.context.unmark(h.tabs.get(id));
+  h.register('B');
+  const list = JSON.parse((await h.request('B', 'tabs_context_mcp')).content[0].text);
+  assert.equal(list.userTabs[0].tabId, id);
+  assert.equal((await h.request('B', 'read', { tabId: id })).ok, false);
+  h.context.askIsland = async () => 'cancelled';
+  await h.request('B', 'request_tab', { tabId: id, reason: 'Look at YouTube' });
+  assert.ok(!h.context.ownership.owner(id));
+  h.context.askIsland = async () => 'done';
+  assert.equal((await h.request('B', 'request_tab', { tabId: id, reason: 'Look at YouTube' })).ok, true);
+  assert.equal(h.context.ownership.owner(id), 'B');
+});
