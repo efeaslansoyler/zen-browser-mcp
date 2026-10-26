@@ -151,7 +151,15 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
 2. Eklenti ve clipboard özellikleri uygulandı. Yeni `extensions`/`clipboard`/`browser_settings`/`react`/`accessibility` araçları ve computer seçenekleri
    için MCP reconnect ve günlük kullanım geri bildirimi bekleniyor. Diğer adaylar Quickshell göstergesi,
    isim + npm; ayrı izinli alan adları yerine site kuralları seçildi.
-3. `browser/main.js` ~2.500 satır; büyümeye devam ederse araçlara göre bölünmeli.
+3. Refactor (2026-10-26): main.js 2.992 → 1.950 satır. Taşınanlar: NetworkLog, TabMenu,
+   Channels, Picks, araç grupları (Read/Input/BrowserTools; `ctx` ile). main.js'te çekirdek kaldı:
+   sahiplik/oturumlar, `query`/çerçeve/girdi yardımcıları, izinler, sekme araçları, soket.
+   Sıradaki aday: izin bölümü (describeWrite/requirePermission, ~200 satır).
+   Testlerde öğrenilenler: araçları kullanan testler artık modül fabrikasını sahte ctx ile çağırır;
+   main.js'i işaretçi yorumlardan dilimleyen testler hâlâ var (sahiplik/izin/iptal), kırılgan.
+4. Araç: `zenctl reload` yeni sürüm başlamazsa da başarılı görünür ("staying on vN" yalnız
+   $XDG_RUNTIME_DIR/zen-mcp.log'da). Reload sonrası log'a bak; zenctl hata bildirmeli.
+   main.js'i bütün olarak yükleyen bir duman testi de TDZ gibi kurulum hatalarını yakalar.
 
 ## Çalışma yöntemi
 
