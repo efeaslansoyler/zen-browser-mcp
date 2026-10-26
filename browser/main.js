@@ -25,6 +25,8 @@ function logError(where, e) {
     out.write(bytes, bytes.length);
     out.close();
   } catch {}
+  // reload'un başarısızlığı yalnız log'da kalmasın: zenctl ping ile ilk kurulum hatasını görür
+  if (where === "kurulum" || where === "start" || where === "reload") globalThis.zenMcpStartError ??= `${where}: ${e}`;
   Components.utils.reportError(e);
 }
 
@@ -1556,12 +1558,13 @@ function logError(where, e) {
     const commands = {
       // CLI (doctor, güncelleme) için: hangi dosya sürümü yüklü, hangi tarayıcı
       ping() {
-        return text({ app: zenMcpApp, version: loadedVersion, onDisk: fileVersion(), browser: Services.appinfo.name, browserVersion: Services.appinfo.version });
+        return text({ app: zenMcpApp, version: loadedVersion, bridge: version, startError: globalThis.zenMcpStartError, onDisk: fileVersion(), browser: Services.appinfo.name, browserVersion: Services.appinfo.version });
       },
       reload() {
         // cevap yazıldıktan sonra yeniden yükle
         Services.tm.dispatchToMainThread(() => {
           stop();
+          delete globalThis.zenMcpStartError;
           try {
             Services.scriptloader.loadSubScript("resource://zenmcp/main.js?" + Date.now(), { zenMcpDir: dir, zenMcpName: zenMcpApp });
           } catch (e) {

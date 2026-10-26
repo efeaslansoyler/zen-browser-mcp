@@ -157,9 +157,9 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
    Sıradaki aday: izin bölümü (describeWrite/requirePermission, ~200 satır).
    Testlerde öğrenilenler: araçları kullanan testler artık modül fabrikasını sahte ctx ile çağırır;
    main.js'i işaretçi yorumlardan dilimleyen testler hâlâ var (sahiplik/izin/iptal), kırılgan.
-4. Araç: `zenctl reload` yeni sürüm başlamazsa da başarılı görünür ("staying on vN" yalnız
-   $XDG_RUNTIME_DIR/zen-mcp.log'da). Reload sonrası log'a bak; zenctl hata bildirmeli.
-   main.js'i bütün olarak yükleyen bir duman testi de TDZ gibi kurulum hatalarını yakalar.
+4. Reload doğrulaması (2026-10-26): `zenctl reload` ping'deki `bridge` sürümünü önce/sonra
+   karşılaştırır; yeni sürüm başlamazsa çıkış 1 ve ilk kurulum hatası (`zenMcpStartError`).
+   `test/main-smoke.test.mjs` main.js'i saplarla bütün olarak yükleyip başlatır (TDZ vb.).
 
 ## Çalışma yöntemi
 
@@ -171,7 +171,7 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
   `check-pick-delivery.ts` GERÇEK sohbete mesaj yollar, rastgele çalıştırma.
 - Codex'in komut sandbox'ı Unix soketine EPERM verebilir; Full Access oturumunda sorun yok.
   Ayrıntı: [`CODEX-SOCKET.md`](CODEX-SOCKET.md).
-- `node scripts/zenctl.ts reload` tarayıcı kodunu Zen'i kapatmadan yeniler; Node MCP sürecini
+- `node scripts/zenctl.ts reload` tarayıcı kodunu Zen'i kapatmadan yeniler (başarısızsa hata verir); Node MCP sürecini
   yenilemez. Node/şema değişince MCP istemcisi reconnect; Zen restart gerekmez.
 - Dosyalar: `src/server.ts` (şemalar, kimlik), `src/zen.ts`/`paths.ts` (soket, receipt),
   `src/delivery.ts` (Codex queue), `browser/main.js` (köprü, araçlar), `Island.sys.mjs` (ada),
