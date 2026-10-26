@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import vm from 'node:vm';
 import { sameReadContext } from '../browser/ReadSnapshots.sys.mjs';
-const source=fs.readFileSync(new URL('../browser/main.js',import.meta.url),'utf8');
-const start=source.indexOf('      async react('),end=source.indexOf('\n    };',start);
+import { readTools } from '../browser/ReadTools.sys.mjs';
 function harness(run) {
   const top={id:1,currentWindowGlobal:{}},child={id:2,currentWindowGlobal:{}};
   const browser={browsingContext:top}, frames=[top,child];
@@ -18,8 +16,7 @@ function harness(run) {
     Stopped,DialogOpen:class extends Error {},
     query:async(browser,name,args,timeout,frame)=>{calls.push({name,args,frame});return {value:await run?.({name,args,frame,top,child,cancel:()=>{cancelled=true;}})||{detected:true,violations:[]}};},
   });
-  vm.runInContext('globalThis.tools={'+source.slice(start,end)+'};',context);
-  return {tools:context.tools,calls};
+  return {tools:readTools(context),calls};
 }
 test('inspection tools route iframe refs only to their frame',async()=>{
   const h=harness();

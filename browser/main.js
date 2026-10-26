@@ -1387,62 +1387,6 @@ function logError(where, e) {
 
     const tools = {
       async tab_work(args) { return coordinateTab(args, activeSession); },
-      async browser_settings(args) {
-        if (args.action === "devices") return text({ engine: "Gecko", presets: DEVICE_PRESETS, note: "Generic layout/DPR/touch presets, not a different browser engine or a full physical device fingerprint. Mobile/tablet presets use the matching Android Firefox user agent; desktop keeps the current one unless userAgent is supplied. Reload for server-side UA detection." });
-        const browser = browserFor(args.tabId);
-        if (args.action !== "get") await browserSettings.change(browser, activeSession, args);
-        const { value } = await query(browser, "browser_metrics");
-        return text({ ...value, requested: browserSettings.entries.get(browser)?.requested, emulated: browserSettings.entries.has(browser), note: "Actual metrics may differ from requested overrides due to native layout/privacy behavior. Overrides are tab-local and restored on reset, take-back, transfer, disconnect or bridge reload. Navigation may be needed for UA-dependent server responses." });
-      },
-      async clipboard(args) {
-        const source = browserFor(args.tabId);
-        if (!args.extensionId) return text(await performClipboard(source, args));
-        if (!["copy", "paste"].includes(args.action)) throw new Error("extensionId is only needed for panel copy/paste; read/write use the system clipboard.");
-        const entry = extensionPanels.get(source, activeSession, args.tabId, args.extensionId);
-        const bc = entry.popup.browser.browsingContext;
-        const prefix = `panel_${bc.id}_${bc.currentWindowGlobal.innerWindowId}:`;
-        let ref = args.ref;
-        if (ref) {
-          if (!ref.startsWith(prefix)) throw new Error("Use a ref from the current extension panel.");
-          ref = ref.slice(prefix.length);
-        }
-        operation.extensionSurface = { source, browser: entry.popup.browser, tabId: args.tabId, extensionId: args.extensionId };
-        try { return text(await performClipboard(entry.popup.browser, { ...args, ref })); }
-        finally { delete operation.extensionSurface; }
-      },
-      async extensions(args) {
-        if (args.action === "list") return text({ extensions: await extensionPanels.list() });
-        if (args.tabId == null || !args.extensionId) throw new Error("tabId and extensionId are required except for list.");
-        const source = browserFor(args.tabId);
-        if (args.action === "close") {
-          extensionPanels.close(source, activeSession, args.tabId, args.extensionId);
-          return text("Extension panel closed. Temporary setting changes must be restored through the extension UI before closing.");
-        }
-        if (args.action === "open") {
-          const entry = await extensionPanels.open(source, activeSession, args.tabId, args.extensionId);
-          return text({ extensionId: args.extensionId, tabId: args.tabId, opened: !!entry.popup,
-            invoked: !!entry.invoked, note: entry.popup ? "Read the panel with extensions read; its refs are separate from the page. The target tab is now selected."
-              : "Toolbar action invoked; this extension has no popup. Inspect the target page or extension output." });
-        }
-        const entry = extensionPanels.get(source, activeSession, args.tabId, args.extensionId);
-        operation.extensionSurface = { source, browser: entry.popup.browser, tabId: args.tabId, extensionId: args.extensionId };
-        const panelContext = entry.popup.browser.browsingContext;
-        const prefix = `panel_${panelContext.id}_${panelContext.currentWindowGlobal.innerWindowId}:`;
-        try {
-          const handlers = { read: "read_page", text: "get_page_text", find: "find", computer: "computer", form_input: "form_input" };
-          const name = handlers[args.action];
-          if (!name) throw new Error("Unknown extension action.");
-          if (name === "computer" && !args.computerAction) throw new Error("computerAction is required.");
-          let ref = args.ref;
-          if (ref) {
-            if (!ref.startsWith(prefix)) throw new Error("This ref is not from the current extension panel. Use extensions read/find for fresh panel refs.");
-            ref = ref.slice(prefix.length);
-          }
-          const result = await tools[name]({ ...args, ref, action: args.computerAction });
-          return result.map(item => item.type === "text"
-            ? { ...item, text: item.text.replace(/\bref_\d+(?:_f\d+)?\b/g, ref => prefix + ref) } : item);
-        } finally { delete operation.extensionSurface; }
-      },
       async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs().filter(tab => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
@@ -1518,223 +1462,6 @@ function logError(where, e) {
         return content;
       },
 
-      async navigate({ url, tabId }) {
-        const browser = browserFor(tabId);
-        releaseInputs(browser);
-        const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
-        if (url === "back") browser.goBack();
-        else if (url === "forward") browser.goForward();
-        else {
-          browser.fixupAndLoadURIString(url, {
-            triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
-          });
-        }
-        await guard(loaded);
-        assertSiteAccess(browser);
-        const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
-        return text(describeTab(tab));
-      },
-
-      async computer(args) {
-        const browser = browserFor(args.tabId);
-        const need = key => {
-          if (args[key] == null) throw new Error(`${args.action} needs ${key}.`);
-          return args[key];
-        };
-        switch (args.action) {
-          case "screenshot": {
-            let shot, labels;
-            try {
-              if (args.annotate) labels = (await query(browser, "annotate", { enabled: true })).value;
-              shot = await screenshot(browser, args.scale);
-            } finally {
-              if (args.annotate) await query(browser, "annotate", { enabled: false }).catch(() => {});
-            }
-            if (args.if_changed) {
-              const source = controlledSource(browser);
-              const context = [browser.browsingContext.currentWindowGlobal, ownership.version(source.browserId), args.scale ?? 1, !!args.annotate];
-              if (screenshotCache.unchanged(`${activeSession}:${browser.browserId}`, context, shot.data)) {
-                return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
-              }
-            }
-            // diyalog tarayıcı arayüzünde çizilir, sayfanın görüntüsünde çıkmaz
-            const dialog = openDialog(browser);
-            return [
-              { type: "image", data: shot.data, mimeType: "image/jpeg" },
-              { type: "text", text: `${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}` },
-            ];
-          }
-          case "left_click":
-            await click(browser, await target(browser, { ...args, forClick: true }), { ...args, ref: args.ref, modifiers: args.text });
-            break;
-          case "right_click":
-            await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, button: 2, modifiers: args.text });
-            break;
-          case "double_click":
-            await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, count: 2, modifiers: args.text });
-            break;
-          case "triple_click":
-            await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, count: 3, modifiers: args.text });
-            break;
-          case "hover": {
-            const [x, y] = await target(browser, args);
-            await input(browser, { ...args, kind: "hover", x, y });
-            break;
-          }
-          case "left_click_drag": {
-            const [x, y] = await target(browser, args, "start_coordinate");
-            await input(browser, { ...args, kind: "drag", x, y, to: await target(browser, args) });
-            break;
-          }
-          case "scroll":
-            await scroll(browser, await target(browser, args), need("scroll_direction"), args.scroll_amount);
-            break;
-          case "scroll_to":
-            await target(browser, { ...args, ref: need("ref") });
-            break;
-          case "type":
-            await typeInFocus(browser, { ...args, kind: "text", text: need("text") });
-            break;
-          case "key_down":
-          case "key_up": {
-            const key = need("text");
-            if (key.includes("+") || /\s/.test(key)) throw new Error("key_down/key_up accept a single key; hold modifiers separately.");
-            if (args.action === "key_down" && clipboardShortcut({ key: keyName(key), mods: heldModifiers(browser) })) throw new Error("Use clipboard or key for clipboard shortcuts so consent can be requested.");
-            const frame = heldFrame(browser) || await focusedFrame(browser);
-            const result = await query(browser, "input", { kind: args.action, keys: [{ key: keyName(key), mods: {} }], hold_ms: args.hold_ms }, 30000, frame);
-            rememberInputs(browser, frame, result.value, args.hold_ms);
-            break;
-          }
-          case "mouse_move": {
-            const [x, y] = await target(browser, args);
-            await input(browser, { ...args, kind: "mouse_move", x, y });
-            break;
-          }
-          case "mouse_down": {
-            const [x, y] = await target(browser, { ...args, forClick: true });
-            await input(browser, { ...args, kind: "mouse_down", x, y, ref: args.ref && longRef(args.ref), button: { left: 0, middle: 1, right: 2 }[args.button || "left"] });
-            break;
-          }
-          case "mouse_up": {
-            const frame = heldFrame(browser) || await focusedFrame(browser);
-            const result = await query(browser, "input", { kind: "mouse_up", button: { left: 0, middle: 1, right: 2 }[args.button || "left"] }, 30000, frame);
-            rememberInputs(browser, frame, result.value);
-            break;
-          }
-          case "key":
-            for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
-            break;
-          case "wait":
-            await operationSleep(Math.min(need("duration"), 30) * 1000);
-            break;
-          default:
-            throw new Error(`Unsupported action: ${args.action}`);
-        }
-        // olayların sayfada işlenmesine kısa süre tanı
-        await operationSleep(100);
-        return text(`${args.action} done.`);
-      },
-
-      // iframe'lerin metni sayfanın metninin ardından, kaynağıyla
-      async get_page_text({ tabId, diff = false, since }) {
-        const browser = browserFor(tabId);
-        const context = readContext(browser);
-        const page = await query(browser, "text");
-        let out = `${page.title}\n${page.url}\n\n${page.text}`;
-        for (const bc of framesOf(browser).slice(1)) {
-          if (out.length > MAX_PAGE_TEXT) break;
-          try {
-            const frame = await query(browser, "text", {}, 30000, bc);
-            if (frame.text.trim()) out += `\n\n[iframe ${frame.url}]\n${frame.text}`;
-          } catch (e) {
-            if (e instanceof DialogOpen) throw e;
-          }
-        }
-        if (out.length > MAX_PAGE_TEXT) out = out.slice(0, MAX_PAGE_TEXT) + "\n…(truncated)";
-        return readOutput(browser, ["get_page_text"], context, out, diff, since);
-      },
-
-      async read_page({ tabId, filter, depth, ref_id, max_chars = 50000, diff = false, since }) {
-        const browser = browserFor(tabId);
-        const context = readContext(browser);
-        const frame = frameOf(browser, ref_id);
-        const opts = { filter, depth, max_chars };
-        let { value } = await query(browser, "read_page", { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext }, 30000, frame);
-        value = shortRefs(await expandFrames(browser, value, opts));
-        if (value.length > max_chars) {
-          const end = value.lastIndexOf("\n", max_chars);
-          value = value.slice(0, end < 0 ? max_chars : end) + `\n…(truncated at ${max_chars} characters; focus on a subtree with ref_id)`;
-        }
-        return readOutput(browser, ["read_page", filter || "all", depth ?? 30, longRef(ref_id) || null, max_chars], context, value, diff, since);
-      },
-
-      // bütün çerçevelerde arar, sonuçları puana göre birleştirir
-      async find({ tabId, query: q }) {
-        const browser = browserFor(tabId);
-        const results = [];
-        for (const bc of framesOf(browser)) {
-          try {
-            const { value } = await query(browser, "find", { query: q }, 30000, bc);
-            results.push(...value);
-          } catch (e) {
-            if (e instanceof DialogOpen || bc === browser.browsingContext) throw e;
-          }
-        }
-        if (!results.length) return text(`Nothing matches "${q}". Look at the page structure with read_page.`);
-        results.sort((a, b) => b.score - a.score);
-        return text(shortRefs(results.slice(0, 20).map(r => r.line).join("\n")));
-      },
-
-      // Metin/seçici görünene (gone: kaybolana) ve/veya ağ durulana kadar bekler. Yoklamayla
-      // çalışır: beklerken sayfa değişse (ör. form gönderildi) de sürer. Bütün çerçevelere bakar.
-      async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }) {
-        const browser = browserFor(tabId);
-        if (!wanted && !selector && !network_idle) throw new Error("text, selector or network_idle is required.");
-        if (selector) {
-          try { browser.ownerDocument.createDocumentFragment().querySelector(selector); } catch {
-            throw new Error(`Invalid CSS selector: ${selector}`);
-          }
-        }
-        const start = Date.now();
-        const limit = Math.min(timeout, 60) * 1000;
-        let quietSince = null;
-        for (;;) {
-          let ok = true;
-          if (wanted || selector) {
-            let found = false;
-            for (const bc of framesOf(browser)) {
-              try {
-                if ((await query(browser, "check", { text: wanted, selector }, 5000, bc)).value) {
-                  found = true;
-                  break;
-                }
-              } catch (e) {
-                // sayfa yüklenirken çerçeve yok ya da değişti: sonraki turda yeniden
-                if (e instanceof DialogOpen || e instanceof Stopped) throw e;
-              }
-            }
-            ok = gone ? !found : found;
-          }
-          if (ok && network_idle) {
-            // 10 sn'den uzun süren istekler (uzun yoklama, akış) sayılmaz
-            const now = Date.now();
-            const busy = network.busy(browser.browserId, now);
-            if (busy) quietSince = null;
-            else quietSince ??= now;
-            ok = !busy && now - quietSince >= 500;
-          }
-          const elapsed = Date.now() - start;
-          if (ok) return text(`Done (${(elapsed / 1000).toFixed(1)} s).`);
-          if (elapsed >= limit) throw new Error(`Not met within ${Math.min(timeout, 60)} s.`);
-          await operationSleep(250);
-        }
-      },
-
-      async form_input({ tabId, ref, value }) {
-        const { value: result } = await queryRef(browserFor(tabId), "form_input", { ref: longRef(ref), value });
-        return text(result);
-      },
-
       // Claude'un kullanıcıya bırakması gereken adımlar (onay, captcha, giriş...): öğeyi
       // çerçevele, mesajı göster, sekmeyi öne getir (kullanıcının orada bir şey yapması
       // gerekiyor), cevabı bekle
@@ -1807,129 +1534,6 @@ function logError(where, e) {
         return text({ ...describeTab(tab), coordination: coordinationStatus(tabId, activeSession), note: "The user granted the tab to this session." });
       },
 
-      async file_upload({ tabId, ref, paths }) {
-        const browser = browserFor(tabId);
-        const mime = Cc["@mozilla.org/mime;1"].getService(Ci.nsIMIMEService);
-        // autoconfig bağlamında IOUtils yok; tarayıcı penceresininki kullanılır
-        const { IOUtils } = browser.ownerDocument.defaultView;
-        let total = 0;
-        const files = [];
-        for (const path of paths) {
-          const file = localFile(path);
-          if (!file.exists() || !file.isFile()) throw new Error(`No such file: ${path}`);
-          total += file.fileSize;
-          if (total > MAX_UPLOAD) throw new Error(`Files exceed ${MAX_UPLOAD / 1048576} MB in total.`);
-          let type = "application/octet-stream";
-          try { type = mime.getTypeFromFile(file); } catch {}
-          files.push({ name: file.leafName, type, lastModified: file.lastModifiedTime, bytes: await IOUtils.read(path) });
-        }
-        const { value } = await queryRef(browser, "file_upload", { ref: longRef(ref), files }, 60000);
-        return text(value);
-      },
-
-      async handle_dialog({ tabId, accept, text: answer }) {
-        const browser = browserFor(tabId);
-        const win = openDialog(browser);
-        if (!win) return text("No dialog is open.");
-        const { promptType, text: message } = win.Dialog.args;
-        if (answer != null && accept) {
-          const box = promptType === "promptPassword" ? win.Dialog.ui.password1Textbox : win.Dialog.ui.loginTextbox;
-          box.value = String(answer);
-        }
-        const dialog = win.document.querySelector("dialog");
-        if (accept) dialog.acceptDialog();
-        else dialog.cancelDialog();
-        await operationSleep(200);
-        return text(`${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`);
-      },
-
-      read_network_requests({ tabId, urlPattern, limit = 100, clear, id, max_chars = 20000 }) {
-        const browser = browserFor(tabId);
-        const log = network.get(browser.browserId);
-        if (id != null) {
-          const r = log?.list.find(r => r.id === id);
-          if (!r) return text(`No request #${id} (the log is cleared when the page moves to another site); take ids from the list.`);
-          assertSiteURL(r.url);
-          return network.details(browser, r, max_chars).then(text);
-        }
-        let list = (log?.list ?? []).filter(r => {
-          try { assertSiteURL(r.url); return true; } catch { return false; }
-        });
-        if (urlPattern) list = list.filter(r => r.url.includes(urlPattern));
-        const lines = list.slice(-limit).map(r => {
-          const status = r.error ?? (r.status ?? (r.duration == null ? "pending" : "no response"));
-          const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
-          return `#${r.id} ${r.method} ${status} ${r.url}${extra ? `  (${extra})` : ""}`;
-        });
-        if (clear && log) {
-          log.list.length = 0;
-          log.byChannel.clear();
-        }
-        if (!lines.length) return text("No matching requests recorded (since the agent opened the tab).");
-        const hidden = list.length - lines.length;
-        return text((hidden > 0 ? `…${hidden} earlier request(s) not shown\n` : "") + lines.join("\n"));
-      },
-
-      async read_console_messages({ tabId, onlyErrors, pattern, limit, clear }) {
-        const { value } = await query(browserFor(tabId), "console", { onlyErrors, pattern, limit, clear });
-        return text(value);
-      },
-
-      async javascript_tool({ text: code, tabId }) {
-        const { value } = await query(browserFor(tabId), "eval", { code });
-        return text(value);
-      },
-
-      async react({ tabId, ref, ...options }) {
-        const browser = browserFor(tabId);
-        if (options.action === "inspect" && !ref) throw new Error("React inspect requires an element ref.");
-        const context = permissionContext(browser);
-        const document = readContext(browser);
-        const frames = ref ? [frameOf(browser, ref)] : framesOf(browser);
-        const results = [];
-        for (const frame of frames) {
-          operation?.check();
-          assertSiteAccess(browser);
-          try {
-            const { value } = await query(browser, "react", { ...options, ref: longRef(ref) }, 30000, frame);
-            results.push({ frame: frame.id, ...value });
-          } catch (error) {
-            operation?.check();
-            if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext) throw error;
-            results.push({ frame: frame.id, error: String(error.message || error), inspected: false });
-          }
-          if (!samePermissionContext(context, permissionContext(browser)) || !sameReadContext(document, readContext(browser))) throw new Error("Page or permissions changed during React inspection; retry.");
-        }
-        return text(shortRefs(JSON.stringify({ frames: results, untrusted: true })));
-      },
-
-      async accessibility({ tabId, ref, ...options }) {
-        const browser = browserFor(tabId);
-        const context = permissionContext(browser);
-        const document = readContext(browser);
-        const deadline = Date.now() + 45000;
-        const frames = ref ? [frameOf(browser, ref)] : framesOf(browser);
-        const results = [];
-        for (const frame of frames) {
-          operation?.check();
-          assertSiteAccess(browser);
-          if (Date.now() >= deadline) {
-            results.push({ frame: frame.id, scanned: false, error: "Total scan time budget exhausted." });
-            continue;
-          }
-          try {
-            const { value } = await query(browser, "axe", { ...options, ref: longRef(ref), timeout_ms: Math.min(20000, deadline - Date.now()) }, Math.min(25000, deadline - Date.now() + 2000), frame);
-            results.push({ frame: frame.id, ...value });
-          } catch (error) {
-            operation?.check();
-            if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext) throw error;
-            results.push({ frame: frame.id, error: String(error.message || error), scanned: false });
-          }
-          if (!samePermissionContext(context, permissionContext(browser)) || !sameReadContext(document, readContext(browser))) throw new Error("Page or permissions changed during accessibility scan; retry.");
-        }
-        return text(shortRefs(JSON.stringify({ frames: results, untrusted: true,
-          coverage: ref ? 'Referenced subtree in its frame; nested frames are not scanned.' : 'Each accessible frame scanned independently; cross-frame relationships are not evaluated.' })));
-      },
     };
 
     // geliştirme komutları: MCP'ye açılmaz, scripts/zenctl.ts kullanır
@@ -1996,6 +1600,24 @@ function logError(where, e) {
         return text(value === undefined ? "undefined" : value);
       },
     };
+
+    // ---- araç modülleri: ortak yardımcılar ctx ile (ReadTools/InputTools/BrowserTools.sys.mjs) ----
+
+    const { readTools } = ChromeUtils.importESModule(`resource://zenmcp/ReadTools.sys.mjs?v=${version}`);
+    const { inputTools } = ChromeUtils.importESModule(`resource://zenmcp/InputTools.sys.mjs?v=${version}`);
+    const { browserTools } = ChromeUtils.importESModule(`resource://zenmcp/BrowserTools.sys.mjs?v=${version}`);
+    const ctx = {
+      get operation() { return operation; },
+      get activeSession() { return activeSession; },
+      DEVICE_PRESETS, DialogOpen, MAX_PAGE_TEXT, MAX_UPLOAD, Stopped, assertSiteAccess, assertSiteURL,
+      browserFor, browserSettings, click, clipboardShortcut, controlledSource, describeDialog, describeTab,
+      expandFrames, extensionPanels, focusedFrame, frameOf, framesOf, guard, heldFrame, heldModifiers, input,
+      keyName, localFile, longRef, network, openDialog, operationSleep, ownership, performClipboard,
+      permissionContext, pressKeys, query, queryRef, readContext, readOutput, releaseInputs, rememberInputs,
+      samePermissionContext, sameReadContext, screenshot, screenshotCache, scroll, shortRefs, target, text,
+      tools, typeInFocus, waitForLoad,
+    };
+    Object.assign(tools, readTools(ctx), inputTools(ctx), browserTools(ctx));
 
     // ---- soket ----
 

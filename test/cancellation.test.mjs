@@ -109,7 +109,7 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
   vm.runInContext(block('    class Stopped extends Error', '    // Adada evet/hayır sorusu') +
     block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
     block('    async function handle(', '    function onConnection(') +
-    'tools.browser_batch = ({' + block('      async browser_batch(', '      async navigate(') + '}).browser_batch;', context);
+    'tools.browser_batch = ({' + block('      async browser_batch(', '      // Claude\'un kullanıcıya bırakması') + '}).browser_batch;', context);
   const batch = context.handle(JSON.stringify({ session: 'test-session', tool: 'browser_batch', args: { actions: [
     { name: 'wait' }, { name: 'effect' },
   ] } }));

@@ -48,7 +48,7 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
   });
   vm.runInContext(block('    const hostOf =', "    // ---- tool'lar:") +
     block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
-    'tools.browser_batch = ({' + block('      async browser_batch(', '      async navigate(') + '}).browser_batch;', context);
+    'tools.browser_batch = ({' + block('      async browser_batch(', '      // Claude\'un kullanıcıya bırakması') + '}).browser_batch;', context);
   const action = (name, input = {}) => ({ name, input: { tabId: 1, ...input } });
   const batch = actions => context.tools.browser_batch({ actions });
   return { context, browser, prompts, effects, settings, navigate, batch, action };

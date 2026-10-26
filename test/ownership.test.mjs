@@ -92,9 +92,9 @@ function harness() {
     block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
     block('    async function handle(', '    function onConnection(') +
     'Object.assign(tools, ({' + block('      async tabs_context_mcp(', '      // Birkaç tool çağrısı') + '}));' +
-    'tools.browser_batch = ({' + block('      async browser_batch(', '      async navigate(') + '}).browser_batch;' +
+    'tools.browser_batch = ({' + block('      async browser_batch(', '      // Claude\'un kullanıcıya bırakması') + '}).browser_batch;' +
     'tools.tab_work = async args => coordinateTab(args, activeSession);' +
-    'tools.request_tab = ({' + block('      async request_tab(', '      async file_upload(') + '}).request_tab;', context);
+    'tools.request_tab = ({' + block('      async request_tab(', '\n    };\n\n    // geliştirme komutları') + '}).request_tab;', context);
   const request = async (session, tool, args = {}, agent = "codex") => {
     const output = {};
     await context.handle(JSON.stringify({ session, agent: { id: agent }, tool, args }), null, output);

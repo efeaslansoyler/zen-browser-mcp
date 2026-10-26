@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { inputTools } from '../browser/InputTools.sys.mjs';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import * as agent from '../browser/Agent.sys.mjs';
 
@@ -189,9 +190,9 @@ test('all four computer click actions request hit testing and forward the expect
     target: async (_, args) => { assert.equal(args.forClick, true); return [10, 20]; },
     click: async (_, point, options) => { calls.push(options); },
   });
-  vm.runInContext('globalThis.tools = ({' + block('      async computer(', '      // iframe\'lerin metni') + '});', context);
+  const tools = inputTools(context);
   for (const action of ['left_click', 'right_click', 'double_click', 'triple_click']) {
-    await context.tools.computer({ action, ref: 'ref_1', text: 'ctrl', tabId: 1 });
+    await tools.computer({ action, ref: 'ref_1', text: 'ctrl', tabId: 1 });
   }
   assert(calls.every(options => options.ref === 'ref_1' && options.modifiers === 'ctrl'));
   assert.equal(calls[1].button, 2); assert.equal(calls[2].count, 2); assert.equal(calls[3].count, 3);

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { readTools } from '../browser/ReadTools.sys.mjs';
 import { ReadSnapshots, linePatch } from '../browser/ReadSnapshots.sys.mjs';
 const context = () => ({ url: 'https://fixture.test/', ownerVersion: 1, frames: [[1, {}]] });
 const id = value => value.match(/^snapshot: (\S+)/)[1];
@@ -156,9 +157,9 @@ function parentHarness() {
   });
   const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
   const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
-  vm.runInContext(block('    function readContext(', '    // ---- tool\'lar') +
-    'globalThis.tools = ({' + block('      async get_page_text(', '      // bütün çerçevelerde arar,') + '});', context);
-  const read = async (name, args = {}) => (await context.tools[name]({ tabId: 1, ...args }))[0].text;
+  vm.runInContext(block('    function readContext(', '    // ---- tool\'lar'), context);
+  // Built per call so tests can swap context helpers (e.g. query) after setup.
+  const read = async (name, args = {}) => (await readTools(context)[name]({ tabId: 1, ...args }))[0].text;
   return { context, browser, read, change: value => { page = value; } };
 }
 
