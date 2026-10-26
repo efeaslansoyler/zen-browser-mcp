@@ -136,6 +136,12 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
   Hepsi untrusted kullanıcı metni. (İlk hâlinde yalnız retle gidiyordu; Efe yazıp OK'e
   basınca not kayboldu, kafa karıştırıcıydı.) Not her soruda sıfırlanır. Zen'de doğrulandı (2026-10-26).
 
+- **browser_settings düzeltmeleri** (2026-10-26, canlı denemede bulundu): ölçüm sayfa
+  sandbox'ında (chrome çağıran DPR/UA geçersiz kılmalarını görmüyordu, DPR "uygulanmıyor"
+  sanılıyordu); reset sonrası düzen beklenir; geçersiz kılmalar güncel `source.browsingContext`
+  üzerinden geri alınır (siteler arası gezinme BC'yi değiştirir, UA yenisine taşınıp kalıyordu);
+  mobil/tablet hazır ayarı Android Firefox UA'sı gönderir.
+
 ## Açık işler
 
 1. Codex hook güveni ve otomatik alıcı uçtan uca doğrulandı; kalan doğrulama yok.

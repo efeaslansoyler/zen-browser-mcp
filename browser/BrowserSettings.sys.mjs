@@ -1,13 +1,19 @@
 // Per-tab layout and Gecko overrides. No window resize, global prefs, or WebDriver.
 export const DEVICE_PRESETS = {
-  mobile: { width: 390, height: 844, dpr: 3, touch: true },
-  tablet: { width: 820, height: 1180, dpr: 2, touch: true },
+  mobile: { width: 390, height: 844, dpr: 3, touch: true, platform: 'Android 15; Mobile' },
+  tablet: { width: 820, height: 1180, dpr: 2, touch: true, platform: 'Android 15; Tablet' },
   desktop: { width: 1280, height: 800, dpr: 1, touch: false },
 };
 export class BrowserSettings {
   constructor(env) { this.env = env; this.entries = new Map(); }
   validate(args) {
     const value = args.action === 'device' ? { ...DEVICE_PRESETS[args.device], ...args } : { ...args };
+    // Mobil/tablet: aynı Gecko sürümünün Android Firefox UA'sı (sunucu mobil sayfayı göndersin)
+    if (value.platform && value.userAgent == null && this.env.geckoVersion) {
+      const v = this.env.geckoVersion;
+      value.userAgent = `Mozilla/5.0 (${value.platform}; rv:${v}) Gecko/${v} Firefox/${v}`;
+    }
+    delete value.platform;
     if (args.action === 'device' && !DEVICE_PRESETS[args.device]) throw new Error('Unknown device preset; use devices.');
     if (args.action === 'viewport' || args.action === 'device') {
       for (const key of ['width', 'height']) if (!Number.isInteger(value[key]) || value[key] < 200 || value[key] > 4000) throw new Error(`${key} must be an integer from 200 to 4000.`);
@@ -19,10 +25,13 @@ export class BrowserSettings {
     if (value.color_scheme != null && !['dark', 'light', 'no-preference'].includes(value.color_scheme)) throw new Error('Invalid color scheme.');
     return value;
   }
-  remember(entry, target, key, value, css = false) {
-    let property = entry.properties.find(p => p.target === target && p.key === key && p.css === css);
+  // target bir fonksiyon olabilir: siteler arası gezinme browsingContext'i değiştirir (Fission),
+  // geçersiz kılmalar yenisine taşınır; geri alırken güncel nesne bulunmalı
+  remember(entry, at, key, value, css = false) {
+    const target = typeof at === 'function' ? at() : at;
+    let property = entry.properties.find(p => p.at === at && p.key === key && p.css === css);
     if (!property) {
-      property = { target, key, css, original: css ? target.style.getPropertyValue(key) : target[key], priority: css ? target.style.getPropertyPriority(key) : '' };
+      property = { at, key, css, original: css ? target.style.getPropertyValue(key) : target[key], priority: css ? target.style.getPropertyPriority(key) : '' };
       entry.properties.push(property);
     }
     if (css) target.style.setProperty(key, value, 'important'); else target[key] = value;
@@ -33,11 +42,12 @@ export class BrowserSettings {
     if (!entry) return;
     for (const p of [...entry.properties].reverse()) {
       try {
-        const current = p.css ? p.target.style.getPropertyValue(p.key) : p.target[p.key];
+        const target = typeof p.at === 'function' ? p.at() : p.at;
+        const current = p.css ? target.style.getPropertyValue(p.key) : target[p.key];
         if (current !== p.applied) continue; // Preserve manual edits made since our change.
         if (p.css) {
-          if (p.original) p.target.style.setProperty(p.key, p.original, p.priority); else p.target.style.removeProperty(p.key);
-        } else p.target[p.key] = p.original;
+          if (p.original) target.style.setProperty(p.key, p.original, p.priority); else target.style.removeProperty(p.key);
+        } else target[p.key] = p.original;
       } catch {}
     }
     this.entries.delete(source);
@@ -54,7 +64,7 @@ export class BrowserSettings {
     if (!await this.env.ask(source, args, value)) throw new Error('The user denied or did not answer the browser settings request; nothing was changed.');
     this.env.check(source, session);
     if (this.env.context(source) !== context || source.browsingContext.currentWindowGlobal !== document || win.gBrowser.selectedBrowser !== selected) throw new Error('The target or selected tab changed while awaiting browser settings approval; nothing was changed.');
-    if (args.action === 'reset') { this.restore(source); return; }
+    if (args.action === 'reset') { this.restore(source); await this.env.wait(100); return; }
     // A background browser's layout is suspended; select it only after explicit approval.
     win.gBrowser.selectedTab = win.gBrowser.getTabForBrowser(source);
     await this.env.wait(50);
@@ -71,7 +81,7 @@ export class BrowserSettings {
           'min-height': `${value.height * zoom}px`, 'max-height': `${value.height * zoom}px`,
           flex: 'none', 'justify-self': 'start', 'align-self': 'start' })) this.remember(entry, source, key, content, true);
       }
-      const bc = source.browsingContext;
+      const bc = () => source.browsingContext;
       if (value.dpr != null) this.remember(entry, bc, 'overrideDPPX', value.dpr);
       if (value.touch != null) this.remember(entry, bc, 'touchEventsOverride', value.touch ? 'enabled' : 'disabled');
       if (value.userAgent != null) this.remember(entry, bc, 'customUserAgent', value.userAgent);

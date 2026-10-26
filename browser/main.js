@@ -1789,6 +1789,7 @@ function logError(where, e) {
       check: (source, session) => { operation?.check(); ownership.check(source.browserId, session); assertSiteAccess(source); },
       context: source => JSON.stringify([source.currentURI.spec, ownership.version(source.browserId), readConfig()]),
       wait: operationSleep,
+      geckoVersion: Services.appinfo.platformVersion.split(".").slice(0, 2).join("."),
       ask: async (source, args, value) => {
         const target = source.contentTitle || hostOf(source) || source.currentURI.spec;
         const details = args.action === "reset" ? L("restore this tab's original settings", "bu sekmenin önceki ayarlarını geri yüklemek")
@@ -2037,7 +2038,7 @@ function logError(where, e) {
     const tools = {
       async tab_work(args) { return coordinateTab(args, activeSession); },
       async browser_settings(args) {
-        if (args.action === "devices") return text({ engine: "Gecko", presets: DEVICE_PRESETS, note: "Generic layout/DPR/touch presets, not a different browser engine or a full physical device fingerprint. User agent is unchanged unless explicitly supplied." });
+        if (args.action === "devices") return text({ engine: "Gecko", presets: DEVICE_PRESETS, note: "Generic layout/DPR/touch presets, not a different browser engine or a full physical device fingerprint. Mobile/tablet presets use the matching Android Firefox user agent; desktop keeps the current one unless userAgent is supplied. Reload for server-side UA detection." });
         const browser = browserFor(args.tabId);
         if (args.action !== "get") await browserSettings.change(browser, activeSession, args);
         const { value } = await query(browser, "browser_metrics");

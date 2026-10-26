@@ -190,11 +190,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "annotate":
           return { value: this.#annotate(data.enabled) };
         case "browser_metrics":
-          return { value: { width: this.contentWindow.innerWidth, height: this.contentWindow.innerHeight,
-            dpr: this.contentWindow.devicePixelRatio, userAgent: this.contentWindow.navigator.userAgent,
-            maxTouchPoints: this.contentWindow.navigator.maxTouchPoints,
-            colorScheme: this.contentWindow.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-            webdriver: this.contentWindow.navigator.webdriver } };
+          return { value: this.#pageMetrics() };
         case "release_inputs":
           return { value: this.#releaseInputs() };
         case "input_state":
@@ -293,6 +289,18 @@ export class ZenMcpChild extends JSWindowActorChild {
     let text = root?.innerText ?? "";
     if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + "\n…(kesildi)";
     return { title: doc.title, url: doc.URL, text };
+  }
+
+  // Sayfanın gördüğü değerler: ayrıcalıklı çağıran DPR/UA geçersiz kılmalarını görmez
+  #pageMetrics() {
+    const win = this.contentWindow;
+    const sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
+    try {
+      return JSON.parse(Cu.evalInSandbox(`JSON.stringify({ width: innerWidth, height: innerHeight,
+        dpr: devicePixelRatio, userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints,
+        colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+        webdriver: navigator.webdriver })`, sandbox, null, "zen-mcp-metrics", 1));
+    } finally { Cu.nukeSandbox(sandbox); }
   }
 
   // Sayfanın principal'ıyla, Xray olmadan çalışan sandbox: sayfa değişkenlerine doğrudan
