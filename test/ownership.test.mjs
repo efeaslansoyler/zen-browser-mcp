@@ -8,6 +8,7 @@ import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import { agentTheme } from '../browser/Agent.sys.mjs';
 import { TabMenu } from '../browser/TabMenu.sys.mjs';
 import { Channels } from '../browser/Channels.sys.mjs';
+import { Picks } from '../browser/Picks.sys.mjs';
 const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const timers = { setTimeout, clearTimeout };
@@ -251,7 +252,8 @@ test('tool lifecycle subscriptions never become element-delivery targets', () =>
 test('pick access metadata is specific to the destination, not to agent branding', () => {
   const h = harness();
   const tabId = h.own('A');
-  vm.runInContext(block('    function pickMessage(', '    const SHOTS_DIR'), h.context);
+  const picks = new Picks({ ownerOf: id => h.context.ownership.owner(id) });
+  h.context.pickMessage = (...args) => picks.message(...args);
   const current = { browser: h.tabs.get(tabId).linkedBrowser, info: {
     rect: { x: 0, y: 0, width: 10, height: 10 }, viewport: { width: 100, height: 100 },
     styles: {}, url: 'https://fixture.test/', selector: '#element', html: '<div/>',
@@ -370,7 +372,7 @@ test('bridge reload closes lifecycle transports without discarding runtime owner
   let closed = 0;
   h.context.connectOwnerSession('A', { close() { closed++; } }, agentTheme({ id: 'codex' }), '/project');
   Object.assign(h.context, {
-    shuttingDown: false, sessionSweep: null, channels: { closeAll() {} },
+    shuttingDown: false, sessionSweep: null, channels: { closeAll() {} }, picks: { destroy() {} },
     sss: { unregisterSheet() {}, USER_SHEET: 1 }, markSheet: {}, menuCleanups: new Set(),
     Services: { obs: { removeObserver() {} } }, tabMenu: { destroy() {} },
     onWindowReady() {}, browserWindows: () => [], server: null,

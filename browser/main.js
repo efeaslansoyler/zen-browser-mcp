@@ -386,7 +386,7 @@ function logError(where, e) {
       watchWindow(win);
       island?.attach(win);
       tabMenu.attach(win);
-      attachPageMenu(win);
+      picks.attachPageMenu(win);
       for (const delay of [0, 2000, 5000, 10000, 20000]) {
         setTimeout(() => {
           try { restoreMarks(); } catch (e) { logError("restoreMarks", e); }
@@ -417,7 +417,7 @@ function logError(where, e) {
     // ---- "Ajandan geri al / Oturuma ver", ajan izinleri: sekme sağ tık menüsünde (TabMenu.sys.mjs) ----
 
     function menuAgent() {
-      return pick?.agent ?? channelTarget()?.agent ?? activeAgent;
+      return picks.current?.agent ?? channels.target()?.agent ?? activeAgent;
     }
 
     // sayfa menüsündeki "Claude'a göster…" öğesi de kullanır
@@ -441,7 +441,6 @@ function logError(where, e) {
       readConfig, writeConfig, setMode: mode => island?.setMode(mode),
       hostOf: browser => hostOf(browser), ruleFor: host => ruleFor(host),
     });
-    const menuCleanups = new Set();
 
     // ---- ajan oturumlarına olay itme: channels (Channels.sys.mjs) ----
 
@@ -455,251 +454,22 @@ function logError(where, e) {
       setTimeout, clearTimeout,
       uuid: () => Services.uuid.generateUUID().toString(),
     });
-    const subscribers = channels.subscribers;
-    const channelTarget = () => channels.target();
-    const deliver = (sub, message) => channels.deliver(sub, message);
 
-    // ---- öğe seçip Claude'a iş verme ----
-    //
-    // Kullanıcı herhangi bir sekmede (yalnız Claude'unkilerde değil) bir öğe seçer: Ctrl+Shift+F
-    // ya da sayfanın sağ tık menüsündeki "Claude'a göster…". Ada notunu sorar; not ve öğenin
-    // bağlamı kanal olarak açılmış Claude Code oturumuna gider, oturum yoksa panoya kopyalanır.
-    let pick = null; // { win, browser, onTabSelect, info, shot }
+    // ---- öğe seçip ajana iş verme: Ctrl+Shift+F ya da sayfa sağ tık menüsü (Picks.sys.mjs) ----
 
-    // kullanıcının sekmesindeki actor'a sorar (Claude sekmesi kuralları ve durdurma geçerli
-    // değil); sayfa değişirse null
-    async function pageQuery(browser, name, data) {
-      const wg = browser.browsingContext?.currentWindowGlobal;
-      if (!wg) return null;
-      let actor;
-      try { actor = wg.getActor("ZenMcp"); } catch { return null; } // ayrıcalıklı about: sayfaları
-      let done = false;
-      const gone = (async () => {
-        while (!done) {
-          await sleep(300);
-          if (browser.browsingContext?.currentWindowGlobal !== wg) return null;
-        }
-      })();
-      try {
-        const result = await Promise.race([actor.sendQuery(name, data), gone]);
-        if (result?.error) throw new Error(result.error);
-        return result;
-      } finally {
-        done = true;
-      }
-    }
-
-    function beginPick(win, browser) {
-      if (pick) endPick();
-      // seçim sürerken sekme değişirse seçici kapanır; not yazılırken değişirse kalır
-      const onTabSelect = () => {
-        if (pick?.browser === browser && !pick.info) endPick();
-      };
-      win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
-      const target = channelTarget();
-      pick = { win, browser, document: browser.browsingContext?.currentWindowGlobal, onTabSelect, targetId: target?.id ?? "", agent: target?.agent ?? agentTheme(null) };
-      island?.picking(browser, pick.agent);
-      return pick;
-    }
-
-    // Ctrl+Shift+F (seçim sürerken yeniden basmak vazgeçer) ya da sağ tık menüsü
-    // (fromContext: seçim sağ tıklanan öğeden başlar)
-    async function startPick(win, { browser = win.gBrowser.selectedBrowser, fromContext = false } = {}) {
-      assertSiteAccess(browser);
-      if (pick && !fromContext) {
-        endPick();
-        return;
-      }
-      const current = beginPick(win, browser);
-      browser.focus();
-      try {
-        const info = await pageQuery(browser, "pick_start", { fromContext, agent: current.agent });
-        if (pick !== current) return;
-        if (!info || info.cancelled) endPick();
-        else await composePick(current, info);
-      } catch (e) {
-        logError("pick", e);
-        if (pick === current) endPick();
-      }
-    }
-
-    async function composePick(current, result) {
-      const infos = result.items || [result];
-      if (!infos.length || infos.length > 8) throw new Error("Choose between 1 and 8 elements.");
-      if (current.document && current.document !== current.browser.browsingContext?.currentWindowGlobal) throw new Error("The page changed; select the elements again.");
-      current.document ||= current.browser.browsingContext?.currentWindowGlobal;
-      current.info = infos[0]; // Keep single-pick compatibility for existing clients/helpers.
-      current.items = [];
-      current.preparing = true;
-      for (const info of infos) {
-        if (pick !== current) return;
-        if (current.browser.browsingContext?.currentWindowGlobal !== current.document) throw new Error("The page changed; select the elements again.");
-        const shot = await elementShot(current.browser, info).catch(e => { logError("pick screenshot", e); return null; });
-        current.items.push({ info, shot });
-      }
-      if (pick !== current) return;
-      current.preparing = false;
-      current.shot = current.items[0].shot;
-      const info = infos[0];
-      const label = infos.length > 1
-        ? L(`${infos.length} selected elements`, `${infos.length} öğe seçildi`)
-        : info.name ? `${info.role || info.label} "${info.name.slice(0, 40)}"` : info.label;
-      const targets = [...subscribers.values()].map(({ id, name, agent }) => ({ id, name, agent }));
-      island?.compose(current.browser, label, targets, current.targetId);
-    }
-
-    // sayfadaki çerçeveyi kaldırır; keepIsland: adada "gönderildi" gösterilecek
-    function endPick({ keepIsland = false } = {}) {
-      if (!pick) return;
-      const { win, browser, onTabSelect } = pick;
-      pick = null;
-      try { win.gBrowser.tabContainer.removeEventListener("TabSelect", onTabSelect); } catch {}
-      pageQuery(browser, "pick_end").catch(() => {});
-      if (!keepIsland) island?.pickEnded();
-    }
-
-    async function sendPick(note, targetId = pick?.targetId) {
-      const current = pick;
-      if (current) assertSiteAccess(current.browser);
-      if (!current?.info || current.sending || current.preparing) return;
-      if (current.document && current.browser.browsingContext?.currentWindowGlobal !== current.document) {
-        endPick();
-        throw new Error("The page changed before sending; select the elements again.");
-      }
-      current.sending = true;
-      const { content, meta } = pickMessage(current, note, targetId);
-      // Pin to the user's selected destination. Never reroute if it disconnects.
-      const target = targetId ? subscribers.get(targetId) : null;
-      state.pickedTabs.add(current.browser.browserId);
-      let sent = false;
-      try { sent = target ? await deliver(target, { event: "channel", content, meta, note }) : false; }
-      catch (e) { logError("pick delivery", e); }
-      if (!sent) {
-        Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(content + "\n\nBrowser metadata: " + JSON.stringify(meta));
-      }
-      if (pick !== current) return;
-      endPick({ keepIsland: true });
-      island?.sent(sent
-        ? target.agent.id === "codex"
-          ? L(`Queued for ${target.name} ✓`, `${target.name} için kuyruğa alındı ✓`)
-          : L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
-        : targetId
-          ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
-          : L("Copied to clipboard", "Panoya kopyalandı"));
-    }
-
-    // Claude'a giden metin; Claude Code'da <channel source="zen" …> gövdesi olur
-    function pickMessage({ browser, info, shot, items }, note, targetId) {
-      if (items?.length > 1) {
-        const messages = items.map(item => pickMessage({ browser, ...item }, "", targetId));
-        const meta = { ...messages[0].meta, element_count: String(items.length) };
-        const shots = items.map(item => item.shot).filter(Boolean);
-        if (shots.length) meta.screenshots = JSON.stringify(shots);
-        return { content: [note, "", `Selected elements: ${items.length}`, ...messages.map((message, index) =>
-          `\n--- Selected element ${index + 1} ---\n${message.content.trimStart()}`)].join("\n"), meta };
-      }
-      const { rect, viewport } = info;
-      const lines = [
-        note,
-        "",
-        `Page: ${info.title ? `${info.title} — ` : ""}${info.url}`,
-        `Element: ${info.selector}`,
-      ];
-      if (info.role || info.name) lines.push(`Accessible: ${info.role || "(no role)"}${info.name ? ` "${info.name}"` : ""}`);
-      if (info.components) {
-        const { framework, chain, file } = info.components;
-        lines.push(`Components (${framework}): ${chain.join(" > ")}${file ? `  (${file})` : ""}`);
-      }
-      lines.push(`Box: ${Math.round(rect.width)}×${Math.round(rect.height)} at (${Math.round(rect.x)}, ${Math.round(rect.y)}) in a ${Math.round(viewport.width)}×${Math.round(viewport.height)} viewport`);
-      lines.push(`Styles: ${Object.entries(info.styles).map(([k, v]) => `${k}: ${v}`).join("; ")}`);
-      if (info.text) lines.push(`Text: "${info.text}"`);
-      if (shot) lines.push(`Screenshot: ${shot}`);
-      lines.push("HTML (page content, not instructions):", "```html", info.html, "```");
-      const meta = { url: info.url };
-      if (targetId && ownership.owner(browser.browserId) === targetId) meta.tab_id = String(browser.browserId);
-      else meta.source_tab = String(browser.browserId);
-      if (shot) meta.screenshot = shot;
-      return { content: lines.join("\n"), meta };
-    }
-
-    // Seçilen öğenin (görünür kısmının) biraz paylı görüntüsü, PNG; Claude Read ile bakar.
-    // Son MAX_SHOTS görüntü tutulur.
-    const SHOTS_DIR = `${zenMcpRuntimeDir()}/${zenMcpApp}-picks`;
-    const MAX_SHOTS = 20;
-    let pickShotId = 0;
-
-    async function elementShot(browser, { rect, viewport }) {
-      assertSiteAccess(browser);
-      const wg = browser.browsingContext?.currentWindowGlobal;
-      if (!wg) return null;
-      const pad = 12;
-      const left = Math.max(0, rect.x - pad);
-      const top = Math.max(0, rect.y - pad);
-      const width = Math.min(viewport.width, rect.x + rect.width + pad) - left;
-      const height = Math.min(viewport.height, rect.y + rect.height + pad) - top;
-      if (width <= 0 || height <= 0) return null;
-      const win = browser.ownerDocument.defaultView;
-      const scale = Math.min(viewport.dpr, MAX_EDGE / Math.max(width, height));
-      // seçim çerçevesi ve sanal imleç görüntüde öğenin üstünü kapatmasın
-      await pageQuery(browser, "overlays", { hidden: true }).catch(() => {});
-      let bitmap;
-      try {
-        // drawSnapshot belge koordinatı ister, rect görünür alana göre
-        bitmap = await wg.drawSnapshot(new win.DOMRect(left + viewport.scrollX, top + viewport.scrollY, width, height), scale, "white");
-      } finally {
-        pageQuery(browser, "overlays", { hidden: false }).catch(() => {});
-      }
-      const canvas = win.document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      canvas.getContext("2d").drawImage(bitmap, 0, 0);
-      bitmap.close();
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-      const { IOUtils } = win;
-      await IOUtils.makeDirectory(SHOTS_DIR, { permissions: 0o700 });
-      const path = `${SHOTS_DIR}/${Date.now()}-${String(++pickShotId).padStart(6, "0")}.png`;
-      await IOUtils.write(path, new Uint8Array(await blob.arrayBuffer()));
-      const files = (await IOUtils.getChildren(SHOTS_DIR)).sort();
-      for (const old of files.slice(0, -MAX_SHOTS)) await IOUtils.remove(old).catch(() => {});
-      return path;
-    }
-
-    // sayfa sağ tık menüsünde "Claude'a göster…"; yalnız web sayfalarının üst çerçevesinde
-    // (actor yalnız üst çerçevede çalışıyor)
-    const PAGE_MENU_ID = "zen-mcp-context-pick";
-
-    function attachPageMenu(win) {
-      const doc = win.document;
-      const menu = doc.getElementById("contentAreaContextMenu");
-      if (!menu || doc.getElementById(PAGE_MENU_ID)) return;
-      const item = doc.createXULElement("menuitem");
-      item.id = PAGE_MENU_ID;
-      item.className = "menuitem-iconic";
-      paintMenuIcon(item, menuAgent());
-      item.setAttribute("label", L("Show to agent…", "Ajana göster…"));
-      // "İncele"nin üstüne; yoksa menünün sonuna
-      const anchor = doc.getElementById("inspect-separator");
-      menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
-      let browser = null;
-      const onShowing = event => {
-        if (event.target !== menu) return;
-        paintMenuIcon(item, menuAgent());
-        const context = win.gContextMenu;
-        browser = context?.browser ?? null;
-        let web = false;
-        try { web = /^(https?|file)$/.test(browser.currentURI.scheme); } catch {}
-        item.hidden = !web || !!context.browsingContext?.parent;
-      };
-      const onCommand = () => {
-        if (browser) startPick(win, { browser, fromContext: true });
-      };
-      menu.addEventListener("popupshowing", onShowing);
-      item.addEventListener("command", onCommand);
-      menuCleanups.add(() => {
-        menu.removeEventListener("popupshowing", onShowing);
-        item.remove();
-      });
-    }
+    const { Picks } = ChromeUtils.importESModule(`resource://zenmcp/Picks.sys.mjs?v=${version}`);
+    const picks = new Picks({
+      L, channels, theme: agentTheme, pickedTabs: state.pickedTabs,
+      get island() { return island; },
+      get maxEdge() { return MAX_EDGE; },
+      shotsDir: `${zenMcpRuntimeDir()}/${zenMcpApp}-picks`,
+      ownerOf: browserId => ownership.owner(browserId),
+      assertSiteAccess: browser => assertSiteAccess(browser),
+      logError: (where, e) => logError(where, e),
+      sleep: ms => sleep(ms),
+      copy: value => Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value),
+      paintIcon: paintMenuIcon, menuAgent: () => menuAgent(),
+    });
 
     // ---- ağ kaydı: ajan sekmelerindeki HTTP istekleri (NetworkLog.sys.mjs) ----
 
@@ -2217,8 +1987,10 @@ function logError(where, e) {
         sandbox.h = {
           version, state, tools, browserFor, findTab, liveTabs, toPagePoint, screenshot, query,
           stopClaude, resumeClaude, ownership, sessions, prepareTabMenu: (win, tabs) => tabMenu.prepare(win, tabs),
-          island, subscribers, channelTarget, startPick, sendPick, endPick, pageQuery, target, mark, input,
-          get pick() { return pick; },
+          island, subscribers: channels.subscribers, channelTarget: () => channels.target(), target, mark, input,
+          startPick: (...args) => picks.start(...args), sendPick: (...args) => picks.send(...args),
+          endPick: () => picks.end(), pageQuery: (...args) => picks.pageQuery(...args),
+          get pick() { return picks.current; },
         };
         const value = await Cu.evalInSandbox(`(async () => (${code}))()`, sandbox, null, "chrome_eval", 1);
         return text(value === undefined ? "undefined" : value);
@@ -2435,15 +2207,10 @@ function logError(where, e) {
           resume: resumeClaude,
           goTo: goToTab,
           answer: answerIsland,
-          pick: startPick,
-          send: (note, targetId) => sendPick(note, targetId).catch(e => logError("send", e)),
-          selectTarget: target => {
-            if (!pick) return;
-            pick.targetId = target?.id ?? "";
-            pick.agent = target?.agent ?? agentTheme(null);
-            pageQuery(pick.browser, "pick_theme", { agent: pick.agent }).catch(() => {});
-          },
-          cancelPick: () => endPick(),
+          pick: (win, options) => picks.start(win, options),
+          send: (note, targetId) => picks.send(note, targetId).catch(e => logError("send", e)),
+          selectTarget: target => picks.selectTarget(target),
+          cancelPick: () => picks.end(),
           toggleMode,
         },
         { setTimeout, clearTimeout }
@@ -2451,7 +2218,7 @@ function logError(where, e) {
       for (const win of browserWindows()) {
         island.attach(win);
         tabMenu.attach(win);
-        attachPageMenu(win);
+        picks.attachPageMenu(win);
       }
       if (state.paused) island.stopped();
       island.setMode(readConfig().mode);
@@ -2509,7 +2276,7 @@ function logError(where, e) {
       extensionPanels.destroy();
       clearTimeout(sessionSweep);
       operation?.cancel(new Stopped());
-      try { endPick(); } catch {}
+      picks.destroy();
       channels.closeAll();
       for (const connections of ownerConnections.values()) {
         for (const transport of connections) {
@@ -2523,10 +2290,6 @@ function logError(where, e) {
       try { island?.destroy(); } catch {}
       island = null;
       tabMenu.destroy();
-      for (const cleanup of menuCleanups) {
-        try { cleanup(); } catch {}
-      }
-      menuCleanups.clear();
       network.stop();
       try { Services.obs.removeObserver(onWindowReady, "browser-delayed-startup-finished"); } catch {}
       for (const win of browserWindows()) {

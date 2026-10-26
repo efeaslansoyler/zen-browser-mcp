@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import * as themes from '../browser/Agent.sys.mjs';
+import { Picks } from '../browser/Picks.sys.mjs';
 
 function harness() {
   class Node {
@@ -118,11 +119,14 @@ test('a disappeared selected node cannot silently become a smaller selection', a
   assert.equal(h.document.documentElement.children.length, 0);
 });
 
-const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
+// Picks with inert defaults; tests override what they exercise.
+function picks(env = {}) {
+  return new Picks({ L: en => en, theme: themes.agentTheme, ownerOf: () => 'owner-A', pickedTabs: new Set(),
+    channels: { subscribers: new Map(), target: () => null, deliver: async () => false },
+    island: null, assertSiteAccess() {}, logError() {}, copy() {}, ...env });
+}
 function messageHarness() {
-  const context = vm.createContext({ ownership: { owner: () => 'owner-A' } });
-  vm.runInContext(block('    function pickMessage(', '    const SHOTS_DIR'), context);
+  const context = picks();
   const info = index => ({ title: 'Fixture', url: 'https://fixture.test', selector: `#item-${index}`, role: 'button', name: `Button ${index}`,
     rect: { x: 1, y: 2, width: 30, height: 40 }, viewport: { width: 800, height: 600 }, styles: {}, text: `Text ${index}`, html: `<button>${index}</button>` });
   const current = { browser: { browserId: 42 }, info: info(1), shot: '/tmp/one.png', items: [
@@ -133,14 +137,14 @@ function messageHarness() {
 
 test('one shared note contains numbered independent element contexts and screenshot metadata', () => {
   const { context, current } = messageHarness();
-  const result = context.pickMessage(current, 'Align these controls', 'owner-A');
+  const result = context.message(current, 'Align these controls', 'owner-A');
   assert.equal(result.content.match(/Align these controls/g).length, 1);
   assert.match(result.content, /Selected elements: 2/);
   assert.match(result.content, /Selected element 1[\s\S]*#item-1[\s\S]*Selected element 2[\s\S]*#item-2/);
   assert.equal(result.meta.element_count, '2');
   assert.deepEqual(JSON.parse(result.meta.screenshots), ['/tmp/one.png', '/tmp/two.png']);
   assert.equal(result.meta.tab_id, '42');
-  const foreign = context.pickMessage(current, 'Align these controls', 'another-session');
+  const foreign = context.message(current, 'Align these controls', 'another-session');
   assert.equal(foreign.meta.source_tab, '42'); assert.equal(foreign.meta.tab_id, undefined);
 });
 
@@ -157,17 +161,18 @@ test('compose captures one screenshot per item and keeps the selected destinatio
   const document = {}, browser = { browsingContext: { currentWindowGlobal: document } };
   const current = { browser, document, targetId: 'chosen' };
   const composed = [];
-  const context = vm.createContext({ pick: current, elementShot: async (_, info) => `/tmp/${info.selector}.png`,
-    subscribers: new Map([['chosen', { id: 'chosen', name: 'Destination', agent: themes.agentTheme({ id: 'codex' }) }]]),
-    island: { compose: (...args) => composed.push(args) }, logError() {}, L: en => en,
+  const context = picks({
+    channels: { subscribers: new Map([['chosen', { id: 'chosen', name: 'Destination', agent: themes.agentTheme({ id: 'codex' }) }]]) },
+    island: { compose: (...args) => composed.push(args) },
   });
-  vm.runInContext(block('    async function composePick(', '    // sayfadaki çerçeveyi kaldırır;'), context);
-  await context.composePick(current, { items: [{ selector: 'one' }, { selector: 'two' }] });
+  context.current = current;
+  context.shot = async (_, info) => `/tmp/${info.selector}.png`;
+  await context.compose(current, { items: [{ selector: 'one' }, { selector: 'two' }] });
   assert.equal(current.items.length, 2); assert.equal(current.items[1].shot, '/tmp/two.png');
   assert.equal(current.targetId, 'chosen'); assert.equal(composed[0][3], 'chosen');
   assert.equal(current.preparing, false);
   browser.browsingContext.currentWindowGlobal = {};
-  await assert.rejects(context.composePick(current, { selector: 'stale' }), /page changed/);
+  await assert.rejects(context.compose(current, { selector: 'stale' }), /page changed/);
 });
 
 test('send guards navigation and preparation; successful delivery waits for receipt and is single-shot', async () => {
@@ -175,25 +180,25 @@ test('send guards navigation and preparation; successful delivery waits for rece
   const deliveries = [], notifications = [], clipboard = [];
   let receipt;
   const acknowledged = new Promise(resolve => { receipt = resolve; });
-  const context = vm.createContext({ assertSiteAccess() {}, pick: current, subscribers: new Map([['chosen', { name: 'Chosen session', agent: { id: 'codex' } }]]),
-    state: { pickedTabs: new Set() }, island: { sent: message => notifications.push(message) }, L: en => en,
-    pickMessage: () => ({ content: 'two contexts and one note', meta: { element_count: '2' } }),
-    deliver: async (target, event) => { deliveries.push({ target, event }); return acknowledged; }, logError() {},
-    endPick: () => { context.pick = null; },
-    Cc: { '@mozilla.org/widget/clipboardhelper;1': { getService: () => ({ copyString: value => clipboard.push(value) }) } }, Ci: { nsIClipboardHelper: {} },
+  const context = picks({
+    channels: { subscribers: new Map([['chosen', { name: 'Chosen session', agent: { id: 'codex' } }]]),
+      deliver: async (target, event) => { deliveries.push({ target, event }); return acknowledged; } },
+    island: { sent: message => notifications.push(message) }, copy: value => clipboard.push(value),
   });
-  vm.runInContext(block('    async function sendPick(', '    // Claude\'a giden metin;'), context);
+  context.current = current;
+  context.message = () => ({ content: 'two contexts and one note', meta: { element_count: '2' } });
+  context.end = () => { context.current = null; };
   current.preparing = true;
-  await context.sendPick('note', 'chosen'); assert.equal(deliveries.length, 0);
+  await context.send('note', 'chosen'); assert.equal(deliveries.length, 0);
   current.preparing = false;
-  const sending = context.sendPick('note', 'chosen');
-  await context.sendPick('other note', 'chosen');
+  const sending = context.send('note', 'chosen');
+  await context.send('other note', 'chosen');
   assert.equal(deliveries.length, 1); assert.equal(notifications.length, 0);
   receipt(true); await sending;
   assert.match(notifications[0], /Queued for Chosen session/); assert.deepEqual(clipboard, []);
-  current.sending = false; context.pick = current;
+  current.sending = false; context.current = current;
   current.browser.browsingContext.currentWindowGlobal = {};
-  await assert.rejects(context.sendPick('stale note', 'chosen'), /page changed/);
+  await assert.rejects(context.send('stale note', 'chosen'), /page changed/);
   assert.equal(deliveries.length, 1);
 });
 

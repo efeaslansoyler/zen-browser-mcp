@@ -167,7 +167,7 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
   yenilemez. Node/şema değişince MCP istemcisi reconnect; Zen restart gerekmez.
 - Dosyalar: `src/server.ts` (şemalar, kimlik), `src/zen.ts`/`paths.ts` (soket, receipt),
   `src/delivery.ts` (Codex queue), `browser/main.js` (köprü, araçlar), `Island.sys.mjs` (ada),
-  `Agent.sys.mjs` (kimlik/tema), `NetworkLog.sys.mjs` (ağ kaydı), `TabMenu.sys.mjs` (sekme sağ tık menüsü), `Channels.sys.mjs` (oturumlara olay itme), `Ownership`/`Cancellation`/`ReadSnapshots.sys.mjs`, `actors/`.
+  `Agent.sys.mjs` (kimlik/tema), `NetworkLog.sys.mjs` (ağ kaydı), `TabMenu.sys.mjs` (sekme sağ tık menüsü), `Channels.sys.mjs` (oturumlara olay itme), `Picks.sys.mjs` (öğe seçimi), `Ownership`/`Cancellation`/`ReadSnapshots.sys.mjs`, `actors/`.
 
 ## Amaç ve kararlar
 
