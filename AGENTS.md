@@ -12,7 +12,7 @@ edit/test loop.
   real Codex conversation.
 - Live checks share the user's `~/.config/zen-mcp/config.json`; confirm `"mode": "auto"`
   afterwards.
-- `zenctl` calls are one-off sessions: they can't reuse each other's tabs. Clean up tabs you
+- `zenctl` calls are one-off sessions unless you pass `--session <name>`. Clean up tabs you
   open.
 - Check [docs/gecko-pitfalls.md](docs/gecko-pitfalls.md) before debugging browser behavior,
   and add new pitfalls there.

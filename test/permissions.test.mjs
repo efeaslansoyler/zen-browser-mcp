@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { siteRule, normalizeConfig } from '../browser/SiteRules.sys.mjs';
 import { Ownership } from '../browser/Ownership.sys.mjs';
+import { permissions } from '../browser/Permissions.sys.mjs';
 const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 
@@ -19,7 +20,7 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
   navigate(site);
   const ownership = new Ownership();
   ownership.assign(1, 'test-session');
-  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = vm.createContext({ ChromeUtils: { importESModule: () => ({ permissions }) }, version: 'test', heldInputFrames: new Map(), browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
     siteRule, framesOf: () => [], Services: { uriFixup: { getFixupURIInfo: url => ({ preferredURI: { spec: new URL(url).href } }) }, io: { newURI: url => ({ host: new URL(url).hostname }) } },
     ownership, activeSession: 'test-session',
     browserFor: id => { ownership.check(id, 'test-session'); return browser; },
@@ -236,4 +237,33 @@ test('React props and axe scans respect ask/site approval and block including ba
     assert.equal((await h.batch([h.action(tool)])).isError, true);
     assert.deepEqual(h.effects, []);
   }
+});
+
+test('permission module describes actions and scopes approvals without slicing main.js', async () => {
+  const settings = normalizeConfig({ mode: 'auto', sites: { 'bank.test': 'ask' } });
+  const ownership = new Ownership();
+  ownership.assign(1, 's');
+  const asked = [];
+  const p = permissions({
+    L: en => en, DialogOpen: class extends Error {}, Stopped: class extends Error {}, ownership,
+    queryRef: async () => ({ value: 'button "Pay"' }), longRef: x => x,
+    readConfig: () => settings, isSensitive: host => siteRule(host, settings.sites) === 'ask',
+    hostOf: b => b.currentURI.host, assertSiteAccess() {}, holdsButtons: () => false,
+    askIsland: async (...args) => { asked.push(args[2]); return 'done'; },
+    operation: null, activeAgent: { name: 'Claude' },
+  });
+  const browser = { browserId: 1, browsingContext: { currentWindowGlobal: {} }, currentURI: { host: 'bank.test', prePath: 'https://bank.test' } };
+  assert.equal(await p.describeWrite('computer', { action: 'left_click', ref: 'ref_1' }, browser), 'button "Pay": click');
+  assert.equal(await p.describeWrite('computer', { action: 'screenshot' }, browser), null);
+  assert.equal(await p.describeWrite('navigate', { url: 'back' }, browser), 'go back');
+  // "sor" kuralı olan sitede gezinme serbest, işlem sorulur
+  assert.equal(p.needsPermission('navigate', browser), false);
+  assert.equal(p.needsPermission('computer', browser), true);
+  const { context, asked: prompted } = await p.requirePermission(browser, [{ tool: 'computer', args: { action: 'left_click', ref: 'ref_1' } }]);
+  assert.equal(prompted, true);
+  assert.equal(asked[0], 'Claude wants to: button "Pay": click');
+  // onay belgeye ve sahiplik sürümüne bağlı
+  assert(p.samePermissionContext(context, p.permissionContext(browser)));
+  ownership.assign(1, 'other');
+  assert(!p.samePermissionContext(context, p.permissionContext(browser)));
 });

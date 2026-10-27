@@ -2,10 +2,15 @@
 //   node scripts/zenctl.ts reload
 //   node scripts/zenctl.ts eval 'gBrowser.tabs.length'      (tarayıcı tarafında, main.js kapsamında)
 //   node scripts/zenctl.ts <tool> '{"tabId": 12}'           (görseller /tmp... yerine stdout'a özet)
+//   node scripts/zenctl.ts --session dev <tool> '{…}'      (aynı adla çağrılar sekmelerini paylaşır)
 import { writeFileSync } from "node:fs";
 import { call } from "../src/zen.ts";
 
-const [cmd, arg] = process.argv.slice(2);
+// her çağrı normalde ayrı oturumdur; --session ile ardışık çağrılar aynı sekmeleri kullanır
+const argv = process.argv.slice(2);
+const named = argv[0] === "--session" ? argv.splice(0, 2)[1] : undefined;
+const session = named ? `zenctl:${named}` : undefined;
+const [cmd, arg] = argv;
 if (!cmd) {
   console.error("kullanım: zenctl <reload|eval KOD|tool JSON>");
   process.exit(1);
@@ -41,7 +46,7 @@ try {
     process.exit(0);
   }
   const content =
-    cmd === "eval" ? await call("chrome_eval", { code: arg }) : await call(cmd, arg ? JSON.parse(arg) : {});
+    cmd === "eval" ? await call("chrome_eval", { code: arg }) : await call(cmd, arg ? JSON.parse(arg) : {}, undefined, undefined, session);
   for (const c of content) {
     if (c.type === "text") console.log(c.text);
     else {

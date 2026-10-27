@@ -27,7 +27,8 @@ alone: the bridge runs your working tree.
 - **Poke the bridge directly:** `node scripts/zenctl.ts eval 'h.version'` evaluates in the
   bridge (`h.state`, `h.tools`, `h.browserFor`, `h.query`, `h.sessions`…), and
   `node scripts/zenctl.ts find '{"tabId": 13, "query": "x"}'` calls a tool. Each `zenctl`
-  call is its own session, so it can't use tabs another call created.
+  call is its own session; add `--session <name>` before the command to share tabs between
+  calls (`node scripts/zenctl.ts --session dev tabs_create_mcp`).
 
 ## Tests
 
