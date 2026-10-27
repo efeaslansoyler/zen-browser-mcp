@@ -1,17 +1,15 @@
 // İndirme kaydı: ajan sekmelerinden (ya da onların açtığı açılır pencerelerden) başlayan
 // indirmeler. Gecko'nun Downloads listesini dinler; durum, yol, boyut ve ilerleme verir.
-// Her indirme için bir olay dosyası (JSON satırları) yazar: shell'den izleyebilen ajanlar
-// (Claude Code Monitor gibi) beklemeden işine devam eder. Dosyayı biz sileriz, ajana bırakmayız.
+// Her indirme için bir olay dosyası yazar (EventFiles.sys.mjs).
 const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
 
 const MAX_RECORDS = 100;
-const EVENT_TTL = 5 * 60_000; // bittikten sonra olay dosyası bu kadar kalır
 const STEP_BYTES = 10 * 1048576; // boyutu bilinmeyen indirmede bu kadar baytta bir satır
 const HASH_CHUNK = 4 * 1048576; // ana iş parçacığını uzun süre tutmasın diye parça parça
 
 export class DownloadLog {
   // records: { list: [{ id, browserId, download, reported }], nextId }; reload'dan sağ çıksın diye dışarıdan gelir
-  // env.tracked(browserId): kaydedilecek sekme mi; env.dir: olay dosyalarının klasörü
+  // env.tracked(browserId): kaydedilecek sekme mi; env.events: EventFiles
   constructor(records, env) {
     this.records = records;
     this.records.list ??= [];
@@ -24,12 +22,7 @@ export class DownloadLog {
   }
 
   async start() {
-    // reload'da silme zamanlayıcıları kaybolur: kalan eski dosyaları süpür
-    await IOUtils.makeDirectory(this.env.dir, { permissions: 0o700 });
-    for (const file of await IOUtils.getChildren(this.env.dir)) {
-      const { lastModified } = await IOUtils.stat(file).catch(() => ({ lastModified: 0 }));
-      if (Date.now() - lastModified > EVENT_TTL) await IOUtils.remove(file).catch(() => {});
-    }
+    await this.env.events.start();
     this.list = await Downloads.getList(Downloads.ALL);
     // addView mevcut indirmeler için de onDownloadAdded çağırır; kayıtlılar tekrar eklenmez
     await this.list.addView(this.view);
@@ -44,7 +37,7 @@ export class DownloadLog {
     const browserId = this.#sourceTab(download);
     if (browserId == null) return;
     const record = { id: this.records.nextId++, browserId, download, reported: false };
-    record.events = PathUtils.join(this.env.dir, `${record.id}.jsonl`);
+    record.events = this.env.events.path(record.id);
     this.records.list.push(record);
     if (this.records.list.length > MAX_RECORDS) this.records.list.shift();
     this.#changed(download);
@@ -62,11 +55,10 @@ export class DownloadLog {
     record.lastStep = step;
     const finished = DownloadLog.finished(record);
     if (finished) record.closed = true;
-    record.writing = (record.writing ?? Promise.resolve()).then(async () => {
+    this.env.events.append(record.events, async () => {
       if (finished && info.state === "done") info.sha256 = await DownloadLog.sha256(record);
-      await IOUtils.writeUTF8(record.events, JSON.stringify(info) + "\n", { mode: "appendOrCreate" });
-      if (finished) this.env.setTimeout(() => IOUtils.remove(record.events).catch(() => {}), EVENT_TTL);
-    }).catch(e => this.env.logError?.("download events", e));
+      return info;
+    }, { last: finished });
   }
 
   // sha256 bir kez hesaplanır; dosya taşınmış/silinmişse undefined

@@ -65,7 +65,9 @@ try {
   assert.equal(done.size, body.length);
   assert.equal(done.sha256, expected);
   assert.equal(fs.statSync(done.path).size, body.length);
-  const doneLines = fs.readFileSync(path.join(process.env.XDG_RUNTIME_DIR || '/tmp', 'zen-mcp-downloads', `${done.id}.jsonl`), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const dir = path.join(process.env.XDG_RUNTIME_DIR || '/tmp', 'zen-mcp-downloads');
+  const doneFile = fs.readdirSync(dir).filter(f => f.startsWith(`${done.id}-`)).map(f => path.join(dir, f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+  const doneLines = fs.readFileSync(doneFile, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   assert.equal(doneLines[0].state, 'downloading');
   assert.equal(doneLines.at(-1).state, 'done');
   assert.equal(doneLines.at(-1).sha256, expected);

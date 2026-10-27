@@ -35,7 +35,7 @@ function actorHarness() {
   const first = new Promise(resolve => { firstEvent = resolve; });
   const emit = value => { events.push(value); firstEvent(); };
   const source = fs.readFileSync(new URL('../browser/actors/ZenMcpChild.sys.mjs', import.meta.url), 'utf8');
-  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = vm.createContext({ watches: { endAll() {}, endSession() {} }, browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
     JSWindowActorChild: class {}, URL, Cancellation, Ci: {}, Cc: {},
     ChromeUtils: { importESModule(url) {
       if (url.includes('InputMotion')) return inputMotion;
@@ -89,7 +89,7 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
   const effects = [];
   let started;
   const first = new Promise(resolve => { started = resolve; });
-  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = vm.createContext({ watches: { endAll() {}, endSession() {} }, browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
     Cancellation, ...timers, state: { paused: false, tabs: new Map() },
     operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
     ownership: new Ownership(), sessions: new Map([['test-session', {}]]), sessionVersions: new Map(),
@@ -135,7 +135,7 @@ test('cancel navigation stops loading and removes its listener and timeout', asy
   const handles = new Set();
   let stopped = 0, removed = 0;
   const browser = { addProgressListener() {}, removeProgressListener() { removed++; }, stop() { stopped++; } };
-  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} }, operation: scope, pendingListeners: new Set(),
+  const context = vm.createContext({ watches: { endAll() {}, endSession() {} }, browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} }, operation: scope, pendingListeners: new Set(),
     ChromeUtils: { generateQI() {} }, Ci: { nsIWebProgress: { NOTIFY_STATE_WINDOW: 1 } },
     setTimeout: fn => { handles.add(fn); return fn; }, clearTimeout: fn => handles.delete(fn),
   });

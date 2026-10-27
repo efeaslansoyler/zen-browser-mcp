@@ -219,6 +219,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#frameId(this.document.activeElement) };
         case "check":
           return { value: this.#check(data) };
+        case "sample":
+          return { value: this.#sample(data) };
         case "describe":
           return { value: this.#describeTarget(data) };
         case "form_input":
@@ -639,6 +641,12 @@ export class ZenMcpChild extends JSWindowActorChild {
       return [...doc.querySelectorAll(selector)].some(el => this.#visible(el) && has(el));
     }
     return !!doc.body && has(doc.body);
+  }
+
+  // watch change: seçiciye uyan ilk görünür öğenin metni (yoksa null)
+  #sample({ selector }) {
+    const el = [...this.document.querySelectorAll(selector)].find(el => this.#visible(el));
+    return el ? truncate(clean(el.innerText ?? el.textContent ?? ""), 500) : null;
   }
 
   // ---- form_input ----

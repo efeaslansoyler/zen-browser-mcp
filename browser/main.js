@@ -143,6 +143,7 @@ function logError(where, e) {
 
     function endOwnerSession(id) {
       extensionPanels.releaseSession(id);
+      watches.endSession(id, "session ended");
       clearTimeout(disconnectTimers.get(id));
       disconnectTimers.delete(id);
       sessionVersions.set(id, (sessionVersions.get(id) || 0) + 1);
@@ -510,11 +511,52 @@ function logError(where, e) {
 
     // ---- indirmeler: ajan sekmelerinden başlayanlar (DownloadLog.sys.mjs) ----
 
+    const { EventFiles } = ChromeUtils.importESModule(`resource://zenmcp/EventFiles.sys.mjs?v=${version}`);
+    const eventFiles = name => new EventFiles({
+      dir: `${zenMcpRuntimeDir()}/${zenMcpApp}-${name}`, setTimeout, logError: (where, e) => logError(where, e),
+    });
     const { DownloadLog } = ChromeUtils.importESModule(`resource://zenmcp/DownloadLog.sys.mjs?v=${version}`);
     const downloads = new DownloadLog(globalThis.zenMcpDownloads ||= {}, {
-      tracked: browserId => state.tabs.has(browserId),
-      dir: `${zenMcpRuntimeDir()}/${zenMcpApp}-downloads`,
-      setTimeout, logError: (where, e) => logError(where, e),
+      tracked: browserId => state.tabs.has(browserId), events: eventFiles("downloads"),
+    });
+
+    // ---- sayfa izleyicileri: koşul/değişim olay dosyasına (Watches.sys.mjs) ----
+
+    const { Watches } = ChromeUtils.importESModule(`resource://zenmcp/Watches.sys.mjs?v=${version}`);
+    // İzleyici sorgusu: query() etkin oturumun sahipliğine ve o anki işleme bağlıdır (başka oturumun
+    // işi durdurulunca iptal olurdu). İzleyici sahipliği ve site kuralını her turda kendisi denetler.
+    async function backgroundQuery(browser, name, data, frame) {
+      const wg = frame?.currentWindowGlobal;
+      if (!wg) throw new Error("The page has not loaded yet.");
+      throwIfDialog(browser);
+      let timer;
+      try {
+        return await Promise.race([
+          wg.getActor("ZenMcp").sendQuery(name, { ...data, requestId: ++querySequence }),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("The page did not answer.")), 5000); }),
+        ]);
+      } finally { clearTimeout(timer); }
+    }
+    // bütün çerçevelerde: ilk doğru/ilk değer kazanır; yüklenirken kaybolan çerçeve atlanır
+    const acrossFrames = async (browser, name, data, accept) => {
+      for (const bc of framesOf(browser)) {
+        try {
+          const { value } = await backgroundQuery(browser, name, data, bc);
+          if (accept(value)) return value;
+        } catch {}
+      }
+      return null;
+    };
+    const watches = new Watches({
+      events: eventFiles("watch"),
+      owned: (tabId, session) => {
+        const tab = findTab(tabId);
+        return tab && state.tabs.has(tabId) && ownership.owner(tabId) === session ? tab.linkedBrowser : null;
+      },
+      check: async (browser, condition) => !!(await acrossFrames(browser, "check", condition, value => value)),
+      sample: (browser, selector) => acrossFrames(browser, "sample", { selector }, value => value != null),
+      assertSite: browser => assertSiteAccess(browser),
+      setTimeout, clearTimeout,
     });
 
     const { Cancellation } = ChromeUtils.importESModule(`resource://zenmcp/Cancellation.sys.mjs?v=${version}`);
@@ -868,6 +910,7 @@ function logError(where, e) {
 
     function stopClaude() {
       releaseAllInputs();
+      watches.endAll("stopped by the user");
       extensionPanels.destroy();
       if (state.paused) return;
       state.paused = true;
@@ -989,6 +1032,7 @@ function logError(where, e) {
         request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
         tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
         wait_for: () => L("waiting", "bekliyor"),
+        watch: () => args.action === "stop" ? L("stopping a watch", "izlemeyi bitiriyor") : args.action === "list" ? L("checking watches", "izlemelere bakıyor") : L("starting to watch the page", "sayfayı izlemeye başlıyor"),
         downloads: () => args.action === "wait" ? L("waiting for a download", "indirmeyi bekliyor") : args.action === "cancel" ? L("canceling a download", "indirmeyi iptal ediyor") : L("checking downloads", "indirmelere bakıyor"),
         extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
         clipboard: () => L("requesting clipboard access", "pano erişimi istiyor"),
@@ -1546,9 +1590,9 @@ function logError(where, e) {
       get operation() { return operation; },
       get activeSession() { return activeSession; },
       DEVICE_PRESETS, DialogOpen, MAX_PAGE_TEXT, MAX_UPLOAD, Stopped, assertSiteAccess, assertSiteURL,
-      DownloadLog, browserFor, browserSettings, click, clipboardShortcut, controlledSource, describeDialog, describeTab,
+      DownloadLog, Watches, browserFor, browserSettings, click, clipboardShortcut, controlledSource, describeDialog, describeTab,
       expandFrames, extensionPanels, focusedFrame, frameOf, framesOf, guard, heldFrame, heldModifiers, input,
-      downloads, keyName, localFile, longRef, network, openDialog, operationSleep, ownership, performClipboard,
+      downloads, watches, keyName, localFile, longRef, network, openDialog, operationSleep, ownership, performClipboard,
       permissionContext, pressKeys, query, queryRef, readContext, readOutput, releaseInputs, rememberInputs,
       samePermissionContext, sameReadContext, screenshot, screenshotCache, scroll, shortRefs, target, text,
       tools, typeInFocus, waitForLoad,
@@ -1782,6 +1826,7 @@ function logError(where, e) {
       island.setMode(readConfig().mode);
       network.start();
       downloads.start().catch(e => logError("downloads", e));
+      watches.env.events.start().catch(e => logError("watch", e));
       restoreMarks();
       for (const info of sessions.values()) {
         if (!info.lifecycle) continue;
@@ -1855,6 +1900,7 @@ function logError(where, e) {
       tabMenu.destroy();
       network.stop();
       downloads.stop();
+      watches.endAll("bridge reloaded");
       try { Services.obs.removeObserver(onWindowReady, "browser-delayed-startup-finished"); } catch {}
       for (const win of browserWindows()) {
         win.removeEventListener("SSTabRestoring", onTabRestoring);

@@ -101,11 +101,23 @@ component chain, styles, text, trimmed HTML, PNG per element) goes to the target
 
 `DownloadLog` adds a view to Gecko's download list and keeps downloads whose source browsing
 context belongs to an agent tab (or a popup it opened). Each one appends JSON lines to
-`$XDG_RUNTIME_DIR/zen-mcp-downloads/<id>.jsonl` on start, every 10 % and at the end, with the
+`$XDG_RUNTIME_DIR/zen-mcp-downloads/<id>-<time>.jsonl` on start, every 10 % and at the end, with the
 sha256 when done (hashed in 4 MB chunks so the UI never blocks). Agents with a background
 monitor watch that file; others call `downloads wait`. The bridge deletes the file five
 minutes after the download ends. If the browser is set to always ask where to save, a
 download only appears once the save dialog is answered.
+
+## Page watches
+
+`wait_for` blocks the agent for at most 60 s. For longer waits and for following changes,
+`watch` starts a background check on an agent tab (`Watches.sys.mjs`): text or a selector
+appearing or disappearing, or every change of a selector's text. Results go to
+`$XDG_RUNTIME_DIR/zen-mcp-watch/<id>-<time>.jsonl` (`started`, `matched`/`changed`, and a final
+line), written by the same `EventFiles` helper as downloads. Checks use a light query path
+that doesn't join the active operation, so another session's Stop or call doesn't cancel
+them; the watch re-checks ownership and site rules itself on every tick. A watch ends at its
+first match (unless `repeat`), on timeout, when the tab is closed or changes owner, when its
+session ends, and on Stop in the island.
 
 ## Other files at runtime
 

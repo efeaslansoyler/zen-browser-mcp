@@ -1,9 +1,9 @@
 // Okuma araçları: sayfa metni, erişilebilirlik ağacı, arama, bekleme, ağ/konsol, JavaScript, React, axe.
 // main.js ortak yardımcıları ctx ile verir; değişen durum (operation, activeSession…) ctx üzerinden okunur.
 export function readTools(ctx) {
-  const { DialogOpen, MAX_PAGE_TEXT, Stopped, assertSiteAccess, assertSiteURL, browserFor,
+  const { DialogOpen, MAX_PAGE_TEXT, Stopped, Watches, assertSiteAccess, assertSiteURL, browserFor,
     expandFrames, frameOf, framesOf, longRef, network, operationSleep, permissionContext, query,
-    readContext, readOutput, samePermissionContext, sameReadContext, shortRefs, text } = ctx;
+    readContext, readOutput, samePermissionContext, sameReadContext, shortRefs, text, watches } = ctx;
   return {
     // iframe'lerin metni sayfanın metninin ardından, kaynağıyla
     async get_page_text({ tabId, diff = false, since }) {
@@ -95,9 +95,29 @@ export function readTools(ctx) {
         }
         const elapsed = Date.now() - start;
         if (ok) return text(`Done (${(elapsed / 1000).toFixed(1)} s).`);
-        if (elapsed >= limit) throw new Error(`Not met within ${Math.min(timeout, 60)} s.`);
+        if (elapsed >= limit) throw new Error(`Not met within ${Math.min(timeout, 60)} s. For longer waits use the watch tool and monitor its events file.`);
         await operationSleep(250);
       }
+    },
+
+    // Uzun süreli izleme: olay dosyasına yazar, ajanı bekletmez (wait_for kısa beklemeler için)
+    watch({ tabId, action = "start", id, ...spec }) {
+      const session = ctx.activeSession;
+      if (action === "list") return text({ watches: watches.forSession(session).map(Watches.summary) });
+      if (action === "stop") {
+        const own = watches.forSession(session).find(w => w.id === id);
+        if (!own) throw new Error(`No watch #${id} in this session; take ids from action list.`);
+        watches.end(id, "stopped by the agent");
+        return text(`Watch #${id} stopped.`);
+      }
+      const browser = browserFor(tabId);
+      assertSiteAccess(browser);
+      if (spec.selector) {
+        try { browser.ownerDocument.createDocumentFragment().querySelector(spec.selector); } catch {
+          throw new Error(`Invalid CSS selector: ${spec.selector}`);
+        }
+      }
+      return text(Watches.summary(watches.start(session, tabId, browser, spec)));
     },
 
     read_network_requests({ tabId, urlPattern, limit = 100, clear, id, max_chars = 20000 }) {
