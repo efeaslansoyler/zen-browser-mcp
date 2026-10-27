@@ -9,7 +9,7 @@ ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren k
 Claude Code, Codex ve diğer MCP istemcileriyle çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
 
-[![zen-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/demo.gif)](docs/demo.mp4)
+[![zen-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Neden
 
@@ -217,7 +217,7 @@ Mobile/tablet/desktop genel Gecko preset'leridir. `requested` istenen ayarları,
 alanlar gerçekten görülen ölçüleri verir; native ölçek/mahremiyet nedeniyle fark olabilir.
 Başka bir tarayıcı motoru veya fiziksel cihaz parmak izi taklidi değildir.
 
-[Özellik karşılaştırması ve sınırlar](docs/FEATURE-COMPARISON.md).
+[Özellik karşılaştırması ve sınırlar](docs/feature-comparison.md).
 
 ## React ve erişilebilirlik incelemesi
 
@@ -424,7 +424,7 @@ claude mcp add --scope user zen -- node "$PWD/src/server.ts"
 node scripts/zenctl.ts reload                    # değişiklikten sonra köprüyü yeniden yükle
 ```
 
-Mimari notlar ve karşılaştığımız Gecko tuzakları [`docs/DEVAM.md`](docs/DEVAM.md) dosyasında.
+Testler ve canlı kontroller [CONTRIBUTING.md](CONTRIBUTING.md)'de; mimari notlar ve karşılaştığımız Gecko tuzakları [docs/](docs/README.md) altında (İngilizce).
 
 ## Lisans
 

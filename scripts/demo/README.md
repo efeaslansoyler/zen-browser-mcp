@@ -1,6 +1,6 @@
 # Demo video
 
-Re-records `docs/demo.mp4` / `docs/demo.gif`. Linux + Hyprland only (pointer moves with `hyprctl`).
+Re-records `docs/media/demo.mp4` / `docs/media/demo.gif`. Linux + Hyprland only (pointer moves with `hyprctl`).
 
 1. Serve the shop: `cd scripts/demo/site && python3 -m http.server 8765 --bind 0.0.0.0`
    (the payment widget comes from `127.0.0.1`, a different site than `localhost`, so it runs as a cross-site iframe)

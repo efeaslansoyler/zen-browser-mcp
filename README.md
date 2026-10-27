@@ -8,7 +8,7 @@ Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse a
 input, and a small island at the top of the window that shows what the agent is doing. Works with
 Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based browsers work too.
 
-[![zen-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/demo.gif)](docs/demo.mp4)
+[![zen-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Why
 
@@ -218,7 +218,7 @@ changes are made. Generic mobile/tablet/desktop presets keep Gecko; actual metri
 returned alongside `requested` overrides and may differ due to native scaling/privacy.
 A preset is not another browser engine or a physical device fingerprint.
 
-See [feature comparison and limitations](docs/FEATURE-COMPARISON.md).
+See [feature comparison and limitations](docs/feature-comparison.md).
 
 ## React and accessibility inspection
 
@@ -425,7 +425,7 @@ claude mcp add --scope user zen -- node "$PWD/src/server.ts"
 node scripts/zenctl.ts reload                    # reload the bridge after changes, no restart
 ```
 
-[`docs/DEVAM.md`](docs/DEVAM.md) has architecture notes and the Gecko pitfalls we hit (in Turkish).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for tests and live checks, and [docs/](docs/README.md) for architecture notes and the Gecko pitfalls we hit.
 
 Run `npm test` for the MCP compatibility, wire-protocol, and island state tests. These
 use an in-memory browser/DOM fixture; live Gecko behavior still needs a browser smoke test.
