@@ -176,6 +176,18 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
    Canlı: `check-downloads.ts` (tıklama + gezinme, olay dosyası, canlı ilerleme + iptal, sahiplik, zaman aşımı) geçti. Kaydetme diyaloğu
    çıkan siteler (always_ask açıksa) diyalog kapanana kadar "başlamadı" görünür.
 
+6. Oturum menüleri (2026-10-27): "Oturuma ver" ve öğe gönder tek kaynaktan, yalnız kalıcı
+   bağlantısı süren oturumlar (`liveSessions`); ad = sohbet başlığı · proje. Claude başlığı
+   `claudeTitle()` (server.ts): üst süreç pid → `~/.claude/sessions/<pid>.json` → transcript'teki
+   son `custom-title`/`ai-title`, 15 sn'de bir; değişince yeniden subscribe. Codex: `src/codex-watch.ts`
+   tek süreç, Codex servisine (`~/.codex/app-server-control/app-server-control.sock`, WebSocket
+   JSON-RPC, deneysel) bağlanır: `thread/loaded/list` + `thread/read`; görünür = açık bir `codex`
+   penceresinin sohbeti (`resume <id>` kesin, yoksa pencere açıldıktan sonra yüklenen en yeni).
+   `/quit` sohbeti arka plana atar → gizlenir. Codex araç çağrıları `_meta.threadId` taşır →
+   oturum `codex:<sohbet>` (öğe alıcısıyla aynı). Kancalar izleyiciyi başlatır; servis yoksa eski
+   sohbet başına alıcıya düşer. Canlı denendi: açılış (mesajsız) → başlık → /quit düşüş.
+   Bilinen sınır: iki pencere aynı anda `codex resume` seçicisiyle eski sohbet açarsa eşleşme tahmindir.
+
 ## Çalışma yöntemi
 
 - `npm test` (build + soketsiz/soketli birim testleri; sahte DOM ile gerçek actor/ana süreç kodu).

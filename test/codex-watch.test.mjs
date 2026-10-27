@@ -38,3 +38,23 @@ test('codex tool calls are owned by their thread, others keep the process sessio
   assert.equal(codexSession({ id: 'claude' }, { threadId: C }), undefined);
   assert.equal(codexSession({ id: 'codex' }, undefined), undefined);
 });
+
+test('claude title follows the current conversation; /rename wins over the generated title', async () => {
+  const { claudeTitle } = await import('../dist/server.js');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-title-'));
+  try {
+    assert.equal(claudeTitle(4242, home), undefined);
+    fs.mkdirSync(path.join(home, 'sessions'));
+    fs.writeFileSync(path.join(home, 'sessions', '4242.json'), JSON.stringify({ sessionId: 's1', cwd: '/home/u/my.proj' }));
+    const dir = path.join(home, 'projects', '-home-u-my-proj');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 's1.jsonl');
+    fs.writeFileSync(file, ['{"type":"user"}', '{"type":"ai-title","aiTitle":"Old"}', 'not json -title', '{"type":"ai-title","aiTitle":"Download tracking"}'].join('\n') + '\n');
+    assert.equal(claudeTitle(4242, home), 'Download tracking');
+    fs.appendFileSync(file, '{"type":"custom-title","customTitle":"My name"}\n{"type":"ai-title","aiTitle":"Later"}\n');
+    assert.equal(claudeTitle(4242, home), 'My name');
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});

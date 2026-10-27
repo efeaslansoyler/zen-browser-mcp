@@ -3,7 +3,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { z } from "zod";
 import { call, subscribe } from "./zen.ts";
 import { NAME, SERVER_NAME, VERSION } from "./paths.ts";
@@ -59,6 +61,31 @@ const coordinationInstructions = "Use clipboard for clipboard operations; every 
 export function codexSession(agent: { id: string }, meta: any) {
   const threadId = meta?.threadId ?? meta?.["x-codex-turn-metadata"]?.thread_id;
   return agent.id === "codex" && typeof threadId === "string" && THREAD_ID.test(threadId) ? `codex:${threadId}` : undefined;
+}
+
+// Claude Code sohbetinin başlığı (`claude -r` listesindeki): /rename adı, yoksa otomatik başlık.
+// MCP süreci Claude'un çocuğu; güncel sohbet (/clear, -r sonrası da) ~/.claude/sessions/<pid>.json'da.
+// Belgelenmemiş biçim: okunamazsa undefined, menü kısa kimliğe döner.
+export function claudeTitle(pid = process.ppid, home = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude")) {
+  try {
+    const { sessionId, cwd } = JSON.parse(readFileSync(path.join(home, "sessions", `${pid}.json`), "utf8"));
+    if (typeof sessionId !== "string" || typeof cwd !== "string") return undefined;
+    const file = path.join(home, "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${sessionId}.jsonl`);
+    // başlık satırları dosya boyunca tekrar yazılır: sondaki 512 KB yeter
+    const size = statSync(file).size, length = Math.min(size, 512 * 1024);
+    const buffer = Buffer.alloc(length), fd = openSync(file, "r");
+    try { readSync(fd, buffer, 0, length, size - length); } finally { closeSync(fd); }
+    let custom: string | undefined, ai: string | undefined;
+    for (const line of buffer.toString("utf8").split("\n")) {
+      if (!line.includes("-title")) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === "custom-title" && entry.customTitle) custom = entry.customTitle;
+        if (entry.type === "ai-title" && entry.aiTitle) ai = entry.aiTitle;
+      } catch {}
+    }
+    return (custom ?? ai)?.trim() || undefined;
+  } catch { return undefined; }
 }
 
 export function createServer(callBrowser: typeof call = call, connectSession?: ConnectSession) {
@@ -478,6 +505,22 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
 
 let subscription: ReturnType<typeof subscribe> | undefined;
 let ownerSubscription: ReturnType<typeof subscribe> | undefined;
+let ownerAgent: { id: string; name: string } | undefined;
+let title = claudeTitle();
+function connectOwner(agent: { id: string; name: string }) {
+  ownerAgent = agent;
+  ownerSubscription = subscribe(() => {}, { cwd: process.cwd(), toolsOnly: true, agent, title });
+}
+function connectChannel() {
+  subscription = subscribe(
+    async (event) => {
+      if (event?.event !== "channel") return;
+      await server.server
+        .notification({ method: "notifications/claude/channel", params: { content: event.content, meta: event.meta } });
+    },
+    { cwd: process.cwd(), agent: { id: "claude", name: "Claude" }, ack: true, title },
+  );
+}
 const server = createServer(call, async ({ threadId, label }) => {
   await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
 });
@@ -488,22 +531,21 @@ export async function serve() {
     // Codex'in MCP süreci arka plan servisinde sohbetten bağımsız yaşar; Codex sohbetlerini
     // codex-watch bağlar, süreç oturumu menüde yanıltıcı olurdu
     if (agent.id === "codex") { ensureCodexWatch().catch(() => {}); return; }
-    ownerSubscription = subscribe(() => {}, { cwd: process.cwd(), toolsOnly: true, agent });
+    connectOwner(agent);
   };
   await server.connect(new StdioServerTransport());
   // tarayıcı tarafı dosyaları bu sürümden eskiyse güncellenir, köprü yeniden yüklenir
   syncBrowserFiles().catch(() => {});
 
-  if (channel) {
-    subscription = subscribe(
-      async (event) => {
-        if (event?.event !== "channel") return;
-        await server.server
-          .notification({ method: "notifications/claude/channel", params: { content: event.content, meta: event.meta } });
-      },
-      { cwd: process.cwd(), agent: { id: "claude", name: "Claude" }, ack: true },
-    );
-  }
+  if (channel) connectChannel();
+  // başlık sohbet sürerken oluşur ve /rename, /clear ile değişir: değişince yeni adla yeniden bağlan
+  setInterval(() => {
+    const now = claudeTitle();
+    if (now === title) return;
+    title = now;
+    if (ownerSubscription) { ownerSubscription.close(); connectOwner(ownerAgent!); }
+    if (subscription) { subscription.close(); connectChannel(); }
+  }, 15_000).unref();
   // Claude Code kapanınca stdin kapanır; Zen bağlantısı süreci ayakta tutmasın
   process.stdin.on("close", () => {
     ownerSubscription?.close();
