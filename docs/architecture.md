@@ -123,7 +123,7 @@ session ends, and on Stop in the island.
 ## Other files at runtime
 
 - `$XDG_RUNTIME_DIR/zen-mcp.log`: bridge errors (the browser's stderr goes nowhere).
-- `~/.local/state/zen-mcp/activity.jsonl`: one line per tool call (time, tool, tab, site, action, error); rotated at 5 MB.
+- `~/.local/state/zen-mcp/activity.jsonl`: one line per tool call (time, tool, tab, site, session name, island label, action description, destination, error); rotated at 5 MB. The tab menu's **Agent history** reads its tail (`ActivityView.sys.mjs`); **Full history…** renders it to `$XDG_RUNTIME_DIR/zen-mcp-history.html` (0600) with every field HTML-escaped and opens it in a new user tab.
 - `$XDG_RUNTIME_DIR/zen-mcp-picks/`: pick screenshots (last 20).
 
 ## Frames

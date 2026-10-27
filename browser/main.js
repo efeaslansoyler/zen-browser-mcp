@@ -475,6 +475,7 @@ function logError(where, e) {
 
     const { TabMenu } = ChromeUtils.importESModule(`resource://zenmcp/TabMenu.sys.mjs?v=${version}`);
     const tabMenu = new TabMenu({
+      history: tabId => tabHistory(tabId), openHistory: win => openHistory(win),
       workspaces: win => workspaceNames(win),
       L, mark: MARK, menuAgent, paintIcon: paintMenuIcon,
       sessions: liveSessions,
@@ -1021,7 +1022,7 @@ function logError(where, e) {
     let activeCalls = 0; // adayı gösteren, sürmekte olan tool çağrıları
 
     // adada görünen kısa açıklama: "seaskablo.com — tıklıyor"
-    function describeAction(tool, args, browser) {
+    function describeAction(tool, args, browser, withHost = true) {
       let host = "";
       try { host = browser.currentURI.host; } catch {}
       const what = {
@@ -1059,7 +1060,7 @@ function logError(where, e) {
         extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
         clipboard: () => L("requesting clipboard access", "pano erişimi istiyor"),
       }[tool]?.() ?? L("working", "çalışıyor");
-      return host ? `${host} — ${what}` : what;
+      return host && withHost ? `${host} — ${what}` : what;
     }
 
     // frame: sekmedeki bir alt çerçevenin BrowsingContext'i (varsayılan üst çerçeve)
@@ -1653,6 +1654,9 @@ function logError(where, e) {
         entry.session = activeSession;
         entry.tab = args.tabId;
         entry.host = hostOf(browser);
+        // geçmiş görünümü için: oturum kapandıktan sonra da okunur kalsın
+        entry.who = sessions.get(activeSession)?.name;
+        entry.doing = describeAction(tool, args, browser, false);
         island?.working(browser, `${describeAction(tool, args, browser)} · ${activeSession.slice(-6)}`);
         activeCalls++;
       }
@@ -1704,6 +1708,25 @@ function logError(where, e) {
     // (5 MB'ı geçince activity.1.jsonl'e taşınır)
     const ACTIVITY_PATH = `${Services.env.get("XDG_STATE_HOME") || Services.env.get("HOME") + "/.local/state"}/${zenMcpApp}/activity.jsonl`;
     const MAX_ACTIVITY = 5 * 1048576;
+    // tarayıcı yeniden başlayınca sekme numaraları yeniden kullanılır: geçmiş bu açılıştan beri
+    globalThis.zenMcpBrowserStart ||= Date.now();
+    const { readRecent, formatLine, renderPage } = ChromeUtils.importESModule(`resource://zenmcp/ActivityView.sys.mjs?v=${version}`);
+
+    async function tabHistory(tabId, limit = 15) {
+      const entries = await readRecent(ACTIVITY_PATH);
+      return entries.filter(e => e.tab === tabId && Date.parse(e.t) >= globalThis.zenMcpBrowserStart)
+        .slice(-limit).reverse().map(e => formatLine(e, L));
+    }
+
+    // yerel dosyaya yazılıp kullanıcının yeni sekmesinde açılır (ajana verilmez)
+    async function openHistory(win) {
+      const entries = (await readRecent(ACTIVITY_PATH, 2 * 1048576)).slice(-500);
+      const path = `${zenMcpRuntimeDir()}/${zenMcpApp}-history.html`;
+      await IOUtils.writeUTF8(path, renderPage(entries, L, ACTIVITY_PATH), { mode: "overwrite" });
+      await IOUtils.setPermissions(path, 0o600).catch(() => {});
+      const tab = win.gBrowser.addTrustedTab(Services.io.newFileURI(localFile(path)).spec, { inBackground: false });
+      win.gBrowser.selectedTab = tab;
+    }
 
     function logActivity(entry) {
       try {

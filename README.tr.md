@@ -362,7 +362,9 @@ sırasında engelli alan adlarına HTTP istekleri ve yönlendirmeler iptal edili
 bağımsız arka plan etkinliği genel olarak filtrelenmez.
 
 Her tool çağrısı `~/.local/state/zen-mcp/activity.jsonl` dosyasına yazılır (zaman, site, ne
-yapıldığı). Claude'a *"dün tarayıcıda ne yaptın?"* diye sorabilirsin.
+yapıldığı). Sekmeye sağ tık → **Ajan geçmişi** o sekmede ajanların son işlemlerini, **Tüm
+geçmiş…** oturumlara göre gruplu bütün kaydı gösterir. Claude'a *"dün tarayıcıda ne yaptın?"*
+diye de sorabilirsin.
 
 ## Tool'lar
 

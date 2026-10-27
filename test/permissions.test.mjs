@@ -20,7 +20,7 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
   navigate(site);
   const ownership = new Ownership();
   ownership.assign(1, 'test-session');
-  const context = vm.createContext({ ChromeUtils: { importESModule: () => ({ permissions }) }, version: 'test', heldInputFrames: new Map(), browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = vm.createContext({ sessions: new Map(), ChromeUtils: { importESModule: () => ({ permissions }) }, version: 'test', heldInputFrames: new Map(), browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
     siteRule, framesOf: () => [], Services: { uriFixup: { getFixupURIInfo: url => ({ preferredURI: { spec: new URL(url).href } }) }, io: { newURI: url => ({ host: new URL(url).hostname }) } },
     ownership, activeSession: 'test-session',
     browserFor: id => { ownership.check(id, 'test-session'); return browser; },

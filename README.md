@@ -364,7 +364,9 @@ and redirects to blocked hosts are cancelled; the browser's independent backgrou
 activity is not globally filtered.
 
 Every tool call is logged to `~/.local/state/zen-mcp/activity.jsonl` (time, site, what was
-done). Ask Claude *"what did you do in the browser yesterday?"*.
+done). Right-click a tab → **Agent history** for the last actions agents took there, or
+**Full history…** for a page of everything, grouped by session. You can also ask Claude
+*"what did you do in the browser yesterday?"*.
 
 ## Tools
 

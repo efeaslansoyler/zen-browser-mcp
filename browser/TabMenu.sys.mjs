@@ -5,7 +5,8 @@
 //   env.paintIcon(item, agent): ajanın simgesi ve rengi,
 //   env.give(tab, sessionId), env.takeBack(tab),
 //   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hostOf(browser), env.ruleFor(host),
-//   env.workspaces(win): Zen çalışma alanı adları (Zen değilse null)
+//   env.workspaces(win): Zen çalışma alanı adları (Zen değilse null),
+//   env.history(tabId): o sekmedeki son ajan işlemleri (satırlar), env.openHistory(win): tüm geçmiş sayfası
 const MENU_ID = "zen-mcp-context-give";
 
 export class TabMenu {
@@ -53,6 +54,31 @@ export class TabMenu {
     const targets = win.document.createXULElement("menupopup");
     give.append(targets);
     menu.insertBefore(give, permissionsMenu);
+    const historyMenu = win.document.createXULElement("menu");
+    historyMenu.id = MENU_ID + "-history";
+    historyMenu.setAttribute("label", L("Agent history", "Ajan geçmişi"));
+    const historyPopup = win.document.createXULElement("menupopup");
+    historyMenu.append(historyPopup);
+    menu.insertBefore(historyMenu, permissionsMenu.nextSibling);
+    // alt menü açılınca doldurulur: günlük dosyası yalnız gerektiğinde okunur
+    const onHistoryShowing = async event => {
+      if (event.target !== historyPopup) return;
+      const tab = shownTabs[0];
+      historyPopup.replaceChildren();
+      const line = (label, disabled = true) => {
+        const item = win.document.createXULElement("menuitem");
+        item.setAttribute("label", label);
+        if (disabled) item.setAttribute("disabled", "true");
+        historyPopup.append(item);
+        return item;
+      };
+      const lines = tab && shownTabs.length === 1 ? await env.history(tab.linkedBrowser.browserId).catch(() => []) : [];
+      if (!lines.length) line(L("No agent actions on this tab", "Bu sekmede ajan işlemi yok"));
+      for (const text of lines) line(text);
+      historyPopup.append(win.document.createXULElement("menuseparator"));
+      line(L("Full history…", "Tüm geçmiş…"), false).addEventListener("command", () => env.openHistory(win));
+    };
+    historyPopup.addEventListener("popupshowing", onHistoryShowing);
     let shownTabs = [];
     const build = inputTabs => {
       const tabs = shownTabs = inputTabs.filter(t => t.isConnected && !t.hasAttribute("zen-empty-tab"));
@@ -187,6 +213,7 @@ export class TabMenu {
       item.remove();
       give.remove();
       permissionsMenu.remove();
+      historyMenu.remove();
     });
   }
 }
