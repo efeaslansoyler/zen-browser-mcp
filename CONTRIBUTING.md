@@ -66,6 +66,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-inspection.ts` | React (development and production builds), axe |
 | `check-downloads.ts` | Click and navigation downloads, events file, progress, cancel, ownership |
 | `check-watch.ts` | Page watches: match timing, text changes, stop, tab close |
+| `check-workspace.ts` | Zen: agent tabs in a configured hidden space, input and screenshots there |
 | `check-pick-delivery.ts` | **Sends a real message to a real Codex conversation**; needs `CODEX_THREAD_ID`. Don't run casually. |
 
 They require the global mode to be `auto` and refuse to run in `ask` mode. Afterwards check

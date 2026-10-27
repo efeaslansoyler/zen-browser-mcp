@@ -79,7 +79,8 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
 
 ## Permissions
 
-`~/.config/zen-mcp/config.json`: `{"mode": "auto" | "ask", "sites": {"example.com": "ask" | "block"}}`.
+`~/.config/zen-mcp/config.json`: `{"mode": "auto" | "ask", "sites": {"example.com": "ask" | "block"}, "workspace": "Agents"}`
+(`workspace` is optional: the Zen space new agent tabs open in).
 Site rules cover subdomains, `block` wins, and a subdomain can't loosen its parent. Every
 `browser_batch` step is re-checked against the current document, origin and rules; a redirect
 or new document invalidates earlier approvals. Clipboard access, tab switches for extension

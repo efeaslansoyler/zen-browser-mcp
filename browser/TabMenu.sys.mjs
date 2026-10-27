@@ -1,10 +1,11 @@
-// Sekme sağ tık menüsü: "Ajandan geri al", "Oturuma ver/devret…" ve "Ajan izinleri"
-// (genel mod + bu sitenin kuralı). Yalnız arayüz; işlemler env üzerinden yapılır:
+// Sekme sağ tık menüsü: "Ajandan geri al", "Oturuma ver/devret…" ve "Ajan ayarları"
+// (genel mod + bu sitenin kuralı + Zen'de ajan sekmelerinin çalışma alanı). Yalnız arayüz; işlemler env üzerinden yapılır:
 //   env.L(en, tr), env.mark: işaret özniteliği,
 //   env.sessions(): bağlı oturumlar, env.ownerName(tab), env.menuAgent(),
 //   env.paintIcon(item, agent): ajanın simgesi ve rengi,
 //   env.give(tab, sessionId), env.takeBack(tab),
-//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hostOf(browser), env.ruleFor(host)
+//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hostOf(browser), env.ruleFor(host),
+//   env.workspaces(win): Zen çalışma alanı adları (Zen değilse null)
 const MENU_ID = "zen-mcp-context-give";
 
 export class TabMenu {
@@ -43,7 +44,7 @@ export class TabMenu {
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
     const permissionsMenu = win.document.createXULElement("menu");
     permissionsMenu.id = MENU_ID + "-permissions";
-    permissionsMenu.setAttribute("label", L("Agent permissions", "Ajan izinleri"));
+    permissionsMenu.setAttribute("label", L("Agent settings", "Ajan ayarları"));
     const permissionsPopup = win.document.createXULElement("menupopup");
     permissionsMenu.append(permissionsPopup);
     menu.insertBefore(permissionsMenu, item.nextSibling);
@@ -143,6 +144,25 @@ export class TabMenu {
           else sites[host] = rule;
           env.writeConfig({ sites });
         });
+        permissionsPopup.append(choice);
+      }
+      const spaces = env.workspaces(win);
+      if (!spaces) return;
+      permissionsPopup.append(win.document.createXULElement("menuseparator"));
+      heading(L("New agent tabs open in", "Yeni ajan sekmeleri şurada açılır"));
+      const current = config.workspace ?? "";
+      const AGENTS = L("Agents", "Ajanlar");
+      const options = [["", L("The space you're in", "Bulunduğun alan")], ...spaces.map(name => [name, name])];
+      if (!spaces.includes(AGENTS)) options.push([AGENTS, L(`New space: ${AGENTS}`, `Yeni alan: ${AGENTS}`)]);
+      if (current && !spaces.includes(current) && current !== AGENTS) options.push([current, L(`New space: ${current}`, `Yeni alan: ${current}`)]);
+      for (const [value, label] of options) {
+        const choice = win.document.createXULElement("menuitem");
+        choice.setAttribute("type", "radio");
+        choice.setAttribute("name", "zen-mcp-workspace");
+        choice.setAttribute("data-zen-workspace", value);
+        choice.setAttribute("label", label);
+        if (value === current) choice.setAttribute("checked", "true");
+        choice.addEventListener("command", () => env.writeConfig({ workspace: value || undefined }));
         permissionsPopup.append(choice);
       }
     };

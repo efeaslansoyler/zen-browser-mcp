@@ -253,9 +253,14 @@ function logError(where, e) {
       return [...Services.wm.getEnumerator("navigator:browser")].filter(w => !w.closed && w.gBrowser);
     }
 
+    // Zen'de gBrowser.tabs yalnız açık çalışma alanının sekmeleri: diğer alanlardakiler de sayılmalı
+    function windowTabs(win) {
+      return [...(win.gZenWorkspaces?.workspaceEnabled ? win.gZenWorkspaces.allStoredTabs : win.gBrowser.tabs)];
+    }
+
     function findTab(tabId) {
       for (const win of browserWindows()) {
-        for (const tab of win.gBrowser.tabs) {
+        for (const tab of windowTabs(win)) {
           if (tab.linkedBrowser?.browserId === tabId) return tab;
         }
       }
@@ -303,12 +308,28 @@ function logError(where, e) {
 
     // Claude in Chrome gibi kullanıcının penceresinde, arka planda: girdiler sayfa sürecinden
     // gittiği için sekmenin seçili olması gerekmez, kullanıcının görünümü değişmez
-    function createTab() {
+    async function createTab() {
       const win = Services.wm.getMostRecentWindow("navigator:browser");
       if (!win) throw new Error("No browser window is open.");
       const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true });
       mark(tab);
+      await placeInWorkspace(win, tab).catch(e => logError("workspace", e));
       return tab;
+    }
+
+    // Zen: ayarlıysa ajan sekmesi o çalışma alanına taşınır (yoksa kullanıcıyı oraya geçirmeden
+    // oluşturulur). Gizli alandaki sekmede de girdi, okuma ve ekran görüntüsü çalışır.
+    async function placeInWorkspace(win, tab) {
+      const name = readConfig().workspace;
+      const spaces = win.gZenWorkspaces;
+      if (!name || !spaces?.workspaceEnabled) return;
+      let space = spaces.getWorkspaces().find(w => w.name === name);
+      space ??= await spaces.createAndSaveWorkspace(name, undefined, true);
+      if (space && tab.getAttribute("zen-workspace-id") !== space.uuid) await spaces.moveTabToWorkspace(tab, space.uuid);
+    }
+
+    function workspaceNames(win) {
+      return win.gZenWorkspaces?.workspaceEnabled ? win.gZenWorkspaces.getWorkspaces().map(w => w.name) : null;
     }
 
     // ---- Claude sekmesi işareti ----
@@ -384,7 +405,7 @@ function logError(where, e) {
 
     function restoreMarks() {
       for (const win of browserWindows()) {
-        for (const tab of win.gBrowser.tabs) restoreMark(tab);
+        for (const tab of windowTabs(win)) restoreMark(tab);
       }
     }
 
@@ -454,6 +475,7 @@ function logError(where, e) {
 
     const { TabMenu } = ChromeUtils.importESModule(`resource://zenmcp/TabMenu.sys.mjs?v=${version}`);
     const tabMenu = new TabMenu({
+      workspaces: win => workspaceNames(win),
       L, mark: MARK, menuAgent, paintIcon: paintMenuIcon,
       sessions: liveSessions,
       ownerName: tab => sessions.get(ownership.owner(tab.linkedBrowser.browserId))?.name,
@@ -1367,7 +1389,7 @@ function logError(where, e) {
       async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs().filter(tab => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
-        const userTabs = browserWindows().flatMap(win => [...win.gBrowser.tabs])
+        const userTabs = browserWindows().flatMap(windowTabs)
           // Zen'in her çalışma alanındaki gizli boş sekme yer tutucusu kullanıcı sekmesi değil
           .filter(tab => tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !ownership.owner(tab.linkedBrowser.browserId)).map(describeTab);
         if (!tabs.length) return text({ userTabs, session: sessions.get(activeSession), tabs: [], extensions: await extensionPanels.list(), note: "No owned tabs. Request an existing userTabs tab with request_tab and wait for approval, or create a new tab." });

@@ -48,7 +48,7 @@ function harness() {
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
     network: { delete() {}, stop() {} }, downloads: { stop() {} }, watches: { endAll() {}, endSession() {} }, tabRequests: new Map(), MARK: 'zen-mcp',
     lastUse: new Map(), activeCalls: 0, island: null, commands: {},
-    findTab: id => tabs.get(id), browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }], restoreMarks() {},
+    findTab: id => tabs.get(id), browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }], windowTabs: win => win.gBrowser.tabs, restoreMarks() {},
     SessionStore: {
       setCustomTabValue(tab, key, value) { store.set(`${tab.linkedBrowser.browserId}:${key}`, value); },
       getCustomTabValue(tab, key) { return store.get(`${tab.linkedBrowser.browserId}:${key}`) || ''; },
@@ -305,7 +305,7 @@ test('session menu pins explicit fixture tabs even when native context points el
     give: (tab, session) => c.mark(tab, tab.getAttribute(c.MARK) || 'user', session),
     takeBack: tab => c.unmark(tab),
     readConfig: () => ({ mode: 'auto', sites: {} }), writeConfig() {}, setMode() {},
-    hostOf: () => 'fixture.test', ruleFor: () => 'default',
+    hostOf: () => 'fixture.test', ruleFor: () => 'default', workspaces: () => null,
   });
   h.context.attachMenu = win => tabMenu.attach(win);
   h.context.prepareTabMenu = (win, tabs) => tabMenu.prepare(win, tabs);

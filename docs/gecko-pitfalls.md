@@ -55,6 +55,11 @@ something that "should work".
 - `gBrowser.insertBrowser(tab)` (no underscore) creates the `<browser>` of a lazy tab.
 - Without a container Firefox sets `.tab-context-line` to `display: none`.
 - `drawSnapshot(rect, …)` wants document coordinates (viewport + scrollX/Y).
+- In Zen, `gBrowser.tabs` holds only the active workspace's tabs; tabs in other spaces are
+  in `gZenWorkspaces.allStoredTabs`. Code that looks tabs up by id must use the latter, or an
+  agent loses its tab as soon as the user switches spaces.
+- `gZenWorkspaces.createAndSaveWorkspace(name, icon, true)` creates a space without switching;
+  `moveTabToWorkspace(tab, uuid)` moves a background tab without selecting it.
 - Zen keeps a hidden empty-tab placeholder per workspace (`zen-empty-tab`, `about:blank`):
   skip it when listing tabs.
 - Zen syncs windows; an unsynced window needs `OpenBrowserWindow({ zenSyncedWindow: false })`.

@@ -308,10 +308,18 @@ kurallarına uyar; pano/indirme çıktıları mevcut host/dosya araçlarıyla al
 Yeni `extensions` aracının görünmesi için MCP istemcisinin bağlantısı yenilenmelidir;
 yalnız tarayıcı köprüsünü reload etmek çalışan MCP sunucusunu yenilemez.
 
+## Zen çalışma alanları
+
+Ajan sekmeleri bulunduğun çalışma alanında açılır. Önüne çıkmasınlar istersen sekme sağ tık
+menüsü → **Ajan ayarları** → **Yeni ajan sekmeleri şurada açılır** ile bir alan seç (ya da
+`npx zen-mcp config workspace <ad>`, geri almak için `current`). Alan yoksa sana geçiş
+yapılmadan oluşturulur. Ajanlar gizli alanda da her zamanki gibi çalışır: okuma, girdi ve
+ekran görüntüsü için sekmenin görünmesi gerekmez; adadaki sekmeye git düğmesi seni oraya götürür.
+
 ## Modlar ve site kuralları
 
 Genel mod **auto / otomatik** (sormadan işlem) veya **ask / onaylı** (işlemden önce onay)
-olabilir. Sekme sağ tık menüsü → **Ajan izinleri** → **Bu site** üzerinden siteye özel kural seçilir:
+olabilir. Sekme sağ tık menüsü → **Ajan ayarları** → **Bu site** üzerinden siteye özel kural seçilir:
 
 | Site kuralı | Davranış |
 |---|---|

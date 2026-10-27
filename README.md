@@ -310,10 +310,18 @@ ownership rules; clipboard/download outputs still use the existing host/file wor
 After installing this update, reconnect the MCP client to discover the new `extensions`
 tool; reloading the browser bridge alone does not refresh an existing MCP server.
 
+## Zen workspaces
+
+Agent tabs open in the workspace you're in. To keep them out of your way, pick a space in the
+tab context menu → **Agent settings** → **New agent tabs open in** (or
+`npx zen-mcp config workspace <name>`, `current` to undo). A missing space is created without
+switching to it. Agents work in a hidden space as usual: reading, input and screenshots don't
+need the tab to be visible, and the island's go-to-tab button takes you there.
+
 ## Modes and site rules
 
 The general mode is **auto** (act without asking) or **ask** (request approval before
-an action). Each site can have one rule in the tab context menu → **Agent permissions** → **This site**:
+an action). Each site can have one rule in the tab context menu → **Agent settings** → **This site**:
 
 | Site rule | Behavior |
 |---|---|

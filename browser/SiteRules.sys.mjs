@@ -17,7 +17,11 @@ export function normalizeConfig(raw = {}) {
     if (rule === 'default') delete sites[domain];
     else sites[domain] = rule;
   }
-  return { mode: raw.mode === 'ask' ? 'ask' : 'auto', sites };
+  const config = { mode: raw.mode === 'ask' ? 'ask' : 'auto', sites };
+  // Zen: ajanın açtığı sekmelerin çalışma alanı (adıyla); yoksa kullanıcının o anki alanı
+  const workspace = typeof raw.workspace === 'string' ? raw.workspace.trim().slice(0, 80) : '';
+  if (workspace) config.workspace = workspace;
+  return config;
 }
 
 export function siteRule(host, sites = {}) {

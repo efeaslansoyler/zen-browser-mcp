@@ -42,3 +42,10 @@ test('CLI migrates legacy config, removes explicit rules and preserves block thr
     assert.equal(read().sites['legacy.test'], 'ask');
   } finally { fs.rmSync(directory, { recursive: true }); }
 });
+
+test('workspace setting is kept trimmed and dropped when empty', () => {
+  assert.equal(normalizeConfig({ workspace: '  Agents ' }).workspace, 'Agents');
+  assert.equal('workspace' in normalizeConfig({ workspace: '   ' }), false);
+  assert.equal('workspace' in normalizeConfig({ workspace: 42 }), false);
+  assert.equal(normalizeConfig({ workspace: 'x'.repeat(200) }).workspace.length, 80);
+});

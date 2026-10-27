@@ -30,8 +30,9 @@ export function configCommand(args: string[]) {
     console.log(L(`mode: ${config.mode}  (${config.mode === "ask" ? "Agent asks before every action" : "Agent acts without asking"})`,
       `mod: ${config.mode}  (${config.mode === "ask" ? "Ajan her işlemden önce izin ister" : "Ajan sormadan işlem yapar"})`));
     console.log(L("site rules:", "site kuralları:"), config.sites);
-    console.log(L(`\nUsage:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <domain>…\n  npx ${NAME} config site list`,
-      `\nKullanım:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <alan-adı>…\n  npx ${NAME} config site list`));
+    console.log(L(`workspace: ${config.workspace ?? "(the space you're in)"}`, `çalışma alanı: ${config.workspace ?? "(bulunduğun alan)"}`));
+    console.log(L(`\nUsage:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <domain>…\n  npx ${NAME} config site list\n  npx ${NAME} config workspace <name>|current`,
+      `\nKullanım:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <alan-adı>…\n  npx ${NAME} config site list\n  npx ${NAME} config workspace <ad>|current`));
     return;
   }
   if (cmd === "mode") {
@@ -39,6 +40,15 @@ export function configCommand(args: string[]) {
     if (mode !== "auto" && mode !== "ask") throw new Error(L("mode must be auto or ask.", "mod auto ya da ask olmalı."));
     writeConfig({ ...config, mode });
     console.log(L(`✓ mode: ${mode}`, `✓ mod: ${mode}`));
+    return;
+  }
+  if (cmd === "workspace") {
+    // Zen: ajanın açtığı sekmeler bu çalışma alanına; "current" kullanıcının o anki alanı
+    const name = rest.join(" ").trim();
+    if (!name) throw new Error(L("Use: config workspace <name>|current", "Kullanım: config workspace <ad>|current"));
+    const { workspace: _, ...rest2 } = config;
+    writeConfig(name === "current" ? rest2 : { ...config, workspace: name });
+    console.log(L(`✓ workspace: ${name === "current" ? "the space you're in" : name}`, `✓ çalışma alanı: ${name === "current" ? "bulunduğun alan" : name}`));
     return;
   }
   if (cmd === "site" || cmd === "sensitive") {
