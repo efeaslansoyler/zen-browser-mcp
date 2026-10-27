@@ -7,6 +7,8 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseHookInput, configureCodexHooks, handleCodexHook } from '../dist/codex-hooks.js';
+// Codex servisi izlenemiyormuş gibi: kancalar sohbet başına alıcıya düşer
+const noWatch = async () => false;
 import { contactRelay, ensureCodexRelay, relaySocket } from '../dist/codex-relay.js';
 
 test('hooks accept exact host IDs, never infer or guess a session', () => {
@@ -69,10 +71,10 @@ test('start/resume/prompt auto-connect one receiver; end cleans up; stale socket
   });
   await new Promise(resolve => browser.listen(process.env.ZEN_MCP_SOCKET, resolve));
   try {
-    await Promise.all([handleCodexHook(input), handleCodexHook(input)]);
+    await Promise.all([handleCodexHook(input, noWatch), handleCodexHook(input, noWatch)]);
     await waitUntil(() => clients.size === 1 && registrations.length >= 1);
     const first = await readControl(threadId);
-    await handleCodexHook({ ...input, hook_event_name: 'UserPromptSubmit' });
+    await handleCodexHook({ ...input, hook_event_name: 'UserPromptSubmit' }, noWatch);
     await waitUntil(() => clients.size === 1 && registrations.length >= 2);
     assert.equal((await readControl(threadId)).pid, first.pid, 'refresh must not spawn another process');
     assert.equal(registrations.at(-1).args.threadId, threadId);
@@ -83,7 +85,7 @@ test('start/resume/prompt auto-connect one receiver; end cleans up; stale socket
     await ensureCodexRelay({ threadId, cwd: dir });
     await waitUntil(() => clients.size === 1);
     assert.notEqual((await readControl(threadId)).pid, first.pid);
-    await handleCodexHook({ ...input, hook_event_name: 'SessionEnd' });
+    await handleCodexHook({ ...input, hook_event_name: 'SessionEnd' }, noWatch);
     await waitUntil(async () => !(await contactRelay(threadId)) && clients.size === 0);
   } finally {
     await contactRelay(threadId, 'stop');

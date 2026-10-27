@@ -20,12 +20,13 @@ const ascii = (s: string) =>
 
 export type AgentIdentity = { id: string; name: string };
 
-export function call(tool: string, args: object = {}, timeout = 60_000, agent?: AgentIdentity): Promise<BrowserContent> {
+// as: bu çağrının oturumu (Codex sohbeti gibi); verilmezse bu MCP sürecinin oturumu
+export function call(tool: string, args: object = {}, timeout = 60_000, agent?: AgentIdentity, as: string = session): Promise<BrowserContent> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     let buffer = "";
     socket.setTimeout(timeout, () => socket.destroy(new Error(`The browser did not answer within ${timeout / 1000} s.`)));
-    socket.on("connect", () => socket.write(ascii(JSON.stringify({ tool, args, session, agent })) + "\n"));
+    socket.on("connect", () => socket.write(ascii(JSON.stringify({ tool, args, session: as, agent })) + "\n"));
     socket.on("data", (chunk) => {
       buffer += chunk.toString("latin1");
       if (buffer.includes("\n")) socket.end();
@@ -58,7 +59,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000, agent?: 
 // Zen'e kalıcı bağlanır, Zen'in ittiği olayları (satır başına bir JSON) onEvent'e verir. Zen
 // kapalıysa ya da köprü yeniden yüklenirse birkaç saniyede bir yeniden dener.
 export type SubscriptionInfo = {
-  cwd: string; session?: string; agent?: AgentIdentity; label?: string; threadId?: string; ack?: boolean; toolsOnly?: boolean;
+  cwd: string; session?: string; agent?: AgentIdentity; label?: string; title?: string; threadId?: string; ack?: boolean; toolsOnly?: boolean;
 };
 
 export function subscribe(onEvent: (event: any) => void | Promise<void>, info: SubscriptionInfo) {

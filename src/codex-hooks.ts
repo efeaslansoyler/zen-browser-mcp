@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { THREAD_ID } from './delivery.ts';
 import { ensureCodexRelay, contactRelay } from './codex-relay.ts';
+import { ensureCodexWatch } from './codex-watch.ts';
 import { PACKAGE_DIR } from './paths.ts';
 
 export type CodexHookInput = { session_id: string; cwd: string; hook_event_name: string };
@@ -17,8 +18,11 @@ export function parseHookInput(value: unknown): CodexHookInput {
   return input as CodexHookInput;
 }
 
-export async function handleCodexHook(value: unknown) {
+// watch: testlerde gerçek Codex servisine dokunmamak için değiştirilebilir
+export async function handleCodexHook(value: unknown, watch: () => Promise<boolean> = ensureCodexWatch) {
   const input = parseHookInput(value);
+  // Codex servisi izlenebiliyorsa sohbetleri izleyici bağlar; sohbet başına alıcı yalnız yedek
+  if (await watch().catch(() => false)) return;
   if (input.hook_event_name === 'SessionEnd') {
     await contactRelay(input.session_id, 'stop');
   } else {

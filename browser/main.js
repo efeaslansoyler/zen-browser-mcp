@@ -102,15 +102,36 @@ function logError(where, e) {
     const ownerConnections = new Map();
     const disconnectTimers = new Map();
 
-    function sessionInfo(id, agent = activeAgent, cwd = "") {
+    function sessionInfo(id, agent = activeAgent, cwd = "", title) {
       if (typeof id !== "string" || !id.trim()) throw new Error("A browser session ID is required. Reconnect the MCP server.");
       let info = sessions.get(id);
       if (!info) { info = { id }; sessions.set(id, info); }
       if (cwd) info.project = String(cwd).split("/").filter(Boolean).pop();
+      if (title !== undefined) info.title = title || undefined;
       info.agent = agentTheme(agent);
-      info.name = `${info.agent.name}${info.project ? " · " + info.project : ""} · ${id.slice(-6)}`;
+      info.name = sessionName(info.agent, info.project, info.title, id);
       info.seen = Date.now();
       return info;
+    }
+
+    // menüde görünen ad: sohbet başlığı varsa o (ajan simgeden anlaşılır), yoksa ajan + kısa kimlik
+    function sessionName(theme, cwd, title, id) {
+      const project = String(cwd || "").split("/").filter(Boolean).pop();
+      if (title) {
+        const short = title.length > 40 ? title.slice(0, 39).trimEnd() + "…" : title;
+        return project ? `${short} · ${project}` : short;
+      }
+      return `${theme.name}${project ? " · " + project : ""} · ${String(id).slice(-6)}`;
+    }
+
+    // menülerde yalnız kalıcı bağlantısı süren oturumlar: zenctl gibi tek seferlik çağrıların
+    // oturumu hiç "koptu" olmaz, listelenirse hayalet kalır
+    function* liveSessions() {
+      for (const info of sessions.values()) {
+        // Codex'te sekme sohbete verilir (codex:<sohbet>); MCP süreci oturumu hiçbir sohbete bağlı değil
+        if (info.agent?.id === "codex" && !info.id.startsWith("codex:")) continue;
+        if (info.lifecycle && !info.disconnected) yield info;
+      }
     }
 
     function cancelTabWork(tabId) {
@@ -137,8 +158,8 @@ function logError(where, e) {
       }
     }
 
-    function connectOwnerSession(id, transport, agent, cwd) {
-      const info = sessionInfo(id, agent, cwd);
+    function connectOwnerSession(id, transport, agent, cwd, title) {
+      const info = sessionInfo(id, agent, cwd, title);
       info.disconnected = false;
       info.lifecycle = true;
       clearTimeout(disconnectTimers.get(id));
@@ -433,7 +454,7 @@ function logError(where, e) {
     const { TabMenu } = ChromeUtils.importESModule(`resource://zenmcp/TabMenu.sys.mjs?v=${version}`);
     const tabMenu = new TabMenu({
       L, mark: MARK, menuAgent, paintIcon: paintMenuIcon,
-      sessions: () => sessions.values(),
+      sessions: liveSessions,
       ownerName: tab => sessions.get(ownership.owner(tab.linkedBrowser.browserId))?.name,
       give: (tab, session) => {
         if (!sessions.has(session) || sessions.get(session).disconnected) return;
@@ -451,6 +472,7 @@ function logError(where, e) {
     const channels = new Channels(lastUse, {
       theme: agentTheme,
       connectOwner: (...args) => connectOwnerSession(...args),
+      sessionName: (...args) => sessionName(...args),
       disconnectOwner: (session, transport) => { if (!shuttingDown) disconnectOwnerSession(session, transport); },
       logError: (where, e) => logError(where, e),
       setTimeout, clearTimeout,
@@ -1402,7 +1424,9 @@ function logError(where, e) {
       async tabs_context_mcp({ createIfEmpty }) {
         let tabs = liveTabs().filter(tab => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
         if (!tabs.length && createIfEmpty) tabs = [await createTab()];
-        const userTabs = browserWindows().flatMap(win => [...win.gBrowser.tabs]).filter(tab => tab.linkedBrowser && !ownership.owner(tab.linkedBrowser.browserId)).map(describeTab);
+        const userTabs = browserWindows().flatMap(win => [...win.gBrowser.tabs])
+          // Zen'in her çalışma alanındaki gizli boş sekme yer tutucusu kullanıcı sekmesi değil
+          .filter(tab => tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !ownership.owner(tab.linkedBrowser.browserId)).map(describeTab);
         if (!tabs.length) return text({ userTabs, session: sessions.get(activeSession), tabs: [], extensions: await extensionPanels.list(), note: "No owned tabs. Request an existing userTabs tab with request_tab and wait for approval, or create a new tab." });
         return text({ userTabs, session: sessions.get(activeSession), extensions: await extensionPanels.list(), tabs: tabs.map(tab => ({ ...describeTab(tab), coordination: coordinationStatus(tab.linkedBrowser.browserId, activeSession) })) });
       },
@@ -1870,7 +1894,11 @@ function logError(where, e) {
       }
       const sweep = () => {
         for (const info of sessions.values()) {
-          if (!ownerConnections.has(info.id) && Date.now() - info.seen > 24 * 60 * 60 * 1000) endOwnerSession(info.id);
+          if (ownerConnections.has(info.id)) continue;
+          const idle = Date.now() - info.seen;
+          // kalıcı bağlantısız ve sekmesiz oturumlar 10 dk sonra, diğerleri bir gün sonra
+          const hasTabs = [...ownership.owners.values()].includes(info.id);
+          if (idle > 24 * 60 * 60 * 1000 || (!info.lifecycle && !hasTabs && idle > 10 * 60 * 1000)) endOwnerSession(info.id);
         }
         sessionSweep = setTimeout(sweep, 60_000);
       };

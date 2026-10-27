@@ -19,11 +19,11 @@ export class Channels {
     this.pending = new Map(); // teslim kimliği → { session, transport, finish }
   }
 
-  subscribe({ session, cwd, agent, label, threadId, ack = false, toolsOnly = false }, transport, output) {
+  subscribe({ session, cwd, agent, label, title, threadId, ack = false, toolsOnly = false }, transport, output) {
     if (!session) throw new Error("session is required.");
     const theme = this.env.theme(agent ?? { id: "claude" });
     if (toolsOnly) {
-      this.env.connectOwner(session, transport, theme, cwd);
+      this.env.connectOwner(session, transport, theme, cwd, title);
       return session;
     }
     const relay = theme.id === "codex" && session === `codex:${threadId}`;
@@ -31,8 +31,9 @@ export class Channels {
     const old = this.subscribers.get(key);
     if (old?.relay && !relay) throw new Error("This Codex thread already has an automatic receiver.");
     if (old) try { old.transport.close(Cr.NS_OK); } catch {}
-    const project = String(label || cwd || "").split("/").filter(Boolean).pop() || "session";
-    const name = `${theme.name} · ${project}${" · " + String(threadId || session).slice(-6)}`;
+    // Codex sohbet alıcısı aynı zamanda sekme sahibi oturumdur: Codex araçları bu kimlikle çağırır
+    if (relay) this.env.connectOwner(key, transport, theme, label || cwd, title);
+    const name = this.env.sessionName(theme, label || cwd, title, threadId || session);
     this.subscribers.set(key, { id: key, name, agent: theme, ack, relay, threadId, transport, output, since: Date.now(), queue: Promise.resolve(true) });
     return key;
   }
