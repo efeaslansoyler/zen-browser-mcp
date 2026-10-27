@@ -486,6 +486,13 @@ function logError(where, e) {
       },
     });
 
+    // ---- indirmeler: ajan sekmelerinden başlayanlar (DownloadLog.sys.mjs) ----
+
+    const { DownloadLog } = ChromeUtils.importESModule(`resource://zenmcp/DownloadLog.sys.mjs?v=${version}`);
+    const downloads = new DownloadLog(globalThis.zenMcpDownloads ||= {}, {
+      tracked: browserId => state.tabs.has(browserId),
+    });
+
     const { Cancellation } = ChromeUtils.importESModule(`resource://zenmcp/Cancellation.sys.mjs?v=${version}`);
     const heldInputFrames = new Map();
     function releaseInputs(browserOrId) {
@@ -958,6 +965,7 @@ function logError(where, e) {
         request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
         tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
         wait_for: () => L("waiting", "bekliyor"),
+        downloads: () => args.action === "wait" ? L("waiting for a download", "indirmeyi bekliyor") : args.action === "cancel" ? L("canceling a download", "indirmeyi iptal ediyor") : L("checking downloads", "indirmelere bakıyor"),
         extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
         clipboard: () => L("requesting clipboard access", "pano erişimi istiyor"),
       }[tool]?.() ?? L("working", "çalışıyor");
@@ -1613,9 +1621,9 @@ function logError(where, e) {
       get operation() { return operation; },
       get activeSession() { return activeSession; },
       DEVICE_PRESETS, DialogOpen, MAX_PAGE_TEXT, MAX_UPLOAD, Stopped, assertSiteAccess, assertSiteURL,
-      browserFor, browserSettings, click, clipboardShortcut, controlledSource, describeDialog, describeTab,
+      DownloadLog, browserFor, browserSettings, click, clipboardShortcut, controlledSource, describeDialog, describeTab,
       expandFrames, extensionPanels, focusedFrame, frameOf, framesOf, guard, heldFrame, heldModifiers, input,
-      keyName, localFile, longRef, network, openDialog, operationSleep, ownership, performClipboard,
+      downloads, keyName, localFile, longRef, network, openDialog, operationSleep, ownership, performClipboard,
       permissionContext, pressKeys, query, queryRef, readContext, readOutput, releaseInputs, rememberInputs,
       samePermissionContext, sameReadContext, screenshot, screenshotCache, scroll, shortRefs, target, text,
       tools, typeInFocus, waitForLoad,
@@ -1848,6 +1856,7 @@ function logError(where, e) {
       if (state.paused) island.stopped();
       island.setMode(readConfig().mode);
       network.start();
+      downloads.start().catch(e => logError("downloads", e));
       restoreMarks();
       for (const info of sessions.values()) {
         if (!info.lifecycle) continue;
@@ -1916,6 +1925,7 @@ function logError(where, e) {
       island = null;
       tabMenu.destroy();
       network.stop();
+      downloads.stop();
       try { Services.obs.removeObserver(onWindowReady, "browser-delayed-startup-finished"); } catch {}
       for (const win of browserWindows()) {
         win.removeEventListener("SSTabRestoring", onTabRestoring);

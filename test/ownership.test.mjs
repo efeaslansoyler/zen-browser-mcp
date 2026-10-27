@@ -46,7 +46,7 @@ function harness() {
     ownerConnections: new Map(), disconnectTimers: new Map(),
     operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
-    network: { delete() {}, stop() {} }, tabRequests: new Map(), MARK: 'zen-mcp',
+    network: { delete() {}, stop() {} }, downloads: { stop() {} }, tabRequests: new Map(), MARK: 'zen-mcp',
     lastUse: new Map(), activeCalls: 0, island: null, commands: {},
     findTab: id => tabs.get(id), browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }], restoreMarks() {},
     SessionStore: {

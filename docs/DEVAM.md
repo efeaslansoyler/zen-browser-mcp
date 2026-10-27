@@ -161,11 +161,21 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
    karşılaştırır; yeni sürüm başlamazsa çıkış 1 ve ilk kurulum hatası (`zenMcpStartError`).
    `test/main-smoke.test.mjs` main.js'i saplarla bütün olarak yükleyip başlatır (TDZ vb.).
 
+5. İndirme takibi (2026-10-27, S23'te APKMirror'dan APKM indirirken ~/Downloads'u yoklamak
+   zorunda kalınca): `downloads` aracı, `browser/DownloadLog.sys.mjs`. Gecko Downloads listesine
+   view ekler; `source.browsingContextId` → üst BC'nin `browserId`'si (açılır pencereyse opener
+   zinciri) ajan sekmesiyse kaydeder. `wait` henüz bildirilmemiş en eski indirmeyi (yoksa
+   başlayacağı) bitene kadar bekler; sha256 Node tarafında (`server.ts` `addChecksums`), yalnız
+   wait sonucunda, browser_batch içinde yok. Kayıt `globalThis.zenMcpDownloads`, reload'dan sağ çıkar.
+   `cancel` (id ile) `finalize(true)`: durdurur, yarım dosyayı siler; bitmiş/iptal kayıtta progress yok.
+   Canlı: `check-downloads.ts` (tıklama + gezinme, canlı ilerleme + iptal, sahiplik, zaman aşımı) geçti. Kaydetme diyaloğu
+   çıkan siteler (always_ask açıksa) diyalog kapanana kadar "başlamadı" görünür.
+
 ## Çalışma yöntemi
 
 - `npm test` (build + soketsiz/soketli birim testleri; sahte DOM ile gerçek actor/ana süreç kodu).
 - Canlı: `node scripts/check-<özellik>.ts` (compat, cancellation, permissions, ownership,
-  coordination, hit-test, read-diff, multi-pick, extensions, clipboard). Köprüyü reload eder, yalnız kendi test
+  coordination, hit-test, read-diff, multi-pick, extensions, clipboard, downloads). Köprüyü reload eder, yalnız kendi test
   sekmelerini kapatır, mevcut `mode: auto` ister; config'i geçici değiştirenler geri yükler.
   Sonrasında `~/.config/zen-mcp/config.json`'un `mode: auto` kaldığını kontrol et.
   `check-pick-delivery.ts` GERÇEK sohbete mesaj yollar, rastgele çalıştırma.
@@ -239,7 +249,7 @@ Claude Code ──stdio MCP──▶ src/server.ts ──Unix soket──▶ bro
 drag, scroll, scroll_to, type, key, wait; koordinat ya da ref), `read_page`, `find`,
 `form_input`, `get_page_text`, `javascript_tool`, `read_console_messages`,
 `read_network_requests`, `handle_dialog`, `ask_user`, `file_upload`, `request_tab`, `browser_batch`,
-`wait_for`, `tab_work`, `connect_session` (Codex için elle yedek).
+`wait_for`, `downloads`, `tab_work`, `connect_session` (Codex için elle yedek).
 
 Davranış notları:
 

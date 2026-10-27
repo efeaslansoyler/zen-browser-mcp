@@ -372,6 +372,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `wait_for` | metin ya da öğe görünene ya da kaybolana, ağ durulana kadar bekleme |
 | `browser_batch` | yukarıdakilerden birkaçı tek çağrıda |
 | `read_console_messages`, `read_network_requests` | konsol çıktısı; başlık ve gövdeleriyle istekler (çerez ve yetki bilgisi gizli) |
+| `downloads` | sekmeden indirilen dosyalar: durum, yol, boyut/ilerleme; `wait` dosya bitene kadar bekler ve sha256'sını verir; `cancel` indirmeyi durdurup yarım dosyayı siler |
 | `javascript_tool`, `handle_dialog` | sayfada JS çalıştırma; `alert`/`confirm`/`prompt` cevaplama |
 | `connect_session` | Codex sohbetini tarayıcıdan seçim alacak şekilde bağlama |
 | `ask_user`, `request_tab` | bir adımı sana bırakma; sekmene erişim isteme |

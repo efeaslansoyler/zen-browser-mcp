@@ -374,6 +374,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `wait_for` | wait until text or an element appears or disappears, or the network is idle |
 | `browser_batch` | several of the above in one call |
 | `read_console_messages`, `read_network_requests` | console output; requests with headers and bodies (cookies and auth hidden) |
+| `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
 | `ask_user`, `request_tab` | hand a step to you; ask for access to your tab |

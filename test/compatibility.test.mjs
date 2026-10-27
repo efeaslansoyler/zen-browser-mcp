@@ -34,7 +34,7 @@ for (const name of ['codex-mcp-client', 'claude-code', 'Example Agent']) {
     await client.connect(clientTransport);
     try {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 25);
+      assert.equal(tools.length, 26);
       const computer = tools.find(t => t.name === 'computer');
       const schema = computer.inputSchema;
       for (const key of ['coordinate', 'start_coordinate']) {
@@ -71,7 +71,7 @@ for (const name of ['codex-mcp-client', 'claude-code', 'Example Agent']) {
         navigate: { tabId: 1, url: 'https://example.test' },
         computer: { tabId: 1, action: 'screenshot', scale: 0.5 },
         read_page: { tabId: 1 }, find: { tabId: 1, query: 'Submit' },
-        wait_for: { tabId: 1, text: 'Ready' }, form_input: { tabId: 1, ref: 'ref_1', value: 'hello' },
+        wait_for: { tabId: 1, text: 'Ready' }, downloads: { tabId: 1, action: 'list' }, form_input: { tabId: 1, ref: 'ref_1', value: 'hello' },
         get_page_text: { tabId: 1 }, ask_user: { tabId: 1, message: 'Please check', coordinate: [1, 2] },
         request_tab: { tabId: 1, reason: 'Inspect the selected element' },
         file_upload: { tabId: 1, ref: 'ref_1', paths: ['/tmp/test.txt'] },
