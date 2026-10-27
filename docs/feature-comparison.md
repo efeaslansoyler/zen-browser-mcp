@@ -23,15 +23,15 @@ rough equivalents, not API or engine parity.
 | File upload | `file_upload` |
 | Downloads | `downloads`: list / wait / cancel, path, progress, sha256, events file |
 | Console and network | Console; requests with headers and bodies |
-| Network route / mock / HAR / throttling | Candidate; current tools only observe |
+| Network route / mock / HAR / throttling | Not available; the tools only observe |
 | React | `react` tree/inspect with optional props; no render history or Suspense tracking |
 | Accessibility audit | `accessibility`: bundled axe-core, findings and refs per frame |
-| Full-page screenshot / PDF | Candidate; screenshots cover the viewport |
-| Web Vitals | Candidate |
-| Cookie / storage / session export | Not planned: the user's sessions are already there |
+| Full-page screenshot / PDF | Not available; screenshots cover the viewport |
+| Web Vitals | Not available |
+| Cookie / storage / session export | Not available: the user's sessions are already there |
 | CDP / headless / launching a browser | Out of scope: the everyday browser and window |
-| Proxy / geolocation / TLS settings | Needs its own design; global profile settings are never changed automatically |
-| Recording / streaming / profiling | Candidate |
+| Proxy / geolocation / TLS settings | Not available; global profile settings are never changed |
+| Recording / streaming / profiling | Not available |
 | Element picks, island, Stop, task handoff | zen-mcp's own focus |
 | Installed extension popups | `extensions`; tab switch asks even in auto mode |
 

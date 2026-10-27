@@ -24,6 +24,8 @@ that talks to the Codex service:
   name (`thread.name`) arrives after the first reply.
 - `/quit` only detaches the window; the conversation keeps running in the service ("Any
   running work continues"). Detached background conversations are hidden on purpose.
+- If the service can't be reached (the protocol changes, or an older Codex), hooks take over
+  and a conversation appears after its first message.
 - The service doesn't say which conversation a window shows, so the watcher looks at
   `codex` window processes: `codex resume <id>` is exact; otherwise each window gets the
   newest conversation created or loaded after the window started. Ephemeral helper

@@ -71,6 +71,9 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   connection closes, ownership survives a 5 s grace period, then tabs return to the user
   (they stay open). Connectionless sessions (one-off calls such as `zenctl`) are never listed
   and are swept after ten idle minutes.
+- Claude conversation titles come from Claude Code's session files
+  (`~/.claude/sessions/<pid>.json` and the transcript's latest `/rename` or generated title).
+  The format is undocumented; if it changes, menus fall back to short ids.
 - `tab_work` lets agents publish task notes and queue for another session's tab; the owner
   hands over with `finish`.
 
@@ -101,7 +104,8 @@ context belongs to an agent tab (or a popup it opened). Each one appends JSON li
 `$XDG_RUNTIME_DIR/zen-mcp-downloads/<id>.jsonl` on start, every 10 % and at the end, with the
 sha256 when done (hashed in 4 MB chunks so the UI never blocks). Agents with a background
 monitor watch that file; others call `downloads wait`. The bridge deletes the file five
-minutes after the download ends.
+minutes after the download ends. If the browser is set to always ask where to save, a
+download only appears once the save dialog is answered.
 
 ## Other files at runtime
 

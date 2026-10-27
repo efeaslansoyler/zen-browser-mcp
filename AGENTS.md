@@ -1,7 +1,7 @@
 # Notes for agents working on this repo
 
-Read [docs/README.md](docs/README.md) for the map, [CONTRIBUTING.md](CONTRIBUTING.md) for the
-edit/test loop, and [ROADMAP.md](ROADMAP.md) for open work.
+Read [docs/README.md](docs/README.md) for the map and [CONTRIBUTING.md](CONTRIBUTING.md) for the
+edit/test loop.
 
 - **The bridge runs inside the user's real browser.** Test on a copy or in your own tabs;
   never act on the user's tabs without `request_tab` approval.

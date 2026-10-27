@@ -3,3 +3,7 @@ dist/
 
 # Private raw model evaluation telemetry
 .benchmarks/
+
+# Agent-local state
+.claude/
+.codex/
