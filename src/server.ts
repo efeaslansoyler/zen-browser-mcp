@@ -3,8 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { execFileSync } from "node:child_process";
-import { createReadStream, readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { call, subscribe } from "./zen.ts";
 import { NAME, SERVER_NAME, VERSION } from "./paths.ts";
@@ -121,33 +120,15 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
   }
 
   // timeout: bu tool'un Zen'den cevap için ne kadar bekleyeceği (ms); ask_user kullanıcıyı bekler
-  // after: sonucu ajana gitmeden önce Node tarafında tamamlar (tarayıcının ana iş parçacığını yormadan)
-  function register(name: string, description: string, inputSchema: z.ZodRawShape, timeout?: (args: any) => number, after?: (content: any) => Promise<any>) {
+  function register(name: string, description: string, inputSchema: z.ZodRawShape, timeout?: (args: any) => number) {
     server.registerTool(name, { description, inputSchema }, async (args: object) => {
       try {
-        let content = await callBrowser(name, args, timeout?.(args) ?? consentTimeout(name, args), identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT));
-        if (after && !content.isError) content = await after(content);
+        const content = await callBrowser(name, args, timeout?.(args) ?? consentTimeout(name, args), identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT));
         return { content, ...(content.isError ? { isError: true } : {}) };
       } catch (e) {
         return { content: [{ type: "text" as const, text: (e as Error).message }], isError: true };
       }
     });
-  }
-
-  // wait ile biten indirmenin sha256'sı (list her seferinde büyük dosyaları okumasın diye yok);
-  // dosya taşınmış/silinmişse yazılmaz
-  const sha256 = (path: string) => new Promise<string>((resolve, reject) => {
-    const hash = createHash("sha256");
-    createReadStream(path).on("error", reject).on("data", chunk => hash.update(chunk)).on("end", () => resolve(hash.digest("hex")));
-  });
-  async function addChecksums(content: any) {
-    for (const item of content) {
-      if (item.type !== "text" || !item.text.startsWith("{")) continue;
-      const value = JSON.parse(item.text);
-      if (value.state === "done" && value.path) value.sha256 = await sha256(value.path).catch(() => undefined);
-      item.text = JSON.stringify(value);
-    }
-    return content;
   }
 
   register(
@@ -308,17 +289,18 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
   register(
     "downloads",
     [
-      "Track files downloaded from an agent tab (or a popup it opened): state (downloading, done, failed, canceled, paused), source url, filename, absolute path, size or progress.",
-      "action wait: call right after the click/navigation that starts a download; waits for the oldest download not yet reported (or the next one to start) to finish and returns it with its sha256, so call it once per expected file. Pass id to wait for a specific one. list shows all downloads from the tab. cancel stops download id and deletes its partial file. Use this instead of polling the Downloads folder.",
+      "Track files downloaded from an agent tab (or a popup it opened): state (downloading, done, failed, canceled, paused), source url, filename, absolute path, size or progress, sha256 when done.",
+      "A running download also has an events file: JSON lines written when it starts, every 10% and when it ends (the last line has state done/failed/canceled, plus sha256 when done). For long downloads, if you have a background monitor tool, call wait with until: start right after the click, watch the returned events file (e.g. tail -f) and keep working; otherwise use wait. The file is deleted automatically a few minutes after the download ends.",
+      "action wait: call right after the click/navigation that starts a download; blocks until the oldest download not yet reported (or the next one to start) finishes, so call it once per expected file. Pass id to wait for a specific one. list shows all downloads from the tab. cancel stops download id and deletes its partial file.",
     ].join(" "),
     {
       tabId,
       action: z.enum(["list", "wait", "cancel"]).optional().describe("Default list."),
       id: z.number().int().optional().describe("With wait: the download #id from list. Required for cancel."),
+      until: z.enum(["start", "end"]).optional().describe("With wait: end (default) waits for the file; start returns as soon as it begins, with its events file."),
       timeout: z.number().optional().describe("With wait: seconds (default 120, max 600)."),
     },
     (args) => (args.action === "wait" ? Math.min(args.timeout ?? 120, 600) + 15 : 60) * 1000,
-    addChecksums,
   );
 
   register(

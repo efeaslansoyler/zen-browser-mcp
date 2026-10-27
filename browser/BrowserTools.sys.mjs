@@ -8,6 +8,7 @@ export function browserTools(ctx) {
   const describeDownload = record => {
     const info = DownloadLog.describe(record);
     try { assertSiteURL(info.url); } catch { delete info.url; }
+    if (!record.closed) info.events = record.events;
     return info;
   };
   return {
@@ -21,7 +22,8 @@ export function browserTools(ctx) {
 
     // list: sekmeden başlayan indirmeler. cancel: indirmeyi durdurur, yarım dosyayı siler. wait: henüz bildirilmemiş en eski indirme (yoksa
     // başlayacak olan) ya da id'deki indirme bitene kadar bekler; tıklamadan hemen sonra çağrılır.
-    async downloads({ tabId, action = "list", id, timeout = 120 }) {
+    // until: "start" indirme başlayınca olay dosyasıyla döner (izleyebilen ajanlar için)
+    async downloads({ tabId, action = "list", id, until = "end", timeout = 120 }) {
       const { browserId } = browserFor(tabId);
       if (action === "list") {
         const list = downloads.forTab(browserId);
@@ -35,6 +37,7 @@ export function browserTools(ctx) {
         if (!record) throw new Error(`No download #${id} from this tab; take ids from action list.`);
         if (record.download.succeeded) throw new Error(`Download #${id} already finished; the file is at ${record.download.target.path}.`);
         // finalize(true): durdurur ve yarım dosyayı siler; duraklatılmış olanda da çalışır
+        record.canceling = true;
         await record.download.finalize(true);
         record.reported = true;
         return text(describeDownload(record));
@@ -45,8 +48,10 @@ export function browserTools(ctx) {
         const list = downloads.forTab(browserId);
         const record = id != null ? list.find(r => r.id === id) : list.find(r => !r.reported);
         if (id != null && !record) throw new Error(`No download #${id} from this tab; take ids from action list.`);
+        if (record && until === "start") return text(describeDownload(record));
         if (record && DownloadLog.finished(record)) {
           record.reported = true;
+          if (record.download.succeeded) await DownloadLog.sha256(record);
           return text(describeDownload(record));
         }
         if (Date.now() - start >= limit) {

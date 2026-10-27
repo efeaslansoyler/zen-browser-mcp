@@ -65,13 +65,17 @@ try {
   assert.equal(done.size, body.length);
   assert.equal(done.sha256, expected);
   assert.equal(fs.statSync(done.path).size, body.length);
+  const doneLines = fs.readFileSync(path.join(process.env.XDG_RUNTIME_DIR || '/tmp', 'zen-mcp-downloads', `${done.id}.jsonl`), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(doneLines[0].state, 'downloading');
+  assert.equal(doneLines.at(-1).state, 'done');
+  assert.equal(doneLines.at(-1).sha256, expected);
   console.log('ok  click → wait: done, path, size, sha256');
 
   const listed = JSON.parse(await tool(a, 'downloads', { tabId }));
   assert.equal(listed.downloads.length, 1);
   assert.equal(listed.downloads[0].id, done.id);
-  assert.equal(listed.downloads[0].sha256, undefined);
-  console.log('ok  list shows it without re-hashing');
+  assert.equal(listed.downloads[0].sha256, expected);
+  console.log('ok  list shows it with the cached sha256');
 
   assert.match(await tool(a, 'downloads', { tabId, action: 'wait', timeout: 2 }, true), /No download started within 2 s/);
   console.log('ok  wait with nothing new times out');
@@ -86,18 +90,22 @@ try {
   console.log('ok  navigate → wait: second download');
 
   await tool(a, 'navigate', { tabId, url: `http://127.0.0.1:${port}/slow` }).catch(() => {});
-  let running;
-  for (let i = 0; i < 40 && !running; i++) {
-    running = JSON.parse(await tool(a, 'downloads', { tabId })).downloads.find((d: any) => d.state === 'downloading' && d.receivedBytes > 0);
-    if (!running) await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  assert(running, 'slow download did not start');
-  assert.equal(running.totalBytes, 50_000_000);
-  assert(running.progress >= 0 && running.progress < 100);
+  const running = JSON.parse(await tool(a, 'downloads', { tabId, action: 'wait', until: 'start', timeout: 10 }));
+  assert.equal(running.state, 'downloading');
+  assert(running.events && fs.existsSync(running.events), 'no events file');
+  // olay satırları ilerledikçe gelir (her %10); en az bir ilerleme satırı bekle
+  for (let i = 0; i < 80 && fs.readFileSync(running.events, 'utf8').trim().split('\n').length < 2; i++) await new Promise(resolve => setTimeout(resolve, 250));
+  const lines = fs.readFileSync(running.events, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert(lines.length >= 2 && lines.at(-1).progress >= 10, JSON.stringify(lines));
+  assert.equal(lines.at(-1).totalBytes, 50_000_000);
+  console.log(`ok  wait until start → events file (${lines.length} lines, ${lines.at(-1).progress}%)`);
   const canceled = JSON.parse(await tool(a, 'downloads', { tabId, action: 'cancel', id: running.id }));
   assert.equal(canceled.state, 'canceled');
   assert.equal(canceled.progress, undefined);
   assert(!fs.existsSync(running.path) && !fs.existsSync(`${running.path}.part`), 'partial file left behind');
+  for (let i = 0; i < 20 && !fs.readFileSync(running.events, 'utf8').includes('"canceled"'); i++) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(JSON.parse(fs.readFileSync(running.events, 'utf8').trim().split('\n').at(-1)).state, 'canceled');
+  assert(!fs.readFileSync(running.events, 'utf8').includes('"paused"'), 'cancel showed a transient paused state');
   assert.match(await tool(a, 'downloads', { tabId, action: 'cancel', id: done.id }, true), /already finished/);
   console.log('ok  live progress → cancel removes the partial file');
 

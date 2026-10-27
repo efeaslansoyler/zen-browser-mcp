@@ -491,6 +491,8 @@ function logError(where, e) {
     const { DownloadLog } = ChromeUtils.importESModule(`resource://zenmcp/DownloadLog.sys.mjs?v=${version}`);
     const downloads = new DownloadLog(globalThis.zenMcpDownloads ||= {}, {
       tracked: browserId => state.tabs.has(browserId),
+      dir: `${zenMcpRuntimeDir()}/${zenMcpApp}-downloads`,
+      setTimeout, logError: (where, e) => logError(where, e),
     });
 
     const { Cancellation } = ChromeUtils.importESModule(`resource://zenmcp/Cancellation.sys.mjs?v=${version}`);

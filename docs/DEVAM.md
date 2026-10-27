@@ -165,10 +165,15 @@ süre olarak belirgin yavaş. **Karar: MCP ana yol.** `cli-prototype` dalı 2026
    zorunda kalınca): `downloads` aracı, `browser/DownloadLog.sys.mjs`. Gecko Downloads listesine
    view ekler; `source.browsingContextId` → üst BC'nin `browserId`'si (açılır pencereyse opener
    zinciri) ajan sekmesiyse kaydeder. `wait` henüz bildirilmemiş en eski indirmeyi (yoksa
-   başlayacağı) bitene kadar bekler; sha256 Node tarafında (`server.ts` `addChecksums`), yalnız
-   wait sonucunda, browser_batch içinde yok. Kayıt `globalThis.zenMcpDownloads`, reload'dan sağ çıkar.
+   başlayacağı) bitene kadar bekler. Olay dosyası `$XDG_RUNTIME_DIR/zen-mcp-downloads/<id>.jsonl`:
+   başlangıç, her %10 (boyut bilinmiyorsa 10 MB) ve son durumda bir JSON satırı; Monitor'lü
+   ajan `wait until: start` ile yolu alıp `tail -f` izler. Dosyayı biz sileriz (bitişten 5 dk
+   sonra; reload'da start eski dosyaları süpürür). Kanal/Codex kuyruğu bilerek kullanılmadı
+   (kanal yalnız dev bayrağıyla açık Claude'da var). sha256 tarayıcıda 4 MB'lık parçalarla
+   (IOUtils.read + nsICryptoHash), bir kez hesaplanıp kayıtta saklanır.
+   Kayıt `globalThis.zenMcpDownloads`, reload'dan sağ çıkar.
    `cancel` (id ile) `finalize(true)`: durdurur, yarım dosyayı siler; bitmiş/iptal kayıtta progress yok.
-   Canlı: `check-downloads.ts` (tıklama + gezinme, canlı ilerleme + iptal, sahiplik, zaman aşımı) geçti. Kaydetme diyaloğu
+   Canlı: `check-downloads.ts` (tıklama + gezinme, olay dosyası, canlı ilerleme + iptal, sahiplik, zaman aşımı) geçti. Kaydetme diyaloğu
    çıkan siteler (always_ask açıksa) diyalog kapanana kadar "başlamadı" görünür.
 
 ## Çalışma yöntemi
