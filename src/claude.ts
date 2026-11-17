@@ -12,17 +12,28 @@ import { NAME, SERVER_NAME } from "./paths.ts";
 // ZEN_MCP_CHANNEL=1/0 overrides the check.
 export function channelEnabled(): boolean {
   if (process.env.ZEN_MCP_CHANNEL) return process.env.ZEN_MCP_CHANNEL === "1";
-  const names = new Set([`server:${SERVER_NAME}`, `server:${NAME}`]);
   let pid = process.ppid;
   for (let i = 0; i < 3 && pid > 1; i++) {
     const proc = processInfo(pid);
     if (!proc) return false;
-    if (proc.args.some((a) => /^--(dangerously-load-development-)?channels\b/.test(a))) {
-      return proc.args.some((a) => a.split(/[\s,=]+/).some((t) => names.has(t)));
-    }
+    if (proc.args.some((a) => /^--(dangerously-load-development-)?channels\b/.test(a))) return channelArgs(proc.args);
     pid = proc.ppid;
   }
   return false;
+}
+
+// The channel flags of a Claude Code command line. Claude Code ignores them in -p mode and under
+// the Agent SDK (stream-json input, as T3 Code and other apps start it), so there is no channel.
+export function channelArgs(args: string[]): boolean {
+  const names = new Set([`server:${SERVER_NAME}`, `server:${NAME}`]);
+  const headless = args.some(
+    (a, i) =>
+      a === "-p" ||
+      a === "--print" ||
+      a === "--input-format=stream-json" ||
+      (a === "--input-format" && args[i + 1] === "stream-json"),
+  );
+  return !headless && args.some((a) => a.split(/[\s,=]+/).some((t) => names.has(t)));
 }
 
 // A process's arguments and parent: /proc on Linux, ps on macOS (arguments split at spaces).

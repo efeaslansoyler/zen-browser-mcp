@@ -118,6 +118,8 @@ component chain, styles, text, trimmed HTML, PNG per element) goes to the target
 - **Claude Code** through [channels](https://code.claude.com/docs/en/channels): when Claude
   runs with `--dangerously-load-development-channels server:zen`, `claude.ts` detects the flag
   from `/proc`, declares `claude/channel` and forwards events as `notifications/claude/channel`.
+  Claude Code ignores the flag in `-p` mode and under the Agent SDK (stream-json input, e.g.
+  T3 Code), so those sessions get no channel: picks for them go to the clipboard.
 - **Codex** through `codex queue` (see [codex.md](codex.md)).
 - Without a target the text is copied to the clipboard.
 
