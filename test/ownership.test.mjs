@@ -793,6 +793,27 @@ for (const [first, second] of [
   });
 }
 
+test("what the user sent from the browser goes with the session's next tool result", async () => {
+  const h = harness();
+  h.own("A");
+  const { Inbox, inboxText } = await import("../browser/Inbox.sys.mjs");
+  h.context.inboxText = inboxText;
+  h.context.inbox = new Inbox({
+    endpoint: () => null,
+    deliver: async () => false,
+    known: () => true,
+    expired() {},
+    now: () => 0,
+  });
+  assert.equal(await h.context.inbox.send("A", { kind: "pick", content: "Make this button blue" }), "waiting");
+  const forB = await h.request("B", "tabs_context_mcp");
+  assert.doesNotMatch(JSON.stringify(forB), /button blue/);
+  const forA = await h.request("A", "tabs_context_mcp");
+  assert.match(forA.content.at(-1).text, /The user sent you this from the browser[\s\S]*Make this button blue/);
+  const again = await h.request("A", "tabs_context_mcp");
+  assert.doesNotMatch(JSON.stringify(again), /button blue/);
+});
+
 test("tabs_context_mcp lists recipes for the sites of open tabs", async () => {
   const h = harness();
   const id = h.own("A");

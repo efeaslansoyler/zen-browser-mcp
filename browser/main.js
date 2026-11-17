@@ -125,6 +125,7 @@ function logError(where, e) {
     const { permissions } = load("Permissions");
     const { TabMenu } = load("TabMenu");
     const { Channels, ascii } = load("Channels");
+    const { Inbox, inboxText } = load("Inbox");
     const { Picks } = load("Picks");
     const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
     const { Recipes, recipeTools, geckoIO, originOf } = load("Recipes");
@@ -388,10 +389,27 @@ function logError(where, e) {
       uuid: () => Services.uuid.generateUUID().toString(),
     });
 
+    // What the user sends to a session: pushed now when its MCP process can, otherwise with the
+    // session's next tool result.
+    ctx.inbox = new Inbox({
+      endpoint: (session) => {
+        const sub = ctx.channels.subscribers.get(session);
+        return sub?.ack && sub.push ? sub : null;
+      },
+      deliver: (sub, event) => ctx.channels.deliver(sub, event),
+      known: (session) => ctx.sessions.has(session) && !ctx.sessions.get(session).disconnected,
+      // the session ended before it could get them: the clipboard, so nothing is lost
+      expired: (_session, items) =>
+        Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(inboxText(items)),
+      now: () => Date.now(),
+    });
+    ctx.inboxText = inboxText;
+
     // Picking elements and sending them to an agent: Ctrl+Shift+F or the page context menu.
     ctx.picks = new Picks({
       L,
       channels: ctx.channels,
+      inbox: ctx.inbox,
       theme: agentTheme,
       pickedTabs: state.pickedTabs,
       get island() {

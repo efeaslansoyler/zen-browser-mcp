@@ -109,19 +109,23 @@ Site rules cover subdomains, `block` wins, and a subdomain can't loosen its pare
 or new document invalidates earlier approvals. Clipboard access, tab switches for extension
 popups and `browser_settings` changes always ask, even in auto mode.
 
-## Element picks (browser → agent)
+## Sending to a session (browser → agent)
 
-Ctrl+Shift+F or the page menu starts the picker; Shift+click selects several elements (up to
-8). The island asks for a note and a target session. The pick (note, URL, selector, role,
-component chain, styles, text, trimmed HTML, PNG per element) goes to the target:
+Element picks (Ctrl+Shift+F or the page menu; Shift+click selects up to 8 elements; the island
+asks for a note and a target session) and recipes the user recorded go through
+`Inbox.sys.mjs`:
 
-- **Claude Code** through [channels](https://code.claude.com/docs/en/channels): when Claude
-  runs with `--dangerously-load-development-channels server:zen`, `claude.ts` detects the flag
-  from `/proc`, declares `claude/channel` and forwards events as `notifications/claude/channel`.
-  Claude Code ignores the flag in `-p` mode and under the Agent SDK (stream-json input, e.g.
-  T3 Code), so those sessions get no channel: picks for them go to the clipboard.
-- **Codex** through `codex queue` (see [codex.md](codex.md)).
-- Without a target the text is copied to the clipboard.
+1. **Push now** when the session's MCP process can. Every MCP process keeps one `subscribe`
+   connection (it also owns the session's tabs) and acknowledges each event; it tells the
+   bridge its push path when it connects:
+   - **Claude Code** through [channels](https://code.claude.com/docs/en/channels): when Claude
+     runs with `--dangerously-load-development-channels server:zen`, `claude.ts` detects the
+     flag from `/proc`, declares `claude/channel` and forwards events as
+     `notifications/claude/channel`. Claude Code ignores the flag in `-p` mode and under the
+     Agent SDK (stream-json input, e.g. T3 Code), so those sessions have no push path.
+   - **Codex** through `codex queue` (see [codex.md](codex.md)).
+2. **Otherwise it waits** in the bridge and goes with the session's next tool result, once.
+3. If the session ends first, or there is no target, the text is copied to the clipboard.
 
 ## Downloads
 

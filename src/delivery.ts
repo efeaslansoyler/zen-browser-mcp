@@ -1,6 +1,10 @@
 // Client-specific delivery lives outside the browser. Never invoke a shell with page text.
 import { execFile } from "node:child_process";
 
+// What a session's MCP process answers when it can't deliver an event now: the bridge keeps
+// it in the inbox for the next tool result (browser/Channels.sys.mjs has the same string).
+export const NO_PUSH = "no push path";
+
 export const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PickEvent = { event: string; id?: string; content: string; note?: string; meta?: Record<string, string> };
 

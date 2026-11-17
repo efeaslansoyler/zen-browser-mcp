@@ -53,6 +53,7 @@ export function sessionManager(ctx) {
   }
 
   function endOwnerSession(id) {
+    ctx.inbox?.end(id);
     ctx.extensionPanels.releaseSession(id);
     ctx.watches.endSession(id, "session ended");
     clearTimer(id);

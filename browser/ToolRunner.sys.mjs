@@ -138,6 +138,9 @@ export function toolRunner(ctx) {
           ctx.setActiveAgent(ctx.agentTheme(agent ?? { id: "claude" }));
           try {
             const content = await runTool(tool, args);
+            // what the user sent this session from the browser meanwhile (picks, recipes)
+            const sent = ctx.inbox?.take(session) ?? [];
+            if (sent.length) content.push({ type: "text", text: ctx.inboxText(sent) });
             for (const note of scope.userNotes)
               content.push(
                 ...ctx.text({

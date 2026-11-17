@@ -76,6 +76,8 @@ export type SubscriptionInfo = {
   threadId?: string;
   ack?: boolean;
   toolsOnly?: boolean;
+  // how this process delivers pushed events now ("channel"), or null: they wait in the inbox
+  push?: string | null;
 };
 
 export function subscribe(onEvent: (event: any) => void | Promise<void>, info: SubscriptionInfo) {

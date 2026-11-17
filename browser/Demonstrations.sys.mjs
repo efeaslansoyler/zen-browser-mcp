@@ -203,16 +203,23 @@ export class Demonstrations {
         ...(choice.tryNow ? ["", TRY_NOW] : []),
       ].join("\n");
       const meta = { recipe: recipe.id, url: recipe.startUrl, source_tab: String(browser.browserId) };
-      let sent = false;
+      let status = "missing";
       try {
-        sent = target ? await this.env.channels.deliver(target, { event: "channel", content, meta }) : false;
+        status = await ctx.inbox.send(choice.targetId, { kind: "recipe", content, meta });
       } catch (e) {
         this.env.logError("recipe delivery", e);
       }
-      if (!sent) this.env.copy(content);
-      notice = sent
-        ? L(`Saved and sent to ${target.name} ✓`, `Kaydedildi, ${target.name} oturumuna gönderildi ✓`)
-        : L("Saved; sending failed, copied to clipboard", "Kaydedildi; gönderilemedi, panoya kopyalandı");
+      if (status === "missing") this.env.copy(content);
+      const name = target?.name ?? "";
+      notice =
+        status === "sent"
+          ? L(`Saved and sent to ${name} ✓`, `Kaydedildi, ${name} oturumuna gönderildi ✓`)
+          : status === "waiting"
+            ? L(
+                `Saved; ${name} gets it with its next browser action`,
+                `Kaydedildi; ${name} bir sonraki tarayıcı işleminde alacak`,
+              )
+            : L("Saved; sending failed, copied to clipboard", "Kaydedildi; gönderilemedi, panoya kopyalandı");
     }
     ctx.island?.working(browser, notice);
     ctx.island?.idle();

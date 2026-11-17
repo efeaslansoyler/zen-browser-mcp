@@ -5,6 +5,7 @@
 // elements' context go to a session connected as a channel, or to the clipboard without one.
 // env:
 //   env.L(en, tr), env.island (getter; changes on reload), env.channels (Channels),
+//   env.inbox (Inbox: sends to a session now or with its next tool result),
 //   env.theme(agent), env.ownerOf(browserId), env.pickedTabs (Set),
 //   env.assertSiteAccess(browser), env.logError(where, e), env.sleep(ms),
 //   env.copy(text): to the clipboard, env.paintIcon(item, agent), env.menuAgent(),
@@ -157,23 +158,26 @@ export class Picks {
     // Pin to the user's selected destination. Never reroute if it disconnects.
     const target = targetId ? this.env.channels.subscribers.get(targetId) : null;
     this.env.pickedTabs.add(current.browser.browserId);
-    let sent = false;
+    let status = "missing";
     try {
-      sent = target ? await this.env.channels.deliver(target, { event: "channel", content, meta, note }) : false;
+      if (targetId) status = await this.env.inbox.send(targetId, { kind: "pick", content, meta, note });
     } catch (e) {
       this.env.logError("pick delivery", e);
     }
-    if (!sent) this.env.copy(content + "\n\nBrowser metadata: " + JSON.stringify(meta));
+    if (status === "missing") this.env.copy(content + "\n\nBrowser metadata: " + JSON.stringify(meta));
     if (this.current !== current) return;
     this.end({ keepIsland: true });
+    const name = target?.name ?? "";
     this.env.island?.sent(
-      sent
-        ? target.agent.id === "codex"
-          ? L(`Queued for ${target.name} ✓`, `${target.name} için kuyruğa alındı ✓`)
-          : L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
-        : targetId
-          ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
-          : L("Copied to clipboard", "Panoya kopyalandı"),
+      status === "sent"
+        ? target?.agent.id === "codex"
+          ? L(`Queued for ${name} ✓`, `${name} için kuyruğa alındı ✓`)
+          : L(`Sent to ${name} ✓`, `${name} oturumuna gönderildi ✓`)
+        : status === "waiting"
+          ? L(`${name} gets it with its next browser action`, `${name} bir sonraki tarayıcı işleminde alacak`)
+          : targetId
+            ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
+            : L("Copied to clipboard", "Panoya kopyalandı"),
     );
   }
 

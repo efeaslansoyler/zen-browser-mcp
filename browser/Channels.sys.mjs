@@ -1,11 +1,15 @@
-// Pushing events from the browser to agent sessions (Claude Code channels, the Codex relay).
+// Pushing events from the browser to agent sessions (Claude Code channels, the Codex relay,
+// T3 Code threads…; Inbox.sys.mjs decides what to send and keeps what can't be pushed).
 //
-// The MCP server of every session opened as a channel keeps a "subscribe" connection open;
-// events are written to it line by line. With several sessions, an event goes to the one that
+// The MCP server of every session keeps a "subscribe" connection open; events are written to
+// it line by line and acknowledged. With several sessions, an event goes to the one that
 // used the browser last (or was opened last). env:
 //   env.theme(agent), env.connectOwner(session, transport, theme, cwd),
 //   env.disconnectOwner(session, transport), env.logError(where, e),
 //   env.setTimeout/clearTimeout, env.uuid()
+
+// the error an MCP process answers when it has no way to push an event (it waits in the inbox)
+export const NO_PUSH = "no push path";
 
 // socket lines are ASCII: non-ASCII characters in JSON are written as \u escapes
 export const ascii = (s) => s.replace(/[\u007f-￿]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
@@ -15,15 +19,36 @@ export class Channels {
   constructor(lastUse, env) {
     this.lastUse = lastUse;
     this.env = env;
-    this.subscribers = new Map(); // session → { id, name, agent, ack, relay, threadId, transport, output, since, queue }
+    this.subscribers = new Map(); // session → { id, name, agent, ack, relay, push, threadId, transport, output, since, queue }
     this.pending = new Map(); // delivery ID → { session, transport, finish }
   }
 
-  subscribe({ session, cwd, agent, label, title, threadId, ack = false, toolsOnly = false }, transport, output) {
+  // push: how the session's MCP process delivers an event now ("channel", "t3", …), or null
+  // when it can't; events then wait in the inbox (Inbox.sys.mjs).
+  subscribe(
+    { session, cwd, agent, label, title, threadId, ack = false, toolsOnly = false, push = null },
+    transport,
+    output,
+  ) {
     if (!session) throw new Error("session is required.");
     const theme = this.env.theme(agent ?? { id: "claude" });
     if (toolsOnly) {
       this.env.connectOwner(session, transport, theme, cwd, title);
+      // An MCP process that acknowledges events is the session's endpoint (older ones aren't).
+      if (ack)
+        this.subscribers.set(session, {
+          id: session,
+          name: this.env.sessionName(theme, label || cwd, title, session),
+          agent: theme,
+          ack,
+          relay: false,
+          push: typeof push === "string" ? push : null,
+          threadId,
+          transport,
+          output,
+          since: Date.now(),
+          queue: Promise.resolve(true),
+        });
       return session;
     }
     const relay = theme.id === "codex" && session === `codex:${threadId}`;
@@ -43,6 +68,8 @@ export class Channels {
       agent: theme,
       ack,
       relay,
+      // a Codex conversation relay queues into Codex; otherwise an older channel process
+      push: relay ? "codex" : "channel",
       threadId,
       transport,
       output,
@@ -115,7 +142,8 @@ export class Channels {
     const pending = this.pending.get(event?.id);
     if (event?.event !== "delivery" || !pending || pending.session !== session || pending.transport !== transport)
       return;
-    if (!event.ok) this.env.logError("pick delivery", new Error(String(event.error || "Delivery rejected")));
+    if (!event.ok && event.error !== NO_PUSH)
+      this.env.logError("pick delivery", new Error(String(event.error || "Delivery rejected")));
     pending.finish(event.ok === true);
   }
 

@@ -8,7 +8,7 @@ import { SERVER_NAME, VERSION } from "./paths.ts";
 import { syncBrowserFiles } from "./install.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
-import { THREAD_ID } from "./delivery.ts";
+import { NO_PUSH, THREAD_ID } from "./delivery.ts";
 import { channelEnabled, claudeTitle } from "./claude.ts";
 import { channelInstructions, clientInstructions } from "./instructions.ts";
 import { TOOLS, callTimeout } from "./tools.ts";
@@ -103,25 +103,30 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
   return server;
 }
 
-let subscription: ReturnType<typeof subscribe> | undefined;
+// The session's one connection to the browser: it owns the session's tabs and receives what
+// the user sends from the browser. An event this process can't push into the conversation is
+// refused with NO_PUSH and waits in the browser's inbox for the next tool result.
 let ownerSubscription: ReturnType<typeof subscribe> | undefined;
 let ownerAgent: { id: string; name: string } | undefined;
 let title = claudeTitle();
 function connectOwner(agent: { id: string; name: string }) {
   ownerAgent = agent;
-  ownerSubscription = subscribe(() => {}, { cwd: process.cwd(), toolsOnly: true, agent, title });
+  ownerSubscription = subscribe(push, {
+    cwd: process.cwd(),
+    toolsOnly: true,
+    ack: true,
+    agent,
+    title,
+    push: channel ? "channel" : null,
+  });
 }
-function connectChannel() {
-  subscription = subscribe(
-    async (event) => {
-      if (event?.event !== "channel") return;
-      await server.server.notification({
-        method: "notifications/claude/channel",
-        params: { content: event.content, meta: event.meta },
-      });
-    },
-    { cwd: process.cwd(), agent: { id: "claude", name: "Claude" }, ack: true, title },
-  );
+async function push(event: any) {
+  if (event?.event !== "channel") return;
+  if (!channel) throw new Error(NO_PUSH);
+  await server.server.notification({
+    method: "notifications/claude/channel",
+    params: { content: event.content, meta: event.meta },
+  });
 }
 const server = createServer(call, async ({ threadId, label }) => {
   await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
@@ -142,7 +147,6 @@ export async function serve() {
   // Browser files older than this version are updated and the bridge reloads.
   syncBrowserFiles().catch(() => {});
 
-  if (channel) connectChannel();
   // The title appears during the conversation and changes with /rename and /clear: reconnect
   // with the new name when it does.
   setInterval(() => {
@@ -153,15 +157,10 @@ export async function serve() {
       ownerSubscription.close();
       connectOwner(ownerAgent!);
     }
-    if (subscription) {
-      subscription.close();
-      connectChannel();
-    }
   }, 15_000).unref();
   // stdin closes when Claude Code exits; the browser connection must not keep the process alive.
   process.stdin.on("close", () => {
     ownerSubscription?.close();
-    subscription?.close();
     process.exit(0);
   });
 }

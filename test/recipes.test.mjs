@@ -7,6 +7,7 @@ import { Recipes, formatRecipe, slug, recipeTools } from "../browser/Recipes.sys
 import { nodeIO, recipesCommand } from "../src/recipes.ts";
 import { ReviewModel, stepLabel } from "../browser/RecordingReview.sys.mjs";
 import { Demonstrations, demonstrationTools } from "../browser/Demonstrations.sys.mjs";
+import { Inbox } from "../browser/Inbox.sys.mjs";
 
 function store() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zen-recipes-"));
@@ -370,6 +371,14 @@ test("a recording the user started is saved and sent to the chosen session", asy
   island.idle = () => {};
   const delivered = [];
   const sessions = new Map([["s1", { id: "s1", name: "Claude · shop", agent: { id: "claude" } }]]);
+  const deliver = async (target, message) => (delivered.push([target.id, message]), true);
+  ctx.inbox = new Inbox({
+    endpoint: (session) => sessions.get(session) ?? null,
+    deliver,
+    known: (session) => sessions.has(session),
+    expired() {},
+    now: () => 0,
+  });
   const demos = new Demonstrations({
     L: (en) => en,
     ctx,

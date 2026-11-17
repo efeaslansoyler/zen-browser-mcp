@@ -3,6 +3,7 @@ import { loadActor } from "./support/actor.mjs";
 import assert from "node:assert/strict";
 import * as themes from "../browser/Agent.sys.mjs";
 import { Picks } from "../browser/Picks.sys.mjs";
+import { Inbox } from "../browser/Inbox.sys.mjs";
 
 function harness() {
   class Node {
@@ -218,12 +219,21 @@ test("a disappeared selected node cannot silently become a smaller selection", a
 
 // Picks with inert defaults; tests override what they exercise.
 function picks(env = {}) {
+  const channels = env.channels ?? { subscribers: new Map(), target: () => null, deliver: async () => false };
   return new Picks({
     L: (en) => en,
     theme: themes.agentTheme,
     ownerOf: () => "owner-A",
     pickedTabs: new Set(),
-    channels: { subscribers: new Map(), target: () => null, deliver: async () => false },
+    channels,
+    // the real inbox: a session's subscriber pushes; nothing waits in these tests
+    inbox: new Inbox({
+      endpoint: (session) => channels.subscribers.get(session) ?? null,
+      deliver: (sub, event) => channels.deliver(sub, event),
+      known: (session) => channels.subscribers.has(session),
+      expired() {},
+      now: () => 0,
+    }),
     island: null,
     assertSiteAccess() {},
     logError() {},
