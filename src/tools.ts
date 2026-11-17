@@ -205,7 +205,14 @@ tool(
 tool(
   "tabs_create_mcp",
   "Open a new empty tab for the agent in the browser and return its tab ID. If the user refers to a page that is already open, request that tab (userTabs in tabs_context_mcp, then request_tab) instead of opening a new one.",
-  {},
+  {
+    clean: z
+      .boolean()
+      .optional()
+      .describe(
+        "true: open the tab in a separate container without the user's cookies and logins (research, untrusted sites, or when the user doesn't want their accounts used); false: with the user's logins. Default follows the user's settings. The tab info shows container when it has one.",
+      ),
+  },
 );
 
 tool(

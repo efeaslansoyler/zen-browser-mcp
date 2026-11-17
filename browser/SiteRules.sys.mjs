@@ -22,6 +22,9 @@ export function normalizeConfig(raw = {}) {
   // Zen: the workspace (by name) for tabs agents open; otherwise the user's current one
   const workspace = typeof raw.workspace === "string" ? raw.workspace.trim().slice(0, 80) : "";
   if (workspace) config.workspace = workspace;
+  // A container (by name) that agent tabs open in by default: their own cookies and site data
+  const container = typeof raw.container === "string" ? raw.container.trim().slice(0, 80) : "";
+  if (container) config.container = container;
   return config;
 }
 

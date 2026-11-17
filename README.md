@@ -328,6 +328,15 @@ tab context menu → **Agent settings** → **New agent tabs open in** (or
 switching to it. Agents work in a hidden space as usual: reading, input and screenshots don't
 need the tab to be visible, and the island's go-to-tab button takes you there.
 
+## Clean tabs
+
+By default agent tabs use your logins, which is what you want when the agent works in your
+accounts. For research or sites you don't trust, an agent can open a **clean tab**
+(`tabs_create_mcp` with `clean: true`): it runs in a separate **Agent** container, with its own
+cookies, logins and site data, in the same window. To make every new agent tab clean, run
+`npx zen-browser-mcp config container Agent` (`off` to undo). History and extensions are still
+shared, and tabs you hand over keep their own container.
+
 ## Modes and site rules
 
 The general mode is **auto** (act without asking) or **ask** (request approval before

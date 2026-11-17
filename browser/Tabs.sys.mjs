@@ -85,18 +85,49 @@ export function tabs(ctx) {
     const owner = ctx.ownership.owner(b.browserId);
     if (owner) info.owner = { session: owner, name: ctx.sessions.get(owner)?.name || owner.slice(-6) };
     if (tab.getAttribute(MARK) === "user") info.givenByUser = true;
+    if (tab.userContextId) {
+      try {
+        info.container = containers().getUserContextLabel(tab.userContextId);
+      } catch {}
+    }
     return info;
   }
 
   // Opened in the background of the user's window, like Claude in Chrome: input comes from the
   // page process, so the tab doesn't need to be selected and the user's view doesn't change.
-  async function createTab() {
+  // clean: in the agent container instead of with the user's cookies (default from the config).
+  async function createTab({ clean } = {}) {
     const win = Services.wm.getMostRecentWindow("navigator:browser");
     if (!win) throw new Error("No browser window is open.");
-    const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true });
+    const userContextId = (clean ?? !!ctx.readConfig().container) ? agentContainerId() : 0;
+    const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true, userContextId });
     mark(tab);
     await placeInWorkspace(win, tab).catch((e) => ctx.logError("workspace", e));
     return tab;
+  }
+
+  // Containers keep cookies, logins and site data apart within the same profile and window.
+  // Agents use one (configured by name, "Agent" by default, created on first use) so a clean
+  // tab doesn't browse with the user's accounts. History and extensions stay shared.
+  function containers() {
+    for (const url of [
+      "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
+      "resource://gre/modules/ContextualIdentityService.sys.mjs",
+    ]) {
+      try {
+        return ChromeUtils.importESModule(url).ContextualIdentityService;
+      } catch {}
+    }
+    throw new Error("This browser has no containers, so clean tabs aren't available.");
+  }
+
+  const containerName = (service, identity) => identity.name ?? service.getUserContextLabel(identity.userContextId);
+
+  function agentContainerId() {
+    const service = containers();
+    const name = ctx.readConfig().container || "Agent";
+    const found = service.getPublicIdentities().find((identity) => containerName(service, identity) === name);
+    return (found ?? service.create(name, "fingerprint", "orange")).userContextId;
   }
 
   // Zen: if a workspace is configured, agent tabs move there (it is created without switching

@@ -326,6 +326,15 @@ menüsü → **Ajan ayarları** → **Yeni ajan sekmeleri şurada açılır** il
 yapılmadan oluşturulur. Ajanlar gizli alanda da her zamanki gibi çalışır: okuma, girdi ve
 ekran görüntüsü için sekmenin görünmesi gerekmez; adadaki sekmeye git düğmesi seni oraya götürür.
 
+## Temiz sekmeler
+
+Ajan sekmeleri varsayılan olarak senin girişlerini kullanır; ajan senin hesaplarında iş
+yapacaksa istediğin de budur. Araştırma ya da güvenmediğin siteler için ajan **temiz sekme**
+açabilir (`tabs_create_mcp`, `clean: true`): sekme aynı pencerede ama ayrı bir **Agent**
+container'ında, kendi cookie'leri, girişleri ve site verisiyle çalışır. Bütün yeni ajan
+sekmelerinin temiz olması için `npx zen-browser-mcp config container Agent` (geri almak için
+`off`). Geçmiş ve eklentiler yine ortaktır; ajana verdiğin kendi sekmelerin kendi container'larında kalır.
+
 ## Modlar ve site kuralları
 
 Genel mod **auto / otomatik** (sormadan işlem) veya **ask / onaylı** (işlemden önce onay)

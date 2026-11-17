@@ -42,8 +42,14 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <domain>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <name>|current`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <alan-adı>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <ad>|current`,
+        `container: ${config.container ?? "off (agent tabs use your logins unless asked otherwise)"}`,
+        `container: ${config.container ?? "kapalı (ajan sekmeleri, aksi istenmedikçe senin girişlerini kullanır)"}`,
+      ),
+    );
+    console.log(
+      L(
+        `\nUsage:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <domain>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off`,
+        `\nKullanım:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <alan-adı>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off`,
       ),
     );
     return;
@@ -66,6 +72,20 @@ export function configCommand(args: string[]) {
       L(
         `✓ workspace: ${name === "current" ? "the space you're in" : name}`,
         `✓ çalışma alanı: ${name === "current" ? "bulunduğun alan" : name}`,
+      ),
+    );
+    return;
+  }
+  if (cmd === "container") {
+    // Agent tabs open in this container by default (their own cookies and logins); "off" uses the user's.
+    const name = rest.join(" ").trim();
+    if (!name) throw new Error(L("Use: config container <name>|off", "Kullanım: config container <ad>|off"));
+    const { container: _, ...rest2 } = config;
+    writeConfig(name === "off" ? rest2 : { ...config, container: name });
+    console.log(
+      L(
+        `✓ container: ${name === "off" ? "off (agent tabs use your logins unless asked otherwise)" : name}`,
+        `✓ container: ${name === "off" ? "kapalı (ajan sekmeleri, aksi istenmedikçe senin girişlerini kullanır)" : name}`,
       ),
     );
     return;

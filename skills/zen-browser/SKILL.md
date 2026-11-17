@@ -22,6 +22,7 @@ extensions. Decide where to work from that, not from memory: tab IDs and the use
 | refers to something open: "this page", a site by name, "the video I'm watching", "my cart" | find it in `userTabs`, call `request_tab` with a short reason, wait for the answer |
 | picked an element and it arrived with `source_tab` | `request_tab` with that ID if you need to see the page live |
 | asks for research, a URL, something not open | `tabs_create_mcp` and work there |
+| doesn't want their accounts used, or it's research on sites you don't trust | `tabs_create_mcp` with `clean: true`: a separate container without their cookies and logins |
 | declined your `request_tab` | open your own tab and explain; don't ask again for the same tab |
 
 Opening a new tab for something the user already has open loses their state (logins, filters,

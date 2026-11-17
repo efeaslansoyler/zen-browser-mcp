@@ -43,6 +43,8 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **Downloads and page watches** that report to events files, so agents can keep working
   instead of blocking.
 - **Zen workspaces**: agent tabs can open in a chosen workspace.
+- **Clean tabs**: `tabs_create_mcp` with `clean: true` (or `config container`) opens agent tabs in
+  a separate container without the user's cookies and logins.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
   snapshot, and unchanged screenshots can skip the image.
 - **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill` and `codex-hooks`; the browser

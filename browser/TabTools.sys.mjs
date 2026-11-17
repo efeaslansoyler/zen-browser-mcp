@@ -108,8 +108,8 @@ export function tabTools(ctx) {
       });
     },
 
-    async tabs_create_mcp() {
-      return text(ctx.describeTab(await ctx.createTab()));
+    async tabs_create_mcp({ clean } = {}) {
+      return text(ctx.describeTab(await ctx.createTab({ clean })));
     },
 
     // A tab the agent opened is closed; a tab the user gave is not closed but given back.
