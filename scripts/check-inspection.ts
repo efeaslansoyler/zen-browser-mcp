@@ -20,8 +20,8 @@ try {
   original = await chrome('Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.browserId');
   const state = await chrome('({version:h.version,paused:h.state.paused,mode:h.readConfig?.().mode})');
   assert(!state.paused);
-  const config = JSON.parse(readFileSync(`${process.env.HOME}/.config/zen-mcp/config.json`, 'utf8'));
-  assert.equal(config.mode, 'auto', 'Smoke test requires existing auto mode; does not change settings.');
+  // The bridge's own reading of the settings; a missing config file means the default auto mode.
+  assert.equal(state.mode, 'auto', 'Smoke test requires existing auto mode; does not change settings.');
   console.log(text(await call('reload')));
   for(let i=0;i<50;i++){await sleep(40);try{if(await chrome(`h.version>${state.version}`))break;}catch{}}
   await client.connect(transport);

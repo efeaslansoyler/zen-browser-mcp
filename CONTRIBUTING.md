@@ -42,6 +42,10 @@ Bridge tests build the same `ctx` as `main.js` with `bridgeContext()` from
 each other through `ctx`, a fake replaces the real function everywhere. Tool groups can also
 be tested alone by calling their factory (`readTools(ctx)` …) with a hand-made `ctx`.
 
+Page actor tests run the real `ZenMcpChild` in a VM with `loadActor()` from
+`test/support/actor.mjs`; its helper modules are the real ones, and the test passes the Gecko
+globals it needs (`Services`, `Cu`, timers).
+
 `test/main-smoke.test.mjs` loads all of `main.js` with stubs and starts it, which catches
 temporal dead zone mistakes and missing wiring.
 
@@ -65,7 +69,9 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-workspace.ts` | Zen: agent tabs in a configured hidden space, input and screenshots there |
 | `check-pick-delivery.ts` | **Sends a real message to a real Codex conversation**; needs `CODEX_THREAD_ID`. Don't run casually. |
 
-They require the global mode to be `auto` and refuse to run in `ask` mode. Afterwards check
+They require the global mode to be `auto` and refuse to run in `ask` mode. `check-input`
+(device emulation) and `check-extensions` (toolbar popups) also need the Zen window visible:
+on Hyprland a window on a hidden workspace is suspended. Afterwards check
 that `~/.config/zen-mcp/config.json` still says `"mode": "auto"`.
 
 ## Testing without touching your browser

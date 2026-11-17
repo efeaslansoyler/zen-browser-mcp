@@ -53,7 +53,9 @@ try {
   const fixture = 'data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><title>Zen ownership test</title><h1>Disposable ownership test</h1><p id="result">untouched</p>');
   const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   for (let i = 0; i < 2; i++) {
-    const client = new Client({ name: 'codex-mcp-client', version: 'ownership-test' });
+    // Claude Code identities: their MCP process sessions are listed in the tab menu. A Codex MCP
+    // process session is not (Codex tabs belong to conversations), so the transfer menu would miss it.
+    const client = new Client({ name: 'claude-code', version: 'ownership-test' });
     clients.push(client);
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['src/server.ts'], cwd: process.cwd(), env: { ...env, ZEN_MCP_CHANNEL: '0' } }));
   }
@@ -74,7 +76,7 @@ try {
     }
     assert.match(text(await tool(client, 'javascript_tool', { tabId: foreign, action: 'javascript_exec', text: 'document.title="BAD"' }, true)), /another session/);
   }
-  console.log('✓ Two real Codex MCP clients have separate tab lists; foreign reads, writes and closes are rejected');
+  console.log('✓ Two real Claude Code MCP clients have separate tab lists; foreign reads, writes and closes are rejected');
 
   const waiting = settle(a.callTool({ name: 'computer', arguments: { tabId, action: 'wait', duration: 30 } }));
   await sleep(250);
