@@ -148,7 +148,9 @@ are not atomic. These checks apply to computer clicks, not programmatic JavaScri
 - shows the site and the current action (*clicking*, *typing*, …), with a live preview on hover
 - **■** stops Claude; **Resume** lets it continue. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> works too
 - when Claude needs you (a payment confirmation, a captcha, a login) it asks in the island and
-  outlines the element on the page; you get a desktop notification if the browser isn't focused
+  outlines the element on the page; you get a desktop notification if the browser isn't focused.
+  Logins and 2FA codes are yours to type: Claude hands the step over and waits for **Done**, so
+  your credentials never pass through it
 - page dialogs (`alert`, `confirm`) show up there too
 
 ### Handing over a tab
@@ -387,7 +389,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
-| `ask_user`, `request_tab` | hand a step to you or ask a question (with answer buttons, with or without a tab); ask for access to your tab |
+| `ask_user`, `hand_to_user`, `request_tab` | ask you a question (with answer buttons, with or without a tab); hand you a step only you should do (logging in, 2FA, a captcha, a payment) and continue when you press **Done**; ask for access to your tab |
 
 ## Security
 

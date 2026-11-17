@@ -53,7 +53,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Control.sys.mjs` | Stop/Resume and island questions (`askIsland`, tab-less `ask_user`, notifications) |
 | `Config.sys.mjs`, `Activity.sys.mjs` | `config.json` and site access checks; island action text and the activity log |
 | `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
-| `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user`, approvals, dialogs, pick note box |
+| `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user` and `hand_to_user`, approvals, dialogs, pick note box |
 | `Agent.sys.mjs` | Agent identity and theme (Claude orange, Codex mint, others blue); shared by Node and Gecko |
 | `Ownership.sys.mjs` | Per-session tab ownership, `tab_work` tasks and the handoff queue |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |

@@ -378,19 +378,45 @@ tool(
 tool(
   "ask_user",
   [
-    "Hand a step to the user when they must do it themselves (confirming a payment or deletion, solving a captcha, logging in, choosing something only they know), or ask them a question.",
-    "Shows your message in the browser island at the top of the user's browser window (with a desktop notification if the browser is not focused) and outlines the element (ref from read_page/find, or a screenshot coordinate) in the agent's color in the tab; the tab is not switched, the user opens it from the island. Waits for the user.",
-    'wait: "click" returns when the user clicks the outlined element; "done" (default) shows OK/Cancel in the island and returns which they pressed. The user can always cancel.',
-    'options: 2-6 short answers shown as buttons instead of OK; the result has the chosen one as choice. Without tabId the question is not tied to a tab (no outline, no ref/coordinate, no wait: "click").',
-    "Results may carry an optional userMessage typed by the user. Write the message in the user's language and say exactly what to do.",
+    "Ask the user a question in the browser island at the top of their browser window (with a desktop notification if the browser is not focused) and wait for the answer: OK/Cancel, or options as answer buttons whose result has the chosen one as choice.",
+    "Use it for decisions only the user can make (which item, whether to proceed). For something the user has to do in a page (log in, 2FA, captcha, confirm a payment), use hand_to_user instead.",
+    "With tabId the question is about that tab, and ref (from read_page/find) or a screenshot coordinate outlines the element in the agent's color; without tabId it is a general question.",
+    "Results may carry an optional userMessage typed by the user. Write the question in the user's language.",
   ].join(" "),
   {
-    tabId: tabId.optional().describe("Tab the step or question is about. Omit for a general question."),
+    tabId: tabId.optional().describe("Tab the question is about. Omit for a general question."),
+    message: z.string().describe("The question, in the user's language."),
+    ref: z.string().optional().describe("Element to outline (from read_page or find)."),
+    coordinate: z
+      .array(z.number())
+      .length(2)
+      .optional()
+      .describe("Or a point in the latest screenshot; the element there is outlined."),
+    options: z
+      .array(z.string().min(1).max(80))
+      .min(2)
+      .max(6)
+      .optional()
+      .describe('Answers to offer as buttons, e.g. ["Red", "Blue"].'),
+    timeout: z.number().optional().describe("Seconds to wait (default 300)."),
+  },
+  (args) => ((args.timeout ?? 300) + 20) * 1000,
+);
+
+tool(
+  "hand_to_user",
+  [
+    "Hand a step to the user when they must do it themselves in a tab: logging in or any credentials, 2FA codes, captchas, confirming a payment or a deletion, accepting terms.",
+    "Never ask the user for passwords or codes to type them yourself; hand the step over instead, so credentials never pass through you.",
+    'Shows your message in the browser island (with a desktop notification if the browser is not focused) with "Go to tab" and "Done", and outlines the element (ref or screenshot coordinate) in the tab; the tab is not switched.',
+    'wait: "done" (default) returns when the user presses Done or Cancel; "click" returns when the user clicks the outlined element. Afterwards, check the page before continuing.',
+    "Write the message in the user's language and say exactly what to do.",
+  ].join(" "),
+  {
+    tabId,
     message: z
       .string()
-      .describe(
-        "What the user should do, e.g. \"Check the amount and press Confirm if it's right.\" Write it in the user's language.",
-      ),
+      .describe('What the user should do, e.g. "Log in to your account, then press Done." In the user\'s language.'),
     ref: z.string().optional().describe("Element to outline (from read_page or find)."),
     coordinate: z
       .array(z.number())
@@ -398,15 +424,9 @@ tool(
       .optional()
       .describe("Or a point in the latest screenshot; the element there is outlined."),
     wait: z.enum(["click", "done"]).optional(),
-    options: z
-      .array(z.string().min(1).max(80))
-      .min(2)
-      .max(6)
-      .optional()
-      .describe('Answers to offer as buttons, e.g. ["Red", "Blue"]. Needs wait: "done".'),
-    timeout: z.number().optional().describe("Seconds to wait (default 300)."),
+    timeout: z.number().optional().describe("Seconds to wait (default 600)."),
   },
-  (args) => ((args.timeout ?? 300) + 20) * 1000,
+  (args) => ((args.timeout ?? 600) + 20) * 1000,
 );
 
 tool(

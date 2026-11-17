@@ -150,7 +150,9 @@ alanı değişikliklerine uygulanmaz.
 - siteyi ve o anki işlemi gösterir (*tıklıyor*, *yazıyor*…); üzerine gelince canlı önizleme
 - **■** Claude'u durdurur, **Devam et** sürdürür. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> da çalışır
 - Claude'un sana ihtiyacı olduğunda (ödeme onayı, captcha, giriş) adada sorar ve sayfadaki
-  öğeyi çerçeveler; tarayıcı odakta değilse masaüstü bildirimi gelir
+  öğeyi çerçeveler; tarayıcı odakta değilse masaüstü bildirimi gelir.
+  Giriş bilgilerini ve 2FA kodlarını sen yazarsın: Claude adımı sana bırakır ve **Bitti**'yi
+  bekler, yani bilgilerin ondan hiç geçmez
 - sayfa diyalogları (`alert`, `confirm`) da orada görünür
 
 ### Sekme vermek
@@ -385,7 +387,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `downloads` | sekmeden indirilen dosyalar: durum, yol, boyut/ilerleme; `wait` dosya bitene kadar bekler ve sha256'sını verir; `cancel` indirmeyi durdurup yarım dosyayı siler |
 | `javascript_tool`, `handle_dialog` | sayfada JS çalıştırma; `alert`/`confirm`/`prompt` cevaplama |
 | `connect_session` | Codex sohbetini tarayıcıdan seçim alacak şekilde bağlama |
-| `ask_user`, `request_tab` | bir adımı sana bırakma ya da soru sorma (cevap butonlarıyla, sekmeli ya da sekmesiz); sekmene erişim isteme |
+| `ask_user`, `hand_to_user`, `request_tab` | sana soru sorma (cevap butonlarıyla, sekmeli ya da sekmesiz); yalnız senin yapman gereken bir adımı sana bırakma (giriş, 2FA, captcha, ödeme) ve **Bitti**'ye basınca devam etme; sekmene erişim isteme |
 
 ## Güvenlik
 

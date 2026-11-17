@@ -171,7 +171,7 @@ mark("ask-user");
 const pay = await text("find", { tabId: tab, query: "Pay now" });
 const payRef = ref(pay, /button "Pay now"/);
 const asked = text(
-  "ask_user",
+  "hand_to_user",
   { tabId: tab, ref: payRef, message: "Check the total, then press Pay now to confirm.", wait: "click", timeout: 60 },
   80000,
 );
