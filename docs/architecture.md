@@ -127,7 +127,11 @@ asks for a note and a target session) and recipes the user recorded go through
    - **T3 Code** threads (`T3CODE_THREAD_ID` and `T3CODE_CLI_PATH` in the environment) through
      `t3 thread send <thread> -`: the message arrives as the thread's next turn, marked as
      coming from zen.
-2. **Otherwise it waits** in the bridge and goes with the session's next tool result, once.
+2. **Otherwise it waits** in the bridge and goes, once, with whichever comes first: the
+   session's next tool result, or the user's next message in that conversation when the prompt
+   hooks are installed (`hooks install`: Claude Code's `UserPromptSubmit`, and the Codex
+   lifecycle hook). The hook (`cli.js hook claude`) asks the bridge with the client's own
+   conversation ID (`inbox_take`), which the MCP process reported when it connected.
 3. If the session ends first, or there is no target, the text is copied to the clipboard.
 
 ## Downloads

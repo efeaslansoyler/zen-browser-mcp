@@ -26,7 +26,19 @@ export class Channels {
   // push: how the session's MCP process delivers an event now ("channel", "t3", …), or null
   // when it can't; events then wait in the inbox (Inbox.sys.mjs).
   subscribe(
-    { session, cwd, agent, label, title, threadId, ack = false, toolsOnly = false, push = null },
+    {
+      session,
+      cwd,
+      agent,
+      label,
+      title,
+      threadId,
+      ack = false,
+      toolsOnly = false,
+      push = null,
+      clientSession = null,
+      hook = false,
+    },
     transport,
     output,
   ) {
@@ -43,6 +55,10 @@ export class Channels {
           ack,
           relay: false,
           push: typeof push === "string" ? push : null,
+          // the client's own conversation ID (prompt hooks ask with it) and whether that client
+          // has the zen prompt hook installed
+          clientSession: typeof clientSession === "string" ? clientSession : null,
+          hook: hook === true,
           threadId,
           transport,
           output,

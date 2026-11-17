@@ -9,6 +9,7 @@ import { configureCodexHooks, handleCodexHook } from "./codex-hooks.ts";
 import { PACKAGE, VERSION } from "./paths.ts";
 import { serve } from "./server.ts";
 import { recipesCommand } from "./recipes.ts";
+import { hooksCommand, promptHook } from "./hooks.ts";
 import { skillCommand } from "./skill.ts";
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -27,7 +28,7 @@ ${usage([
   [`npx ${PACKAGE} uninstall`, "remove it"],
   [`npx ${PACKAGE} doctor`, "check the setup"],
   [`npx ${PACKAGE} skill install|uninstall`, "add the agent skill to Claude Code and Codex"],
-  [`npx ${PACKAGE} codex-hooks install|uninstall`, "manage automatic Codex chat connection"],
+  [`npx ${PACKAGE} hooks install|uninstall`, "deliver browser picks with your next message (Claude Code, Codex)"],
   [`npx ${PACKAGE} config`, "show or change settings (mode, site rules)"],
   [`npx ${PACKAGE} recipes [list]|show|rm <id>`, "recipes the user showed the agent once"],
 ])}`,
@@ -42,7 +43,10 @@ ${usage([
   [`npx ${PACKAGE} uninstall`, "kaldırır"],
   [`npx ${PACKAGE} doctor`, "kurulumu kontrol eder"],
   [`npx ${PACKAGE} skill install|uninstall`, "ajan skill'ini Claude Code ve Codex'e ekler"],
-  [`npx ${PACKAGE} codex-hooks install|uninstall`, "otomatik Codex sohbet bağlantısını yönetir"],
+  [
+    `npx ${PACKAGE} hooks install|uninstall`,
+    "tarayıcıdan gönderilenleri sonraki mesajınla iletir (Claude Code, Codex)",
+  ],
   [`npx ${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
   [`npx ${PACKAGE} recipes [list]|show|rm <id>`, "ajana bir kez gösterdiğin tarifler"],
 ])}`,
@@ -60,9 +64,33 @@ try {
         input += chunk;
         if (input.length > 1_048_576) throw new Error("Hook input is too large.");
       }
-      await handleCodexHook(JSON.parse(input));
+      const value = JSON.parse(input);
+      await handleCodexHook(value);
+      // what the user sent this conversation from the browser and couldn't be queued
+      if (value?.hook_event_name === "UserPromptSubmit") {
+        const output = await promptHook("codex", value);
+        if (output) console.log(output);
+      }
       break;
     }
+    case "hook": {
+      if (args[0] !== "claude") throw new Error("Usage: zen-browser-mcp hook claude");
+      let input = "";
+      for await (const chunk of process.stdin) {
+        input += chunk;
+        if (input.length > 1_048_576) throw new Error("Hook input is too large.");
+      }
+      let value: unknown = null;
+      try {
+        value = JSON.parse(input);
+      } catch {}
+      const output = await promptHook("claude", value);
+      if (output) console.log(output);
+      break;
+    }
+    case "hooks":
+      console.log(hooksCommand(args[0]));
+      break;
     case "codex-hooks": {
       if (args[0] !== "install" && args[0] !== "uninstall")
         throw new Error("Usage: zen-browser-mcp codex-hooks install|uninstall");

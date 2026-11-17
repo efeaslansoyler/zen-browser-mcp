@@ -10,6 +10,7 @@ import { ensureCodexRelay } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
 import { NO_PUSH, THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
 import { channelEnabled, claudeTitle } from "./claude.ts";
+import { claudeHookInstalled } from "./hooks.ts";
 import { channelInstructions, clientInstructions } from "./instructions.ts";
 import { TOOLS, callTimeout } from "./tools.ts";
 import { identifyAgent } from "../browser/Agent.sys.mjs";
@@ -119,6 +120,10 @@ function connectOwner(agent: { id: string; name: string }) {
     agent,
     title,
     push: channel ? "channel" : t3 ? "t3" : null,
+    // prompt hooks find the conversation by the client's own ID
+    ...(agent.id === "claude" && process.env.CLAUDE_CODE_SESSION_ID
+      ? { clientSession: process.env.CLAUDE_CODE_SESSION_ID, hook: claudeHookInstalled() }
+      : {}),
   });
 }
 async function push(event: any) {

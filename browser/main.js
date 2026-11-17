@@ -522,6 +522,17 @@ function logError(where, e) {
 
     // Not exposed over MCP; used by the CLI (doctor, updates) and scripts/zenctl.ts.
     Object.assign(ctx.commands, {
+      // A prompt hook (src/hooks.ts) asks for what waits for its conversation: the client's own
+      // conversation ID maps to the zen session.
+      inbox_take({ client, clientSession }) {
+        if (typeof clientSession !== "string" || !clientSession) return ctx.text("");
+        let session = null;
+        if (client === "codex") session = `codex:${clientSession}`;
+        else
+          for (const sub of ctx.channels.subscribers.values())
+            if (sub.clientSession === clientSession) session = sub.id;
+        return ctx.text(session ? ctx.inboxText(ctx.inbox.take(session)) : "");
+      },
       ping() {
         return ctx.text({
           app: zenMcpApp,

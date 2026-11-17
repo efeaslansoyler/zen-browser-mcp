@@ -1,7 +1,9 @@
 // The `doctor` command: checks each part of the setup in turn and says what to do about problems
 import fs from "node:fs";
+import path from "node:path";
 import { L } from "./i18n.ts";
 import { skillStatus } from "./skill.ts";
+import { claudeHookInstalled, claudeSettingsFile } from "./hooks.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
 import { readConfig } from "./config.ts";
 import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
@@ -55,6 +57,14 @@ export async function doctor() {
       `  ${L(`browser files ${files}, package ${VERSION}: updated when the MCP client starts the server`, `tarayıcı dosyaları ${files}, paket ${VERSION}: MCP istemcisi sunucuyu başlatınca güncellenir`)}`,
     );
   else ok(L(`browser files ${files}`, `tarayıcı dosyaları ${files}`));
+
+  // The prompt hook is optional too: without it, what the user sends waits for the next tool call.
+  if (fs.existsSync(path.dirname(claudeSettingsFile())))
+    if (claudeHookInstalled()) ok(L("Claude Code: prompt hook installed", "Claude Code: prompt hook'u kurulu"));
+    else
+      console.log(
+        `  Claude Code: ${L("prompt hook not installed", "prompt hook'u kurulu değil")} → npx ${PACKAGE} hooks install`,
+      );
 
   // The skill is optional: report it, but never count it as a problem.
   for (const { client, status } of skillStatus()) {

@@ -78,6 +78,10 @@ export type SubscriptionInfo = {
   toolsOnly?: boolean;
   // how this process delivers pushed events now ("channel"), or null: they wait in the inbox
   push?: string | null;
+  // the client's own conversation ID (Claude Code: CLAUDE_CODE_SESSION_ID), for prompt hooks
+  clientSession?: string;
+  // the client has the zen prompt hook installed (hooks install)
+  hook?: boolean;
 };
 
 export function subscribe(onEvent: (event: any) => void | Promise<void>, info: SubscriptionInfo) {
