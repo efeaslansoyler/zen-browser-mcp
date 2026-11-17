@@ -1,13 +1,13 @@
-// Ağ kaydı: ajan sekmelerindeki HTTP istekleri, sekme açıldığından beri. Başlıklar, istek
-// gövdesi ve fetch/XHR/belge cevap gövdeleri; çerez ve yetki başlıkları gizlenir.
+// Network log: HTTP requests of agent tabs since the tab opened. Headers, request bodies and
+// fetch/XHR/document response bodies; cookie and authorization headers are hidden.
 const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
 
 const MAX_REQUESTS = 500;
 const BODY_TYPES = new Set(["xmlhttprequest", "fetch", "document"]);
-const MAX_BODY = 256 * 1024; // istek başına
-const MAX_TAB_BODIES = 8 * 1048576; // sekme başına, eskiler silinir
+const MAX_BODY = 256 * 1024; // per request
+const MAX_TAB_BODIES = 8 * 1048576; // per tab; the oldest are dropped
 const MAX_UPLOAD_TEXT = 64 * 1024;
-// ajana gösterilmez: oturum ve kimlik bilgileri
+// never shown to agents: session and credential headers
 const SECRET_HEADERS = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"]);
 const TOPICS = [
   "http-on-modify-request",
@@ -17,7 +17,7 @@ const TOPICS = [
   "http-on-stop-request",
   "http-on-failed-opening-request",
 ];
-// XPCOM sabitleri Object.entries'de görünmez, for...in ile gezilir
+// XPCOM constants don't show up in Object.entries; iterate with for...in
 const CONTENT_TYPES = {};
 for (const key in Ci.nsIContentPolicy) {
   if (key.startsWith("TYPE_") && !key.startsWith("TYPE_INTERNAL")) {
@@ -26,9 +26,9 @@ for (const key in Ci.nsIContentPolicy) {
 }
 
 export class NetworkLog {
-  // logs: browserId → { list, byChannel, host, nextId }; reload'dan sağ çıksın diye dışarıdan gelir
-  // env.tracked(browserId): kaydedilecek sekme mi
-  // env.blocked(browserId, host): true ise istek iptal edilir (site kuralı)
+  // logs: browserId → { list, byChannel, host, nextId }; passed in so it survives reloads
+  // env.tracked(browserId): whether the tab is recorded
+  // env.blocked(browserId, host): true cancels the request (site rule)
   constructor(logs, env) {
     this.logs = logs;
     this.env = env;
@@ -45,7 +45,7 @@ export class NetworkLog {
   get(browserId) { return this.logs.get(browserId); }
   delete(browserId) { this.logs.delete(browserId); }
 
-  // 10 sn'den uzun süren istekler (uzun yoklama, akış) sayılmaz
+  // requests longer than 10 s (long polling, streams) don't count
   busy(browserId, now = Date.now()) {
     return (this.logs.get(browserId)?.list ?? []).some(r => r.duration == null && !r.error && now - r.start < 10000);
   }
@@ -62,7 +62,7 @@ export class NetworkLog {
     }
     let log = this.logs.get(browserId);
     if (!log) this.logs.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
-    // reload'dan önceki sürümün kaydı: numarasız girdiler
+    // a log from the version before a reload: entries without IDs
     if (!log.nextId) {
       log.nextId = 1;
       for (const r of log.list) r.id = log.nextId++;
@@ -70,7 +70,7 @@ export class NetworkLog {
 
     if (topic === "http-on-modify-request" || (topic === "http-on-failed-opening-request" && !log.byChannel.has(channel.channelId))) {
       const type = CONTENT_TYPES[channel.loadInfo.externalContentPolicyType] ?? "other";
-      // Claude in Chrome gibi: ana belge başka bir siteye gidince eski kayıtlar silinir
+      // Like Claude in Chrome: old entries are cleared when the main document goes to another site
       if (type === "document" && bc.top === bc) {
         const host = channel.URI.host;
         if (log.host && host !== log.host) {
@@ -91,7 +91,7 @@ export class NetworkLog {
     }
     const entry = log.byChannel.get(channel.channelId);
     if (!entry) return;
-    // açılmadan reddedilen istek (ör. yasaklı port, CSP): stop-request gelmez
+    // a request refused before opening (e.g. banned port, CSP) gets no stop-request
     if (topic === "http-on-failed-opening-request") {
       entry.error = ChromeUtils.getXPCOMErrorName(channel.status);
       entry.duration = 0;
@@ -104,19 +104,19 @@ export class NetworkLog {
       log.byChannel.delete(channel.channelId);
       return;
     }
-    // examine-*: cevap başlıkları geldi
+    // examine-*: response headers arrived
     try {
       entry.status = channel.responseStatus;
       entry.mime = channel.contentType || undefined;
       if (topic === "http-on-examine-cached-response") entry.cached = true;
       entry.responseHeaders = headersOf(channel, "visitResponseHeaders");
-      // istek başlıkları gönderilirken eklenenler (çerez gibi) burada tamam
+      // headers added while sending (such as cookies) are complete here
       entry.requestHeaders = headersOf(channel, "visitRequestHeaders");
     } catch {}
     if (BODY_TYPES.has(entry.type) && entry.body === undefined) captureBody(channel, entry, log);
   }
 
-  // read_network_requests id ile: tek isteğin ayrıntısı
+  // read_network_requests with id: one request's details
   async details(browser, r, maxChars) {
     const win = browser.ownerDocument.defaultView;
     const lines = [`#${r.id} ${r.method} ${r.error ?? r.status ?? "pending"} ${r.url}`];
@@ -161,7 +161,7 @@ function headersOf(channel, visit) {
   return out;
 }
 
-// POST gövdesi (küçükse); akış okunduktan sonra başa sarılır, istek bozulmaz
+// The POST body (if small); the stream is rewound after reading so the request is unaffected.
 function uploadText(channel) {
   try {
     const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
@@ -178,8 +178,8 @@ function uploadText(channel) {
   }
 }
 
-// Kanalın dinleyicisinin önüne geçip gelen veriyi kopyalar (içerik kodlaması çözülmüş);
-// sayfa veriyi aynen alır
+// Sits in front of the channel's listener and copies the incoming data (with the content
+// encoding decoded); the page receives the data unchanged.
 function captureBody(channel, entry, log) {
   let traceable;
   try { traceable = channel.QueryInterface(Ci.nsITraceableChannel); } catch { return; }
@@ -225,7 +225,7 @@ function trimBodies(log) {
   }
 }
 
-// Kayıt sıkıştırmanın önünde yapılıyor: content-encoding'i burada açılır
+// Recording happens before decompression, so content-encoding is decoded here.
 const DECOMPRESS_FORMATS = { gzip: "gzip", "x-gzip": "gzip", deflate: "deflate", br: "brotli", zstd: "zstd" };
 async function decompress(win, raw, encoding) {
   const format = DECOMPRESS_FORMATS[encoding.trim().toLowerCase()];

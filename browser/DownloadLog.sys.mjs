@@ -1,15 +1,15 @@
-// İndirme kaydı: ajan sekmelerinden (ya da onların açtığı açılır pencerelerden) başlayan
-// indirmeler. Gecko'nun Downloads listesini dinler; durum, yol, boyut ve ilerleme verir.
-// Her indirme için bir olay dosyası yazar (EventFiles.sys.mjs).
+// Download log: downloads started from agent tabs (or popups they opened). Listens to Gecko's
+// Downloads list and reports state, path, size and progress. Writes an events file per
+// download (EventFiles.sys.mjs).
 const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
 
 const MAX_RECORDS = 100;
-const STEP_BYTES = 10 * 1048576; // boyutu bilinmeyen indirmede bu kadar baytta bir satır
-const HASH_CHUNK = 4 * 1048576; // ana iş parçacığını uzun süre tutmasın diye parça parça
+const STEP_BYTES = 10 * 1048576; // one line per this many bytes when the size is unknown
+const HASH_CHUNK = 4 * 1048576; // in chunks, so the main thread isn't held for long
 
 export class DownloadLog {
-  // records: { list: [{ id, browserId, download, reported }], nextId }; reload'dan sağ çıksın diye dışarıdan gelir
-  // env.tracked(browserId): kaydedilecek sekme mi; env.events: EventFiles
+  // records: { list: [{ id, browserId, download, reported }], nextId }; passed in so it survives reloads
+  // env.tracked(browserId): whether the tab is recorded; env.events: EventFiles
   constructor(records, env) {
     this.records = records;
     this.records.list ??= [];
@@ -24,7 +24,7 @@ export class DownloadLog {
   async start() {
     await this.env.events.start();
     this.list = await Downloads.getList(Downloads.ALL);
-    // addView mevcut indirmeler için de onDownloadAdded çağırır; kayıtlılar tekrar eklenmez
+    // addView calls onDownloadAdded for existing downloads too; recorded ones aren't added again
     await this.list.addView(this.view);
   }
 
@@ -43,7 +43,7 @@ export class DownloadLog {
     this.#changed(download);
   }
 
-  // olay satırı: durum değişince ve her %10'da (boyut bilinmiyorsa her 10 MB'da)
+  // An event line on state changes and every 10% (every 10 MB if the size is unknown).
   #changed(download) {
     const record = this.records.list.find(r => r.download === download);
     if (!record?.events || record.closed) return;
@@ -61,7 +61,7 @@ export class DownloadLog {
     }, { last: finished });
   }
 
-  // sha256 bir kez hesaplanır; dosya taşınmış/silinmişse undefined
+  // sha256 is computed once; undefined if the file was moved or deleted
   static async sha256(record) {
     if (record.sha256) return record.sha256;
     try {
@@ -79,7 +79,7 @@ export class DownloadLog {
     return record.sha256;
   }
 
-  // indirmeyi başlatan çerçevenin sekmesi; yeni açılan bir pencereden geldiyse açan sekme
+  // The tab of the frame that started the download; for a popup, the tab that opened it.
   #sourceTab(download) {
     const bc = download.source.browsingContextId && BrowsingContext.get(download.source.browsingContextId);
     if (!bc) return null;
@@ -91,12 +91,12 @@ export class DownloadLog {
 
   forTab(browserId) { return this.records.list.filter(r => r.browserId === browserId); }
 
-  // duraklatılmış (kısmi veriyle iptal) indirme bitmiş sayılmaz
+  // a paused download (cancelled with partial data) doesn't count as finished
   static finished({ download: d }) { return d.succeeded || !!d.error || (d.canceled && !d.hasPartialData); }
 
   static describe(record) {
     const d = record.download;
-    // cancel sırasında Gecko bir an kısmi veriyi tutar: o ara "paused" görünmesin
+    // during cancel Gecko briefly keeps partial data: don't report "paused" in between
     const state = d.succeeded ? "done" : d.error ? "failed"
       : d.canceled ? (d.hasPartialData && !record.canceling ? "paused" : "canceled") : "downloading";
     const info = { id: record.id, state, url: d.source.url, filename: PathUtils.filename(d.target.path), path: d.target.path };

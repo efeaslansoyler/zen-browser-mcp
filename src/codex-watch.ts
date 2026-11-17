@@ -1,7 +1,9 @@
-// Codex sohbetlerini Codex'in arka plan servisinden (app-server daemon) izler: sohbet açıldığı an
-// (ilk mesajı beklemeden) bağlanır, adını menüye taşır, penceresi kapanınca bağlantıyı keser.
-// `/quit` sohbeti kapatmaz, arka plana atar; arka plandaki görevler menüde gösterilmez.
-// Servis protokolü deneyseldir: bağlanamazsa kancalardaki sohbet başına alıcıya (codex-relay) düşülür.
+// Follows Codex conversations through Codex's background service (the app-server daemon): a
+// conversation connects as soon as it opens (without waiting for the first message), its name
+// goes into the menus, and it disconnects when its window closes. `/quit` doesn't close a
+// conversation but moves it to the background; background tasks aren't shown in menus.
+// The service protocol is experimental: if it can't connect, the per-conversation relay from
+// the hooks (codex-relay) takes over.
 import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,14 +20,14 @@ const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
 export const DAEMON_SOCKET = path.join(CODEX_HOME, 'app-server-control', 'app-server-control.sock');
 const WATCH_SOCKET = path.join(RUNTIME_DIR, `${NAME}-codex`, 'watch.sock');
 const POLL_MS = 2000;
-const IDLE_EXIT_MS = 10 * 60_000; // Codex penceresi yokken bu kadar sonra çıkar; kanca/MCP yeniden başlatır
+const IDLE_EXIT_MS = 10 * 60_000; // exit after this long without a Codex window; a hook or the MCP server restarts it
 
 export type Thread = { id: string; name?: string; cwd: string; createdAt: number; ephemeral: boolean; loadedAt: number };
 export type Tui = { pid: number; startedAt: number; threadId?: string };
 
-// Açık Codex pencereleri (TUI) ve gösterdikleri sohbetler. Servis hangi sohbetin bir pencereye bağlı
-// olduğunu söylemez: `codex resume <id>` kesin, diğer pencereler kendilerinden sonra açılan/yüklenen
-// en yeni sohbete eşlenir (pencere içinde /new de en yeniyi seçer).
+// Open Codex windows (TUI) and the conversations they show. The service doesn't say which
+// conversation belongs to a window: `codex resume <id>` is exact; other windows are matched to
+// the newest conversation opened or loaded after them (/new inside a window picks the newest too).
 export function visibleThreads(threads: Thread[], tuis: Tui[]): Set<string> {
   const visible = new Set<string>();
   const candidates = threads.filter(t => !t.ephemeral);
@@ -39,8 +41,8 @@ export function visibleThreads(threads: Thread[], tuis: Tui[]): Set<string> {
   return visible;
 }
 
-// argv: ["codex", ...]; servis, `exec`, `agents` gibi alt komutlar pencere değildir. Seçenek
-// değerleri (`-m x`) alt komut sanılmasın diye yalnız bilinen etkileşimsiz alt komutlar elenir.
+// argv: ["codex", ...]; the service and subcommands like `exec` or `agents` aren't windows. Only
+// known non-interactive subcommands are excluded, so option values (`-m x`) aren't taken for one.
 const NOT_WINDOWS = new Set(['app-server', 'exec', 'e', 'agents', 'queue', 'mcp', 'mcp-server', 'login', 'logout',
   'apply', 'a', 'completion', 'debug', 'sandbox', 'cloud', 'features', 'help', 'update', 'review']);
 export function parseTui(argv: string[]): { threadId?: string } | null {
@@ -54,7 +56,7 @@ export function parseTui(argv: string[]): { threadId?: string } | null {
 }
 
 function listTuis(): Tui[] {
-  const ticks = 100; // CLK_TCK (Linux'ta pratikte her zaman 100)
+  const ticks = 100; // CLK_TCK (in practice always 100 on Linux)
   const bootTime = Number(/^btime (\d+)/m.exec(fs.readFileSync('/proc/stat', 'utf8'))?.[1]) * 1000;
   const tuis: Tui[] = [];
   for (const entry of fs.readdirSync('/proc')) {
@@ -71,7 +73,7 @@ function listTuis(): Tui[] {
   return tuis;
 }
 
-// Servisle WebSocket (unix soket üzerinden) JSON-RPC: yalnız okuma istekleri
+// JSON-RPC with the service over a WebSocket on a Unix socket: read requests only
 class DaemonClient {
   private socket?: net.Socket;
   private buffer = Buffer.alloc(0);
@@ -131,7 +133,7 @@ class DaemonClient {
     }
   }
 
-  // istemci çerçeveleri maskelenir (RFC 6455)
+  // client frames are masked (RFC 6455)
   private frame(payload: Buffer, opcode = 0x1) {
     const mask = crypto.randomBytes(4);
     const head = payload.length < 126 ? Buffer.from([0x80 | opcode, 0x80 | payload.length])
@@ -162,7 +164,7 @@ export async function runCodexWatch() {
   let daemon: DaemonClient | undefined;
   let lastTui = Date.now();
   let stopped = false;
-  let firstRead = true; // izleyiciden önce yüklenmiş sohbetlerin yüklenme anı bilinmez
+  let firstRead = true; // the load time of conversations loaded before the watcher is unknown
 
   const connectDaemon = async () => {
     const client = new DaemonClient();
@@ -174,7 +176,7 @@ export async function runCodexWatch() {
     };
     await client.connect();
     daemon = client;
-    // kancaların açtığı eski alıcılar aynı oturumu bağlar, birbirinin yerine geçip dururlardı
+    // old relays started by hooks bind the same session; they would keep replacing each other
     await stopCodexRelays();
   };
 
@@ -188,7 +190,7 @@ export async function runCodexWatch() {
         for (const id of threads.keys()) if (!loaded.includes(id)) threads.delete(id);
         for (const id of loaded) {
           const known = threads.get(id);
-          // ad değişebilir: görünenleri her turda yeniden oku, yenileri bir kez
+          // names can change: read visible ones every round, new ones once
           if (known && !receivers.has(id)) continue;
           const { thread } = await daemon.request('thread/read', { threadId: id });
           threads.set(id, {
@@ -269,7 +271,7 @@ export function contactWatch(action: 'ping' | 'stop' = 'ping'): Promise<{ daemon
   });
 }
 
-// İzleyici çalışmıyorsa başlatır; servise bağlanabildiyse true (kancalar alıcı açmasın)
+// Starts the watcher if it isn't running; true if it reached the service (hooks then skip the relay)
 export async function ensureCodexWatch(): Promise<boolean> {
   let state = await contactWatch();
   if (!state) {
@@ -281,7 +283,7 @@ export async function ensureCodexWatch(): Promise<boolean> {
       state = await contactWatch();
     }
   }
-  // ilk tur servise bağlanmayı dener; bağlanana kadar kısa bir pay
+  // the first round tries to reach the service; a short margin until it does
   for (let i = 0; i < 10 && state && !state.daemon; i++) {
     await new Promise(resolve => setTimeout(resolve, 100));
     state = await contactWatch();

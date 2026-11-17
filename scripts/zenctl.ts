@@ -1,25 +1,25 @@
-// Geliştirme için: MCP'siz doğrudan köprüyü çağırır.
+// For development: calls the bridge directly, without MCP.
 //   node scripts/zenctl.ts reload
-//   node scripts/zenctl.ts eval 'gBrowser.tabs.length'      (tarayıcı tarafında, main.js kapsamında)
-//   node scripts/zenctl.ts <tool> '{"tabId": 12}'           (görseller /tmp... yerine stdout'a özet)
-//   node scripts/zenctl.ts --session dev <tool> '{…}'      (aynı adla çağrılar sekmelerini paylaşır)
+//   node scripts/zenctl.ts eval 'gBrowser.tabs.length'      (in the browser, with helpers on h)
+//   node scripts/zenctl.ts <tool> '{"tabId": 12}'           (images summarized on stdout)
+//   node scripts/zenctl.ts --session dev <tool> '{…}'      (calls with the same name share tabs)
 import { writeFileSync } from "node:fs";
 import { call } from "../src/zen.ts";
 
-// her çağrı normalde ayrı oturumdur; --session ile ardışık çağrılar aynı sekmeleri kullanır
+// each call is its own session; with --session, consecutive calls use the same tabs
 const argv = process.argv.slice(2);
 const named = argv[0] === "--session" ? argv.splice(0, 2)[1] : undefined;
 const session = named ? `zenctl:${named}` : undefined;
 const [cmd, arg] = argv;
 if (!cmd) {
-  console.error("kullanım: zenctl <reload|eval KOD|tool JSON>");
+  console.error("usage: zenctl [--session NAME] <reload|eval CODE|TOOL JSON>");
   process.exit(1);
 }
 
 type Ping = { bridge?: number; startError?: string };
 const ping = async (): Promise<Ping> => JSON.parse(((await call("ping", {}, 1000))[0] as { text: string }).text);
 
-// reload cevabı eski sürümden gelir; yeni sürümün gerçekten başladığını ping ile doğrula
+// the reload reply comes from the old version; confirm with ping that the new one started
 async function reload() {
   const before = await ping();
   await call("reload");
@@ -28,7 +28,7 @@ async function reload() {
     let now: Ping;
     try { now = await ping(); } catch { continue; }
     if (now.bridge === before.bridge) {
-      // eski sürüm geri döndüyse hata yazılmıştır; yoksa reload henüz çalışmadı
+      // if the old version came back, the error was logged; otherwise the reload hasn't run yet
       if (now.startError && now.startError !== before.startError) break;
       continue;
     }
@@ -52,7 +52,7 @@ try {
     else {
       const file = `${process.env.ZENCTL_OUT ?? "/tmp"}/zen-mcp-shot.jpg`;
       writeFileSync(file, Buffer.from(c.data, "base64"));
-      console.log(`[görsel: ${file}]`);
+      console.log(`[image: ${file}]`);
     }
   }
 } catch (e) {

@@ -8,7 +8,7 @@ const entry = (extra) => ({ t: '2026-10-27T12:00:05.000Z', tool: 'computer', ses
 test('a history line shows who, what, where it went and errors', () => {
   const line = formatLine(entry({ who: 'S23 downloads · efe', what: 'button "Pay": click', to: 'https://shop.test/done', error: 'denied' }), L);
   assert.match(line, /S23 downloads · efe — button "Pay": click → https:\/\/shop\.test\/done ✗ denied$/);
-  // eski kayıtlar: başlık ve tarif yoksa ajan adı ve araç
+  // old entries: without title and description, the agent name and tool
   assert.match(formatLine({ t: '2026-10-27T12:00:05.000Z', tool: 'computer', action: 'screenshot', agent: 'Codex' }, L), /Codex — computer screenshot$/);
 });
 

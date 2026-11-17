@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Giriş noktası: argümansız MCP sunucusu (MCP istemcin böyle başlatır), yanında kurulum komutları
+// Entry point: without arguments the MCP server (how MCP clients start it), plus setup commands
 import { configCommand } from "./config.ts";
 import { doctor } from "./doctor.ts";
 import { L } from "./i18n.ts";

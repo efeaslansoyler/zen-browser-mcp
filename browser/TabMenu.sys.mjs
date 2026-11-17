@@ -1,12 +1,13 @@
-// Sekme sağ tık menüsü: "Ajandan geri al", "Oturuma ver/devret…" ve "Ajan ayarları"
-// (genel mod + bu sitenin kuralı + Zen'de ajan sekmelerinin çalışma alanı). Yalnız arayüz; işlemler env üzerinden yapılır:
-//   env.L(en, tr), env.mark: işaret özniteliği,
-//   env.sessions(): bağlı oturumlar, env.ownerName(tab), env.menuAgent(),
-//   env.paintIcon(item, agent): ajanın simgesi ve rengi,
+// The tab context menu: "Take back from agent", "Give/transfer to session…" and "Agent
+// settings" (global mode, this site's rule and, in Zen, the workspace for agent tabs). UI only;
+// the work goes through env:
+//   env.L(en, tr), env.mark: the mark attribute,
+//   env.sessions(): connected sessions, env.ownerName(tab), env.menuAgent(),
+//   env.paintIcon(item, agent): the agent's icon and color,
 //   env.give(tab, sessionId), env.takeBack(tab),
 //   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hostOf(browser), env.ruleFor(host),
-//   env.workspaces(win): Zen çalışma alanı adları (Zen değilse null),
-//   env.history(tabId): o sekmedeki son ajan işlemleri (satırlar), env.openHistory(win): tüm geçmiş sayfası
+//   env.workspaces(win): Zen workspace names (null outside Zen),
+//   env.history(tabId): the latest agent actions in that tab (lines), env.openHistory(win): the full history page
 const MENU_ID = "zen-mcp-context-give";
 
 export class TabMenu {
@@ -16,7 +17,7 @@ export class TabMenu {
     this.cleanups = new Set();
   }
 
-  // menüyü belirli sekmeler için kurar (testler ve betikler; yerel contextTab değişebilir)
+  // Builds the menu for given tabs (tests and scripts; the native contextTab may change).
   prepare(win, tabs) {
     const build = this.builders.get(win);
     if (!build) throw new Error("The session handoff menu is not attached to this window.");
@@ -40,7 +41,7 @@ export class TabMenu {
     item.id = MENU_ID;
     item.className = "menuitem-iconic";
     env.paintIcon(item, env.menuAgent());
-    // Firefox'un yapay zekâ bölümünün sonuna; yoksa menünün sonuna
+    // at the end of Firefox's AI section, otherwise at the end of the menu
     const anchor = win.document.getElementById("context_aiSeparator");
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
     const permissionsMenu = win.document.createXULElement("menu");
@@ -60,7 +61,7 @@ export class TabMenu {
     const historyPopup = win.document.createXULElement("menupopup");
     historyMenu.append(historyPopup);
     menu.insertBefore(historyMenu, permissionsMenu.nextSibling);
-    // alt menü açılınca doldurulur: günlük dosyası yalnız gerektiğinde okunur
+    // filled when the submenu opens: the log file is read only when needed
     const onHistoryShowing = async event => {
       if (event.target !== historyPopup) return;
       const tab = shownTabs[0];
@@ -193,7 +194,7 @@ export class TabMenu {
       }
     };
     this.builders.set(win, build);
-    // menünün açıldığı sekme; o sekme çoklu seçimin parçasıysa seçili sekmelerin hepsi
+    // the tab the menu opened on; all selected tabs if it is part of a multi-selection
     const contextTabs = () => {
       const tab = win.TabContextMenu?.contextTab;
       if (!tab) return [];

@@ -1,22 +1,22 @@
-// Ajan oturumlarına tarayıcıdan olay itmek için (Claude Code channels, Codex alıcısı).
+// Pushing events from the browser to agent sessions (Claude Code channels, the Codex relay).
 //
-// Kanal olarak açılmış her oturumun MCP sunucusu kalıcı bir "subscribe" bağlantısı açar;
-// olaylar bu bağlantıya satır satır yazılır. Birden fazla oturum varsa olay tarayıcıyı en son
-// kullanan (ya da en son açılan) oturuma gider. env:
+// The MCP server of every session opened as a channel keeps a "subscribe" connection open;
+// events are written to it line by line. With several sessions, an event goes to the one that
+// used the browser last (or was opened last). env:
 //   env.theme(agent), env.connectOwner(session, transport, theme, cwd),
 //   env.disconnectOwner(session, transport), env.logError(where, e),
 //   env.setTimeout/clearTimeout, env.uuid()
 
-// soket satırları ASCII: JSON içindeki ASCII dışı karakterler \u kaçışıyla yazılır
+// socket lines are ASCII: non-ASCII characters in JSON are written as \u escapes
 export const ascii = s => s.replace(/[\u007f-￿]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 
 export class Channels {
-  // lastUse: session → son tool çağrısı; reload'dan sağ çıksın diye dışarıdan gelir
+  // lastUse: session → last tool call; passed in so it survives reloads
   constructor(lastUse, env) {
     this.lastUse = lastUse;
     this.env = env;
     this.subscribers = new Map(); // session → { id, name, agent, ack, relay, threadId, transport, output, since, queue }
-    this.pending = new Map(); // teslim kimliği → { session, transport, finish }
+    this.pending = new Map(); // delivery ID → { session, transport, finish }
   }
 
   subscribe({ session, cwd, agent, label, title, threadId, ack = false, toolsOnly = false }, transport, output) {
@@ -31,7 +31,7 @@ export class Channels {
     const old = this.subscribers.get(key);
     if (old?.relay && !relay) throw new Error("This Codex thread already has an automatic receiver.");
     if (old) try { old.transport.close(Cr.NS_OK); } catch {}
-    // Codex sohbet alıcısı aynı zamanda sekme sahibi oturumdur: Codex araçları bu kimlikle çağırır
+    // The Codex conversation relay is also the tab-owning session: Codex tools call with this ID.
     if (relay) this.env.connectOwner(key, transport, theme, label || cwd, title);
     const name = this.env.sessionName(theme, label || cwd, title, threadId || session);
     this.subscribers.set(key, { id: key, name, agent: theme, ack, relay, threadId, transport, output, since: Date.now(), queue: Promise.resolve(true) });
@@ -46,7 +46,7 @@ export class Channels {
     }
   }
 
-  // olayın varsayılan hedefi
+  // the default target of an event
   target() {
     let best = null;
     let bestTime = -1;
@@ -57,7 +57,7 @@ export class Channels {
     return best;
   }
 
-  // tek satır yazar, bağlantı açık kalır (NetUtil.asyncCopy soketi de kapatırdı)
+  // Writes one line and keeps the connection open (NetUtil.asyncCopy would close the socket).
   #push(sub, message) {
     const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
     stream.setByteStringData(ascii(JSON.stringify(message)) + "\n");
@@ -69,7 +69,7 @@ export class Channels {
     return sub.queue;
   }
 
-  // ack isteyen alıcıda alındı bildirimi gelene kadar (en çok 40 sn) bekler
+  // For a subscriber that wants acks, waits for the receipt (at most 40 s).
   async deliver(sub, message) {
     if (!sub.ack) return this.#push(sub, message); // legacy Claude channel processes
     const id = this.env.uuid();
@@ -93,7 +93,7 @@ export class Channels {
     pending.finish(event.ok === true);
   }
 
-  // köprü kapanırken: aboneler yeni sürüme yeniden bağlansın
+  // When the bridge shuts down: subscribers reconnect to the new version.
   closeAll() {
     for (const sub of this.subscribers.values()) {
       try { sub.transport.close(Cr.NS_OK); } catch {}

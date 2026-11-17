@@ -1,4 +1,4 @@
-// CLI ve sunucu mesajları: varsayılan İngilizce, sistem dili Türkçeyse Türkçe
+// CLI and server messages: English by default, Turkish if the system language is Turkish
 const lang = (process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || "").toLowerCase();
 export const turkish = lang.startsWith("tr");
 export const L = (en: string, tr: string) => (turkish ? tr : en);

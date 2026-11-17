@@ -1,3 +1,3 @@
-// İstekler parent'tan sendQuery ile gider; parent tarafında yapılacak iş yok ama actor
-// kaydı için iki taraf da gerekli.
+// Requests go from the parent with sendQuery; the parent side has nothing to do, but
+// registering an actor needs both sides.
 export class ZenMcpParent extends JSWindowActorParent {}

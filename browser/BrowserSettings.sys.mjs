@@ -8,7 +8,7 @@ export class BrowserSettings {
   constructor(env) { this.env = env; this.entries = new Map(); }
   validate(args) {
     const value = args.action === 'device' ? { ...DEVICE_PRESETS[args.device], ...args } : { ...args };
-    // Mobil/tablet: aynı Gecko sürümünün Android Firefox UA'sı (sunucu mobil sayfayı göndersin)
+    // Mobile/tablet: the Android Firefox UA of the same Gecko version (so servers send the mobile page)
     if (value.platform && value.userAgent == null && this.env.geckoVersion) {
       const v = this.env.geckoVersion;
       value.userAgent = `Mozilla/5.0 (${value.platform}; rv:${v}) Gecko/${v} Firefox/${v}`;
@@ -25,8 +25,8 @@ export class BrowserSettings {
     if (value.color_scheme != null && !['dark', 'light', 'no-preference'].includes(value.color_scheme)) throw new Error('Invalid color scheme.');
     return value;
   }
-  // target bir fonksiyon olabilir: siteler arası gezinme browsingContext'i değiştirir (Fission),
-  // geçersiz kılmalar yenisine taşınır; geri alırken güncel nesne bulunmalı
+  // target can be a function: cross-site navigation replaces the browsingContext (Fission) and
+  // overrides move to the new one, so restoring must find the current object
   remember(entry, at, key, value, css = false) {
     const target = typeof at === 'function' ? at() : at;
     let property = entry.properties.find(p => p.at === at && p.key === key && p.css === css);

@@ -1,10 +1,10 @@
-// Tarayıcı araçları: sekme başına emülasyon, sistem panosu, eklenti panelleri.
-// main.js ortak yardımcıları ctx ile verir; değişen durum (operation, activeSession…) ctx üzerinden okunur.
+// Browser tools: per-tab emulation, downloads, the system clipboard, extension panels.
+// Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
 export function browserTools(ctx) {
   const { DEVICE_PRESETS, DownloadLog, assertSiteURL, browserFor, browserSettings, downloads, extensionPanels, operationSleep,
     performClipboard, query, text, tools } = ctx;
 
-  // site kuralıyla engelli adres ajana gösterilmez
+  // an address blocked by a site rule is not shown to the agent
   const describeDownload = record => {
     const info = DownloadLog.describe(record);
     try { assertSiteURL(info.url); } catch { delete info.url; }
@@ -20,9 +20,10 @@ export function browserTools(ctx) {
       return text({ ...value, requested: browserSettings.entries.get(browser)?.requested, emulated: browserSettings.entries.has(browser), note: "Actual metrics may differ from requested overrides due to native layout/privacy behavior. Overrides are tab-local and restored on reset, take-back, transfer, disconnect or bridge reload. Navigation may be needed for UA-dependent server responses." });
     },
 
-    // list: sekmeden başlayan indirmeler. cancel: indirmeyi durdurur, yarım dosyayı siler. wait: henüz bildirilmemiş en eski indirme (yoksa
-    // başlayacak olan) ya da id'deki indirme bitene kadar bekler; tıklamadan hemen sonra çağrılır.
-    // until: "start" indirme başlayınca olay dosyasıyla döner (izleyebilen ajanlar için)
+    // list: downloads started from the tab. cancel: stops a download and deletes the partial file.
+    // wait: waits until the oldest unreported download (or the next to start), or the one with id,
+    // finishes; called right after the click. until: "start" returns with the events file once the
+    // download starts (for agents that can follow it).
     async downloads({ tabId, action = "list", id, until = "end", timeout = 120 }) {
       const { browserId } = browserFor(tabId);
       if (action === "list") {
@@ -36,7 +37,7 @@ export function browserTools(ctx) {
         const record = downloads.forTab(browserId).find(r => r.id === id);
         if (!record) throw new Error(`No download #${id} from this tab; take ids from action list.`);
         if (record.download.succeeded) throw new Error(`Download #${id} already finished; the file is at ${record.download.target.path}.`);
-        // finalize(true): durdurur ve yarım dosyayı siler; duraklatılmış olanda da çalışır
+        // finalize(true): stops and deletes the partial file; works on paused ones too
         record.canceling = true;
         await record.download.finalize(true);
         record.reported = true;

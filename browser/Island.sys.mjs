@@ -1,27 +1,27 @@
-// Claude adası: Zen pencerelerinin üst ortasında, sayfanın üzerinde duran hap (Dynamic Island
-// gibi). Claude'un ne yaptığını gösterir, Durdur/Devam düğmesi burada; Claude kullanıcıdan
-// bir şey istediğinde (ask_user) ya da sayfa diyalog açtığında genişleyip mesajı ve
-// "Sekmeye git"i gösterir. Compact mode'da da görünür. Boştayken gizli.
+// The island: a pill at the top center of Zen windows, over the page (like Dynamic Island).
+// It shows what the agent is doing and holds the Stop/Resume button; when the agent needs
+// the user (ask_user) or the page opens a dialog, it expands with the message and "Go to
+// tab". Visible in compact mode too. Hidden when idle.
 //
-// Yalnız görünüm: durdurma, sekmeye gitme, vazgeçme gibi işleri main.js'ten gelen geri
-// çağrılar yapar.
+// View only: stopping, going to the tab, cancelling and the like are done by callbacks from
+// main.js.
 
 const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(new URL("./Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
 
 const XHTML = "http://www.w3.org/1999/xhtml";
-// arayüz dili: tarayıcı Türkçeyse Türkçe, değilse İngilizce
+// UI language: Turkish if the browser is Turkish, English otherwise
 const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
 const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
-const PREVIEW_WIDTH = 340; // canlı önizleme genişliği (CSS px)
+const PREVIEW_WIDTH = 340; // live preview width (CSS px)
 const PREVIEW_EVERY = 400; // ms, ~2,5 kare/sn
 
-// dönen yıldız: Claude'un "çalışıyor" işareti
+// spinning star: the "working" sign
 const SPARK = "data:image/svg+xml," + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`
 );
 
-// Dynamic Island gibi: koyu, tam yuvarlak hap; her temada aynı (koyu hap açık temada da okunur)
+// Like Dynamic Island: a dark, fully rounded pill, the same in every theme (dark reads on light themes too)
 const CSS = `
   #${ID} {
     position: fixed;
@@ -34,7 +34,7 @@ const CSS = `
     border-radius: 17px;
     background: rgba(14, 14, 14, 0.94);
     color: #f3f3f3;
-    /* iç kenar: koyu sayfalarda (ör. YouTube başlığı) hap arka plana karışmasın */
+    /* inner edge: keeps the pill apart from dark pages (e.g. YouTube's header) */
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
     font: menu;
     font-size: 12.5px;
@@ -53,7 +53,7 @@ const CSS = `
       pointer-events: none;
     }
 
-    /* kullanıcıdan bir şey bekleniyor: turuncu nabız */
+    /* waiting for the user: a pulse in the agent color */
     &:is([state="ask"], [state="dialog"]) {
       animation: zen-mcp-glow 1.8s ease-in-out infinite;
     }
@@ -130,7 +130,7 @@ const CSS = `
       }
     }
 
-    /* mod: "otomatik" / "onaylı"; tıklayınca değişir */
+    /* mode: "auto" / "ask"; toggles on click */
     & .mode {
       padding: 0 9px;
       background: none;
@@ -143,7 +143,7 @@ const CSS = `
     }
     &:not([state="working"]) .mode { display: none; }
 
-    /* durdurma: küçük yuvarlak ■; durdurulunca turuncu "Devam et" */
+    /* stop: a small round ■; once stopped, a colored "Resume" */
     & .stop {
       display: grid;
       place-items: center;
@@ -177,7 +177,7 @@ const CSS = `
       &:empty { display: none; }
     }
 
-    /* öğe seçildi: "Ne yapılsın?" */
+    /* element picked: "What should happen?" */
     & .compose {
       display: none;
       flex-direction: column;
@@ -203,7 +203,7 @@ const CSS = `
       line-height: 1.4;
 
       &:focus { box-shadow: inset 0 0 0 1px rgba(var(--zen-agent-rgb, 217, 119, 87), 0.7); }
-      /* onay sorusundaki not: tek satır, iki düğmeyle de gider */
+      /* the note on an approval question: one line, sent with either button */
       &.answer-note { height: 32px; }
       &::placeholder { color: rgba(243, 243, 243, 0.45); }
     }
@@ -232,7 +232,7 @@ const CSS = `
       max-height: 6.5em;
       overflow: auto;
     }
-    /* canlı önizleme: üzerine gelince Claude'un sekmesinin küçük, canlı görüntüsü */
+    /* live preview: on hover, a small live view of the agent's tab */
     & .preview {
       display: none;
       padding: 0 6px 6px;
@@ -248,7 +248,7 @@ const CSS = `
         background: #000;
       }
     }
-    /* soru varken önizleme düğmelerin yanında sayfayı kapatmasın */
+    /* while a question is shown, the preview must not cover the page next to the buttons */
     &[previewing][state="working"] .preview { display: block; }
 
     & .buttons {
@@ -277,24 +277,24 @@ const CSS = `
 
 const isStopKey = event =>
   event.key === "Escape" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
-// Ctrl+Shift+F: öğe seç (Ctrl+Shift+E Zen'de ağ izleyicisi)
+// Ctrl+Shift+F: pick elements (Ctrl+Shift+E is Zen's network monitor)
 const isPickKey = event =>
   event.key?.toLowerCase() === "f" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
 const SENT_FOR = 2500;
 
 export class Island {
   #agent = agentTheme({ id: "claude" });
-  #windows = new Map(); // pencere → DOM parçaları ve dinleyiciler
+  #windows = new Map(); // window → DOM parts and listeners
   #sheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(CSS));
   #state = "hidden"; // hidden | working | ask | dialog | stopped
   #text = "";
   #message = "";
-  #askDone = false; // ask_user wait: "done" → adada Tamam
-  #askLabels = {}; // { ok, cancel }: düğme yazıları (request_tab: Ver / Verme)
+  #askDone = false; // ask_user wait: "done" → OK on the island
+  #askLabels = {}; // { ok, cancel }: button labels (request_tab: Allow / Deny)
   #askOptions = []; // ask_user options: answer buttons that replace OK
-  #browser = null; // son işlem yapılan sekme (WeakRef)
+  #browser = null; // the tab of the latest action (WeakRef)
   #hideTimer = null;
-  // kullanıcının öğe seçimi Claude'un durumunun üstüne biner, bitince ada o duruma döner:
+  // The user's pick goes over the agent's state; afterwards the island returns to it:
   // { mode: "picking" | "compose" | "sent", browser (WeakRef), label, target, text }
   #pick = null;
   #pickTimer = null;
@@ -392,7 +392,7 @@ export class Island {
     };
     send.addEventListener("click", submit);
     discard.addEventListener("click", () => this.#actions.cancelPick());
-    // Enter gönderir, Shift+Enter yeni satır, Esc vazgeçer
+    // Enter sends, Shift+Enter adds a line, Esc cancels
     note.addEventListener("keydown", event => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -424,8 +424,8 @@ export class Island {
       if (this.#state === "stopped") this.#actions.resume();
       else this.#actions.stop();
     });
-    // Ctrl+Shift+Esc: Claude'u durdur (sayfa odaktayken de; tuşları önce tarayıcı görür)
-    // Ctrl+Shift+F: öğe seç (seçim sürerken yeniden basmak vazgeçer)
+    // Ctrl+Shift+Esc: stop the agent (also while the page has focus; the browser sees keys first)
+    // Ctrl+Shift+F: pick elements (pressing it again while picking cancels)
     const onKey = event => {
       if (isPickKey(event)) {
         event.preventDefault();
@@ -441,7 +441,7 @@ export class Island {
     win.addEventListener("keydown", onKey, true);
     const onResize = () => this.#place(win);
     win.addEventListener("resize", onResize);
-    // kullanıcı Claude'un sekmesine geçince "Sekmeye git" gereksiz
+    // once the user is on the agent's tab, "Go to tab" is pointless
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
@@ -479,7 +479,7 @@ export class Island {
     this.#render();
   }
 
-  // Claude bir sekmede iş yapıyor; işlem sürdükçe görünür kalır
+  // The agent is working in a tab; stays visible while the action runs.
   working(browser, text) {
     if (this.#state === "stopped" || this.#state === "ask") return;
     this.#clearTimeout(this.#hideTimer);
@@ -489,16 +489,16 @@ export class Island {
     this.#render();
   }
 
-  // süren işlem kalmadı: HIDE_AFTER sonra gizlen (arada yeni işlem gelirse iptal)
+  // No action running: hide after HIDE_AFTER (cancelled if a new action arrives).
   idle() {
     if (this.#state !== "working") return;
     this.#clearTimeout(this.#hideTimer);
     this.#hideTimer = this.#setTimeout(() => this.#hide(), HIDE_AFTER);
   }
 
-  // Claude kullanıcıdan bir şey istiyor: genişle, mesajı göster; askEnded'e kadar kalır.
-  // done: Tamam düğmesi (wait: "done"); yoksa kullanıcı sayfadaki öğeye tıklayınca biter.
-  // labels: düğme yazıları, ör. { ok: "Ver", cancel: "Verme" }
+  // The agent needs the user: expand and show the message until askEnded.
+  // done: an OK button (wait: "done"); otherwise it ends when the user clicks the element.
+  // labels: button labels, e.g. { ok: "Allow", cancel: "Deny" }
   // options: answer buttons instead of OK; browser null: a question not tied to a tab,
   // shown in every window
   ask(browser, text, message, done, labels = {}, options = []) {
@@ -512,7 +512,7 @@ export class Island {
     this.#askOptions = options ?? [];
     for (const parts of this.#windows.values()) parts.answerNote.value = "";
     for (const win of this.#windows.keys()) this.#fillChoices(win);
-    // "gönderildi" bildirimi beklemesin; seçim ya da not yazımı sürüyorsa o üstte kalır
+    // don't wait for the "sent" notice; a running pick or note stays on top
     if (this.#pick?.mode === "sent") {
       this.#clearTimeout(this.#pickTimer);
       this.#pick = null;
@@ -551,7 +551,7 @@ export class Island {
     this.idle();
   }
 
-  // sayfa alert/confirm/prompt açtı; dialogEnded'e (ya da yeni işleme) kadar kalır
+  // The page opened alert/confirm/prompt; stays until dialogEnded (or a new action).
   dialog(browser, text, message) {
     if (this.#state === "stopped" || this.#state === "ask") return;
     this.#clearTimeout(this.#hideTimer);
@@ -569,7 +569,7 @@ export class Island {
     this.idle();
   }
 
-  // sekme artık Claude'da değil (kullanıcı geri aldı): onu gösteriyorsa gizlen
+  // The tab is no longer the agent's (the user took it back): hide if it is shown.
   release(browser) {
     if (this.#state === "stopped" || this.#browser?.deref() !== browser) return;
     this.#clearTimeout(this.#hideTimer);
@@ -594,27 +594,27 @@ export class Island {
     this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);
   }
 
-  // Claude'un çalışma modu: auto (sormadan işlem yapar) | ask (her işlemde izin ister)
+  // The agent mode: auto (acts without asking) | ask (asks before each action)
   setMode(mode) {
     if (mode === this.#mode) return;
     this.#mode = mode;
     this.#render();
   }
 
-  // ---- kullanıcının öğe seçimi ----
+  // ---- the user's element pick ----
 
   get pickMode() {
     return this.#pick?.mode ?? null;
   }
 
-  // seçici açık: "bir öğeye tıkla"
+  // picker open: "click an element"
   picking(browser, agent = { id: "claude" }) {
     this.#clearTimeout(this.#pickTimer);
     this.#pick = { mode: "picking", browser: new WeakRef(browser), agent };
     this.#render();
   }
 
-  // öğe seçildi: not kutusu; target gönderilecek Claude Code oturumunun adı (yoksa pano)
+  // Element picked: the note box; target is the receiving session's name (none: clipboard).
   compose(browser, label, targets = [], targetId = "") {
     this.#clearTimeout(this.#pickTimer);
     const selected = targets.find(t => t.id === targetId);
@@ -631,7 +631,7 @@ export class Island {
     this.#windows.get(owner)?.note.focus();
   }
 
-  // "gönderildi" kısa süre görünür, sonra ada Claude'un durumuna döner
+  // "sent" shows briefly, then the island returns to the agent's state
   sent(text) {
     const browser = this.#pick?.browser;
     if (!browser) return;
@@ -650,20 +650,20 @@ export class Island {
 
   #hide() {
     if (this.#state !== "working") return;
-    // kullanıcı önizlemeyi izliyorsa kaybolma; fare ayrılınca idle() yeniden sayar
+    // don't vanish while the user watches the preview; idle() counts again when the mouse leaves
     if ([...this.#windows.values()].some(p => p.previewing)) return;
     this.#state = "hidden";
     this.#render();
   }
 
-  // Durdurulmuşken her pencerede; diğer durumlarda yalnız Claude'un sekmesinin penceresinde
+  // In every window while stopped; otherwise only in the window of the agent's tab
   #render() {
     const pick = this.#pick;
     const browser = (pick ? pick.browser : this.#browser)?.deref();
     const owner = browser?.ownerDocument?.defaultView;
     const state = pick ? pick.mode : this.#state;
     const stopped = state === "stopped";
-    // "seaskablo.com — tıklıyor": site soluk, işlem belirgin; sekmenin favicon'u başta
+    // "example.com — clicking": the site dimmed, the action prominent; the tab's favicon first
     let [siteName, action] = this.#text.includes(" — ") ? this.#text.split(" — ") : ["", this.#text];
     let hintText = "";
     if (pick) {
@@ -717,7 +717,7 @@ export class Island {
       message.textContent = this.#message;
       parts.answerNote.hidden = state !== "ask";
       parts.choices.hidden = state !== "ask" || !this.#askOptions.length;
-      // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
+      // on the agent's tab already, "Go to tab" is pointless; without OK it is the primary button
       goto.hidden = !browser || win.gBrowser.selectedBrowser === browser;
       ok.hidden = !(state === "ask" && this.#askDone && !this.#askOptions.length);
       ok.textContent = this.#askLabels.ok ?? L("OK", "Tamam");
@@ -728,7 +728,7 @@ export class Island {
     }
   }
 
-  // ---- canlı önizleme ----
+  // ---- live preview ----
 
   #startPreview(win) {
     const parts = this.#windows.get(win);
@@ -747,7 +747,7 @@ export class Island {
     this.idle();
   }
 
-  // Arka plandaki sekmenin görüntüsü drawSnapshot ile (sekme seçilmeden) alınır
+  // A background tab's image comes from drawSnapshot (without selecting the tab)
   async #previewLoop(parts) {
     while (parts.previewing) {
       const browser = this.#browser?.deref();
@@ -769,7 +769,7 @@ export class Island {
     }
   }
 
-  // sayfa alanının üst ortası (compact mode'da araç çubuğu gizliyken de doğru yer)
+  // the top center of the page area (also right in compact mode with the toolbar hidden)
   #place(win) {
     const parts = this.#windows.get(win);
     const panels = win.gBrowser?.tabpanels;

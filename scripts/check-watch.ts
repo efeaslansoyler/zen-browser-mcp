@@ -55,7 +55,7 @@ try {
   assert.equal(done[0].event, 'started');
   assert.equal(done.at(-1).event, 'matched');
   const after = (Date.parse(done.at(-1).t) - Date.parse(done[0].t)) / 1000;
-  // sayfa 3 sn'de canlıya geçer; çok daha geç eşleşme eski bir dosyaya yazıldığını gösterir
+  // the page goes live at 3 s; a much later match would mean it was written to an old file
   assert(after >= 2 && after < 8, `matched after ${after} s`);
   console.log(`ok  text watch matched after ${after.toFixed(1)} s, then ended`);
 

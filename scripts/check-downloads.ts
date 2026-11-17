@@ -32,7 +32,7 @@ const expected = createHash('sha256').update(body).digest('hex');
 const name = `zen-mcp-check-${Date.now()}.bin`;
 const server = http.createServer((req, res) => {
   if (req.url === '/slow') {
-    // yavaş akış: iptal edilene kadar sürer
+    // a slow stream: runs until cancelled
     res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': 50_000_000, 'content-disposition': `attachment; filename="slow-${name}"` });
     const timer = setInterval(() => res.write(randomBytes(64 * 1024)), 100);
     res.on('close', () => clearInterval(timer));
@@ -95,7 +95,7 @@ try {
   const running = JSON.parse(await tool(a, 'downloads', { tabId, action: 'wait', until: 'start', timeout: 10 }));
   assert.equal(running.state, 'downloading');
   assert(running.events && fs.existsSync(running.events), 'no events file');
-  // olay satırları ilerledikçe gelir (her %10); en az bir ilerleme satırı bekle
+  // event lines arrive as it progresses (every 10%); wait for at least one progress line
   for (let i = 0; i < 80 && fs.readFileSync(running.events, 'utf8').trim().split('\n').length < 2; i++) await new Promise(resolve => setTimeout(resolve, 250));
   const lines = fs.readFileSync(running.events, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   assert(lines.length >= 2 && lines.at(-1).progress >= 10, JSON.stringify(lines));
@@ -115,7 +115,7 @@ try {
   console.log('ok  other session cannot see the tab\'s downloads');
 } finally {
   for (const file of files) fs.rmSync(file, { force: true });
-  // Gecko indirme listesinden de sil (yalnız bu testin dosyaları)
+  // also remove from Gecko's download list (only this test's files)
   await chrome(`(async () => { const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs"); const list = await Downloads.getList(Downloads.ALL); for (const d of await list.getAll()) if (d.target.path.includes(${JSON.stringify(name.replace(/\.bin$/, ''))})) { await list.remove(d); await d.finalize(true); } return "ok"; })()`).catch(() => {});
   if (tabId != null) await tool(clients[0], 'tabs_close_mcp', { tabId }).catch(() => {});
   for (const client of clients) await client.close().catch(() => {});

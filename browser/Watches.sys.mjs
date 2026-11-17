@@ -1,6 +1,7 @@
-// Sayfa izleyicileri: bir ajan sekmesinde koşul (metin/öğe görünür ya da kaybolur) ya da bir
-// öğenin metni değişince olay dosyasına satır yazar. wait_for gibi ajanı bekletmez, saatlerce
-// sürebilir. Sekme sahibi değişince, sekme kapanınca, süre dolunca ya da Durdur'da biter.
+// Page watches: write a line to an events file when a condition holds in an agent tab (text or
+// element appears or disappears) or an element's text changes. Unlike wait_for they don't block
+// the agent and can run for hours. They end when the owner changes, the tab closes, the time
+// runs out or on Stop.
 const MAX_PER_SESSION = 10;
 
 export class Watches {
@@ -8,7 +9,7 @@ export class Watches {
   //        sample(browser, selector), assertSite(browser), setTimeout, clearTimeout }
   constructor(env) {
     this.env = env;
-    this.list = new Map(); // id → kayıt
+    this.list = new Map(); // id → record
     this.nextId = 1;
   }
 
@@ -65,7 +66,7 @@ export class Watches {
       } else {
         const found = await this.env.check(browser, { text: spec.text, selector: spec.selector });
         const ok = spec.gone ? !found : found;
-        // yalnız geçişte yaz: koşul sürekli doğruyken her turda satır olmasın
+        // write on transitions only, not every round while the condition stays true
         if (ok && !watch.matched) {
           if (!spec.repeat) return this.end(watch.id, "matched", { url });
           this.#write(watch, { event: "matched", url });
@@ -73,14 +74,14 @@ export class Watches {
         watch.matched = ok;
       }
     } catch {
-      // sayfa yüklenirken çerçeve yok, diyalog açık…: sonraki turda yeniden
+      // no frame while loading, a dialog open…: try again next round
     }
     if (!this.list.has(watch.id)) return;
     if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
     this.#schedule(watch, watch.interval);
   }
 
-  // son satır; reason "matched" ise koşul sağlanmıştır
+  // the final line; reason "matched" means the condition held
   end(id, reason, extra = {}) {
     const watch = this.list.get(id);
     if (!watch) return null;

@@ -1,5 +1,5 @@
-// `config` komutu: ~/.config/<ad>/config.json'u düzenler. Köprü dosya değişince kendiliğinden
-// okur; tarayıcıyı yeniden başlatmak gerekmez.
+// The `config` command: edits ~/.config/<name>/config.json. The bridge reads the file again when
+// it changes; no browser restart needed.
 import fs from "node:fs";
 import path from "node:path";
 import { L } from "./i18n.ts";
@@ -43,7 +43,7 @@ export function configCommand(args: string[]) {
     return;
   }
   if (cmd === "workspace") {
-    // Zen: ajanın açtığı sekmeler bu çalışma alanına; "current" kullanıcının o anki alanı
+    // Zen: tabs agents open go to this workspace; "current" means the user's current one
     const name = rest.join(" ").trim();
     if (!name) throw new Error(L("Use: config workspace <name>|current", "Kullanım: config workspace <ad>|current"));
     const { workspace: _, ...rest2 } = config;

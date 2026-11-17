@@ -1,5 +1,5 @@
-// Girdi araçları: fare/klavye/ekran görüntüsü, form, dosya yükleme, sayfa diyaloğu, gezinme.
-// main.js ortak yardımcıları ctx ile verir; değişen durum (operation, activeSession…) ctx üzerinden okunur.
+// Input tools: mouse/keyboard/screenshots, forms, file upload, page dialogs, navigation.
+// Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
 export function inputTools(ctx) {
   const { MAX_UPLOAD, assertSiteAccess, browserFor, click, clipboardShortcut, controlledSource,
     describeDialog, describeTab, focusedFrame, guard, heldFrame, heldModifiers, input, keyName,
@@ -46,7 +46,7 @@ export function inputTools(ctx) {
               return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
             }
           }
-          // diyalog tarayıcı arayüzünde çizilir, sayfanın görüntüsünde çıkmaz
+          // the dialog is drawn in the browser UI, so it isn't in the page image
           const dialog = openDialog(browser);
           return [
             { type: "image", data: shot.data, mimeType: "image/jpeg" },
@@ -119,7 +119,7 @@ export function inputTools(ctx) {
         default:
           throw new Error(`Unsupported action: ${args.action}`);
       }
-      // olayların sayfada işlenmesine kısa süre tanı
+      // give the page a moment to handle the events
       await operationSleep(100);
       return text(`${args.action} done.`);
     },
@@ -132,7 +132,7 @@ export function inputTools(ctx) {
     async file_upload({ tabId, ref, paths }) {
       const browser = browserFor(tabId);
       const mime = Cc["@mozilla.org/mime;1"].getService(Ci.nsIMIMEService);
-      // autoconfig bağlamında IOUtils yok; tarayıcı penceresininki kullanılır
+      // the browser window's IOUtils (the autoconfig scope has none)
       const { IOUtils } = browser.ownerDocument.defaultView;
       let total = 0;
       const files = [];

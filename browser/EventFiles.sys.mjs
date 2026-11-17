@@ -1,13 +1,13 @@
-// Olay dosyaları: uzun süren işler (indirme, sayfa izleme) için JSON satırları. Shell'den
-// izleyebilen ajanlar (Claude Code Monitor gibi) beklemeden işine devam eder. Dosyayı biz
-// sileriz, ajana bırakmayız: iş bittikten TTL sonra, reload'da kalanlar start'ta süpürülür.
+// Events files: JSON lines for long-running work (downloads, page watches). Agents that can
+// follow a file from the shell (like Claude Code's Monitor) keep working instead of waiting.
+// We delete the files, not the agent: TTL after the work ends; leftovers from a reload are swept on start.
 const TTL = 5 * 60_000;
 
 export class EventFiles {
   // env: { dir, setTimeout, logError }
   constructor(env) {
     this.env = env;
-    this.queues = new Map(); // dosya → yazma sırası (satırlar karışmasın)
+    this.queues = new Map(); // file → write queue (so lines don't interleave)
   }
 
   async start() {
@@ -18,10 +18,10 @@ export class EventFiles {
     }
   }
 
-  // numaralar reload ya da tarayıcı yeniden başlayınca 1'den başlar: önceki dosyaya eklenmesin diye zaman eki
+  // IDs restart at 1 after a reload or browser restart: a time suffix keeps them from appending to an old file
   path(name) { return PathUtils.join(this.env.dir, `${name}-${Date.now().toString(36)}.jsonl`); }
 
-  // value bir fonksiyon olabilir: sıra gelince hesaplanır (ör. sha256 gibi yavaş alanlar)
+  // value can be a function, computed when its turn comes (slow fields such as sha256)
   append(file, value, { last = false } = {}) {
     const queue = (this.queues.get(file) ?? Promise.resolve()).then(async () => {
       const line = typeof value === "function" ? await value() : value;

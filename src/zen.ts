@@ -1,4 +1,4 @@
-// Zen içindeki köprüyle konuşur: bağlantı başına tek satır istek, tek satır cevap.
+// Talks to the bridge in the browser: one request line and one reply line per connection.
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { NAME, SOCKET as socketPath } from "./paths.ts";
@@ -7,20 +7,20 @@ export type Content =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string };
 
-// bu sunucu sürecinin kimliği: Zen olayı (öğe seçimi) Zen'i en son kullanan oturuma gönderir
+// this server process's identity: browser events (picks) go to the session that used the browser last
 export const session = randomUUID();
 
 export type BrowserContent = Content[] & { isError?: boolean };
 
 type Reply = { ok: true; content: Content[]; isError?: boolean } | { ok: false; error: string };
 
-// karşı taraf da aynısını yapar: JSON saf ASCII kalsın, kodlama sorunu çıkmasın
+// the other side does the same: JSON stays pure ASCII, so encodings never matter
 const ascii = (s: string) =>
   s.replace(/[\u007f-￿]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 
 export type AgentIdentity = { id: string; name: string };
 
-// as: bu çağrının oturumu (Codex sohbeti gibi); verilmezse bu MCP sürecinin oturumu
+// as: the session of this call (such as a Codex conversation); defaults to this MCP process's session
 export function call(tool: string, args: object = {}, timeout = 60_000, agent?: AgentIdentity, as: string = session): Promise<BrowserContent> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
@@ -56,8 +56,8 @@ export function call(tool: string, args: object = {}, timeout = 60_000, agent?: 
   });
 }
 
-// Zen'e kalıcı bağlanır, Zen'in ittiği olayları (satır başına bir JSON) onEvent'e verir. Zen
-// kapalıysa ya da köprü yeniden yüklenirse birkaç saniyede bir yeniden dener.
+// Keeps a connection to the browser and hands pushed events (one JSON per line) to onEvent.
+// If the browser is closed or the bridge reloads, it retries every few seconds.
 export type SubscriptionInfo = {
   cwd: string; session?: string; agent?: AgentIdentity; label?: string; title?: string; threadId?: string; ack?: boolean; toolsOnly?: boolean;
 };

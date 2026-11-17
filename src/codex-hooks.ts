@@ -18,10 +18,10 @@ export function parseHookInput(value: unknown): CodexHookInput {
   return input as CodexHookInput;
 }
 
-// watch: testlerde gerçek Codex servisine dokunmamak için değiştirilebilir
+// watch: replaceable so tests don't touch the real Codex service
 export async function handleCodexHook(value: unknown, watch: () => Promise<boolean> = ensureCodexWatch) {
   const input = parseHookInput(value);
-  // Codex servisi izlenebiliyorsa sohbetleri izleyici bağlar; sohbet başına alıcı yalnız yedek
+  // If the Codex service can be watched, the watcher connects conversations; the per-conversation relay is only a fallback.
   if (await watch().catch(() => false)) return;
   if (input.hook_event_name === 'SessionEnd') {
     await contactRelay(input.session_id, 'stop');

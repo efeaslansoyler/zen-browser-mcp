@@ -21,13 +21,13 @@ test('only interactive codex windows count; resume gives the exact thread', () =
 
 test('detached background threads stay hidden; a window shows its newest thread', () => {
   const threads = [thread(A, 1000), thread(B, 5000), thread(C, 5100, { ephemeral: true })];
-  // /quit sonrası pencere yok: hepsi gizli
+  // no window after /quit: all hidden
   assert.deepEqual([...visibleThreads(threads, [])], []);
-  // 4900'de açılan pencere: kendinden önceki A değil, B (geçici başlık sohbeti C sayılmaz)
+  // a window opened at 4900: B, not the earlier A (the temporary title conversation C doesn't count)
   assert.deepEqual([...visibleThreads(threads, [{ pid: 1, startedAt: 4900 }])], [B]);
-  // resume edilen pencere kesin eşlenir, diğer pencere kalan en yeniyi alır
+  // a resumed window matches exactly; the other window gets the newest remaining one
   assert.deepEqual(new Set(visibleThreads(threads, [{ pid: 1, startedAt: 900, threadId: A }, { pid: 2, startedAt: 4900 }])), new Set([A, B]));
-  // resume edilen sohbet yüklü değilse görünmez
+  // a resumed conversation that isn't loaded stays hidden
   assert.deepEqual([...visibleThreads([thread(B, 5000)], [{ pid: 1, startedAt: 9000, threadId: A }])], []);
 });
 

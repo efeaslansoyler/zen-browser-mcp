@@ -1,8 +1,8 @@
-// Etkinlik günlüğünü (activity.jsonl) okunur hale getirir: sekme menüsündeki "Ajan geçmişi" ve
-// "Tüm geçmiş" sayfası. Günlük satırları ajanın değil köprünün yazdığı veridir, ama site adresleri
-// ve tarifler sayfadan gelebilir: sayfada her alan HTML'den kaçırılır.
+// Makes the activity log (activity.jsonl) readable: "Agent history" in the tab menu and the
+// "All history" page. Log lines are written by the bridge, not the agent, but site addresses
+// and descriptions can come from pages: every field is HTML-escaped on the page.
 
-// dosyanın sonundan en çok `bytes` kadar; yarım kalan ilk satır atlanır
+// at most `bytes` from the end of the file; a cut-off first line is skipped
 export async function readRecent(path, bytes = 512 * 1024) {
   let size;
   try { ({ size } = await IOUtils.stat(path)); } catch { return []; }
@@ -20,7 +20,7 @@ export async function readRecent(path, bytes = 512 * 1024) {
 
 const time = entry => new Date(entry.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-// tek satır: "14:02:11 · S23 download… — button "Pay": click ✗ hata"
+// one line: "14:02:11 · S23 download… — button "Pay": click ✗ error"
 export function formatLine(entry, L) {
   const doing = entry.what ?? entry.doing ?? [entry.tool, entry.action].filter(Boolean).join(" ");
   const to = entry.to ? ` → ${entry.to}` : "";
@@ -30,7 +30,7 @@ export function formatLine(entry, L) {
 
 const escape = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-// oturumlara göre gruplu, en yeni üstte; tarayıcının açık/koyu temasına uyar
+// grouped by session, newest first; follows the browser's light/dark theme
 export function renderPage(entries, L, source = "activity.jsonl") {
   const groups = new Map();
   for (const entry of entries) {

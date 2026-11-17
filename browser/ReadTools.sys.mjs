@@ -1,11 +1,11 @@
-// Okuma araçları: sayfa metni, erişilebilirlik ağacı, arama, bekleme, ağ/konsol, JavaScript, React, axe.
-// main.js ortak yardımcıları ctx ile verir; değişen durum (operation, activeSession…) ctx üzerinden okunur.
+// Read tools: page text, the accessibility tree, find, waiting, network/console, JavaScript, React, axe.
+// Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
 export function readTools(ctx) {
   const { DialogOpen, MAX_PAGE_TEXT, Stopped, Watches, assertSiteAccess, assertSiteURL, browserFor,
     expandFrames, frameOf, framesOf, longRef, network, operationSleep, permissionContext, query,
     readContext, readOutput, samePermissionContext, sameReadContext, shortRefs, text, watches } = ctx;
   return {
-    // iframe'lerin metni sayfanın metninin ardından, kaynağıyla
+    // iframe text follows the page text, with its source
     async get_page_text({ tabId, diff = false, since }) {
       const browser = browserFor(tabId);
       const context = readContext(browser);
@@ -38,7 +38,7 @@ export function readTools(ctx) {
       return readOutput(browser, ["read_page", filter || "all", depth ?? 30, longRef(ref_id) || null, max_chars], context, value, diff, since);
     },
 
-    // bütün çerçevelerde arar, sonuçları puana göre birleştirir
+    // searches every frame and merges the results by score
     async find({ tabId, query: q }) {
       const browser = browserFor(tabId);
       const results = [];
@@ -55,8 +55,8 @@ export function readTools(ctx) {
       return text(shortRefs(results.slice(0, 20).map(r => r.line).join("\n")));
     },
 
-    // Metin/seçici görünene (gone: kaybolana) ve/veya ağ durulana kadar bekler. Yoklamayla
-    // çalışır: beklerken sayfa değişse (ör. form gönderildi) de sürer. Bütün çerçevelere bakar.
+    // Waits until text/selector appears (gone: disappears) and/or the network is idle. Polls,
+    // so it keeps going when the page changes meanwhile (e.g. a form was sent). Looks at all frames.
     async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }) {
       const browser = browserFor(tabId);
       if (!wanted && !selector && !network_idle) throw new Error("text, selector or network_idle is required.");
@@ -79,14 +79,14 @@ export function readTools(ctx) {
                 break;
               }
             } catch (e) {
-              // sayfa yüklenirken çerçeve yok ya da değişti: sonraki turda yeniden
+              // no frame or a changed one while the page loads: try again next round
               if (e instanceof DialogOpen || e instanceof Stopped) throw e;
             }
           }
           ok = gone ? !found : found;
         }
         if (ok && network_idle) {
-          // 10 sn'den uzun süren istekler (uzun yoklama, akış) sayılmaz
+          // requests longer than 10 s (long polling, streams) don't count
           const now = Date.now();
           const busy = network.busy(browser.browserId, now);
           if (busy) quietSince = null;
@@ -100,7 +100,7 @@ export function readTools(ctx) {
       }
     },
 
-    // Uzun süreli izleme: olay dosyasına yazar, ajanı bekletmez (wait_for kısa beklemeler için)
+    // Long-running watches: write to an events file without blocking the agent (wait_for is for short waits)
     watch({ tabId, action = "start", id, ...spec }) {
       const session = ctx.activeSession;
       if (action === "list") return text({ watches: watches.forSession(session).map(Watches.summary) });

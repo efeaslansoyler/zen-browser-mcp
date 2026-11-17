@@ -1,18 +1,18 @@
-// Paketin adı ve kullanıcıya görünen yollar tek yerde: isim değişince yalnız burası (ve
-// browser/main.js'e yükleyicinin verdiği zenMcpName) değişir. Tarayıcı tarafı aynı yolları
-// aynı ortam değişkenlerinden hesaplar; bütün platformlarda XDG düzeni kullanılır.
+// The package name and user-visible paths in one place: a rename changes only this file (and
+// the zenMcpName the loader passes to browser/main.js). The browser side computes the same paths
+// from the same environment variables; the XDG layout is used on every platform.
 import os from "node:os";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
 export const NAME = "zen-mcp";
-// Claude Code'da önerilen sunucu adı: kanal bayrağı "server:<ad>" bununla eşleşir
+// The suggested server name in Claude Code: the channel flag "server:<name>" matches it
 export const SERVER_NAME = "zen";
 
 const home = os.homedir();
 const env = process.env;
 
-// tarayıcı tarafı dosyaları (browser/): yükleyici buradan yükler
+// the browser-side files (browser/): the loader loads from here
 export const DATA_DIR = path.join(env.XDG_DATA_HOME || path.join(home, ".local/share"), NAME);
 export const CONFIG_FILE = path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), NAME, "config.json");
 export const STATE_DIR = path.join(env.XDG_STATE_HOME || path.join(home, ".local/state"), NAME);
@@ -28,6 +28,6 @@ export const RUNTIME_DIR = env.XDG_RUNTIME_DIR
 export const SOCKET = env.ZEN_MCP_SOCKET || path.join(RUNTIME_DIR, `${NAME}.sock`);
 export const LOG_FILE = path.join(RUNTIME_DIR, `${NAME}.log`);
 
-// paketin kökü (src/ ya da dist/ bir üstü): browser/ ve package.json burada
+// the package root (the parent of src/ or dist/): browser/ and package.json live here
 export const PACKAGE_DIR = path.resolve(import.meta.dirname, "..");
 export const VERSION: string = JSON.parse(readFileSync(path.join(PACKAGE_DIR, "package.json"), "utf8")).version;

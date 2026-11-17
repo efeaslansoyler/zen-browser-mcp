@@ -1,4 +1,4 @@
-// `doctor` komutu: kurulumun her parçasını sırayla kontrol eder, sorun varsa ne yapılacağını söyler
+// The `doctor` command: checks each part of the setup in turn and says what to do about problems
 import fs from "node:fs";
 import { L } from "./i18n.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";

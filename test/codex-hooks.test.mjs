@@ -7,7 +7,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseHookInput, configureCodexHooks, handleCodexHook } from '../dist/codex-hooks.js';
-// Codex servisi izlenemiyormuş gibi: kancalar sohbet başına alıcıya düşer
+// As if the Codex service can't be watched: hooks fall back to the per-conversation relay
 const noWatch = async () => false;
 import { contactRelay, ensureCodexRelay, relaySocket } from '../dist/codex-relay.js';
 

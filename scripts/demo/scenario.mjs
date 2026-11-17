@@ -36,8 +36,8 @@ async function pointerTo(wx, wy, ms = 600) {
     const k = i / steps, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     const x = Math.round(sx + (tx - sx) * e), y = Math.round(sy + (ty - sy) * e);
     execFileSync("hyprctl", ["dispatch", `hl.dsp.cursor.move({ x = ${x}, y = ${y} })`]);
-    // imleci ışınlamak pencereye fare hareketi göndermiyor; tarayıcıya ayrıca bildir (hover,
-    // seçici çerçevesi, ada önizlemesi)
+    // teleporting the pointer sends no mouse move to the window; tell the browser separately
+    // (hover, the picker outline, the island preview)
     if (i % 3 === 0 || i === steps) await chromeMove(x - WIN.x, y - WIN.y);
     else await sleep(ms / steps);
   }
@@ -164,7 +164,7 @@ const scrolling = (async () => {
   for (let i = 0; i < 6; i++) await text("computer", { tabId: tab, action: "scroll", coordinate: [700, 500], scroll_direction: i % 2 ? "up" : "down", scroll_amount: 2 }).catch(() => {});
 })();
 await sleep(1200);
-// ada metni değişince düğmeler kayıyor: yaklaştıktan sonra konumu yeniden al
+// the buttons shift when the island text changes: read the position again after approaching
 let stop = await islandRect(".stop");
 await pointerTo(stop[0], stop[1], 600);
 await sleep(300);

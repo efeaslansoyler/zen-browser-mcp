@@ -18,7 +18,7 @@ export function normalizeConfig(raw = {}) {
     else sites[domain] = rule;
   }
   const config = { mode: raw.mode === 'ask' ? 'ask' : 'auto', sites };
-  // Zen: ajanın açtığı sekmelerin çalışma alanı (adıyla); yoksa kullanıcının o anki alanı
+  // Zen: the workspace (by name) for tabs agents open; otherwise the user's current one
   const workspace = typeof raw.workspace === 'string' ? raw.workspace.trim().slice(0, 80) : '';
   if (workspace) config.workspace = workspace;
   return config;

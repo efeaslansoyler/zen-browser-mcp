@@ -1,15 +1,16 @@
-// Öğe seçip ajana iş verme.
+// Picking elements and giving an agent work on them.
 //
-// Kullanıcı herhangi bir sekmede (yalnız ajanınkilerde değil) bir ya da birkaç öğe seçer:
-// Ctrl+Shift+F ya da sayfanın sağ tık menüsündeki "Ajana göster…". Ada notu sorar; not ve
-// öğelerin bağlamı kanal olarak açılmış oturuma gider, oturum yoksa panoya kopyalanır. env:
-//   env.L(en, tr), env.island (getter; reload'da değişir), env.channels (Channels),
+// The user picks one or more elements in any tab (not only agent tabs): Ctrl+Shift+F or
+// "Show to agent…" in the page context menu. The island asks for a note; the note and the
+// elements' context go to a session connected as a channel, or to the clipboard without one.
+// env:
+//   env.L(en, tr), env.island (getter; changes on reload), env.channels (Channels),
 //   env.theme(agent), env.ownerOf(browserId), env.pickedTabs (Set),
 //   env.assertSiteAccess(browser), env.logError(where, e), env.sleep(ms),
-//   env.copy(text): panoya, env.paintIcon(item, agent), env.menuAgent(),
+//   env.copy(text): to the clipboard, env.paintIcon(item, agent), env.menuAgent(),
 //   env.shotsDir, env.maxEdge
 const PAGE_MENU_ID = "zen-mcp-context-pick";
-const MAX_SHOTS = 20; // son görüntüler tutulur
+const MAX_SHOTS = 20; // the latest images are kept
 
 export class Picks {
   constructor(env) {
@@ -19,13 +20,13 @@ export class Picks {
     this.shotId = 0;
   }
 
-  // kullanıcının sekmesindeki actor'a sorar (ajan sekmesi kuralları ve durdurma geçerli
-  // değil); sayfa değişirse null
+  // Asks the actor in the user's tab (agent tab rules and Stop don't apply); null if the
+  // page changes.
   async pageQuery(browser, name, data) {
     const wg = browser.browsingContext?.currentWindowGlobal;
     if (!wg) return null;
     let actor;
-    try { actor = wg.getActor("ZenMcp"); } catch { return null; } // ayrıcalıklı about: sayfaları
+    try { actor = wg.getActor("ZenMcp"); } catch { return null; } // privileged about: pages
     let done = false;
     const gone = (async () => {
       while (!done) {
@@ -44,7 +45,7 @@ export class Picks {
 
   #begin(win, browser) {
     if (this.current) this.end();
-    // seçim sürerken sekme değişirse seçici kapanır; not yazılırken değişirse kalır
+    // switching tabs while picking closes the picker; while writing the note it stays
     const onTabSelect = () => {
       if (this.current?.browser === browser && !this.current.info) this.end();
     };
@@ -55,8 +56,8 @@ export class Picks {
     return this.current;
   }
 
-  // Ctrl+Shift+F (seçim sürerken yeniden basmak vazgeçer) ya da sağ tık menüsü
-  // (fromContext: seçim sağ tıklanan öğeden başlar)
+  // Ctrl+Shift+F (pressing it again while picking cancels) or the context menu
+  // (fromContext: the pick starts at the right-clicked element)
   async start(win, { browser = win.gBrowser.selectedBrowser, fromContext = false } = {}) {
     this.env.assertSiteAccess(browser);
     if (this.current && !fromContext) {
@@ -102,7 +103,7 @@ export class Picks {
     this.env.island?.compose(current.browser, label, targets, current.targetId);
   }
 
-  // adada hedef oturum değişti
+  // the target session changed on the island
   selectTarget(target) {
     const current = this.current;
     if (!current) return;
@@ -111,7 +112,7 @@ export class Picks {
     this.pageQuery(current.browser, "pick_theme", { agent: current.agent }).catch(() => {});
   }
 
-  // sayfadaki çerçeveyi kaldırır; keepIsland: adada "gönderildi" gösterilecek
+  // Removes the outline from the page; keepIsland: the island will show "sent".
   end({ keepIsland = false } = {}) {
     if (!this.current) return;
     const { win, browser, onTabSelect } = this.current;
@@ -150,7 +151,7 @@ export class Picks {
         : L("Copied to clipboard", "Panoya kopyalandı"));
   }
 
-  // ajana giden metin; Claude Code'da <channel source="zen" …> gövdesi olur
+  // The text sent to the agent; in Claude Code it becomes the <channel source="zen" …> body.
   message({ browser, info, shot, items }, note, targetId) {
     if (items?.length > 1) {
       const messages = items.map(item => this.message({ browser, ...item }, "", targetId));
@@ -184,7 +185,7 @@ export class Picks {
     return { content: lines.join("\n"), meta };
   }
 
-  // Seçilen öğenin (görünür kısmının) biraz paylı görüntüsü, PNG; ajan Read ile bakar
+  // A PNG of the picked element's visible part with some margin; the agent views it with Read.
   async shot(browser, { rect, viewport }) {
     this.env.assertSiteAccess(browser);
     const wg = browser.browsingContext?.currentWindowGlobal;
@@ -197,11 +198,11 @@ export class Picks {
     if (width <= 0 || height <= 0) return null;
     const win = browser.ownerDocument.defaultView;
     const scale = Math.min(viewport.dpr, this.env.maxEdge / Math.max(width, height));
-    // seçim çerçevesi ve sanal imleç görüntüde öğenin üstünü kapatmasın
+    // keep the pick outline and the virtual cursor off the element in the image
     await this.pageQuery(browser, "overlays", { hidden: true }).catch(() => {});
     let bitmap;
     try {
-      // drawSnapshot belge koordinatı ister, rect görünür alana göre
+      // drawSnapshot wants document coordinates; rect is viewport-relative
       bitmap = await wg.drawSnapshot(new win.DOMRect(left + viewport.scrollX, top + viewport.scrollY, width, height), scale, "white");
     } finally {
       this.pageQuery(browser, "overlays", { hidden: false }).catch(() => {});
@@ -222,8 +223,8 @@ export class Picks {
     return path;
   }
 
-  // sayfa sağ tık menüsünde "Ajana göster…"; yalnız web sayfalarının üst çerçevesinde
-  // (actor yalnız üst çerçevede çalışıyor)
+  // "Show to agent…" in the page context menu; only in the top frame of web pages
+  // (the pick runs in the top frame's actor)
   attachPageMenu(win) {
     const { L } = this.env;
     const doc = win.document;
@@ -234,7 +235,7 @@ export class Picks {
     item.className = "menuitem-iconic";
     this.env.paintIcon(item, this.env.menuAgent());
     item.setAttribute("label", L("Show to agent…", "Ajana göster…"));
-    // "İncele"nin üstüne; yoksa menünün sonuna
+    // above "Inspect", otherwise at the end of the menu
     const anchor = doc.getElementById("inspect-separator");
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
     let browser = null;

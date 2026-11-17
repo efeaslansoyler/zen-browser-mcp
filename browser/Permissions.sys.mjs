@@ -1,6 +1,6 @@
-// İzin: onaylı modda ya da "sor" kuralı olan sitede işlem öncesi adadan sorulur. Onay tek bir
-// belgeye, origin'e, ayarlara ve sahiplik sürümüne aittir; biri değişirse yeniden sorulur.
-// main.js ortak yardımcıları ctx ile verir; değişen durum (operation, activeAgent) ctx üzerinden okunur.
+// Permissions: in ask mode, or on a site with an "ask" rule, actions are approved on the island
+// first. An approval belongs to one document, origin, settings and ownership version; if any of
+// them changes, the user is asked again. Changing state (operation, activeAgent) is read from ctx.
 export function permissions(ctx) {
   const { L, DialogOpen, Stopped } = ctx;
 
@@ -13,7 +13,7 @@ export function permissions(ctx) {
     left_click_drag: L("drag", "sürüklemek"), type: L("type", "yazmak"), key: L("press keys", "tuşa basmak"),
   })[action];
 
-  // izin gerektiren işlemse kısa tarif ("button "Gönder"'e tıklamak"), değilse null
+  // A short description if the action needs permission ('button "Send": click'), otherwise null.
   async function describeWrite(tool, args, browser) {
     const target = async () => {
       try {
@@ -65,7 +65,7 @@ export function permissions(ctx) {
     return null;
   }
 
-  // Bu çağrı izin ister mi: onaylı modda her işlem, "sor" kuralı olan sitede gezinme dışındakiler
+  // Does this call need permission: every action in ask mode; on an "ask" site, all but navigation.
   function needsPermission(tool, browser) {
     if (ctx.readConfig().mode === "ask") return true;
     return tool !== "navigate" && ctx.isSensitive(ctx.hostOf(browser));

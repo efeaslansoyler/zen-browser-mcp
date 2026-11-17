@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Watches } from '../browser/Watches.sys.mjs';
 
-// elle ilerleyen zamanlayıcı ve satırları biriktiren olay dosyası
+// a manually advanced clock and an events file that collects lines
 function harness() {
   const timers = [];
   const lines = [];
@@ -43,7 +43,7 @@ test('repeat reports each new match, not every check while it stays true', async
   h.page.found = false; await h.tick();
   h.page.found = true; await h.tick();
   assert.deepEqual(h.events(), ['started', 'matched', 'matched']);
-  // gone tersine çevirir
+  // gone inverts
   const g = harness();
   g.page.found = true;
   g.watches.start('s', 1, g.browser, { text: 'Loading', gone: true });
