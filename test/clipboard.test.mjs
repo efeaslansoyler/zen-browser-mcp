@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { ClipboardAccess, clipboardShortcut } from '../browser/Clipboard.sys.mjs';
 
 function fixture(answer = true) {
-  let value = 'private initial text', version = 1, checks = 0;
+  let value = 'private initial text', version = 1;
   const calls = [];
   const env = {
-    check: context => { checks++; if (context && version !== context.version) throw new Error('target changed'); },
+    check: context => { if (context && version !== context.version) throw new Error('target changed'); },
     prepare: async () => ({ version }),
     ask: async args => { calls.push(`ask:${args.action}`); return typeof answer === 'function' ? answer() : answer; },
     read: () => { calls.push('read'); return value; },

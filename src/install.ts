@@ -131,7 +131,7 @@ function existingAutoconfig(dir: string) {
 export function loaderStatus(dir: string): "installed" | "legacy" | "missing" {
   const existing = existingAutoconfig(dir);
   if (!existing) return "missing";
-  let text = "";
+  let text: string;
   try { text = fs.readFileSync(existing.cfg, "utf8"); } catch { return "missing"; }
   if (text.includes(BEGIN)) return "installed";
   return text.includes(LEGACY) ? "legacy" : "missing";
@@ -224,7 +224,7 @@ function removeFiles(files: string[]) {
       fs.rmSync(f);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
-      if (spawnSync("sudo", ["rm", "-f", f], { stdio: "inherit" }).status !== 0) throw new Error(L(`Could not remove ${f}.`, `${f} silinemedi.`));
+      if (spawnSync("sudo", ["rm", "-f", f], { stdio: "inherit" }).status !== 0) throw new Error(L(`Could not remove ${f}.`, `${f} silinemedi.`), { cause: e });
     }
   }
 }

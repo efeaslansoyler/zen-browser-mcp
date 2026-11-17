@@ -7,7 +7,7 @@ import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { call, type Content } from '../src/zen.ts';
+import { call } from '../src/zen.ts';
 const text = (result: { content: any[] }) => result.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
 const chrome = async (code: string) => JSON.parse(text({ content: await call('chrome_eval', { code }) }));
 const clients: Client[] = [];

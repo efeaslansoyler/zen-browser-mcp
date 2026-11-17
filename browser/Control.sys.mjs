@@ -110,7 +110,9 @@ export function control(ctx) {
       const AlertNotification = Components.Constructor("@mozilla.org/alert-notification;1", "nsIAlertNotification", "initWithObject");
       const alert = new AlertNotification({ name: ALERT_NAME, title: L(`${activeAgent.name} needs you`, `${activeAgent.name} senden bir şey istiyor`), text: message, textClickable: true });
       alerts().showAlert(alert, (_subject, topic) => {
-        if (topic === "alertclickcallback") browser ? goToTab(browser) : win.focus();
+        if (topic !== "alertclickcallback") return;
+        if (browser) goToTab(browser);
+        else win.focus();
       });
       return true;
     } catch (e) {

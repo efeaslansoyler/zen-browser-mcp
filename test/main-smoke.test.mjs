@@ -25,7 +25,7 @@ const dir = new URL('../browser/', import.meta.url);
 const observers = new Map();
 const gecko = {
   Components: new Proxy({}, {
-    get(_target, key) {
+    get() {
       return stub();
     },
   }),

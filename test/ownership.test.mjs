@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ReadSnapshots } from '../browser/ReadSnapshots.sys.mjs';
 import { Ownership } from '../browser/Ownership.sys.mjs';
-import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import { agentTheme } from '../browser/Agent.sys.mjs';
 import { TabMenu } from '../browser/TabMenu.sys.mjs';
 import { Channels } from '../browser/Channels.sys.mjs';
