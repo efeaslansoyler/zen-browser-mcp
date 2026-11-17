@@ -52,6 +52,14 @@ Sonra tarayıcıyı yeniden başlat ve sunucuyu Claude Code'a ekle:
 claude mcp add --scope user zen -- npx -y zen-browser-mcp
 ```
 
+İstersen ajan skill'ini de ekle. Ajana hangi durumda hangi tool'u kullanacağını öğretir: yeni
+sekme yerine açık olan sekmen, girişi ve 2FA'yı sana bırakmak, beklerken bloklamamak. Kurulu
+olan client'ların skill klasörlerine gider (`~/.claude/skills`, Codex için `~/.agents/skills`):
+
+```sh
+npx zen-browser-mcp skill install
+```
+
 Her şeyi `npx zen-browser-mcp doctor` ile kontrol edebilirsin. Yeni sürümler, Claude Code sunucuyu
 başlattığında tarayıcı tarafını kendiliğinden günceller; sudo ya da tarayıcıyı yeniden
 başlatmak gerekmez.

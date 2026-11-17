@@ -100,7 +100,7 @@ tool(
 
 tool(
   "browser_settings",
-  "Get or temporarily change an owned tab's viewport, generic device preset, DPR, touch-event override, custom user agent or color scheme. Every change/reset requires island approval even in auto mode; applying selects the target tab only after consent. Changes are tab-local and restored on reset, ownership release or bridge reload. Generic mobile/tablet/desktop presets keep Gecko (mobile/tablet send the Android Firefox user agent) and do not emulate Safari/Chrome or a complete physical device fingerprint; navigator.maxTouchPoints is reported, not spoofed. Server-side UA changes may require explicit navigation/reload. get reports actual metrics; devices lists presets without a tab.",
+  "Get or temporarily change an owned tab's viewport, generic device preset, DPR, touch-event override, custom user agent or color scheme. Every change/reset requires island approval even in auto mode; applying selects the target tab only after consent. Changes are tab-local and restored on reset, ownership release or bridge reload. Generic mobile/tablet/desktop presets keep Gecko (mobile/tablet send the Android Firefox user agent) and do not emulate Safari/Chrome or a complete physical device fingerprint; navigator.maxTouchPoints is reported, not spoofed. Server-side UA changes may require explicit navigation/reload. get reports actual metrics; devices lists presets without a tab. Reset what you changed when your task is done.",
   {
     action: z.enum(["get", "devices", "viewport", "device", "media", "reset"]),
     tabId: tabId.optional(),
@@ -182,7 +182,7 @@ tool(
 
 tool(
   "tab_work",
-  "Coordinate shared browser tabs without reading other sessions' pages. list/status return owner, published task, execution state, FIFO queue and handoff note. start/update publish your task; finish explicitly releases a completed task for handoff (auto transfers to the first connected waiter; ask requires request_tab approval). request queues/renews your request without blocking or interrupting the owner; cancel removes your request. Status/request remain responsive during long browser operations. Busy/stale/disconnected tasks are never silently treated as finished. Call separately from browser_batch. After transfer, read the handoff note and refresh the page state. No chat history is shared.",
+  "Coordinate shared browser tabs without reading other sessions' pages. list/status return owner, published task, execution state, FIFO queue and handoff note. start/update publish your task; finish explicitly releases a completed task for handoff (auto transfers to the first connected waiter; ask requires request_tab approval). request queues/renews your request without blocking or interrupting the owner; cancel removes your request. Status/request remain responsive during long browser operations. Busy/stale/disconnected tasks are never silently treated as finished. Call separately from browser_batch. Publish start when you begin work in a shared tab and finish with a short handoff summary when the whole task is done, even if nobody waits; finishing a tool call is not finishing the task. While waiting, poll status every few seconds (not in a tight loop); requests expire after 10 minutes and can be renewed; act only once ownedByCaller is true. After transfer, read the handoff note and refresh the page state. No chat history is shared.",
   {
     action: z.enum(["list", "status", "start", "update", "finish", "request", "cancel"]),
     tabId: z
@@ -202,7 +202,11 @@ tool(
   },
 );
 
-tool("tabs_create_mcp", "Open a new empty tab for the agent in the browser and return its tab ID.", {});
+tool(
+  "tabs_create_mcp",
+  "Open a new empty tab for the agent in the browser and return its tab ID. If the user refers to a page that is already open, request that tab (userTabs in tabs_context_mcp, then request_tab) instead of opening a new one.",
+  {},
+);
 
 tool(
   "tabs_close_mcp",

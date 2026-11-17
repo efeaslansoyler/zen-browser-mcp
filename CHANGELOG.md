@@ -45,8 +45,11 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **Zen workspaces**: agent tabs can open in a chosen workspace.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
   snapshot, and unchanged screenshots can skip the image.
-- **CLI**: `install`, `uninstall`, `doctor`, `config` and `codex-hooks`; the browser side
-  updates itself when the package version changes.
+- **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill` and `codex-hooks`; the browser
+  side updates itself when the package version changes.
+- **Agent skill** (`skills/zen-browser`) for Claude Code and Codex: which tool to use when, from
+  choosing the user's open tab to handing over logins. Short server instructions point the same
+  way for every client.
 - English and Turkish UI, following the browser language.
 
 ## Development history (before 0.1.0)

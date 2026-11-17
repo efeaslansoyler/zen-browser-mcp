@@ -51,6 +51,14 @@ Then restart the browser and add the server to Claude Code:
 claude mcp add --scope user zen -- npx -y zen-browser-mcp
 ```
 
+Optionally, add the agent skill. It teaches the agent when to use which tool: your open tab
+instead of a new one, handing you logins and 2FA, waiting without blocking. It goes into the
+skill folders of the clients you have (`~/.claude/skills`, `~/.agents/skills` for Codex):
+
+```sh
+npx zen-browser-mcp skill install
+```
+
 Check everything with `npx zen-browser-mcp doctor`. New versions update the browser side by
 themselves when Claude Code starts the server, without sudo or a browser restart.
 

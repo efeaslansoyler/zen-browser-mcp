@@ -8,6 +8,7 @@ import { stopCodexRelays } from "./codex-relay.ts";
 import { configureCodexHooks, handleCodexHook } from "./codex-hooks.ts";
 import { PACKAGE, VERSION } from "./paths.ts";
 import { serve } from "./server.ts";
+import { skillCommand } from "./skill.ts";
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -24,6 +25,7 @@ ${usage([
   ["    --all", "every browser found"],
   [`npx ${PACKAGE} uninstall`, "remove it"],
   [`npx ${PACKAGE} doctor`, "check the setup"],
+  [`npx ${PACKAGE} skill install|uninstall`, "add the agent skill to Claude Code and Codex"],
   [`npx ${PACKAGE} codex-hooks install|uninstall`, "manage automatic Codex chat connection"],
   [`npx ${PACKAGE} config`, "show or change settings (mode, site rules)"],
 ])}`,
@@ -37,6 +39,7 @@ ${usage([
   ["    --all", "bulunan bütün tarayıcılar"],
   [`npx ${PACKAGE} uninstall`, "kaldırır"],
   [`npx ${PACKAGE} doctor`, "kurulumu kontrol eder"],
+  [`npx ${PACKAGE} skill install|uninstall`, "ajan skill'ini Claude Code ve Codex'e ekler"],
   [`npx ${PACKAGE} codex-hooks install|uninstall`, "otomatik Codex sohbet bağlantısını yönetir"],
   [`npx ${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
 ])}`,
@@ -79,6 +82,9 @@ try {
       break;
     case "config":
       configCommand(args);
+      break;
+    case "skill":
+      skillCommand(args[0]);
       break;
     case "--version":
     case "-v":

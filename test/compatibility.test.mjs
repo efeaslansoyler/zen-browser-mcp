@@ -143,3 +143,9 @@ test("browser errors retain the MCP error flag and partial batch output", async 
     await server.close();
   }
 });
+
+test("server instructions stay well under Claude Code's 4096-character cut", async () => {
+  const { channelInstructions, clientInstructions } = await import("../dist/instructions.js");
+  for (const text of [channelInstructions, clientInstructions])
+    assert(text.length <= 2600, `${text.length} characters`);
+});

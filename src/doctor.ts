@@ -1,6 +1,7 @@
 // The `doctor` command: checks each part of the setup in turn and says what to do about problems
 import fs from "node:fs";
 import { L } from "./i18n.ts";
+import { skillStatus } from "./skill.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
 import { readConfig } from "./config.ts";
 import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
@@ -54,6 +55,15 @@ export async function doctor() {
       `  ${L(`browser files ${files}, package ${VERSION}: updated when the MCP client starts the server`, `tarayıcı dosyaları ${files}, paket ${VERSION}: MCP istemcisi sunucuyu başlatınca güncellenir`)}`,
     );
   else ok(L(`browser files ${files}`, `tarayıcı dosyaları ${files}`));
+
+  // The skill is optional: report it, but never count it as a problem.
+  for (const { client, status } of skillStatus()) {
+    if (status === "current") ok(L(`${client}: skill installed`, `${client}: skill kurulu`));
+    else
+      console.log(
+        `  ${client}: ${status === "missing" ? L("skill not installed", "skill kurulu değil") : L("skill outdated", "skill eski")} → npx ${PACKAGE} skill install`,
+      );
+  }
 
   try {
     const [reply] = await call("ping", {}, 5000);

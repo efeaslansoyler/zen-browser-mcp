@@ -24,6 +24,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | `server.ts` | The MCP server: registers the tools, agent identity and per-call session, channel and lifecycle subscriptions |
 | `tools.ts`, `instructions.ts` | Tool schemas, descriptions and answer timeouts; server instructions |
 | `claude.ts` | Channel detection and the Claude conversation title |
+| `skill.ts` | `skill install`: copies `skills/zen-browser` into Claude Code's and Codex's skill folders |
 | `zen.ts` | Socket client: one request per connection (`call`) and long-lived subscriptions (`subscribe`) |
 | `paths.ts` | Package name and every user-visible path in one place |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
