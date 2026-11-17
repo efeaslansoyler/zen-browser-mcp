@@ -680,6 +680,10 @@ function logError(where, e) {
       if (state.paused) ctx.island.stopped();
       ctx.island.setMode(ctx.readConfig().mode);
       ctx.network.start();
+      // images of recordings that a reload or restart cut off (running ones stopped with stop())
+      Promise.resolve()
+        .then(() => ctx.recipes.io.remove(`${zenMcpRuntimeDir()}/${zenMcpApp}-recordings`))
+        .catch(() => {});
       ctx.downloads.start().catch((e) => logError("downloads", e));
       ctx.watches.env.events.start().catch((e) => logError("watch", e));
       ctx.restoreMarks();
