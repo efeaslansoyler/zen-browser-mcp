@@ -30,6 +30,12 @@ alone: the bridge runs your working tree.
   call is its own session; add `--session <name>` before the command to share tabs between
   calls (`node scripts/zenctl.ts --session dev tabs_create_mcp`).
 
+## Lint and format
+
+`npm run lint` runs ESLint and `npm run format` runs Prettier; CI checks both. To keep
+`git blame` useful across the bulk formatting commit, run
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+
 ## Tests
 
 `npm test` builds and runs the unit tests: MCP client compatibility, schemas, the wire
