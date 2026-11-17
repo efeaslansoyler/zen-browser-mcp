@@ -4,12 +4,15 @@
 //
 // env: { document(), window(), agent(), applyTheme, setTimeout, clearTimeout }
 
-const HOST_STYLE = "all: initial !important; position: fixed !important; z-index: 2147483647 !important; pointer-events: none !important;";
+const HOST_STYLE =
+  "all: initial !important; position: fixed !important; z-index: 2147483647 !important; pointer-events: none !important;";
 
 // The arrow in the agent's accent color.
-const arrowImage = color => "data:image/svg+xml," + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`
-);
+const arrowImage = (color) =>
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22"><path d="M3 2v16.5l4.6-4.3 3.1 6.8 2.7-1.2-3-6.7 6.3-.3z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  );
 
 const CURSOR_CSS = `
   .pointer {
@@ -103,7 +106,12 @@ export class VirtualCursor {
     if (this.el?.host.isConnected) return this.el;
     const doc = this.env.document();
     const win = this.env.window();
-    const { host, root } = overlayHost(this.env, "zen-mcp-cursor", CURSOR_CSS, "left: 0 !important; top: 0 !important;");
+    const { host, root } = overlayHost(
+      this.env,
+      "zen-mcp-cursor",
+      CURSOR_CSS,
+      "left: 0 !important; top: 0 !important;",
+    );
     const pointer = doc.createElement("div");
     pointer.className = "pointer";
     const arrow = doc.createElement("div");
@@ -198,7 +206,12 @@ export class VirtualCursor {
 // A short ring at the clicked point, so a user looking at the tab sees what the agent last did.
 // It doesn't block clicks and removes itself.
 export function ripple(env, x, y) {
-  const { host, root } = overlayHost(env, "zen-mcp-ripple", RIPPLE_CSS, `left: ${x}px !important; top: ${y}px !important;`);
+  const { host, root } = overlayHost(
+    env,
+    "zen-mcp-ripple",
+    RIPPLE_CSS,
+    `left: ${x}px !important; top: ${y}px !important;`,
+  );
   root.append(env.document().createElement("div"));
   env.document().documentElement.append(host);
   env.setTimeout(() => host.remove(), 700);
@@ -229,16 +242,18 @@ export function outlineAndWait(env, { target, wait, timeout }) {
     const r = target.getBoundingClientRect();
     const pad = 6;
     Object.assign(box.style, {
-      left: `${r.left - pad}px`, top: `${r.top - pad}px`,
-      width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
+      left: `${r.left - pad}px`,
+      top: `${r.top - pad}px`,
+      width: `${r.width + pad * 2}px`,
+      height: `${r.height + pad * 2}px`,
     });
     frame = win.requestAnimationFrame(place);
   };
   if (target) place();
 
   let finish;
-  const answer = new Promise(resolve => {
-    const onClick = event => {
+  const answer = new Promise((resolve) => {
+    const onClick = (event) => {
       if (event.isTrusted && wait === "click" && target && event.composedPath().includes(target)) finish("clicked");
     };
     const timer = env.setTimeout(() => finish("timeout"), timeout * 1000);
@@ -250,12 +265,16 @@ export function outlineAndWait(env, { target, wait, timeout }) {
       throw e;
     }
     let done = false;
-    finish = result => {
+    finish = (result) => {
       if (done) return;
       done = true;
       env.clearTimeout(timer);
-      try { win.removeEventListener("click", onClick, SYSTEM_CAPTURE); } catch {}
-      try { win.cancelAnimationFrame(frame); } catch {}
+      try {
+        win.removeEventListener("click", onClick, SYSTEM_CAPTURE);
+      } catch {}
+      try {
+        win.cancelAnimationFrame(frame);
+      } catch {}
       host.remove();
       resolve(result);
     };

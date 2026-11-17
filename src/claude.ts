@@ -46,15 +46,24 @@ function processInfo(pid: number): { args: string[]; ppid: number } | null {
 // the automatic title. The MCP server is Claude's child; the current conversation (also after
 // /clear or -r) is in ~/.claude/sessions/<pid>.json. Undocumented format: if it can't be read,
 // this returns undefined and menus fall back to a short ID.
-export function claudeTitle(pid = process.ppid, home = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude")) {
+export function claudeTitle(
+  pid = process.ppid,
+  home = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
+) {
   try {
     const { sessionId, cwd } = JSON.parse(readFileSync(path.join(home, "sessions", `${pid}.json`), "utf8"));
     if (typeof sessionId !== "string" || typeof cwd !== "string") return undefined;
     const file = path.join(home, "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${sessionId}.jsonl`);
     // Title lines are written again and again through the file: the last 512 KB are enough.
-    const size = statSync(file).size, length = Math.min(size, 512 * 1024);
-    const buffer = Buffer.alloc(length), fd = openSync(file, "r");
-    try { readSync(fd, buffer, 0, length, size - length); } finally { closeSync(fd); }
+    const size = statSync(file).size,
+      length = Math.min(size, 512 * 1024);
+    const buffer = Buffer.alloc(length),
+      fd = openSync(file, "r");
+    try {
+      readSync(fd, buffer, 0, length, size - length);
+    } finally {
+      closeSync(fd);
+    }
     let custom: string | undefined, ai: string | undefined;
     for (const line of buffer.toString("utf8").split("\n")) {
       if (!line.includes("-title")) continue;
@@ -65,5 +74,7 @@ export function claudeTitle(pid = process.ppid, home = process.env.CLAUDE_CONFIG
       } catch {}
     }
     return (custom ?? ai)?.trim() || undefined;
-  } catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }

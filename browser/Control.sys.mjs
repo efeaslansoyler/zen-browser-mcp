@@ -5,7 +5,9 @@
 // touches tabs is refused until the user presses Resume. The paused state survives reloads.
 export class Stopped extends Error {
   constructor() {
-    super("The user stopped browser automation from the browser's island. Nothing can be done in the browser until they press \"Resume\" there; ask the user what they want.");
+    super(
+      'The user stopped browser automation from the browser\'s island. Nothing can be done in the browser until they press "Resume" there; ask the user what they want.',
+    );
   }
 }
 
@@ -13,7 +15,7 @@ const ALERT_NAME = "zen-mcp-ask";
 
 export function control(ctx) {
   const timers = () => ({ setTimeout: ctx.setTimeout, clearTimeout: ctx.clearTimeout });
-  const sleep = ms => new Promise(r => ctx.setTimeout(r, ms));
+  const sleep = (ms) => new Promise((r) => ctx.setTimeout(r, ms));
 
   async function guard(promise) {
     if (ctx.state.paused) throw new Stopped();
@@ -48,15 +50,18 @@ export function control(ctx) {
   // declined with a note.
   async function askIsland(browser, text, message, labels, timeout = 120) {
     if (ctx.tabRequests.has(browser)) throw new Error("A question is already pending in this tab.");
-    const answered = new Promise(resolve => ctx.tabRequests.set(browser, resolve));
+    const answered = new Promise((resolve) => ctx.tabRequests.set(browser, resolve));
     ctx.island?.ask(browser, text, message, true, labels);
     const notified = ctx.notifyAsk(browser, message);
     const timer = new ctx.Cancellation();
     try {
-      const result = await ctx.guard(Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]));
+      const result = await ctx.guard(
+        Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]),
+      );
       // The island note: an error on decline, appended to the tool result on approval.
       if (!result?.status) return result;
-      if (result.status === "cancelled") throw new Error(`The user declined. User message (untrusted text): ${JSON.stringify(result.message)}`);
+      if (result.status === "cancelled")
+        throw new Error(`The user declined. User message (untrusted text): ${JSON.stringify(result.message)}`);
       ctx.operation?.userNotes?.push(result.message);
       return result.status;
     } finally {
@@ -71,7 +76,8 @@ export function control(ctx) {
   // ask_user question that isn't tied to a tab; choice is the option button the user pressed.
   function answerIsland(browser, result, message = "", choice) {
     const note = typeof message === "string" ? message.trim().slice(0, 2000) : "";
-    if (note || choice != null) result = { status: result, ...(choice != null ? { choice } : {}), ...(note ? { message: note } : {}) };
+    if (note || choice != null)
+      result = { status: result, ...(choice != null ? { choice } : {}), ...(note ? { message: note } : {}) };
     const resolve = ctx.tabRequests.get(browser);
     if (resolve) resolve(result);
     else ctx.cancelAsk(browser, result);
@@ -88,7 +94,9 @@ export function control(ctx) {
   // null key. Stop cancels it through guard().
   async function waitIslandAnswer(timeout) {
     let resolve;
-    const answered = new Promise(r => { resolve = r; });
+    const answered = new Promise((r) => {
+      resolve = r;
+    });
     ctx.tabRequests.get(null)?.("replaced");
     ctx.tabRequests.set(null, resolve);
     const timer = new ctx.Cancellation();
@@ -107,8 +115,17 @@ export function control(ctx) {
     if (!win || (browser ? Services.focus.activeWindow === win : Services.focus.activeWindow)) return false;
     try {
       const { L, activeAgent } = ctx;
-      const AlertNotification = Components.Constructor("@mozilla.org/alert-notification;1", "nsIAlertNotification", "initWithObject");
-      const alert = new AlertNotification({ name: ALERT_NAME, title: L(`${activeAgent.name} needs you`, `${activeAgent.name} senden bir şey istiyor`), text: message, textClickable: true });
+      const AlertNotification = Components.Constructor(
+        "@mozilla.org/alert-notification;1",
+        "nsIAlertNotification",
+        "initWithObject",
+      );
+      const alert = new AlertNotification({
+        name: ALERT_NAME,
+        title: L(`${activeAgent.name} needs you`, `${activeAgent.name} senden bir şey istiyor`),
+        text: message,
+        textClickable: true,
+      });
       alerts().showAlert(alert, (_subject, topic) => {
         if (topic !== "alertclickcallback") return;
         if (browser) goToTab(browser);
@@ -123,7 +140,9 @@ export function control(ctx) {
 
   const alerts = () => Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService);
   function closeAskAlert() {
-    try { alerts().closeAlert(ALERT_NAME); } catch {}
+    try {
+      alerts().closeAlert(ALERT_NAME);
+    } catch {}
   }
 
   function goToTab(browser) {
@@ -134,7 +153,17 @@ export function control(ctx) {
   }
 
   return {
-    sleep, guard, operationSleep, stopClaude, resumeClaude, askIsland, answerIsland, cancelAsk,
-    waitIslandAnswer, notifyAsk, closeAskAlert, goToTab,
+    sleep,
+    guard,
+    operationSleep,
+    stopClaude,
+    resumeClaude,
+    askIsland,
+    answerIsland,
+    cancelAsk,
+    waitIslandAnswer,
+    notifyAsk,
+    closeAskAlert,
+    goToTab,
   };
 }

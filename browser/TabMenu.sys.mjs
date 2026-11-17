@@ -21,13 +21,16 @@ export class TabMenu {
   prepare(win, tabs) {
     const build = this.builders.get(win);
     if (!build) throw new Error("The session handoff menu is not attached to this window.");
-    if (tabs.some(tab => tab.ownerDocument.defaultView !== win)) throw new Error("Menu tabs must belong to the same window.");
+    if (tabs.some((tab) => tab.ownerDocument.defaultView !== win))
+      throw new Error("Menu tabs must belong to the same window.");
     build(tabs);
   }
 
   destroy() {
     for (const cleanup of this.cleanups) {
-      try { cleanup(); } catch {}
+      try {
+        cleanup();
+      } catch {}
     }
     this.cleanups.clear();
   }
@@ -62,7 +65,7 @@ export class TabMenu {
     historyMenu.append(historyPopup);
     menu.insertBefore(historyMenu, permissionsMenu.nextSibling);
     // filled when the submenu opens: the log file is read only when needed
-    const onHistoryShowing = async event => {
+    const onHistoryShowing = async (event) => {
       if (event.target !== historyPopup) return;
       const tab = shownTabs[0];
       historyPopup.replaceChildren();
@@ -81,12 +84,16 @@ export class TabMenu {
     };
     historyPopup.addEventListener("popupshowing", onHistoryShowing);
     let shownTabs = [];
-    const build = inputTabs => {
-      const tabs = shownTabs = inputTabs.filter(t => t.isConnected && !t.hasAttribute("zen-empty-tab"));
-      item.hidden = !tabs.some(t => t.hasAttribute(MARK));
+    const build = (inputTabs) => {
+      const tabs = (shownTabs = inputTabs.filter((t) => t.isConnected && !t.hasAttribute("zen-empty-tab")));
+      item.hidden = !tabs.some((t) => t.hasAttribute(MARK));
       give.hidden = !tabs.length;
-      give.setAttribute("label", tabs.some(t => t.hasAttribute(MARK))
-        ? L("Transfer to session…", "Oturuma devret…") : L("Give to session…", "Oturuma ver…"));
+      give.setAttribute(
+        "label",
+        tabs.some((t) => t.hasAttribute(MARK))
+          ? L("Transfer to session…", "Oturuma devret…")
+          : L("Give to session…", "Oturuma ver…"),
+      );
       targets.replaceChildren();
       let targetCount = 0;
       for (const target of env.sessions()) {
@@ -109,13 +116,16 @@ export class TabMenu {
         targets.append(empty);
       }
       const tab = tabs[0];
-      env.paintIcon(item, tab?.hasAttribute(MARK)
-        ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
-        : env.menuAgent());
+      env.paintIcon(
+        item,
+        tab?.hasAttribute(MARK)
+          ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
+          : env.menuAgent(),
+      );
       const owner = tab && env.ownerName(tab);
       item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner}` : ""));
       permissionsPopup.replaceChildren();
-      const heading = label => {
+      const heading = (label) => {
         const item = win.document.createXULElement("menuitem");
         item.setAttribute("label", label);
         item.setAttribute("disabled", "true");
@@ -143,14 +153,17 @@ export class TabMenu {
       permissionsPopup.append(win.document.createXULElement("menuseparator"));
       const host = tab && env.hostOf(tab.linkedBrowser);
       const hasSite = tabs.length === 1 && !!host;
-      let siteLabel = hasSite ? L(`This site · ${host}`, `Bu site · ${host}`)
+      let siteLabel = hasSite
+        ? L(`This site · ${host}`, `Bu site · ${host}`)
         : L("This site · select one web tab", "Bu site · tek bir web sekmesi seç");
       const effectiveRule = env.ruleFor(host);
-      const ownRule = hasSite ? (config.sites[host] || "default") : "default";
+      const ownRule = hasSite ? config.sites[host] || "default" : "default";
       if (hasSite && ownRule !== effectiveRule) {
-        siteLabel += " · " + (effectiveRule === "block"
-          ? L("blocked by parent domain", "üst alan adı engelliyor")
-          : L("parent domain requires approval", "üst alan adı onay istiyor"));
+        siteLabel +=
+          " · " +
+          (effectiveRule === "block"
+            ? L("blocked by parent domain", "üst alan adı engelliyor")
+            : L("parent domain requires approval", "üst alan adı onay istiyor"));
       }
       heading(siteLabel);
       for (const [rule, label] of [
@@ -179,9 +192,10 @@ export class TabMenu {
       heading(L("New agent tabs open in", "Yeni ajan sekmeleri şurada açılır"));
       const current = config.workspace ?? "";
       const AGENTS = L("Agents", "Ajanlar");
-      const options = [["", L("The space you're in", "Bulunduğun alan")], ...spaces.map(name => [name, name])];
+      const options = [["", L("The space you're in", "Bulunduğun alan")], ...spaces.map((name) => [name, name])];
       if (!spaces.includes(AGENTS)) options.push([AGENTS, L(`New space: ${AGENTS}`, `Yeni alan: ${AGENTS}`)]);
-      if (current && !spaces.includes(current) && current !== AGENTS) options.push([current, L(`New space: ${current}`, `Yeni alan: ${current}`)]);
+      if (current && !spaces.includes(current) && current !== AGENTS)
+        options.push([current, L(`New space: ${current}`, `Yeni alan: ${current}`)]);
       for (const [value, label] of options) {
         const choice = win.document.createXULElement("menuitem");
         choice.setAttribute("type", "radio");
@@ -200,7 +214,7 @@ export class TabMenu {
       if (!tab) return [];
       return tab.multiselected ? win.gBrowser.selectedTabs : [tab];
     };
-    const onShowing = event => {
+    const onShowing = (event) => {
       if (event.target === menu) build(contextTabs());
     };
     const onCommand = () => {

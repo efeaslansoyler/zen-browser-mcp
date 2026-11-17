@@ -17,13 +17,22 @@ export class InputDriver {
   #releaseTimer = null;
   #pointer = null;
 
-  constructor(env) { this.env = env; }
+  constructor(env) {
+    this.env = env;
+  }
 
-  state() { return { keys: [...this.#heldKeys.keys()], buttons: [...this.#heldButtons.keys()] }; }
+  state() {
+    return { keys: [...this.#heldKeys.keys()], buttons: [...this.#heldButtons.keys()] };
+  }
 
   #heldModifiers() {
     const mods = {};
-    for (const [key, name] of [["KEY_Shift", "shiftKey"], ["KEY_Control", "ctrlKey"], ["KEY_Alt", "altKey"], ["KEY_Meta", "metaKey"]]) {
+    for (const [key, name] of [
+      ["KEY_Shift", "shiftKey"],
+      ["KEY_Control", "ctrlKey"],
+      ["KEY_Alt", "altKey"],
+      ["KEY_Meta", "metaKey"],
+    ]) {
       if (this.#heldKeys.has(key)) mods[name] = true;
     }
     return mods;
@@ -43,13 +52,19 @@ export class InputDriver {
     const win = this.env.window();
     this.env.clearTimeout(this.#releaseTimer);
     for (const [button, point] of this.#heldButtons) {
-      try { this.env.eventUtils().synthesizeMouseAtPoint(point[0], point[1], { ...this.#heldModifiers(), type: "mouseup", button }, win); } catch {}
+      try {
+        this.env
+          .eventUtils()
+          .synthesizeMouseAtPoint(point[0], point[1], { ...this.#heldModifiers(), type: "mouseup", button }, win);
+      } catch {}
     }
     this.#heldButtons.clear();
     for (const key of [...this.#heldKeys.keys()].reverse()) {
       const sentKey = this.#heldKeys.get(key);
       this.#heldKeys.delete(key);
-      try { this.env.eventUtils().synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keyup" }, win); } catch {}
+      try {
+        this.env.eventUtils().synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keyup" }, win);
+      } catch {}
     }
     this.#heldOwner = null;
     return this.state();
@@ -61,7 +76,14 @@ export class InputDriver {
     for (const point of this.env.mousePath(from, [x, y], options)) {
       await scope.wait(point.delay, this.env);
       scope.check();
-      this.env.eventUtils().synthesizeMouseAtPoint(point.x, point.y, { ...this.#heldModifiers(), ...modifiers, type: "mousemove", buttons }, win);
+      this.env
+        .eventUtils()
+        .synthesizeMouseAtPoint(
+          point.x,
+          point.y,
+          { ...this.#heldModifiers(), ...modifiers, type: "mousemove", buttons },
+          win,
+        );
       this.#pointer = [point.x, point.y];
       for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
       await this.env.cursor.move(point.x, point.y, scope, true);
@@ -69,7 +91,33 @@ export class InputDriver {
   }
 
   // silent: no virtual cursor or ripple (development and demos: like the user's own click)
-  async input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false, ref, session, hold_ms, movement, duration_ms, steps, seed, typing, delay_ms }, scope) {
+  async input(
+    {
+      kind,
+      x,
+      y,
+      to,
+      button = 0,
+      count = 1,
+      modifiers = {},
+      keys,
+      text,
+      dx = 0,
+      dy = 0,
+      multiplier = [1, 1],
+      silent = false,
+      ref,
+      session,
+      hold_ms,
+      movement,
+      duration_ms,
+      steps,
+      seed,
+      typing,
+      delay_ms,
+    },
+    scope,
+  ) {
     const { cursor, L } = this.env;
     const win = this.env.window();
     const eu = this.env.eventUtils();
@@ -137,12 +185,16 @@ export class InputDriver {
           if (movement && movement !== "instant") {
             await this.#moveInput(to[0], to[1], scope, motion, modifiers, 1);
             last = [to[0], to[1]];
-          } else for (let i = 1; i <= 10; i++) {
-            await scope.wait(0, this.env);
-            last = [x + ((to[0] - x) * i) / 10, y + ((to[1] - y) * i) / 10];
-            mouse(...last, { type: "mousemove", buttons: 1 });
-          }
-        } finally { off(); release(); }
+          } else
+            for (let i = 1; i <= 10; i++) {
+              await scope.wait(0, this.env);
+              last = [x + ((to[0] - x) * i) / 10, y + ((to[1] - y) * i) / 10];
+              mouse(...last, { type: "mousemove", buttons: 1 });
+            }
+        } finally {
+          off();
+          release();
+        }
         await move(to[0], to[1]);
         return "done";
       }
@@ -197,7 +249,8 @@ export class InputDriver {
         }
         return "done";
       case "text":
-        if (Object.keys(this.#heldModifiers()).length) throw new Error("Release held modifiers before typing text; use key actions for shortcuts.");
+        if (Object.keys(this.#heldModifiers()).length)
+          throw new Error("Release held modifiers before typing text; use key actions for shortcuts.");
         cursor.label(L("typing…", "yazıyor…"));
         for (const chunk of this.env.typingPlan(text, { typing, delay_ms, seed })) {
           await scope.wait(chunk.delay, this.env);
@@ -217,7 +270,7 @@ export class InputDriver {
     const doc = this.env.document();
     const target = doc.elementFromPoint(x, y);
     const focusable = target?.closest(
-      'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [contenteditable=""], [contenteditable="true"], [tabindex]'
+      'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [contenteditable=""], [contenteditable="true"], [tabindex]',
     );
     if (focusable && doc.activeElement !== focusable) focusable.focus();
   }
@@ -230,7 +283,9 @@ export class InputDriver {
     const scroller = this.#scrollerAt(x, y);
     const before = [scroller.scrollLeft, scroller.scrollTop];
     const dpr = win.devicePixelRatio;
-    this.env.eventUtils().synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
+    this.env
+      .eventUtils()
+      .synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
     await scope.wait(150, this.env);
     scope.check();
     const moved = [scroller.scrollLeft - before[0], scroller.scrollTop - before[1]];
@@ -267,7 +322,8 @@ export class InputDriver {
     if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= win.innerWidth || y >= win.innerHeight) {
       throw new Error(`Click blocked: ${label} is outside the viewport. Refresh screenshot/read_page.`);
     }
-    if (!expected?.isConnected) throw new Error(`Click blocked: ${label} is gone or has no hit target. Refresh screenshot/read_page.`);
+    if (!expected?.isConnected)
+      throw new Error(`Click blocked: ${label} is gone or has no hit target. Refresh screenshot/read_page.`);
     if (expected.matches?.(":disabled")) throw new Error(`Click blocked: ${label} is disabled.`);
     const hit = this.hitAt(x, y);
     // Follow composed ancestry so an icon or shadow child inside a button is legitimate.
@@ -275,6 +331,8 @@ export class InputDriver {
       if (node === expected) return;
     }
     const blocker = hit ? `${this.env.elementLabel(hit)} [${this.env.ref(hit)}]` : "no element";
-    throw new Error(`Click blocked: ${label} is covered or moved at (${Math.round(x)}, ${Math.round(y)}); hit ${blocker}. Refresh screenshot/read_page and resolve the obstruction before retrying. No click was sent to the blocker.`);
+    throw new Error(
+      `Click blocked: ${label} is covered or moved at (${Math.round(x)}, ${Math.round(y)}); hit ${blocker}. Refresh screenshot/read_page and resolve the obstruction before retrying. No click was sent to the blocker.`,
+    );
   }
 }

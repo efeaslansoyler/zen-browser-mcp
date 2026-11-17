@@ -15,26 +15,40 @@ const mark = (label) => {
   console.log(`${t.toFixed(1)}s ${label}`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const text = async (tool, args, timeout) => (await call(tool, args, timeout)).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+const text = async (tool, args, timeout) =>
+  (await call(tool, args, timeout))
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
 const evalChrome = (code) => text("chrome_eval", { code });
 const ref = (out, re) => {
-  const m = out.split("\n").find((l) => re.test(l))?.match(/\[(ref_[\w]+)\]/);
+  const m = out
+    .split("\n")
+    .find((l) => re.test(l))
+    ?.match(/\[(ref_[\w]+)\]/);
   if (!m) throw new Error(`no ref for ${re} in:\n${out}`);
   return m[1];
 };
 
 // browser content area origin inside the window
-const content = JSON.parse(await evalChrome('(()=>{const r=Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.getBoundingClientRect(); return JSON.stringify([r.left,r.top])})()'));
+const content = JSON.parse(
+  await evalChrome(
+    '(()=>{const r=Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.getBoundingClientRect(); return JSON.stringify([r.left,r.top])})()',
+  ),
+);
 let cursor = JSON.parse("[" + execFileSync("hyprctl", ["cursorpos"], { encoding: "utf8" }).trim() + "]");
 
 // smooth real pointer movement to a point in window coordinates
 async function pointerTo(wx, wy, ms = 600) {
   const [sx, sy] = cursor;
-  const tx = WIN.x + wx, ty = WIN.y + wy;
+  const tx = WIN.x + wx,
+    ty = WIN.y + wy;
   const steps = Math.max(8, Math.round(ms / 16));
   for (let i = 1; i <= steps; i++) {
-    const k = i / steps, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    const x = Math.round(sx + (tx - sx) * e), y = Math.round(sy + (ty - sy) * e);
+    const k = i / steps,
+      e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const x = Math.round(sx + (tx - sx) * e),
+      y = Math.round(sy + (ty - sy) * e);
     execFileSync("hyprctl", ["dispatch", `hl.dsp.cursor.move({ x = ${x}, y = ${y} })`]);
     // teleporting the pointer sends no mouse move to the window; tell the browser separately
     // (hover, the picker outline, the island preview)
@@ -43,17 +57,43 @@ async function pointerTo(wx, wy, ms = 600) {
   }
   cursor = [tx, ty];
 }
-const chromeMove = (wx, wy) => evalChrome(`(()=>{const w=Services.wm.getMostRecentWindow("navigator:browser"); const eu={window:w,parent:w,_EU_Ci:Ci,_EU_Cc:Cc}; Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu); eu.synthesizeMouseAtPoint(${wx}, ${wy}, {type:"mousemove"}, w); return 1})()`);
+const chromeMove = (wx, wy) =>
+  evalChrome(
+    `(()=>{const w=Services.wm.getMostRecentWindow("navigator:browser"); const eu={window:w,parent:w,_EU_Ci:Ci,_EU_Cc:Cc}; Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu); eu.synthesizeMouseAtPoint(${wx}, ${wy}, {type:"mousemove"}, w); return 1})()`,
+  );
 const pagePoint = ([x, y]) => [content[0] + x, content[1] + y];
 
 // click on browser chrome (island) at window coordinates
-const chromeClick = (wx, wy) => evalChrome(`(()=>{const w=Services.wm.getMostRecentWindow("navigator:browser"); const eu={window:w,parent:w,_EU_Ci:Ci,_EU_Cc:Cc}; Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu); eu.synthesizeMouseAtPoint(${wx}, ${wy}, {}, w); return 1})()`);
-const chromeKey = (key, mods) => evalChrome(`(()=>{const w=Services.wm.getMostRecentWindow("navigator:browser"); const eu={window:w,parent:w,_EU_Ci:Ci,_EU_Cc:Cc}; Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu); eu.synthesizeKey(${JSON.stringify(key)}, ${JSON.stringify(mods)}, w); return 1})()`);
+const chromeClick = (wx, wy) =>
+  evalChrome(
+    `(()=>{const w=Services.wm.getMostRecentWindow("navigator:browser"); const eu={window:w,parent:w,_EU_Ci:Ci,_EU_Cc:Cc}; Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu); eu.synthesizeMouseAtPoint(${wx}, ${wy}, {}, w); return 1})()`,
+  );
+const chromeKey = (key, mods) =>
+  evalChrome(
+    `(()=>{const w=Services.wm.getMostRecentWindow("navigator:browser"); const eu={window:w,parent:w,_EU_Ci:Ci,_EU_Cc:Cc}; Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", eu); eu.synthesizeKey(${JSON.stringify(key)}, ${JSON.stringify(mods)}, w); return 1})()`,
+  );
 // center of an island element (window coordinates)
-const islandRect = async (sel) => JSON.parse(await evalChrome(`(()=>{const r=Services.wm.getMostRecentWindow("navigator:browser").document.querySelector("#zen-mcp-island ${sel}").getBoundingClientRect(); return JSON.stringify([r.left+r.width/2, r.top+r.height/2])})()`));
-const pageTarget = async (tabId, r) => JSON.parse(await evalChrome(`(async()=>JSON.stringify(await h.target(h.findTab(${tabId}).linkedBrowser,{ref:${JSON.stringify(r)}})))()`));
-const userPageClick = (tabId, [x, y]) => evalChrome(`(async()=>{await h.input(h.findTab(${tabId}).linkedBrowser,{kind:"click",x:${x},y:${y},silent:true}); return 1})()`);
-const setMode = (mode) => fs.writeFileSync(`${process.env.HOME}/.config/zen-mcp/config.json`, JSON.stringify({ mode, sensitive: [] }, null, 2) + "\n");
+const islandRect = async (sel) =>
+  JSON.parse(
+    await evalChrome(
+      `(()=>{const r=Services.wm.getMostRecentWindow("navigator:browser").document.querySelector("#zen-mcp-island ${sel}").getBoundingClientRect(); return JSON.stringify([r.left+r.width/2, r.top+r.height/2])})()`,
+    ),
+  );
+const pageTarget = async (tabId, r) =>
+  JSON.parse(
+    await evalChrome(
+      `(async()=>JSON.stringify(await h.target(h.findTab(${tabId}).linkedBrowser,{ref:${JSON.stringify(r)}})))()`,
+    ),
+  );
+const userPageClick = (tabId, [x, y]) =>
+  evalChrome(
+    `(async()=>{await h.input(h.findTab(${tabId}).linkedBrowser,{kind:"click",x:${x},y:${y},silent:true}); return 1})()`,
+  );
+const setMode = (mode) =>
+  fs.writeFileSync(
+    `${process.env.HOME}/.config/zen-mcp/config.json`,
+    JSON.stringify({ mode, sensitive: [] }, null, 2) + "\n",
+  );
 
 // ---- scene ----
 setMode("auto");
@@ -80,7 +120,10 @@ await sleep(800);
 // 2. shopping with real input
 mark("shopping");
 const products = await text("find", { tabId: tab, query: "Add to cart" });
-const adds = products.split("\n").filter((l) => /Add to cart/.test(l)).map((l) => l.match(/\[(ref_\w+)\]/)[1]);
+const adds = products
+  .split("\n")
+  .filter((l) => /Add to cart/.test(l))
+  .map((l) => l.match(/\[(ref_\w+)\]/)[1]);
 await text("computer", { tabId: tab, action: "left_click", ref: adds[0] });
 await sleep(500);
 await text("computer", { tabId: tab, action: "left_click", ref: adds[2] });
@@ -93,7 +136,11 @@ await sleep(500);
 // 3. the form, typed with real keystrokes
 mark("typing");
 const form = await text("read_page", { tabId: tab, filter: "interactive" });
-for (const [re, value] of [[/textbox "Full name"/, "Ada Lovelace"], [/textbox "Email"/, "ada@example.com"], [/textbox "Address"/, "12 Analytical Street, London"]]) {
+for (const [re, value] of [
+  [/textbox "Full name"/, "Ada Lovelace"],
+  [/textbox "Email"/, "ada@example.com"],
+  [/textbox "Address"/, "12 Analytical Street, London"],
+]) {
   await text("computer", { tabId: tab, action: "left_click", ref: ref(form, re) });
   await text("computer", { tabId: tab, action: "type", text: value });
   await sleep(250);
@@ -104,7 +151,11 @@ await sleep(700);
 // 4. ask mode: the island asks before acting
 setMode("ask");
 mark("ask-mode");
-const note = call("form_input", { tabId: tab, ref: ref(form, /textbox "Gift note"/), value: "Happy birthday, Charles! ☕" }, 60000);
+const note = call(
+  "form_input",
+  { tabId: tab, ref: ref(form, /textbox "Gift note"/), value: "Happy birthday, Charles! ☕" },
+  60000,
+);
 await sleep(1200);
 const allow = await islandRect(".ok");
 await pointerTo(allow[0], allow[1], 800);
@@ -119,7 +170,11 @@ await sleep(900);
 mark("ask-user");
 const pay = await text("find", { tabId: tab, query: "Pay now" });
 const payRef = ref(pay, /button "Pay now"/);
-const asked = text("ask_user", { tabId: tab, ref: payRef, message: "Check the total, then press Pay now to confirm.", wait: "click", timeout: 60 }, 80000);
+const asked = text(
+  "ask_user",
+  { tabId: tab, ref: payRef, message: "Check the total, then press Pay now to confirm.", wait: "click", timeout: 60 },
+  80000,
+);
 await sleep(1800);
 const payPoint = await pageTarget(tab, payRef);
 const [px, py] = pagePoint(payPoint);
@@ -146,7 +201,9 @@ await sleep(900);
 mark("compose");
 const msg = "Make this heading green and add a confetti burst";
 for (let i = 1; i <= msg.length; i++) {
-  await evalChrome(`(()=>{const t=Services.wm.getMostRecentWindow("navigator:browser").document.querySelector("#zen-mcp-island textarea"); t.value=${JSON.stringify(msg.slice(0, i))}; return 1})()`);
+  await evalChrome(
+    `(()=>{const t=Services.wm.getMostRecentWindow("navigator:browser").document.querySelector("#zen-mcp-island textarea"); t.value=${JSON.stringify(msg.slice(0, i))}; return 1})()`,
+  );
   await sleep(45);
 }
 await sleep(500);
@@ -161,7 +218,14 @@ await sleep(2600);
 mark("stop");
 await text("navigate", { tabId: tab, url: `${SITE}/index.html` });
 const scrolling = (async () => {
-  for (let i = 0; i < 6; i++) await text("computer", { tabId: tab, action: "scroll", coordinate: [700, 500], scroll_direction: i % 2 ? "up" : "down", scroll_amount: 2 }).catch(() => {});
+  for (let i = 0; i < 6; i++)
+    await text("computer", {
+      tabId: tab,
+      action: "scroll",
+      coordinate: [700, 500],
+      scroll_direction: i % 2 ? "up" : "down",
+      scroll_amount: 2,
+    }).catch(() => {});
 })();
 await sleep(1200);
 // the buttons shift when the island text changes: read the position again after approaching
@@ -178,6 +242,6 @@ const resume = await islandRect(".stop");
 await pointerTo(resume[0], resume[1], 400);
 await chromeClick(resume[0], resume[1]);
 await sleep(600);
-if (await evalChrome("String(h.state.paused)") === "true") console.log("WARN: still paused");
+if ((await evalChrome("String(h.state.paused)")) === "true") console.log("WARN: still paused");
 mark("end");
 fs.writeFileSync(new URL("./timeline.json", import.meta.url), JSON.stringify(marks, null, 2));

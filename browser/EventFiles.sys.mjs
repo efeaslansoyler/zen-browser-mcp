@@ -19,18 +19,22 @@ export class EventFiles {
   }
 
   // IDs restart at 1 after a reload or browser restart: a time suffix keeps them from appending to an old file
-  path(name) { return PathUtils.join(this.env.dir, `${name}-${Date.now().toString(36)}.jsonl`); }
+  path(name) {
+    return PathUtils.join(this.env.dir, `${name}-${Date.now().toString(36)}.jsonl`);
+  }
 
   // value can be a function, computed when its turn comes (slow fields such as sha256)
   append(file, value, { last = false } = {}) {
-    const queue = (this.queues.get(file) ?? Promise.resolve()).then(async () => {
-      const line = typeof value === "function" ? await value() : value;
-      await IOUtils.writeUTF8(file, JSON.stringify(line) + "\n", { mode: "appendOrCreate" });
-      if (last) {
-        this.queues.delete(file);
-        this.env.setTimeout(() => IOUtils.remove(file).catch(() => {}), TTL);
-      }
-    }).catch(e => this.env.logError?.("event file", e));
+    const queue = (this.queues.get(file) ?? Promise.resolve())
+      .then(async () => {
+        const line = typeof value === "function" ? await value() : value;
+        await IOUtils.writeUTF8(file, JSON.stringify(line) + "\n", { mode: "appendOrCreate" });
+        if (last) {
+          this.queues.delete(file);
+          this.env.setTimeout(() => IOUtils.remove(file).catch(() => {}), TTL);
+        }
+      })
+      .catch((e) => this.env.logError?.("event file", e));
     if (!last) this.queues.set(file, queue);
     return queue;
   }

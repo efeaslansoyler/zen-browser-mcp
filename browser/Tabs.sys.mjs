@@ -27,7 +27,7 @@ export const MARK_CSS = `
 
 export function tabs(ctx) {
   function browserWindows() {
-    return [...Services.wm.getEnumerator("navigator:browser")].filter(w => !w.closed && w.gBrowser);
+    return [...Services.wm.getEnumerator("navigator:browser")].filter((w) => !w.closed && w.gBrowser);
   }
 
   // In Zen, gBrowser.tabs holds only the open workspace's tabs; count the other spaces too.
@@ -50,7 +50,10 @@ export function tabs(ctx) {
     for (const id of ctx.state.tabs) {
       const tab = ctx.findTab(id);
       if (tab) tabs.push(tab);
-      else { ctx.ownership.release(id); ctx.state.tabs.delete(id); }
+      else {
+        ctx.ownership.release(id);
+        ctx.state.tabs.delete(id);
+      }
     }
     return tabs;
   }
@@ -61,7 +64,9 @@ export function tabs(ctx) {
     const tab = ctx.findTab(tabId);
     if (tab) restoreMark(tab);
     if (!tab || !ctx.state.tabs.has(tabId)) {
-      throw new Error(`Tab ${tabId} is not assigned to an agent (closed, or the user took it back). Use tabs_context_mcp for current tabs.`);
+      throw new Error(
+        `Tab ${tabId} is not assigned to an agent (closed, or the user took it back). Use tabs_context_mcp for current tabs.`,
+      );
     }
     ctx.ownership.check(tabId, ctx.activeSession);
     ctx.operation?.tabs?.add(tabId);
@@ -90,7 +95,7 @@ export function tabs(ctx) {
     if (!win) throw new Error("No browser window is open.");
     const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true });
     mark(tab);
-    await placeInWorkspace(win, tab).catch(e => ctx.logError("workspace", e));
+    await placeInWorkspace(win, tab).catch((e) => ctx.logError("workspace", e));
     return tab;
   }
 
@@ -100,31 +105,36 @@ export function tabs(ctx) {
     const name = ctx.readConfig().workspace;
     const spaces = win.gZenWorkspaces;
     if (!name || !spaces?.workspaceEnabled) return;
-    let space = spaces.getWorkspaces().find(w => w.name === name);
+    let space = spaces.getWorkspaces().find((w) => w.name === name);
     space ??= await spaces.createAndSaveWorkspace(name, undefined, true);
     if (space && tab.getAttribute("zen-workspace-id") !== space.uuid) await spaces.moveTabToWorkspace(tab, space.uuid);
   }
 
   function workspaceNames(win) {
-    return win.gZenWorkspaces?.workspaceEnabled ? win.gZenWorkspaces.getWorkspaces().map(w => w.name) : null;
+    return win.gZenWorkspaces?.workspaceEnabled ? win.gZenWorkspaces.getWorkspaces().map((w) => w.name) : null;
   }
 
   function paintTab(tab, agent) {
     const theme = ctx.applyTheme(tab, agent);
     tab.setAttribute("zen-mcp-agent-name", theme.name);
-    try { ctx.SessionStore.setCustomTabValue(tab, "zen-mcp-agent", JSON.stringify({ id: theme.id, name: theme.name })); } catch {}
+    try {
+      ctx.SessionStore.setCustomTabValue(tab, "zen-mcp-agent", JSON.stringify({ id: theme.id, name: theme.name }));
+    } catch {}
   }
 
   // origin: "true" when an agent opened the tab, "user" when the user gave it from the tab menu
   function mark(tab, origin = "true", session = ctx.activeSession, { cancel = true } = {}) {
     const target = ctx.sessions.get(session);
-    if (!target || target.disconnected) throw new Error("The selected browser session is no longer connected. Choose a session again.");
+    if (!target || target.disconnected)
+      throw new Error("The selected browser session is no longer connected. Choose a session again.");
     const id = tab.linkedBrowser.browserId;
     if (ctx.ownership.assign(id, session)) releaseTabState(tab.linkedBrowser, { cancel });
     tab.setAttribute(MARK, origin);
     ctx.state.tabs.add(id);
     ctx.paintTab(tab, target.agent);
-    try { ctx.SessionStore.setCustomTabValue(tab, MARK, origin); } catch {}
+    try {
+      ctx.SessionStore.setCustomTabValue(tab, MARK, origin);
+    } catch {}
   }
 
   // When the owner changes or the user takes the tab back, drop the previous owner's held
@@ -153,20 +163,29 @@ export function tabs(ctx) {
     tab.removeAttribute("data-zen-agent");
     tab.removeAttribute("zen-mcp-agent-name");
     for (const key of ["accent", "hover", "rgb", "foreground"]) tab.style.removeProperty(`--zen-agent-${key}`);
-    try { ctx.SessionStore.deleteCustomTabValue(tab, "zen-mcp-agent"); } catch {}
+    try {
+      ctx.SessionStore.deleteCustomTabValue(tab, "zen-mcp-agent");
+    } catch {}
     ctx.state.tabs.delete(id);
-    try { ctx.SessionStore.deleteCustomTabValue(tab, MARK); } catch {}
+    try {
+      ctx.SessionStore.deleteCustomTabValue(tab, MARK);
+    } catch {}
     ctx.island?.release(browser);
   }
 
   function restoreMark(tab) {
     let origin = "";
-    try { origin = ctx.SessionStore.getCustomTabValue(tab, MARK); } catch {}
+    try {
+      origin = ctx.SessionStore.getCustomTabValue(tab, MARK);
+    } catch {}
     if (origin !== "true" && origin !== "user") return;
     const id = tab.linkedBrowser.browserId;
     const owner = ctx.ownership.owner(id);
     // Persisted visual marks are not authorization after a browser restart.
-    if (!owner || !ctx.sessions.has(owner)) { unmark(tab); return; }
+    if (!owner || !ctx.sessions.has(owner)) {
+      unmark(tab);
+      return;
+    }
     if (tab.hasAttribute(MARK)) return;
     tab.setAttribute(MARK, origin);
     ctx.state.tabs.add(id);
@@ -181,11 +200,15 @@ export function tabs(ctx) {
 
   // Zen restores the session with its own manager after windows open; catch each tab with the
   // SSTabRestoring event fired while its state is applied.
-  const onTabRestoring = event => {
-    try { restoreMark(event.target); } catch (e) { ctx.logError("restoreMark", e); }
+  const onTabRestoring = (event) => {
+    try {
+      restoreMark(event.target);
+    } catch (e) {
+      ctx.logError("restoreMark", e);
+    }
   };
 
-  const onTabClose = event => {
+  const onTabClose = (event) => {
     const tab = event.target;
     const id = tab.linkedBrowser?.browserId;
     if (ctx.state.tabs.has(id)) unmark(tab);
@@ -203,7 +226,21 @@ export function tabs(ctx) {
   }
 
   return {
-    browserWindows, windowTabs, findTab, liveTabs, browserFor, describeTab, createTab, workspaceNames,
-    paintTab, mark, unmark, restoreMark, restoreMarks, onTabClose, watchWindow, unwatchWindow,
+    browserWindows,
+    windowTabs,
+    findTab,
+    liveTabs,
+    browserFor,
+    describeTab,
+    createTab,
+    workspaceNames,
+    paintTab,
+    mark,
+    unmark,
+    restoreMark,
+    restoreMarks,
+    onTabClose,
+    watchWindow,
+    unwatchWindow,
   };
 }

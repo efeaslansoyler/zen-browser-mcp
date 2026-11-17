@@ -1,6 +1,53 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SecurePay</title>
-<style>body{margin:0;font:15px/1.5 system-ui,sans-serif;background:#1d2433;color:#fff;padding:20px 22px;border-radius:14px}.top{display:flex;justify-content:space-between;opacity:.7;font-size:13px}.amt{font-size:30px;font-weight:700;margin:6px 0 14px}.card{opacity:.8;margin-bottom:14px}button{font:inherit;font-weight:700;width:100%;padding:12px;border:0;border-radius:10px;background:#6e8bff;color:#fff;cursor:pointer}</style>
-<div class="top"><span>🔒 SecurePay</span><span>Visa •••• 4242</span></div>
-<div class="amt" id="a"></div><button id="pay">Pay now</button>
-<script>const a=new URLSearchParams(location.search).get("amount");document.getElementById("a").textContent="$"+a;
-document.getElementById("pay").onclick=()=>{document.getElementById("pay").textContent="Paid ✓";setTimeout(()=>parent.postMessage("paid","*"),700)};</script></html>
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>SecurePay</title>
+  <style>
+    body {
+      margin: 0;
+      font:
+        15px/1.5 system-ui,
+        sans-serif;
+      background: #1d2433;
+      color: #fff;
+      padding: 20px 22px;
+      border-radius: 14px;
+    }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      opacity: 0.7;
+      font-size: 13px;
+    }
+    .amt {
+      font-size: 30px;
+      font-weight: 700;
+      margin: 6px 0 14px;
+    }
+    .card {
+      opacity: 0.8;
+      margin-bottom: 14px;
+    }
+    button {
+      font: inherit;
+      font-weight: 700;
+      width: 100%;
+      padding: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #6e8bff;
+      color: #fff;
+      cursor: pointer;
+    }
+  </style>
+  <div class="top"><span>🔒 SecurePay</span><span>Visa •••• 4242</span></div>
+  <div class="amt" id="a"></div>
+  <button id="pay">Pay now</button>
+  <script>
+    const a = new URLSearchParams(location.search).get("amount");
+    document.getElementById("a").textContent = "$" + a;
+    document.getElementById("pay").onclick = () => {
+      document.getElementById("pay").textContent = "Paid ✓";
+      setTimeout(() => parent.postMessage("paid", "*"), 700);
+    };
+  </script>
+</html>

@@ -7,7 +7,8 @@
 // ?v= query so a bridge reload picks up new code, and they never import each other: whatever
 // one helper needs from another is passed in here.
 
-const load = name => ChromeUtils.importESModule(new URL(name, import.meta.url).href + new URL(import.meta.url).search);
+const load = (name) =>
+  ChromeUtils.importESModule(new URL(name, import.meta.url).href + new URL(import.meta.url).search);
 const { agentTheme, applyTheme } = load("../Agent.sys.mjs");
 const { mousePath, typingPlan } = load("../InputMotion.sys.mjs");
 const { Cancellation } = load("../Cancellation.sys.mjs");
@@ -40,12 +41,19 @@ export class ZenMcpChild extends JSWindowActorChild {
     document: () => this.document,
     window: () => this.contentWindow,
     agent: () => this.#agent,
-    element: ref => this.#element(ref),
-    ref: el => this.#ref(el),
+    element: (ref) => this.#element(ref),
+    ref: (el) => this.#ref(el),
     eventUtils: () => this.#eu(),
     contextTarget: () => this.#contextTarget?.deref(),
-    unwrap: value => Cu.waiveXrays(value),
-    applyTheme, mousePath, typingPlan, L, setTimeout, clearTimeout, reader, info,
+    unwrap: (value) => Cu.waiveXrays(value),
+    applyTheme,
+    mousePath,
+    typingPlan,
+    L,
+    setTimeout,
+    clearTimeout,
+    reader,
+    info,
     elementLabel: reader.elementLabel,
     ripple: (x, y) => ripple(this.#env, x, y),
   };
@@ -56,7 +64,10 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   // The right-clicked element, for "Show to agent…" (main.js subscribes the actor to this event).
   handleEvent(event) {
-    if (event.type === "pagehide") { this.#input.release(); return; }
+    if (event.type === "pagehide") {
+      this.#input.release();
+      return;
+    }
     // An event the page made itself must not change the picked element.
     if (event.type !== "contextmenu" || !event.isTrusted) return;
     let target = event.composedPath()[0] ?? event.target;
@@ -91,9 +102,15 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: await this.#eval(data.code) };
         case "react": {
           const { inspectReact } = load("../ReactInspect.sys.mjs");
-          return { value: inspectReact({ ...data, document: this.document,
-            element: data.ref ? this.#element(data.ref) : null,
-            unwrap: value => Cu.waiveXrays(value), refFor: el => this.#ref(el) }) };
+          return {
+            value: inspectReact({
+              ...data,
+              document: this.document,
+              element: data.ref ? this.#element(data.ref) : null,
+              unwrap: (value) => Cu.waiveXrays(value),
+              refFor: (el) => this.#ref(el),
+            }),
+          };
         }
         case "axe":
           return { value: await this.#axe(data, scope) };
@@ -134,8 +151,11 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#console(data) };
         case "ask_user": {
           const off = scope.onCancel(() => this.#ask?.finish("stopped"));
-          try { return { value: await this.#askUser(data) }; }
-          finally { off(); }
+          try {
+            return { value: await this.#askUser(data) };
+          } finally {
+            off();
+          }
         }
         case "overlays":
           return { value: this.#overlays(data.hidden) };
@@ -188,11 +208,21 @@ export class ZenMcpChild extends JSWindowActorChild {
     const win = this.contentWindow;
     const sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
     try {
-      return JSON.parse(Cu.evalInSandbox(`JSON.stringify({ width: innerWidth, height: innerHeight,
+      return JSON.parse(
+        Cu.evalInSandbox(
+          `JSON.stringify({ width: innerWidth, height: innerHeight,
         dpr: devicePixelRatio, userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints,
         colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-        webdriver: navigator.webdriver })`, sandbox, null, "zen-mcp-metrics", 1));
-    } finally { Cu.nukeSandbox(sandbox); }
+        webdriver: navigator.webdriver })`,
+          sandbox,
+          null,
+          "zen-mcp-metrics",
+          1,
+        ),
+      );
+    } finally {
+      Cu.nukeSandbox(sandbox);
+    }
   }
 
   // A sandbox with the page's principal and no Xrays: it reaches page variables directly, and
@@ -214,39 +244,72 @@ export class ZenMcpChild extends JSWindowActorChild {
     let sandbox, timer;
     try {
       sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
-      Object.defineProperty(sandbox, 'window', { value: sandbox });
-      Object.defineProperty(sandbox, 'document', { value: Cu.waiveXrays(this.document) });
+      Object.defineProperty(sandbox, "window", { value: sandbox });
+      Object.defineProperty(sandbox, "document", { value: Cu.waiveXrays(this.document) });
       sandbox.scanTarget = ref ? Cu.waiveXrays(this.#element(ref)) : sandbox.document;
-      sandbox.scanOptions = Cu.cloneInto({ iframes: false, elementRef: true,
-        resultTypes: ['violations', 'incomplete'], preload: false,
-        ...(tags?.length ? { runOnly: { type: 'tag', values: tags } } : {}) }, sandbox);
-      Services.scriptloader.loadSubScript(new URL('../vendor/axe.min.js', import.meta.url).href, sandbox);
-      const pending = Cu.evalInSandbox('axe.run(scanTarget, scanOptions)', sandbox, null, 'zen-mcp-axe', 1);
-      const results = await scope.race(Promise.race([pending, new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Accessibility scan timed out.')), Math.max(1, Math.min(20000, timeout_ms)));
-      })]));
+      sandbox.scanOptions = Cu.cloneInto(
+        {
+          iframes: false,
+          elementRef: true,
+          resultTypes: ["violations", "incomplete"],
+          preload: false,
+          ...(tags?.length ? { runOnly: { type: "tag", values: tags } } : {}),
+        },
+        sandbox,
+      );
+      Services.scriptloader.loadSubScript(new URL("../vendor/axe.min.js", import.meta.url).href, sandbox);
+      const pending = Cu.evalInSandbox("axe.run(scanTarget, scanOptions)", sandbox, null, "zen-mcp-axe", 1);
+      const results = await scope.race(
+        Promise.race([
+          pending,
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("Accessibility scan timed out.")),
+              Math.max(1, Math.min(20000, timeout_ms)),
+            );
+          }),
+        ]),
+      );
       scope.check();
       const cap = Math.max(1, Math.min(50, max_nodes));
       const ruleCap = Math.max(1, Math.min(200, max_rules));
-      const summarize = list => list.slice(0, ruleCap).map(rule => ({
-        id: rule.id, impact: rule.impact, description: rule.description, help: rule.help,
-        helpUrl: rule.helpUrl, tags: Array.from(rule.tags), nodeCount: rule.nodes.length,
-        nodes: rule.nodes.slice(0, cap).map(node => ({
-          ref: node.element ? this.#ref(node.element) : undefined,
-          target: Array.from(node.target, selector => String(selector).slice(0, 500)),
-          html: String(node.html).slice(0, 1000), failureSummary: String(node.failureSummary || '').slice(0, 2000),
-        })), truncated: rule.nodes.length > cap,
-      }));
-      return { engine: { name: 'axe-core', version: String(results.testEngine.version) },
-        counts: { violations: results.violations.length, incomplete: results.incomplete.length,
-          passes: results.passes.length, inapplicable: results.inapplicable.length },
-        violations: summarize(results.violations), incomplete: summarize(results.incomplete),
+      const summarize = (list) =>
+        list.slice(0, ruleCap).map((rule) => ({
+          id: rule.id,
+          impact: rule.impact,
+          description: rule.description,
+          help: rule.help,
+          helpUrl: rule.helpUrl,
+          tags: Array.from(rule.tags),
+          nodeCount: rule.nodes.length,
+          nodes: rule.nodes.slice(0, cap).map((node) => ({
+            ref: node.element ? this.#ref(node.element) : undefined,
+            target: Array.from(node.target, (selector) => String(selector).slice(0, 500)),
+            html: String(node.html).slice(0, 1000),
+            failureSummary: String(node.failureSummary || "").slice(0, 2000),
+          })),
+          truncated: rule.nodes.length > cap,
+        }));
+      return {
+        engine: { name: "axe-core", version: String(results.testEngine.version) },
+        counts: {
+          violations: results.violations.length,
+          incomplete: results.incomplete.length,
+          passes: results.passes.length,
+          inapplicable: results.inapplicable.length,
+        },
+        violations: summarize(results.violations),
+        incomplete: summarize(results.incomplete),
         truncated: results.violations.length > ruleCap || results.incomplete.length > ruleCap,
-        note: 'Automated checks only. Incomplete results require manual review; zero violations does not establish accessibility compliance.' };
+        note: "Automated checks only. Incomplete results require manual review; zero violations does not establish accessibility compliance.",
+      };
     } finally {
       clearTimeout(timer);
-      try { if (sandbox) Cu.nukeSandbox(sandbox); }
-      finally { this.#axeRunning = false; }
+      try {
+        if (sandbox) Cu.nukeSandbox(sandbox);
+      } finally {
+        this.#axeRunning = false;
+      }
     }
   }
 
@@ -256,16 +319,27 @@ export class ZenMcpChild extends JSWindowActorChild {
   #clipboardSequence = 0;
   #clipboardState(element) {
     const selection = this.contentWindow.getSelection();
-    return { element, value: element.value, start: element.selectionStart, end: element.selectionEnd,
-      anchor: selection?.anchorNode, anchorOffset: selection?.anchorOffset,
-      focus: selection?.focusNode, focusOffset: selection?.focusOffset };
+    return {
+      element,
+      value: element.value,
+      start: element.selectionStart,
+      end: element.selectionEnd,
+      anchor: selection?.anchorNode,
+      anchorOffset: selection?.anchorOffset,
+      focus: selection?.focusNode,
+      focusOffset: selection?.focusOffset,
+    };
   }
   #clipboardPrepare({ action, ref }) {
     if (!["copy", "paste", "cut"].includes(action)) throw new Error("Unsupported clipboard command.");
     const element = ref ? this.#element(ref) : this.document.activeElement;
     if (!element) throw new Error("No clipboard target.");
-    if ((action === "paste" || action === "cut") &&
-        (!(element.localName === "input" || element.localName === "textarea" || element.isContentEditable) || element.disabled || element.readOnly)) {
+    if (
+      (action === "paste" || action === "cut") &&
+      (!(element.localName === "input" || element.localName === "textarea" || element.isContentEditable) ||
+        element.disabled ||
+        element.readOnly)
+    ) {
       throw new Error("Clipboard target must be an editable field.");
     }
     const token = `clipboard_${++this.#clipboardSequence}`;
@@ -278,9 +352,11 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#clipboardPending.delete(token);
     if (!pending || pending.action !== action) throw new Error("Clipboard approval target expired; try again.");
     const expected = pending.state;
-    if (!expected.element.isConnected || (!pending.ref && this.document.activeElement !== expected.element)) throw new Error("Clipboard focus changed; nothing was done.");
+    if (!expected.element.isConnected || (!pending.ref && this.document.activeElement !== expected.element))
+      throw new Error("Clipboard focus changed; nothing was done.");
     const current = this.#clipboardState(expected.element);
-    if (Object.keys(expected).some(key => current[key] !== expected[key])) throw new Error("Clipboard target/selection changed; nothing was done.");
+    if (Object.keys(expected).some((key) => current[key] !== expected[key]))
+      throw new Error("Clipboard target/selection changed; nothing was done.");
     if (pending.ref) expected.element.focus({ preventScroll: true });
     if (!this.document.execCommand(action)) throw new Error(`Native clipboard ${action} was not available.`);
     return "done";
@@ -290,23 +366,29 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   #annotation = null;
   #annotate(enabled) {
-    this.#annotation?.remove(); this.#annotation = null;
+    this.#annotation?.remove();
+    this.#annotation = null;
     if (!enabled) return [];
     const host = this.document.createElement("zen-mcp-annotations");
     host.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483647";
     const root = host.attachShadow({ mode: "closed" });
     const refs = [];
-    for (const element of this.document.querySelectorAll('a[href],button,input,textarea,select,[role="button"],[tabindex]')) {
+    for (const element of this.document.querySelectorAll(
+      'a[href],button,input,textarea,select,[role="button"],[tabindex]',
+    )) {
       if (!reader.isVisible(element) || !reader.inViewport(element, this.contentWindow)) continue;
       const box = element.getBoundingClientRect();
       if (!box.width || !box.height) continue;
-      const ref = this.#ref(element), label = this.document.createElement("span");
+      const ref = this.#ref(element),
+        label = this.document.createElement("span");
       label.textContent = ref;
       label.style.cssText = `position:absolute;left:${Math.max(0, box.left)}px;top:${Math.max(0, box.top)}px;background:#111;color:#fff;font:12px/16px monospace;border:1px solid #fff;padding:1px 3px;pointer-events:none`;
-      root.append(label); refs.push(ref);
+      root.append(label);
+      refs.push(ref);
       if (refs.length >= 80) break;
     }
-    this.document.documentElement.append(host); this.#annotation = host;
+    this.document.documentElement.append(host);
+    this.#annotation = host;
     return refs;
   }
 
@@ -344,7 +426,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   #frameRect(bcId) {
     const el = this.#frameElement(bcId);
     if (!el) throw new Error("iframe not found (the page may have changed).");
-    if (!reader.fullyInViewport(el, this.contentWindow)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+    if (!reader.fullyInViewport(el, this.contentWindow))
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     return this.#contentOrigin(el);
   }
 
@@ -386,13 +469,15 @@ export class ZenMcpChild extends JSWindowActorChild {
     const el = this.#element(ref);
     const win = this.contentWindow;
     const tag = el.tagName.toUpperCase();
-    const fire = type => el.dispatchEvent(new win.Event(type, { bubbles: true }));
+    const fire = (type) => el.dispatchEvent(new win.Event(type, { bubbles: true }));
 
     if (tag === "SELECT") {
       const wanted = String(value);
-      const opt = [...el.options].find(o => o.value === wanted) ||
-        [...el.options].find(o => reader.normalize(o.text) === reader.normalize(wanted));
-      if (!opt) throw new Error(`No option "${wanted}". Options: ${[...el.options].map(o => o.text.trim()).join(", ")}`);
+      const opt =
+        [...el.options].find((o) => o.value === wanted) ||
+        [...el.options].find((o) => reader.normalize(o.text) === reader.normalize(wanted));
+      if (!opt)
+        throw new Error(`No option "${wanted}". Options: ${[...el.options].map((o) => o.text.trim()).join(", ")}`);
       el.value = opt.value;
       fire("input");
       fire("change");
@@ -428,19 +513,21 @@ export class ZenMcpChild extends JSWindowActorChild {
     if (!input) throw new Error(`No file input (input type=file) near ${ref}.`);
     if (files.length > 1 && !input.multiple) throw new Error("This field accepts a single file.");
     const win = this.contentWindow;
-    const list = files.map(f => new win.File([Cu.cloneInto(f.bytes, win)], f.name, { type: f.type, lastModified: f.lastModified }));
+    const list = files.map(
+      (f) => new win.File([Cu.cloneInto(f.bytes, win)], f.name, { type: f.type, lastModified: f.lastModified }),
+    );
     // A privileged method: fills the field without opening a file picker.
     input.mozSetFileArray(list);
     // Events created by privileged code look trusted (isTrusted) to the page.
     input.dispatchEvent(new win.Event("input", { bubbles: true }));
     input.dispatchEvent(new win.Event("change", { bubbles: true }));
-    return `${files.length} file(s) uploaded: ${files.map(f => f.name).join(", ")}`;
+    return `${files.length} file(s) uploaded: ${files.map((f) => f.name).join(", ")}`;
   }
 
   // Drop zones usually hide an input[type=file]: look at the element, its label's control,
   // inside it and a few ancestors up.
   #fileInputNear(el) {
-    const isFile = node => node?.localName === "input" && node.type === "file";
+    const isFile = (node) => node?.localName === "input" && node.type === "file";
     if (isFile(el)) return el;
     if (isFile(el.control)) return el.control;
     for (let node = el, depth = 0; node && depth < 5; node = node.parentElement, depth++) {
@@ -456,10 +543,13 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#ask?.finish("replaced");
     const doc = this.document;
     const target = ref ? this.#element(ref) : x != null ? doc.elementFromPoint(x, y) : null;
-    if (target && !reader.fullyInViewport(target, this.contentWindow)) target.scrollIntoView({ block: "center", behavior: "instant" });
+    if (target && !reader.fullyInViewport(target, this.contentWindow))
+      target.scrollIntoView({ block: "center", behavior: "instant" });
     const ask = outlineAndWait(this.#env, { target, wait, timeout });
     this.#ask = ask;
-    return ask.answer.finally(() => { if (this.#ask === ask) this.#ask = null; });
+    return ask.answer.finally(() => {
+      if (this.#ask === ask) this.#ask = null;
+    });
   }
 
   // Keep the cursor, ripples and pick outline out of the agent's own screenshots.
@@ -478,14 +568,19 @@ export class ZenMcpChild extends JSWindowActorChild {
   #console({ onlyErrors = false, pattern, limit = 100, clear = false }) {
     const innerId = this.manager.innerWindowId;
     const entries = [];
-    const unwrap = value => Cu.waiveXrays(value);
+    const unwrap = (value) => Cu.waiveXrays(value);
 
     const storage = Cc["@mozilla.org/consoleAPI-storage;1"].getService(Ci.nsIConsoleAPIStorage);
     for (const event of storage.getEvents(String(innerId))) {
       const level = event.level === "warn" ? "warning" : event.level;
       if (onlyErrors && level !== "error" && level !== "assert") continue;
-      const message = [...(event.arguments ?? [])].map(arg => info.formatArg(arg, unwrap)).join(" ");
-      entries.push({ time: event.timeStamp, level, message, source: event.filename && `${event.filename}:${event.lineNumber}` });
+      const message = [...(event.arguments ?? [])].map((arg) => info.formatArg(arg, unwrap)).join(" ");
+      entries.push({
+        time: event.timeStamp,
+        level,
+        message,
+        source: event.filename && `${event.filename}:${event.lineNumber}`,
+      });
     }
 
     for (const m of Services.console.getMessageArray() ?? []) {
@@ -500,15 +595,15 @@ export class ZenMcpChild extends JSWindowActorChild {
       });
     }
 
-    let list = entries.filter(e => e.time > this.#consoleSince).sort((a, b) => a.time - b.time);
+    let list = entries.filter((e) => e.time > this.#consoleSince).sort((a, b) => a.time - b.time);
     if (pattern) {
       const re = new RegExp(pattern, "i");
-      list = list.filter(e => re.test(e.message) || re.test(e.source ?? ""));
+      list = list.filter((e) => re.test(e.message) || re.test(e.source ?? ""));
     }
     if (clear) this.#consoleSince = Date.now();
     if (!list.length) return "No console messages" + (pattern || onlyErrors ? " matching the filter." : ".");
     const shown = list.slice(-limit);
-    const lines = shown.map(e => {
+    const lines = shown.map((e) => {
       const time = new Date(e.time).toTimeString().slice(0, 8);
       return `[${e.level}] ${time} ${reader.truncate(e.message, 2000)}${e.source ? `  (${e.source})` : ""}`;
     });

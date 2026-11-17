@@ -17,7 +17,8 @@ export function pageQueries(ctx) {
   const bcById = (browser, id) => browser.ownerDocument.defaultView.BrowsingContext.get(id);
 
   // All loaded frames, top first.
-  const framesOf = browser => browser.browsingContext.getAllBrowsingContextsInSubtree().filter(bc => bc.currentWindowGlobal);
+  const framesOf = (browser) =>
+    browser.browsingContext.getAllBrowsingContextsInSubtree().filter((bc) => bc.currentWindowGlobal);
 
   // The actor appends the browsing context ID to refs in subframes ("ref_3_f150323855361").
   // Agents see a short number instead ("ref_3_f2"); incoming refs are translated back.
@@ -47,11 +48,13 @@ export function pageQueries(ctx) {
     const id = /_f(\d+)$/.exec(ctx.longRef(ref) ?? "")?.[1];
     if (!id) return browser.browsingContext;
     const bc = bcById(browser, Number(id));
-    if (!bc || bc.top !== browser.browsingContext) throw new Error(`${ref} not found (its frame may be gone); get refs again with read_page or find.`);
+    if (!bc || bc.top !== browser.browsingContext)
+      throw new Error(`${ref} not found (its frame may be gone); get refs again with read_page or find.`);
     return bc;
   }
 
-  const queryRef = (browser, name, data, timeout) => ctx.query(browser, name, data, timeout, ctx.frameOf(browser, data.ref));
+  const queryRef = (browser, name, data, timeout) =>
+    ctx.query(browser, name, data, timeout, ctx.frameOf(browser, data.ref));
 
   // A screenshot coordinate → CSS px in the page's viewport.
   function toPagePoint(browser, [x, y]) {
@@ -99,7 +102,13 @@ export function pageQueries(ctx) {
   async function target(browser, args, key = "coordinate") {
     if (args.ref && key === "coordinate") {
       const frame = ctx.frameOf(browser, args.ref);
-      const { x, y } = await ctx.query(browser, "locate", { ref: ctx.longRef(args.ref), forClick: !!args.forClick }, 30000, frame);
+      const { x, y } = await ctx.query(
+        browser,
+        "locate",
+        { ref: ctx.longRef(args.ref), forClick: !!args.forClick },
+        30000,
+        frame,
+      );
       return ctx.toTop(browser, frame, x, y, !!args.forClick);
     }
     if (args[key] == null) throw new Error(`${args.action} needs ${key}${key === "coordinate" ? " or ref" : ""}.`);
@@ -109,7 +118,11 @@ export function pageQueries(ctx) {
   function openDialog(browser) {
     const gBrowser = browser.ownerDocument.defaultView.gBrowser;
     let dialogs;
-    try { dialogs = gBrowser.getTabDialogBox(browser).getContentDialogManager()._dialogs; } catch { return null; }
+    try {
+      dialogs = gBrowser.getTabDialogBox(browser).getContentDialogManager()._dialogs;
+    } catch {
+      return null;
+    }
     for (const dialog of dialogs ?? []) {
       const win = dialog._frame?.contentWindow;
       if (win?.Dialog?.args) return win;
@@ -138,12 +151,15 @@ export function pageQueries(ctx) {
     const dialog = openDialog(browser);
     if (!dialog || !ctx.island) return;
     const { promptType, text: message } = dialog.Dialog.args;
-    const kind = {
-      alert: L("shows an alert", "uyarı gösteriyor"),
-      prompt: L("asks you for text", "senden bir metin istiyor"),
-    }[promptType.replace(/Check$/, "")] ?? L("asks for confirmation", "onay istiyor");
+    const kind =
+      {
+        alert: L("shows an alert", "uyarı gösteriyor"),
+        prompt: L("asks you for text", "senden bir metin istiyor"),
+      }[promptType.replace(/Check$/, "")] ?? L("asks for confirmation", "onay istiyor");
     let host = "";
-    try { host = browser.currentURI.host; } catch {}
+    try {
+      host = browser.currentURI.host;
+    } catch {}
     ctx.island.dialog(browser, `${host} — ${L("the page", "sayfa")} ${kind}`, message);
     while (openDialog(browser) && ctx.island?.state === "dialog") await ctx.sleep(500);
     ctx.island?.dialogEnded();
@@ -166,7 +182,9 @@ export function pageQueries(ctx) {
     const requestId = ++querySequence;
     const watcher = new ctx.Cancellation();
     const cancelActor = () => {
-      try { actor.sendAsyncMessage("cancel_operation", { requestId }); } catch {}
+      try {
+        actor.sendAsyncMessage("cancel_operation", { requestId });
+      } catch {}
     };
     const off = scope?.onCancel(cancelActor);
     const watchDialog = (async () => {
@@ -180,11 +198,15 @@ export function pageQueries(ctx) {
       }
     })();
     try {
-      const result = await ctx.guard(Promise.race([
-        actor.sendQuery(name, { ...data, agent: ctx.activeAgent, session: ctx.activeSession, requestId }),
-        watchDialog,
-        watcher.wait(timeout, timers).then(() => { throw new Error(`The page did not respond within ${timeout / 1000} s.`); }),
-      ]));
+      const result = await ctx.guard(
+        Promise.race([
+          actor.sendQuery(name, { ...data, agent: ctx.activeAgent, session: ctx.activeSession, requestId }),
+          watchDialog,
+          watcher.wait(timeout, timers).then(() => {
+            throw new Error(`The page did not respond within ${timeout / 1000} s.`);
+          }),
+        ]),
+      );
       scope?.check();
       if (result?.error) throw new Error(ctx.shortRefs(result.error));
       return result;
@@ -207,9 +229,13 @@ export function pageQueries(ctx) {
     try {
       return await Promise.race([
         wg.getActor("ZenMcp").sendQuery(name, { ...data, requestId: ++querySequence }),
-        new Promise((_, reject) => { timer = ctx.setTimeout(() => reject(new Error("The page did not answer.")), 5000); }),
+        new Promise((_, reject) => {
+          timer = ctx.setTimeout(() => reject(new Error("The page did not answer.")), 5000);
+        }),
       ]);
-    } finally { ctx.clearTimeout(timer); }
+    } finally {
+      ctx.clearTimeout(timer);
+    }
   }
 
   // Across all frames: the first accepted value wins; frames that vanish while loading are skipped.
@@ -245,7 +271,12 @@ export function pageQueries(ctx) {
         if (e instanceof DialogOpen) throw e;
         inner = `(could not read: ${e?.message ?? e})`;
       }
-      const body = inner ? inner.split("\n").map(line => indent + line).join("\n") : `${indent}(no visible elements)`;
+      const body = inner
+        ? inner
+            .split("\n")
+            .map((line) => indent + line)
+            .join("\n")
+        : `${indent}(no visible elements)`;
       parts.push(`${indent}[iframe ${wg.documentURI?.spec ?? ""}]\n${body}`);
     }
     parts.push(value.slice(last));
@@ -253,26 +284,34 @@ export function pageQueries(ctx) {
   }
 
   function waitForLoad(browser, timeout = 20000, destination = null) {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const listener = {
         QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
         onStateChange(webProgress, _request, flags) {
           const done = Ci.nsIWebProgressListener.STATE_STOP | Ci.nsIWebProgressListener.STATE_IS_WINDOW;
           // A newly inserted tab may still deliver about:blank's STOP after the
           // listener was installed. It is not the requested navigation completing.
-          const initialBlank = destination && destination !== "about:blank"
-            && browser.currentURI?.spec === "about:blank";
+          const initialBlank =
+            destination && destination !== "about:blank" && browser.currentURI?.spec === "about:blank";
           if (webProgress.isTopLevel && (flags & done) === done && !initialBlank) finish();
         },
       };
       // The browser holds the listener weakly; keep it alive until it finishes.
       pendingListeners.add(listener);
-      const off = ctx.operation?.onCancel(() => { try { browser.stop(); } finally { finish(); } });
+      const off = ctx.operation?.onCancel(() => {
+        try {
+          browser.stop();
+        } finally {
+          finish();
+        }
+      });
       function finish() {
         off?.();
         ctx.clearTimeout(timer);
         pendingListeners.delete(listener);
-        try { browser.removeProgressListener(listener); } catch {}
+        try {
+          browser.removeProgressListener(listener);
+        } catch {}
         resolve();
       }
       browser.addProgressListener(listener, Ci.nsIWebProgress.NOTIFY_STATE_WINDOW);
@@ -286,7 +325,7 @@ export function pageQueries(ctx) {
     return {
       url: browser.currentURI?.spec,
       ownerVersion: ctx.ownership.version(browser.browserId),
-      frames: ctx.framesOf(browser).map(frame => [frame.id, frame.currentWindowGlobal]),
+      frames: ctx.framesOf(browser).map((frame) => [frame.id, frame.currentWindowGlobal]),
     };
   }
 
@@ -294,16 +333,47 @@ export function pageQueries(ctx) {
     ctx.assertSiteAccess(browser);
     ctx.operation?.check();
     ctx.ownership.check(ctx.controlledSource(browser).browserId, ctx.activeSession);
-    return ctx.text(ctx.readSnapshots.render({ session: ctx.activeSession, tabId: browser.browserId,
-      scope, context, currentContext: readContext(browser), text: value, diff, since }));
+    return ctx.text(
+      ctx.readSnapshots.render({
+        session: ctx.activeSession,
+        tabId: browser.browserId,
+        scope,
+        context,
+        currentContext: readContext(browser),
+        text: value,
+        diff,
+        since,
+      }),
+    );
   }
 
   // Single-line JSON: indentation costs tokens on every call.
-  const text = t => [{ type: "text", text: ctx.shortRefs(typeof t === "string" ? t : JSON.stringify(t)) }];
+  const text = (t) => [{ type: "text", text: ctx.shortRefs(typeof t === "string" ? t : JSON.stringify(t)) }];
 
   return {
-    pendingListeners, bcById, framesOf, shortRefs, longRef, frameOf, queryRef, toPagePoint, toTop, deepest,
-    focusedFrame, target, openDialog, describeDialog, throwIfDialog, showDialog, query, backgroundQuery,
-    acrossFrames, expandFrames, waitForLoad, readContext, readOutput, text,
+    pendingListeners,
+    bcById,
+    framesOf,
+    shortRefs,
+    longRef,
+    frameOf,
+    queryRef,
+    toPagePoint,
+    toTop,
+    deepest,
+    focusedFrame,
+    target,
+    openDialog,
+    describeDialog,
+    throwIfDialog,
+    showDialog,
+    query,
+    backgroundQuery,
+    acrossFrames,
+    expandFrames,
+    waitForLoad,
+    readContext,
+    readOutput,
+    text,
   };
 }

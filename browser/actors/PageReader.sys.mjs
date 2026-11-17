@@ -13,38 +13,94 @@
 export const MAX_NAME = 100;
 
 const LANDMARKS = {
-  NAV: "navigation", MAIN: "main", HEADER: "banner", FOOTER: "contentinfo", ASIDE: "complementary",
-  FORM: "form", DIALOG: "dialog", SECTION: "region",
+  NAV: "navigation",
+  MAIN: "main",
+  HEADER: "banner",
+  FOOTER: "contentinfo",
+  ASIDE: "complementary",
+  FORM: "form",
+  DIALOG: "dialog",
+  SECTION: "region",
 };
 const STRUCTURE = {
-  H1: "heading", H2: "heading", H3: "heading", H4: "heading", H5: "heading", H6: "heading",
-  UL: "list", OL: "list", LI: "listitem", TABLE: "table", TR: "row", TD: "cell", TH: "columnheader",
-  P: "paragraph", IMG: "img", LABEL: "label", IFRAME: "iframe",
+  H1: "heading",
+  H2: "heading",
+  H3: "heading",
+  H4: "heading",
+  H5: "heading",
+  H6: "heading",
+  UL: "list",
+  OL: "list",
+  LI: "listitem",
+  TABLE: "table",
+  TR: "row",
+  TD: "cell",
+  TH: "columnheader",
+  P: "paragraph",
+  IMG: "img",
+  LABEL: "label",
+  IFRAME: "iframe",
 };
 export const INPUT_ROLES = {
-  button: "button", submit: "button", reset: "button", image: "button", checkbox: "checkbox",
-  radio: "radio", range: "slider", search: "searchbox", file: "button", color: "button",
+  button: "button",
+  submit: "button",
+  reset: "button",
+  image: "button",
+  checkbox: "checkbox",
+  radio: "radio",
+  range: "slider",
+  search: "searchbox",
+  file: "button",
+  color: "button",
 };
 export const INTERACTIVE_ROLES = new Set([
-  "button", "link", "textbox", "searchbox", "checkbox", "radio", "combobox", "listbox", "option",
-  "slider", "switch", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "spinbutton", "treeitem",
+  "button",
+  "link",
+  "textbox",
+  "searchbox",
+  "checkbox",
+  "radio",
+  "combobox",
+  "listbox",
+  "option",
+  "slider",
+  "switch",
+  "tab",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "spinbutton",
+  "treeitem",
 ]);
 export const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD", "META", "LINK"]);
 export const TEXT_CONTAINERS = new Set(["paragraph", "listitem", "cell", "label"]);
-export const CONTROL_SELECTOR = "a[href], button, input, select, textarea, summary, [role], [contenteditable], [tabindex]";
+export const CONTROL_SELECTOR =
+  "a[href], button, input, select, textarea, summary, [role], [contenteditable], [tabindex]";
 
 // Roles named by their content. The text of structural elements (list items, cells,
 // paragraphs) goes on the lines below instead, or it would repeat the name of a link inside.
 export const NAME_FROM_CONTENT = new Set([
-  "button", "link", "heading", "tab", "menuitem", "option", "columnheader", "treeitem", "switch",
-  "checkbox", "radio",
+  "button",
+  "link",
+  "heading",
+  "tab",
+  "menuitem",
+  "option",
+  "columnheader",
+  "treeitem",
+  "switch",
+  "checkbox",
+  "radio",
 ]);
 
-export const clean = s => (s ?? "").replace(/\s+/g, " ").trim();
+export const clean = (s) => (s ?? "").replace(/\s+/g, " ").trim();
 export const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
-export const normalize = s => clean(s).toLocaleLowerCase("tr");
+export const normalize = (s) => clean(s).toLocaleLowerCase("tr");
 // Everything but letters and digits separates words: "package.json" → ["package", "json"]
-export const tokens = s => normalize(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+export const tokens = (s) =>
+  normalize(s)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
 
 export function roleOf(el) {
   const explicit = el.getAttribute("role")?.split(/\s+/)[0];
@@ -70,7 +126,8 @@ export function roleOf(el) {
   if (el.isContentEditable && !el.parentElement?.isContentEditable) return "textbox";
   if (LANDMARKS[tag]) {
     // section and form are landmarks only when named
-    if ((tag === "SECTION" || tag === "FORM") && !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby")) return "";
+    if ((tag === "SECTION" || tag === "FORM") && !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby"))
+      return "";
     return LANDMARKS[tag];
   }
   if (STRUCTURE[tag]) return STRUCTURE[tag];
@@ -82,7 +139,10 @@ export function roleOf(el) {
 export function accessibleName(el, doc) {
   const labelledby = el.getAttribute("aria-labelledby");
   if (labelledby) {
-    const text = labelledby.split(/\s+/).map(id => doc.getElementById(id)?.innerText ?? "").join(" ");
+    const text = labelledby
+      .split(/\s+/)
+      .map((id) => doc.getElementById(id)?.innerText ?? "")
+      .join(" ");
     if (clean(text)) return truncate(clean(text), MAX_NAME);
   }
   const aria = el.getAttribute("aria-label");
@@ -91,7 +151,8 @@ export function accessibleName(el, doc) {
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     const label = el.labels?.[0];
     if (label && clean(label.innerText)) return truncate(clean(label.innerText), MAX_NAME);
-    if (tag === "INPUT" && ["button", "submit", "reset"].includes(el.type) && el.value) return truncate(el.value, MAX_NAME);
+    if (tag === "INPUT" && ["button", "submit", "reset"].includes(el.type) && el.value)
+      return truncate(el.value, MAX_NAME);
     if (el.getAttribute("placeholder")) return truncate(clean(el.getAttribute("placeholder")), MAX_NAME);
   }
   if (tag === "IMG" || (tag === "INPUT" && el.type === "image")) {
@@ -151,7 +212,9 @@ export const MAX_TREE = 50000;
 
 export class PageReader {
   // env: { document(), window(), ref(el), element(ref), L }
-  constructor(env) { this.env = env; }
+  constructor(env) {
+    this.env = env;
+  }
 
   // bare: tree lines only, for a subframe (the parent adds title and URL)
   readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false }) {
@@ -237,7 +300,12 @@ export class PageReader {
     if (tag === "SELECT") {
       const opt = el.selectedOptions?.[0];
       if (opt) parts.push(`value="${truncate(clean(opt.text), MAX_NAME)}"`);
-      parts.push(`options=[${[...el.options].slice(0, 20).map(o => `"${truncate(clean(o.text), 40)}"`).join(", ")}${el.options.length > 20 ? ", …" : ""}]`);
+      parts.push(
+        `options=[${[...el.options]
+          .slice(0, 20)
+          .map((o) => `"${truncate(clean(o.text), 40)}"`)
+          .join(", ")}${el.options.length > 20 ? ", …" : ""}]`,
+      );
     }
     if (el.isContentEditable && role === "textbox") parts.push(`value="${truncate(clean(el.innerText), MAX_NAME)}"`);
     if (el.disabled || el.getAttribute("aria-disabled") === "true") parts.push("disabled");
@@ -264,9 +332,17 @@ export class PageReader {
       if (!role || !isVisible(el)) continue;
       const name = accessibleName(el, doc);
       const haystack = tokens(
-        [name, el.getAttribute("placeholder"), el.getAttribute("title"), el.id, el.getAttribute("name"), el.getAttribute("href"), role].join(" ")
+        [
+          name,
+          el.getAttribute("placeholder"),
+          el.getAttribute("title"),
+          el.id,
+          el.getAttribute("name"),
+          el.getAttribute("href"),
+          role,
+        ].join(" "),
       );
-      const hits = words.filter(w => haystack.some(t => t.startsWith(w))).length;
+      const hits = words.filter((w) => haystack.some((t) => t.startsWith(w))).length;
       if (!hits) continue;
       let score = hits / words.length;
       // Interactive elements rank above exact name matches (the link, not the cell around it).
@@ -285,16 +361,16 @@ export class PageReader {
   // wait_for: is the text and/or selector visible in this frame
   check({ text, selector }) {
     const doc = this.env.document();
-    const has = el => !text || normalize(el.innerText ?? "").includes(normalize(text));
+    const has = (el) => !text || normalize(el.innerText ?? "").includes(normalize(text));
     if (selector) {
-      return [...doc.querySelectorAll(selector)].some(el => isVisible(el) && has(el));
+      return [...doc.querySelectorAll(selector)].some((el) => isVisible(el) && has(el));
     }
     return !!doc.body && has(doc.body);
   }
 
   // watch change: the text of the first visible element matching the selector (or null)
   sample({ selector }) {
-    const el = [...this.env.document().querySelectorAll(selector)].find(el => isVisible(el));
+    const el = [...this.env.document().querySelectorAll(selector)].find((el) => isVisible(el));
     return el ? truncate(clean(el.innerText ?? el.textContent ?? ""), 500) : null;
   }
 

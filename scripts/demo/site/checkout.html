@@ -1,19 +1,49 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>Checkout — Brew & Bean</title><link rel="stylesheet" href="style.css">
-<header><div class="logo">Brew <span>&</span> Bean</div><nav><a href="index.html">Shop</a></nav></header>
-<div class="wrap"><form class="panel" id="f" action="done.html"><h2>Delivery</h2>
-<label for="name">Full name</label><input type="text" id="name" name="name" placeholder="Jane Doe">
-<label for="email">Email</label><input type="email" id="email" name="email" placeholder="jane@example.com">
-<label for="addr">Address</label><input type="text" id="addr" name="addr" placeholder="Street, city">
-<label>Delivery</label><div class="options"><label><input type="radio" name="ship" value="std" checked> Standard · free</label><label><input type="radio" name="ship" value="exp" id="exp"> Express · $6</label></div>
-<label for="note">Gift note</label><textarea id="note" name="note" rows="2" placeholder="Optional"></textarea>
-</form>
-<div class="panel"><h2>Your order</h2><div id="lines"></div><div class="line total"><span>Total</span><span id="total">$0</span></div>
-<iframe id="pay" title="Payment"></iframe></div></div>
-<script>
-const cart = JSON.parse(localStorage.cart || "[]"); let sum = cart.reduce((a, b) => a + b.price, 0);
-document.getElementById("lines").innerHTML = cart.map(i => `<div class="line"><span>${i.name}</span><span>$${i.price}</span></div>`).join("");
-const total = () => sum + (document.getElementById("exp").checked ? 6 : 0);
-const show = () => { document.getElementById("total").textContent = "$" + total(); document.getElementById("pay").src = `http://127.0.0.1:8765/pay.html?amount=${total()}`; };
-for (const r of document.querySelectorAll("input[name=ship]")) r.onchange = show; show();
-addEventListener("message", e => { if (e.data === "paid") { localStorage.cart = "[]"; location.href = "done.html"; } });
-</script></html>
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Checkout — Brew & Bean</title
+  ><link rel="stylesheet" href="style.css" />
+  <header>
+    <div class="logo">Brew <span>&</span> Bean</div>
+    <nav><a href="index.html">Shop</a></nav>
+  </header>
+  <div class="wrap">
+    <form class="panel" id="f" action="done.html">
+      <h2>Delivery</h2>
+      <label for="name">Full name</label><input type="text" id="name" name="name" placeholder="Jane Doe" />
+      <label for="email">Email</label><input type="email" id="email" name="email" placeholder="jane@example.com" />
+      <label for="addr">Address</label><input type="text" id="addr" name="addr" placeholder="Street, city" />
+      <label>Delivery</label>
+      <div class="options">
+        <label><input type="radio" name="ship" value="std" checked /> Standard · free</label
+        ><label><input type="radio" name="ship" value="exp" id="exp" /> Express · $6</label>
+      </div>
+      <label for="note">Gift note</label><textarea id="note" name="note" rows="2" placeholder="Optional"></textarea>
+    </form>
+    <div class="panel">
+      <h2>Your order</h2>
+      <div id="lines"></div>
+      <div class="line total"><span>Total</span><span id="total">$0</span></div>
+      <iframe id="pay" title="Payment"></iframe>
+    </div>
+  </div>
+  <script>
+    const cart = JSON.parse(localStorage.cart || "[]");
+    let sum = cart.reduce((a, b) => a + b.price, 0);
+    document.getElementById("lines").innerHTML = cart
+      .map((i) => `<div class="line"><span>${i.name}</span><span>$${i.price}</span></div>`)
+      .join("");
+    const total = () => sum + (document.getElementById("exp").checked ? 6 : 0);
+    const show = () => {
+      document.getElementById("total").textContent = "$" + total();
+      document.getElementById("pay").src = `http://127.0.0.1:8765/pay.html?amount=${total()}`;
+    };
+    for (const r of document.querySelectorAll("input[name=ship]")) r.onchange = show;
+    show();
+    addEventListener("message", (e) => {
+      if (e.data === "paid") {
+        localStorage.cart = "[]";
+        location.href = "done.html";
+      }
+    });
+  </script>
+</html>

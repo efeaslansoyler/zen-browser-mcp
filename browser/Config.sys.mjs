@@ -47,11 +47,15 @@ export function config(ctx) {
     ctx.island?.setMode(current.mode);
   }
 
-  const hostOf = browser => {
-    try { return browser.currentURI.host; } catch { return ""; }
+  const hostOf = (browser) => {
+    try {
+      return browser.currentURI.host;
+    } catch {
+      return "";
+    }
   };
-  const ruleFor = host => ctx.siteRule(host, ctx.readConfig().sites);
-  const isSensitive = host => ctx.ruleFor(host) === "ask";
+  const ruleFor = (host) => ctx.siteRule(host, ctx.readConfig().sites);
+  const isSensitive = (host) => ctx.ruleFor(host) === "ask";
 
   function assertSiteHost(host) {
     if (ctx.ruleFor(host) === "block") throw new Error(`Site access blocked by user rule: ${host}`);
@@ -59,7 +63,9 @@ export function config(ctx) {
 
   function assertSiteURL(url) {
     let host = "";
-    try { host = Services.io.newURI(url).host; } catch {}
+    try {
+      host = Services.io.newURI(url).host;
+    } catch {}
     assertSiteHost(host);
   }
 
@@ -75,5 +81,15 @@ export function config(ctx) {
     }
   }
 
-  return { readConfig, writeConfig, toggleMode, hostOf, ruleFor, isSensitive, assertSiteHost, assertSiteURL, assertSiteAccess };
+  return {
+    readConfig,
+    writeConfig,
+    toggleMode,
+    hostOf,
+    ruleFor,
+    isSensitive,
+    assertSiteHost,
+    assertSiteURL,
+    assertSiteAccess,
+  };
 }

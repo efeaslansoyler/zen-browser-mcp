@@ -7,11 +7,20 @@ import tseslint from "typescript-eslint";
 
 // Globals of Gecko's privileged scopes (.sys.mjs modules, actors and the autoconfig script).
 const gecko = {
-  Services: "readonly", ChromeUtils: "readonly", Components: "readonly",
-  Cc: "readonly", Ci: "readonly", Cu: "readonly", Cr: "readonly",
-  IOUtils: "readonly", PathUtils: "readonly", BrowsingContext: "readonly",
-  URL: "readonly", TextDecoder: "readonly",
-  JSWindowActorChild: "readonly", JSWindowActorParent: "readonly",
+  Services: "readonly",
+  ChromeUtils: "readonly",
+  Components: "readonly",
+  Cc: "readonly",
+  Ci: "readonly",
+  Cu: "readonly",
+  Cr: "readonly",
+  IOUtils: "readonly",
+  PathUtils: "readonly",
+  BrowsingContext: "readonly",
+  URL: "readonly",
+  TextDecoder: "readonly",
+  JSWindowActorChild: "readonly",
+  JSWindowActorParent: "readonly",
 };
 
 export default defineConfig([
@@ -22,7 +31,10 @@ export default defineConfig([
     rules: {
       // Empty catch blocks are deliberate: best-effort cleanup against a browser that may be gone.
       "no-empty": ["error", { allowEmptyCatch: true }],
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrors: "none", ignoreRestSiblings: true }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", caughtErrors: "none", ignoreRestSiblings: true },
+      ],
       // `any` marks JSON from the browser socket, MCP metadata and tool arguments on purpose.
       "@typescript-eslint/no-explicit-any": "off",
     },

@@ -1,11 +1,40 @@
 // Input tools: mouse/keyboard/screenshots, forms, file upload, page dialogs, navigation.
 // Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
 export function inputTools(ctx) {
-  const { MAX_UPLOAD, assertSiteAccess, browserFor, click, clipboardShortcut, controlledSource,
-    describeDialog, describeTab, focusedFrame, guard, heldFrame, heldModifiers, input, keyName,
-    localFile, longRef, openDialog, operationSleep, ownership, pressKeys, query, queryRef,
-    releaseInputs, rememberInputs, screenshot, screenshotCache, scroll, shortRefs, target, text,
-    typeInFocus, waitForLoad } = ctx;
+  const {
+    MAX_UPLOAD,
+    assertSiteAccess,
+    browserFor,
+    click,
+    clipboardShortcut,
+    controlledSource,
+    describeDialog,
+    describeTab,
+    focusedFrame,
+    guard,
+    heldFrame,
+    heldModifiers,
+    input,
+    keyName,
+    localFile,
+    longRef,
+    openDialog,
+    operationSleep,
+    ownership,
+    pressKeys,
+    query,
+    queryRef,
+    releaseInputs,
+    rememberInputs,
+    screenshot,
+    screenshotCache,
+    scroll,
+    shortRefs,
+    target,
+    text,
+    typeInFocus,
+    waitForLoad,
+  } = ctx;
   return {
     async navigate({ url, tabId }) {
       const browser = browserFor(tabId);
@@ -26,7 +55,7 @@ export function inputTools(ctx) {
 
     async computer(args) {
       const browser = browserFor(args.tabId);
-      const need = key => {
+      const need = (key) => {
         if (args[key] == null) throw new Error(`${args.action} needs ${key}.`);
         return args[key];
       };
@@ -41,7 +70,12 @@ export function inputTools(ctx) {
           }
           if (args.if_changed) {
             const source = controlledSource(browser);
-            const context = [browser.browsingContext.currentWindowGlobal, ownership.version(source.browserId), args.scale ?? 1, !!args.annotate];
+            const context = [
+              browser.browsingContext.currentWindowGlobal,
+              ownership.version(source.browserId),
+              args.scale ?? 1,
+              !!args.annotate,
+            ];
             if (screenshotCache.unchanged(`${ctx.activeSession}:${browser.browserId}`, context, shot.data)) {
               return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
             }
@@ -50,20 +84,39 @@ export function inputTools(ctx) {
           const dialog = openDialog(browser);
           return [
             { type: "image", data: shot.data, mimeType: "image/jpeg" },
-            { type: "text", text: `${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}` },
+            {
+              type: "text",
+              text: `${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}`,
+            },
           ];
         }
         case "left_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), { ...args, ref: args.ref, modifiers: args.text });
+          await click(browser, await target(browser, { ...args, forClick: true }), {
+            ...args,
+            ref: args.ref,
+            modifiers: args.text,
+          });
           break;
         case "right_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, button: 2, modifiers: args.text });
+          await click(browser, await target(browser, { ...args, forClick: true }), {
+            ref: args.ref,
+            button: 2,
+            modifiers: args.text,
+          });
           break;
         case "double_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, count: 2, modifiers: args.text });
+          await click(browser, await target(browser, { ...args, forClick: true }), {
+            ref: args.ref,
+            count: 2,
+            modifiers: args.text,
+          });
           break;
         case "triple_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), { ref: args.ref, count: 3, modifiers: args.text });
+          await click(browser, await target(browser, { ...args, forClick: true }), {
+            ref: args.ref,
+            count: 3,
+            modifiers: args.text,
+          });
           break;
         case "hover": {
           const [x, y] = await target(browser, args);
@@ -87,10 +140,18 @@ export function inputTools(ctx) {
         case "key_down":
         case "key_up": {
           const key = need("text");
-          if (key.includes("+") || /\s/.test(key)) throw new Error("key_down/key_up accept a single key; hold modifiers separately.");
-          if (args.action === "key_down" && clipboardShortcut({ key: keyName(key), mods: heldModifiers(browser) })) throw new Error("Use clipboard or key for clipboard shortcuts so consent can be requested.");
-          const frame = heldFrame(browser) || await focusedFrame(browser);
-          const result = await query(browser, "input", { kind: args.action, keys: [{ key: keyName(key), mods: {} }], hold_ms: args.hold_ms }, 30000, frame);
+          if (key.includes("+") || /\s/.test(key))
+            throw new Error("key_down/key_up accept a single key; hold modifiers separately.");
+          if (args.action === "key_down" && clipboardShortcut({ key: keyName(key), mods: heldModifiers(browser) }))
+            throw new Error("Use clipboard or key for clipboard shortcuts so consent can be requested.");
+          const frame = heldFrame(browser) || (await focusedFrame(browser));
+          const result = await query(
+            browser,
+            "input",
+            { kind: args.action, keys: [{ key: keyName(key), mods: {} }], hold_ms: args.hold_ms },
+            30000,
+            frame,
+          );
           rememberInputs(browser, frame, result.value, args.hold_ms);
           break;
         }
@@ -101,12 +162,25 @@ export function inputTools(ctx) {
         }
         case "mouse_down": {
           const [x, y] = await target(browser, { ...args, forClick: true });
-          await input(browser, { ...args, kind: "mouse_down", x, y, ref: args.ref && longRef(args.ref), button: { left: 0, middle: 1, right: 2 }[args.button || "left"] });
+          await input(browser, {
+            ...args,
+            kind: "mouse_down",
+            x,
+            y,
+            ref: args.ref && longRef(args.ref),
+            button: { left: 0, middle: 1, right: 2 }[args.button || "left"],
+          });
           break;
         }
         case "mouse_up": {
-          const frame = heldFrame(browser) || await focusedFrame(browser);
-          const result = await query(browser, "input", { kind: "mouse_up", button: { left: 0, middle: 1, right: 2 }[args.button || "left"] }, 30000, frame);
+          const frame = heldFrame(browser) || (await focusedFrame(browser));
+          const result = await query(
+            browser,
+            "input",
+            { kind: "mouse_up", button: { left: 0, middle: 1, right: 2 }[args.button || "left"] },
+            30000,
+            frame,
+          );
           rememberInputs(browser, frame, result.value);
           break;
         }
@@ -142,7 +216,9 @@ export function inputTools(ctx) {
         total += file.fileSize;
         if (total > MAX_UPLOAD) throw new Error(`Files exceed ${MAX_UPLOAD / 1048576} MB in total.`);
         let type = "application/octet-stream";
-        try { type = mime.getTypeFromFile(file); } catch {}
+        try {
+          type = mime.getTypeFromFile(file);
+        } catch {}
         files.push({ name: file.leafName, type, lastModified: file.lastModifiedTime, bytes: await IOUtils.read(path) });
       }
       const { value } = await queryRef(browser, "file_upload", { ref: longRef(ref), files }, 60000);
@@ -162,7 +238,9 @@ export function inputTools(ctx) {
       if (accept) dialog.acceptDialog();
       else dialog.cancelDialog();
       await operationSleep(200);
-      return text(`${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`);
+      return text(
+        `${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`,
+      );
     },
   };
 }

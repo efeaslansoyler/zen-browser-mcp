@@ -58,17 +58,38 @@ export function findBrowsers(): Browser[] {
   const home = os.homedir();
   const dirs: string[] = [];
   if (process.platform === "darwin") {
-    for (const app of ["Zen", "Zen Browser", "Firefox", "Firefox Developer Edition", "Firefox Nightly", "LibreWolf", "Floorp", "Waterfox"]) {
+    for (const app of [
+      "Zen",
+      "Zen Browser",
+      "Firefox",
+      "Firefox Developer Edition",
+      "Firefox Nightly",
+      "LibreWolf",
+      "Floorp",
+      "Waterfox",
+    ]) {
       for (const base of ["/Applications", path.join(home, "Applications")]) {
         dirs.push(path.join(base, `${app}.app`, "Contents", "Resources"));
       }
     }
   } else {
     dirs.push(
-      "/opt/zen-browser-bin", "/opt/zen-browser", "/opt/zen", "/usr/lib/zen-browser", "/usr/lib64/zen-browser",
+      "/opt/zen-browser-bin",
+      "/opt/zen-browser",
+      "/opt/zen",
+      "/usr/lib/zen-browser",
+      "/usr/lib64/zen-browser",
       path.join(home, ".tarball-installations", "zen"),
-      "/usr/lib/firefox", "/usr/lib64/firefox", "/opt/firefox", "/usr/lib/firefox-developer-edition",
-      "/usr/lib/librewolf", "/opt/librewolf", "/opt/floorp", "/usr/lib/floorp", "/opt/waterfox", "/usr/lib/waterfox",
+      "/usr/lib/firefox",
+      "/usr/lib64/firefox",
+      "/opt/firefox",
+      "/usr/lib/firefox-developer-edition",
+      "/usr/lib/librewolf",
+      "/opt/librewolf",
+      "/opt/floorp",
+      "/usr/lib/floorp",
+      "/opt/waterfox",
+      "/usr/lib/waterfox",
     );
     // executables on PATH (usually links into the installation folder)
     for (const bin of ["zen-browser", "zen", "firefox", "librewolf", "floorp", "waterfox"]) {
@@ -84,7 +105,11 @@ export function findBrowsers(): Browser[] {
   const found: Browser[] = [];
   for (const dir of dirs) {
     let real: string;
-    try { real = fs.realpathSync(dir); } catch { continue; }
+    try {
+      real = fs.realpathSync(dir);
+    } catch {
+      continue;
+    }
     if (seen.has(real)) continue;
     seen.add(real);
     const browser = browserAt(real);
@@ -97,7 +122,10 @@ export function findBrowsers(): Browser[] {
 // Flatpak/Snap installations are read-only: no autoconfig possible
 export function unsupportedInstalls(): string[] {
   const out: string[] = [];
-  for (const [id, label] of [["app.zen_browser.zen", "Zen (Flatpak)"], ["org.mozilla.firefox", "Firefox (Flatpak)"]]) {
+  for (const [id, label] of [
+    ["app.zen_browser.zen", "Zen (Flatpak)"],
+    ["org.mozilla.firefox", "Firefox (Flatpak)"],
+  ]) {
     if (spawnSync("flatpak", ["info", id], { stdio: "ignore" }).status === 0) out.push(label);
   }
   if (fs.existsSync("/snap/firefox")) out.push("Firefox (Snap)");
@@ -114,10 +142,15 @@ const PREF = (name: string) => new RegExp(`pref\\(\\s*["']${name.replace(/\./g, 
 function existingAutoconfig(dir: string) {
   const prefsDir = path.join(dir, "defaults", "pref");
   let files: string[] = [];
-  try { files = fs.readdirSync(prefsDir).filter((f) => f.endsWith(".js")); } catch {}
+  try {
+    files = fs.readdirSync(prefsDir).filter((f) => f.endsWith(".js"));
+  } catch {}
   for (const f of files) {
     const text = fs.readFileSync(path.join(prefsDir, f), "utf8");
-    const filename = PREF("general.config.filename").exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "");
+    const filename = PREF("general.config.filename")
+      .exec(text)?.[1]
+      ?.trim()
+      .replace(/^["']|["']$/g, "");
     if (!filename) continue;
     return {
       cfg: path.join(dir, filename),
@@ -132,7 +165,11 @@ export function loaderStatus(dir: string): "installed" | "legacy" | "missing" {
   const existing = existingAutoconfig(dir);
   if (!existing) return "missing";
   let text: string;
-  try { text = fs.readFileSync(existing.cfg, "utf8"); } catch { return "missing"; }
+  try {
+    text = fs.readFileSync(existing.cfg, "utf8");
+  } catch {
+    return "missing";
+  }
   if (text.includes(BEGIN)) return "installed";
   return text.includes(LEGACY) ? "legacy" : "missing";
 }
@@ -154,24 +191,33 @@ function planInstall(dir: string): Plan {
     };
   }
   if (existing.obscure !== "0") {
-    throw new Error(L(
-      `The existing autoconfig (${existing.cfg}) is obfuscated (general.config.obscure_value is not 0); add the loader by hand.`,
-      `Mevcut autoconfig (${existing.cfg}) şifreli (general.config.obscure_value 0 değil); yükleyiciyi elle ekle.`,
-    ));
+    throw new Error(
+      L(
+        `The existing autoconfig (${existing.cfg}) is obfuscated (general.config.obscure_value is not 0); add the loader by hand.`,
+        `Mevcut autoconfig (${existing.cfg}) şifreli (general.config.obscure_value 0 değil); yükleyiciyi elle ekle.`,
+      ),
+    );
   }
   if (existing.sandbox !== "false") {
-    throw new Error(L(
-      `The existing autoconfig runs sandboxed (general.config.sandbox_enabled is not false), so ${PACKAGE} can't load from it.`,
-      `Mevcut autoconfig sandbox'ta çalışıyor (general.config.sandbox_enabled false değil); ${PACKAGE} oradan yüklenemez.`,
-    ));
+    throw new Error(
+      L(
+        `The existing autoconfig runs sandboxed (general.config.sandbox_enabled is not false), so ${PACKAGE} can't load from it.`,
+        `Mevcut autoconfig sandbox'ta çalışıyor (general.config.sandbox_enabled false değil); ${PACKAGE} oradan yüklenemez.`,
+      ),
+    );
   }
   let text = "// autoconfig (the first line is skipped)\n";
-  try { text = fs.readFileSync(existing.cfg, "utf8"); } catch {}
+  try {
+    text = fs.readFileSync(existing.cfg, "utf8");
+  } catch {}
   if (text.includes(BEGIN)) {
     const start = text.indexOf(BEGIN);
     const end = text.indexOf(END, start);
     const after = end < 0 ? text.length : end + END.length + 1;
-    return { status: "update", writes: [{ file: existing.cfg, content: text.slice(0, start) + block + text.slice(after) }] };
+    return {
+      status: "update",
+      writes: [{ file: existing.cfg, content: text.slice(0, start) + block + text.slice(after) }],
+    };
   }
   if (text.includes(LEGACY)) return { status: "legacy", writes: [] };
   return { status: "append", writes: [{ file: existing.cfg, content: text.replace(/\n*$/, "\n\n") + block }] };
@@ -187,7 +233,7 @@ function planUninstall(dir: string): string[] | { file: string; content: string 
   if (start < 0) return [];
   const end = text.indexOf(END, start);
   const after = end < 0 ? text.length : end + END.length + 1;
-  return [{ file: existing.cfg, content: (text.slice(0, start).replace(/\n+$/, "\n") + text.slice(after)) }];
+  return [{ file: existing.cfg, content: text.slice(0, start).replace(/\n+$/, "\n") + text.slice(after) }];
 }
 
 // ---- writing files: directly, or with sudo ----
@@ -204,7 +250,12 @@ function writeFiles(writes: { file: string; content: string }[]) {
     }
   }
   if (!needSudo.length) return;
-  console.log(L("The browser folder belongs to root; sudo will ask for your password.", "Tarayıcı klasörü root'un; sudo şifreni soracak."));
+  console.log(
+    L(
+      "The browser folder belongs to root; sudo will ask for your password.",
+      "Tarayıcı klasörü root'un; sudo şifreni soracak.",
+    ),
+  );
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `${NAME}-`));
   try {
     for (const [i, w] of needSudo.entries()) {
@@ -224,7 +275,8 @@ function removeFiles(files: string[]) {
       fs.rmSync(f);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
-      if (spawnSync("sudo", ["rm", "-f", f], { stdio: "inherit" }).status !== 0) throw new Error(L(`Could not remove ${f}.`, `${f} silinemedi.`), { cause: e });
+      if (spawnSync("sudo", ["rm", "-f", f], { stdio: "inherit" }).status !== 0)
+        throw new Error(L(`Could not remove ${f}.`, `${f} silinemedi.`), { cause: e });
     }
   }
 }
@@ -233,12 +285,20 @@ function removeFiles(files: string[]) {
 
 // a symlinked DATA_DIR is a development setup: left alone
 const isDevLink = () => {
-  try { return fs.lstatSync(DATA_DIR).isSymbolicLink(); } catch { return false; }
+  try {
+    return fs.lstatSync(DATA_DIR).isSymbolicLink();
+  } catch {
+    return false;
+  }
 };
 
 export function installedVersion(): string | null {
   if (isDevLink()) return "dev";
-  try { return fs.readFileSync(path.join(DATA_DIR, ".version"), "utf8").trim(); } catch { return null; }
+  try {
+    return fs.readFileSync(path.join(DATA_DIR, ".version"), "utf8").trim();
+  } catch {
+    return null;
+  }
 }
 
 function copyBrowserFiles() {
@@ -267,19 +327,34 @@ async function chooseBrowsers(args: string[]): Promise<Browser[]> {
   if (flag >= 0) {
     const dir = args[flag + 1];
     const browser = dir && browserAt(path.resolve(dir.replace(/^~/, os.homedir())));
-    if (!browser) throw new Error(L(`No Firefox-based browser installation at ${dir} (application.ini not found).`, `${dir} bir Firefox tabanlı tarayıcı kurulumu değil (application.ini yok).`));
+    if (!browser)
+      throw new Error(
+        L(
+          `No Firefox-based browser installation at ${dir} (application.ini not found).`,
+          `${dir} bir Firefox tabanlı tarayıcı kurulumu değil (application.ini yok).`,
+        ),
+      );
     return [browser];
   }
   const found = findBrowsers();
   if (!found.length) {
     const flatpak = unsupportedInstalls();
     throw new Error(
-      L("No supported browser installation found. Pass its folder with --browser <dir> (the one containing application.ini).",
-        "Desteklenen bir tarayıcı kurulumu bulunamadı. Klasörünü --browser <klasör> ile ver (application.ini'nin olduğu klasör).") +
-      (flatpak.length ? "\n" + L(`Flatpak/Snap installations can't be supported (read-only): ${flatpak.join(", ")}`, `Flatpak/Snap kurulumları desteklenemiyor (salt okunur): ${flatpak.join(", ")}`) : ""),
+      L(
+        "No supported browser installation found. Pass its folder with --browser <dir> (the one containing application.ini).",
+        "Desteklenen bir tarayıcı kurulumu bulunamadı. Klasörünü --browser <klasör> ile ver (application.ini'nin olduğu klasör).",
+      ) +
+        (flatpak.length
+          ? "\n" +
+            L(
+              `Flatpak/Snap installations can't be supported (read-only): ${flatpak.join(", ")}`,
+              `Flatpak/Snap kurulumları desteklenemiyor (salt okunur): ${flatpak.join(", ")}`,
+            )
+          : ""),
     );
   }
-  if (found.length === 1 || !process.stdin.isTTY || args.includes("--all")) return args.includes("--all") ? found : [found[0]];
+  if (found.length === 1 || !process.stdin.isTTY || args.includes("--all"))
+    return args.includes("--all") ? found : [found[0]];
   console.log(L("Found these browsers:", "Bulunan tarayıcılar:"));
   found.forEach((b, i) => console.log(`  ${i + 1}. ${b.name}  (${b.dir})`));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -299,16 +374,27 @@ export async function install(args: string[]) {
       new: L("added an autoconfig loader", "autoconfig yükleyicisi eklendi"),
       append: L("added a block to the existing autoconfig", "mevcut autoconfig'e blok eklendi"),
       update: L("updated the loader block", "yükleyici bloğu güncellendi"),
-      legacy: L("already loaded by a custom block, left as is", "zaten elle eklenmiş bir blokla yükleniyor, dokunulmadı"),
+      legacy: L(
+        "already loaded by a custom block, left as is",
+        "zaten elle eklenmiş bir blokla yükleniyor, dokunulmadı",
+      ),
     }[plan.status];
     console.log(`✓ ${browser.name}: ${what}`);
   }
-  if (isDevLink()) console.log(L(`✓ ${DATA_DIR} is a symlink (development setup), not touched`, `✓ ${DATA_DIR} bir bağ (geliştirme kurulumu), dokunulmadı`));
+  if (isDevLink())
+    console.log(
+      L(
+        `✓ ${DATA_DIR} is a symlink (development setup), not touched`,
+        `✓ ${DATA_DIR} bir bağ (geliştirme kurulumu), dokunulmadı`,
+      ),
+    );
   else {
     copyBrowserFiles();
     console.log(L(`✓ browser files copied to ${DATA_DIR}`, `✓ tarayıcı dosyaları ${DATA_DIR} klasörüne kopyalandı`));
   }
-  console.log(L(`
+  console.log(
+    L(
+      `
 Next:
   1. Restart the browser (the loader runs at startup).
   2. Add the MCP server to your client:
@@ -316,7 +402,8 @@ Next:
        codex mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}
   3. Optional, to send page elements from the browser to Claude Code (channels, research preview):
        claude --dangerously-load-development-channels server:${SERVER_NAME}
-Check everything with: npx ${PACKAGE} doctor`, `
+Check everything with: npx ${PACKAGE} doctor`,
+      `
 Sırada:
   1. Tarayıcıyı yeniden başlat (yükleyici açılışta çalışır).
   2. MCP sunucusunu istemcine ekle:
@@ -324,7 +411,9 @@ Sırada:
        codex mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}
   3. İsteğe bağlı, tarayıcıdan öğe seçip Claude Code'a göndermek için (channels, araştırma önizlemesi):
        claude --dangerously-load-development-channels server:${SERVER_NAME}
-Hepsini kontrol etmek için: npx ${PACKAGE} doctor`));
+Hepsini kontrol etmek için: npx ${PACKAGE} doctor`,
+    ),
+  );
 }
 
 export async function uninstall(args: string[]) {
@@ -340,6 +429,10 @@ export async function uninstall(args: string[]) {
     fs.rmSync(DATA_DIR, { recursive: true, force: true });
     console.log(L(`✓ ${DATA_DIR} removed`, `✓ ${DATA_DIR} silindi`));
   }
-  console.log(L("Restart the browser to unload it. Settings and the activity log are kept in ~/.config and ~/.local/state.",
-    "Tamamen çıkması için tarayıcıyı yeniden başlat. Ayarlar ve etkinlik günlüğü ~/.config ve ~/.local/state'te kalır."));
+  console.log(
+    L(
+      "Restart the browser to unload it. Settings and the activity log are kept in ~/.config and ~/.local/state.",
+      "Tamamen çıkması için tarayıcıyı yeniden başlat. Ayarlar ve etkinlik günlüğü ~/.config ve ~/.local/state'te kalır.",
+    ),
+  );
 }

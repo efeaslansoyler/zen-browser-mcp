@@ -5,9 +5,13 @@ export function sessionManager(ctx) {
   const GRACE = 5000;
 
   function sessionInfo(id, agent = ctx.activeAgent, cwd = "", title) {
-    if (typeof id !== "string" || !id.trim()) throw new Error("A browser session ID is required. Reconnect the MCP server.");
+    if (typeof id !== "string" || !id.trim())
+      throw new Error("A browser session ID is required. Reconnect the MCP server.");
     let info = ctx.sessions.get(id);
-    if (!info) { info = { id }; ctx.sessions.set(id, info); }
+    if (!info) {
+      info = { id };
+      ctx.sessions.set(id, info);
+    }
     if (cwd) info.project = String(cwd).split("/").filter(Boolean).pop();
     if (title !== undefined) info.title = title || undefined;
     info.agent = ctx.agentTheme(agent);
@@ -19,7 +23,10 @@ export function sessionManager(ctx) {
   // Name shown in menus: the conversation title if there is one (the icon shows the agent),
   // otherwise the agent name and a short ID.
   function sessionName(theme, cwd, title, id) {
-    const project = String(cwd || "").split("/").filter(Boolean).pop();
+    const project = String(cwd || "")
+      .split("/")
+      .filter(Boolean)
+      .pop();
     if (title) {
       const short = title.length > 40 ? title.slice(0, 39).trimEnd() + "…" : title;
       return project ? `${short} · ${project}` : short;
@@ -41,7 +48,8 @@ export function sessionManager(ctx) {
     ctx.releaseInputs(tabId);
     ctx.browserSettings.restoreTab(tabId);
     ctx.extensionPanels.releaseTab(tabId);
-    if (ctx.operation?.tabs?.has(tabId)) ctx.operation.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
+    if (ctx.operation?.tabs?.has(tabId))
+      ctx.operation.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
   }
 
   function endOwnerSession(id) {
@@ -52,12 +60,16 @@ export function sessionManager(ctx) {
     ctx.sessions.delete(id);
     ctx.ownership.removeRequester(id);
     ctx.readSnapshots.clearSession(id);
-    if (ctx.operation?.session === id) ctx.operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
+    if (ctx.operation?.session === id)
+      ctx.operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
     for (const [tabId, owner] of ctx.ownership.owners) {
       if (owner !== id) continue;
       const tab = ctx.findTab(tabId);
       if (tab) ctx.unmark(tab);
-      else { ctx.ownership.release(tabId); ctx.state.tabs.delete(tabId); }
+      else {
+        ctx.ownership.release(tabId);
+        ctx.state.tabs.delete(tabId);
+      }
     }
   }
 
@@ -68,10 +80,13 @@ export function sessionManager(ctx) {
 
   // Ends the session after the grace period unless it reconnected meanwhile.
   function endAfterGrace(id) {
-    ctx.disconnectTimers.set(id, ctx.setTimeout(() => {
-      ctx.disconnectTimers.delete(id);
-      if (!ctx.ownerConnections.has(id)) endOwnerSession(id);
-    }, GRACE));
+    ctx.disconnectTimers.set(
+      id,
+      ctx.setTimeout(() => {
+        ctx.disconnectTimers.delete(id);
+        if (!ctx.ownerConnections.has(id)) endOwnerSession(id);
+      }, GRACE),
+    );
   }
 
   function connectOwnerSession(id, transport, agent, cwd, title) {
@@ -90,7 +105,8 @@ export function sessionManager(ctx) {
     const info = ctx.sessions.get(id);
     if (info) info.disconnected = true;
     ctx.sessionVersions.set(id, (ctx.sessionVersions.get(id) || 0) + 1);
-    if (ctx.operation?.session === id) ctx.operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
+    if (ctx.operation?.session === id)
+      ctx.operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
     // Allow the same MCP process to reconnect after a bridge reload or brief outage.
     endAfterGrace(id);
   }
@@ -110,7 +126,8 @@ export function sessionManager(ctx) {
       if (ctx.ownerConnections.has(info.id)) continue;
       const idle = Date.now() - info.seen;
       const hasTabs = [...ctx.ownership.owners.values()].includes(info.id);
-      if (idle > 24 * 60 * 60 * 1000 || (!info.lifecycle && !hasTabs && idle > 10 * 60 * 1000)) endOwnerSession(info.id);
+      if (idle > 24 * 60 * 60 * 1000 || (!info.lifecycle && !hasTabs && idle > 10 * 60 * 1000))
+        endOwnerSession(info.id);
     }
   }
 
@@ -119,7 +136,9 @@ export function sessionManager(ctx) {
   function closeConnections() {
     for (const connections of ctx.ownerConnections.values()) {
       for (const transport of connections) {
-        try { transport.close(0); } catch {} // NS_OK
+        try {
+          transport.close(0);
+        } catch {} // NS_OK
       }
     }
     ctx.ownerConnections.clear();
@@ -128,7 +147,15 @@ export function sessionManager(ctx) {
   }
 
   return {
-    sessionInfo, sessionName, liveSessions, cancelTabWork, endOwnerSession, connectOwnerSession,
-    disconnectOwnerSession, awaitReconnects, sweepSessions, closeConnections,
+    sessionInfo,
+    sessionName,
+    liveSessions,
+    cancelTabWork,
+    endOwnerSession,
+    connectOwnerSession,
+    disconnectOwnerSession,
+    awaitReconnects,
+    sweepSessions,
+    closeConnections,
   };
 }

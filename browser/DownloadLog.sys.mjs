@@ -16,8 +16,8 @@ export class DownloadLog {
     this.records.nextId ??= 1;
     this.env = env;
     this.view = {
-      onDownloadAdded: download => this.#added(download),
-      onDownloadChanged: download => this.#changed(download),
+      onDownloadAdded: (download) => this.#added(download),
+      onDownloadChanged: (download) => this.#changed(download),
     };
   }
 
@@ -33,7 +33,7 @@ export class DownloadLog {
   }
 
   #added(download) {
-    if (this.records.list.some(r => r.download === download)) return;
+    if (this.records.list.some((r) => r.download === download)) return;
     const browserId = this.#sourceTab(download);
     if (browserId == null) return;
     const record = { id: this.records.nextId++, browserId, download, reported: false };
@@ -45,20 +45,28 @@ export class DownloadLog {
 
   // An event line on state changes and every 10% (every 10 MB if the size is unknown).
   #changed(download) {
-    const record = this.records.list.find(r => r.download === download);
+    const record = this.records.list.find((r) => r.download === download);
     if (!record?.events || record.closed) return;
     const info = DownloadLog.describe(record);
-    const step = info.state !== "downloading" ? -1
-      : download.hasProgress ? Math.floor(download.progress / 10) : Math.floor(download.currentBytes / STEP_BYTES);
+    const step =
+      info.state !== "downloading"
+        ? -1
+        : download.hasProgress
+          ? Math.floor(download.progress / 10)
+          : Math.floor(download.currentBytes / STEP_BYTES);
     if (info.state === record.lastState && step === record.lastStep) return;
     record.lastState = info.state;
     record.lastStep = step;
     const finished = DownloadLog.finished(record);
     if (finished) record.closed = true;
-    this.env.events.append(record.events, async () => {
-      if (finished && info.state === "done") info.sha256 = await DownloadLog.sha256(record);
-      return info;
-    }, { last: finished });
+    this.env.events.append(
+      record.events,
+      async () => {
+        if (finished && info.state === "done") info.sha256 = await DownloadLog.sha256(record);
+        return info;
+      },
+      { last: finished },
+    );
   }
 
   // sha256 is computed once; undefined if the file was moved or deleted
@@ -74,7 +82,7 @@ export class DownloadLog {
         hash.update(bytes, bytes.length);
       }
       const binary = hash.finish(false);
-      record.sha256 = Array.from(binary, c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+      record.sha256 = Array.from(binary, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
     } catch {}
     return record.sha256;
   }
@@ -89,22 +97,42 @@ export class DownloadLog {
     return null;
   }
 
-  forTab(browserId) { return this.records.list.filter(r => r.browserId === browserId); }
+  forTab(browserId) {
+    return this.records.list.filter((r) => r.browserId === browserId);
+  }
 
   // a paused download (cancelled with partial data) doesn't count as finished
-  static finished({ download: d }) { return d.succeeded || !!d.error || (d.canceled && !d.hasPartialData); }
+  static finished({ download: d }) {
+    return d.succeeded || !!d.error || (d.canceled && !d.hasPartialData);
+  }
 
   static describe(record) {
     const d = record.download;
     // during cancel Gecko briefly keeps partial data: don't report "paused" in between
-    const state = d.succeeded ? "done" : d.error ? "failed"
-      : d.canceled ? (d.hasPartialData && !record.canceling ? "paused" : "canceled") : "downloading";
-    const info = { id: record.id, state, url: d.source.url, filename: PathUtils.filename(d.target.path), path: d.target.path };
+    const state = d.succeeded
+      ? "done"
+      : d.error
+        ? "failed"
+        : d.canceled
+          ? d.hasPartialData && !record.canceling
+            ? "paused"
+            : "canceled"
+          : "downloading";
+    const info = {
+      id: record.id,
+      state,
+      url: d.source.url,
+      filename: PathUtils.filename(d.target.path),
+      path: d.target.path,
+    };
     if (d.contentType) info.contentType = d.contentType;
     if (d.succeeded) info.size = d.target.size ?? d.currentBytes;
     else if (state === "downloading" || state === "paused") {
       info.receivedBytes = d.currentBytes;
-      if (d.hasProgress) { info.totalBytes = d.totalBytes; info.progress = d.progress; }
+      if (d.hasProgress) {
+        info.totalBytes = d.totalBytes;
+        info.progress = d.progress;
+      }
     }
     if (d.error) {
       info.error = d.error.becauseBlocked ? `blocked (${d.error.reputationCheckVerdict || "policy"})` : d.error.message;

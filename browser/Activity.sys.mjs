@@ -8,42 +8,64 @@ export function activity(ctx) {
   function describeAction(tool, args, browser, withHost = true) {
     const { L } = ctx;
     let host = "";
-    try { host = browser.currentURI.host; } catch {}
-    const what = {
-      navigate: () => {
-        if (args.url === "back") return L("going back", "geri gidiyor");
-        if (args.url === "forward") return L("going forward", "ileri gidiyor");
-        try { host = Services.uriFixup.getFixupURIInfo(args.url).preferredURI.host; } catch {}
-        return L("opening the page", "sayfayı açıyor");
-      },
-      computer: () => ({
-        screenshot: L("looking at the page", "ekrana bakıyor"), left_click: L("clicking", "tıklıyor"),
-        right_click: L("right-clicking", "sağ tıklıyor"), double_click: L("double-clicking", "çift tıklıyor"),
-        triple_click: L("clicking", "tıklıyor"), hover: L("hovering", "fareyi gezdiriyor"),
-        left_click_drag: L("dragging", "sürüklüyor"), scroll: L("scrolling", "kaydırıyor"),
-        scroll_to: L("scrolling", "kaydırıyor"), type: L("typing", "yazıyor"), key: L("pressing keys", "tuşa basıyor"),
-        wait: L("waiting", "bekliyor"),
-      })[args.action] ?? L("working", "çalışıyor"),
-      read_page: () => L("reading the page", "sayfayı okuyor"),
-      react: () => L("inspecting React components", "React bileşenlerini inceliyor"),
-      accessibility: () => L("checking accessibility", "erişilebilirliği denetliyor"),
-      get_page_text: () => L("reading the page", "sayfayı okuyor"),
-      find: () => L(`looking for "${args.query}"`, `"${args.query}" arıyor`),
-      form_input: () => L("filling in the form", "formu dolduruyor"),
-      file_upload: () => L("uploading a file", "dosya yüklüyor"),
-      javascript_tool: () => L("running code on the page", "sayfada kod çalıştırıyor"),
-      read_console_messages: () => L("reading the console", "konsolu okuyor"),
-      read_network_requests: () => L("checking network requests", "ağ isteklerine bakıyor"),
-      handle_dialog: () => L("answering a dialog", "diyaloğu cevaplıyor"),
-      ask_user: () => L("needs you", "senden bir şey istiyor"),
-      request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
-      tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
-      wait_for: () => L("waiting", "bekliyor"),
-      watch: () => args.action === "stop" ? L("stopping a watch", "izlemeyi bitiriyor") : args.action === "list" ? L("checking watches", "izlemelere bakıyor") : L("starting to watch the page", "sayfayı izlemeye başlıyor"),
-      downloads: () => args.action === "wait" ? L("waiting for a download", "indirmeyi bekliyor") : args.action === "cancel" ? L("canceling a download", "indirmeyi iptal ediyor") : L("checking downloads", "indirmelere bakıyor"),
-      extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
-      clipboard: () => L("requesting clipboard access", "pano erişimi istiyor"),
-    }[tool]?.() ?? L("working", "çalışıyor");
+    try {
+      host = browser.currentURI.host;
+    } catch {}
+    const what =
+      {
+        navigate: () => {
+          if (args.url === "back") return L("going back", "geri gidiyor");
+          if (args.url === "forward") return L("going forward", "ileri gidiyor");
+          try {
+            host = Services.uriFixup.getFixupURIInfo(args.url).preferredURI.host;
+          } catch {}
+          return L("opening the page", "sayfayı açıyor");
+        },
+        computer: () =>
+          ({
+            screenshot: L("looking at the page", "ekrana bakıyor"),
+            left_click: L("clicking", "tıklıyor"),
+            right_click: L("right-clicking", "sağ tıklıyor"),
+            double_click: L("double-clicking", "çift tıklıyor"),
+            triple_click: L("clicking", "tıklıyor"),
+            hover: L("hovering", "fareyi gezdiriyor"),
+            left_click_drag: L("dragging", "sürüklüyor"),
+            scroll: L("scrolling", "kaydırıyor"),
+            scroll_to: L("scrolling", "kaydırıyor"),
+            type: L("typing", "yazıyor"),
+            key: L("pressing keys", "tuşa basıyor"),
+            wait: L("waiting", "bekliyor"),
+          })[args.action] ?? L("working", "çalışıyor"),
+        read_page: () => L("reading the page", "sayfayı okuyor"),
+        react: () => L("inspecting React components", "React bileşenlerini inceliyor"),
+        accessibility: () => L("checking accessibility", "erişilebilirliği denetliyor"),
+        get_page_text: () => L("reading the page", "sayfayı okuyor"),
+        find: () => L(`looking for "${args.query}"`, `"${args.query}" arıyor`),
+        form_input: () => L("filling in the form", "formu dolduruyor"),
+        file_upload: () => L("uploading a file", "dosya yüklüyor"),
+        javascript_tool: () => L("running code on the page", "sayfada kod çalıştırıyor"),
+        read_console_messages: () => L("reading the console", "konsolu okuyor"),
+        read_network_requests: () => L("checking network requests", "ağ isteklerine bakıyor"),
+        handle_dialog: () => L("answering a dialog", "diyaloğu cevaplıyor"),
+        ask_user: () => L("needs you", "senden bir şey istiyor"),
+        request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
+        tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
+        wait_for: () => L("waiting", "bekliyor"),
+        watch: () =>
+          args.action === "stop"
+            ? L("stopping a watch", "izlemeyi bitiriyor")
+            : args.action === "list"
+              ? L("checking watches", "izlemelere bakıyor")
+              : L("starting to watch the page", "sayfayı izlemeye başlıyor"),
+        downloads: () =>
+          args.action === "wait"
+            ? L("waiting for a download", "indirmeyi bekliyor")
+            : args.action === "cancel"
+              ? L("canceling a download", "indirmeyi iptal ediyor")
+              : L("checking downloads", "indirmelere bakıyor"),
+        extensions: () => L("using extension UI", "eklenti arayüzünü kullanıyor"),
+        clipboard: () => L("requesting clipboard access", "pano erişimi istiyor"),
+      }[tool]?.() ?? L("working", "çalışıyor");
     return host && withHost ? `${host} — ${what}` : what;
   }
 
@@ -61,8 +83,11 @@ export function activity(ctx) {
   async function tabHistory(tabId, limit = 15) {
     const { readRecent, formatLine } = ctx.activityView;
     const entries = await readRecent(ctx.activityPath);
-    return entries.filter(e => e.tab === tabId && Date.parse(e.t) >= ctx.browserStart)
-      .slice(-limit).reverse().map(e => formatLine(e, ctx.L));
+    return entries
+      .filter((e) => e.tab === tabId && Date.parse(e.t) >= ctx.browserStart)
+      .slice(-limit)
+      .reverse()
+      .map((e) => formatLine(e, ctx.L));
   }
 
   // Written to a local file and opened in a new tab for the user (never given to an agent).

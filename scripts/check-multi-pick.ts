@@ -1,53 +1,90 @@
 // Live multi-pick through real input and local receipt fixtures; no message reaches an AI chat.
 // Run: node scripts/check-multi-pick.ts. Existing auto mode required; settings unchanged.
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { setTimeout as sleep } from 'node:timers/promises';
-import { call, subscribe, type Content } from '../src/zen.ts';
-const text = (result: Content[]) => result.filter(c => c.type === 'text').map(c => c.text).join('\n');
-const chrome = async (code: string) => JSON.parse(text(await call('chrome_eval', { code })));
-const command = (tool: string, args: object = {}) => call(tool, args, 60_000, { id: 'codex', name: 'Codex' });
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+import { call, subscribe, type Content } from "../src/zen.ts";
+const text = (result: Content[]) =>
+  result
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+const chrome = async (code: string) => JSON.parse(text(await call("chrome_eval", { code })));
+const command = (tool: string, args: object = {}) => call(tool, args, 60_000, { id: "codex", name: "Codex" });
 const token = `multi-pick-${randomUUID()}`;
 const events: { target: string; event: any }[] = [];
 const receivers: ReturnType<typeof subscribe>[] = [];
 let tabId: number | undefined;
-const ids = ['codex', 'claude'].map(name => ({ name, id: `${token}-${name}` }));
+const ids = ["codex", "claude"].map((name) => ({ name, id: `${token}-${name}` }));
 async function until(check: () => Promise<boolean>, message: string) {
-  for (let i = 0; i < 100; i++) { if (await check()) return; await sleep(50); }
+  for (let i = 0; i < 100; i++) {
+    if (await check()) return;
+    await sleep(50);
+  }
   throw new Error(message);
 }
 try {
-  const file = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'zen-mcp/config.json');
-  const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-  assert(config.mode !== 'ask', 'Requires your existing auto mode; settings were not changed.');
-  const before = await chrome('({version:h.version,paused:h.state.paused,picking:!!h.pick})');
-  assert(!before.paused && !before.picking, 'Resume automation and finish/cancel any current selection first.');
-  console.log(text(await call('reload')));
-  await until(async () => { try { return await chrome(`h.version>${before.version}`); } catch { return false; } }, 'Bridge did not reload.');
+  const file = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "zen-mcp/config.json");
+  const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+  assert(config.mode !== "ask", "Requires your existing auto mode; settings were not changed.");
+  const before = await chrome("({version:h.version,paused:h.state.paused,picking:!!h.pick})");
+  assert(!before.paused && !before.picking, "Resume automation and finish/cancel any current selection first.");
+  console.log(text(await call("reload")));
+  await until(async () => {
+    try {
+      return await chrome(`h.version>${before.version}`);
+    } catch {
+      return false;
+    }
+  }, "Bridge did not reload.");
   for (const target of ids) {
-    receivers.push(subscribe(event => { if (event.event === 'channel') events.push({ target: target.id, event }); }, {
-      session: target.id, label: token, agent: { id: target.name, name: target.name }, cwd: process.cwd(), ack: true,
-    }));
-    await until(() => chrome(`h.subscribers.has(${JSON.stringify(target.id)})`), 'Local receipt fixture did not connect.');
+    receivers.push(
+      subscribe(
+        (event) => {
+          if (event.event === "channel") events.push({ target: target.id, event });
+        },
+        {
+          session: target.id,
+          label: token,
+          agent: { id: target.name, name: target.name },
+          cwd: process.cwd(),
+          ack: true,
+        },
+      ),
+    );
+    await until(
+      () => chrome(`h.subscribers.has(${JSON.stringify(target.id)})`),
+      "Local receipt fixture did not connect.",
+    );
   }
-  tabId = JSON.parse(text(await command('tabs_create_mcp'))).tabId;
-  const fixture = 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><title>${token}</title><style>body{font:16px system-ui;padding:35px}.grid{display:grid;grid-template-columns:repeat(5,130px);gap:12px}button{padding:15px}</style><h1>Disposable multi-pick test</h1><div class="grid">${Array.from({ length: 10 }, (_, i) => `<button id="item${i}" onclick="window.pageClicks++">Item ${i}</button>`).join('')}</div><script>window.pageClicks=0</script>`);
-  await command('navigate', { tabId, url: fixture });
-  const tree = text(await command('read_page', { tabId }));
+  tabId = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
+  const fixture =
+    "data:text/html;charset=utf-8," +
+    encodeURIComponent(
+      `<!doctype html><title>${token}</title><style>body{font:16px system-ui;padding:35px}.grid{display:grid;grid-template-columns:repeat(5,130px);gap:12px}button{padding:15px}</style><h1>Disposable multi-pick test</h1><div class="grid">${Array.from({ length: 10 }, (_, i) => `<button id="item${i}" onclick="window.pageClicks++">Item ${i}</button>`).join("")}</div><script>window.pageClicks=0</script>`,
+    );
+  await command("navigate", { tabId, url: fixture });
+  const tree = text(await command("read_page", { tabId }));
   const refs = Array.from({ length: 10 }, (_, i) => {
-    const ref = new RegExp(`button "Item ${i}" \\[([^\\]]+)\\]`).exec(tree)?.[1]; assert(ref, tree); return ref;
+    const ref = new RegExp(`button "Item ${i}" \\[([^\\]]+)\\]`).exec(tree)?.[1];
+    assert(ref, tree);
+    return ref;
   });
   const start = async () => {
-    await chrome(`(() => {const browser=h.findTab(${tabId}).linkedBrowser;h.startPick(browser.ownerDocument.defaultView,{browser});return true;})()`);
-    await until(() => chrome('h.island.pickMode==="picking"'), 'Picker did not start.');
+    await chrome(
+      `(() => {const browser=h.findTab(${tabId}).linkedBrowser;h.startPick(browser.ownerDocument.defaultView,{browser});return true;})()`,
+    );
+    await until(() => chrome('h.island.pickMode==="picking"'), "Picker did not start.");
   };
-  const click = (index: number, shift = true) => command('computer', { tabId, action: 'left_click', ref: refs[index], ...(shift ? { text: 'shift' } : {}) });
-  const key = (key: string) => command('computer', { tabId, action: 'key', text: key });
-  const ready = () => until(() => chrome('h.island.pickMode==="compose" && !h.pick?.preparing'), 'Picker did not reach compose.');
-  const end = () => chrome('(() => {h.endPick();return true;})()');
+  const click = (index: number, shift = true) =>
+    command("computer", { tabId, action: "left_click", ref: refs[index], ...(shift ? { text: "shift" } : {}) });
+  const key = (key: string) => command("computer", { tabId, action: "key", text: key });
+  const ready = () =>
+    until(() => chrome('h.island.pickMode==="compose" && !h.pick?.preparing'), "Picker did not reach compose.");
+  const end = () => chrome("(() => {h.endPick();return true;})()");
   const send = async (target: string, note: string) => {
     await chrome(`(() => {
       const win=h.findTab(${tabId}).ownerDocument.defaultView;
@@ -58,57 +95,96 @@ try {
       el.querySelector('.compose textarea').value=${JSON.stringify(note)};
       el.querySelector('.compose-footer button.primary').click();return true;
     })()`);
-    await until(async () => events.some(item => item.target === target && item.event.note === note), 'Local receipt did not receive the selection.');
-    await until(() => chrome('h.island.pickMode==="sent"'), 'Receipt did not update the island.');
-    return events.find(item => item.target === target && item.event.note === note)!.event;
+    await until(
+      async () => events.some((item) => item.target === target && item.event.note === note),
+      "Local receipt did not receive the selection.",
+    );
+    await until(() => chrome('h.island.pickMode==="sent"'), "Receipt did not update the island.");
+    return events.find((item) => item.target === target && item.event.note === note)!.event;
   };
   for (const target of ids) {
     await start();
-    await click(0); await click(1); await click(0); await click(2); // Toggle first off.
-    await key('Return'); await ready();
-    const selected = await chrome('h.pick.items.map(item=>({selector:item.info.selector,shot:item.shot}))');
-    assert.deepEqual(selected.map((item: any) => item.selector), ['#item1', '#item2']);
+    await click(0);
+    await click(1);
+    await click(0);
+    await click(2); // Toggle first off.
+    await key("Return");
+    await ready();
+    const selected = await chrome("h.pick.items.map(item=>({selector:item.info.selector,shot:item.shot}))");
+    assert.deepEqual(
+      selected.map((item: any) => item.selector),
+      ["#item1", "#item2"],
+    );
     assert(selected.every((item: any) => item.shot && fs.existsSync(item.shot)));
     assert.notEqual(selected[0].shot, selected[1].shot);
     const note = `${token}: align these two controls for ${target.name}`;
     const event = await send(target.id, note);
-    assert.equal(event.meta.element_count, '2');
+    assert.equal(event.meta.element_count, "2");
     assert.equal(event.meta.source_tab, String(tabId));
-    assert.deepEqual(JSON.parse(event.meta.screenshots), selected.map((item: any) => item.shot));
+    assert.deepEqual(
+      JSON.parse(event.meta.screenshots),
+      selected.map((item: any) => item.shot),
+    );
     assert.equal(event.content.split(note).length - 1, 1);
-    assert(event.content.indexOf('#item1') < event.content.indexOf('#item2'));
-    assert.equal(events.filter(item => item.event.note === note).length, 1);
-    console.log(`✓ ${target.name} fixture: trusted Shift-click/toggle/Enter → two contexts/images, shared note, pinned destination and receipt`);
+    assert(event.content.indexOf("#item1") < event.content.indexOf("#item2"));
+    assert.equal(events.filter((item) => item.event.note === note).length, 1);
+    console.log(
+      `✓ ${target.name} fixture: trusted Shift-click/toggle/Enter → two contexts/images, shared note, pinned destination and receipt`,
+    );
   }
-  await start(); await click(0, false); await ready();
-  assert.equal(await chrome('h.pick.items.length'), 1); await end();
-  console.log('✓ Single-click compatibility preserved');
+  await start();
+  await click(0, false);
+  await ready();
+  assert.equal(await chrome("h.pick.items.length"), 1);
+  await end();
+  console.log("✓ Single-click compatibility preserved");
 
   await start();
   for (let i = 0; i < 10; i++) await click(i);
-  await key('Return'); await ready();
-  assert.equal(await chrome('h.pick.items.length'), 8); await end();
-  await start(); await click(0); await click(1); await key('Backspace'); await key('Return'); await ready();
-  assert.equal(await chrome('h.pick.items.length'), 1); await end();
-  await start(); await click(0); await key('Escape');
-  await until(() => chrome('!h.pick'), 'Escape did not cancel all picks.');
-  console.log('✓ Eight-item limit, Backspace and Escape clean up correctly');
+  await key("Return");
+  await ready();
+  assert.equal(await chrome("h.pick.items.length"), 8);
+  await end();
+  await start();
+  await click(0);
+  await click(1);
+  await key("Backspace");
+  await key("Return");
+  await ready();
+  assert.equal(await chrome("h.pick.items.length"), 1);
+  await end();
+  await start();
+  await click(0);
+  await key("Escape");
+  await until(() => chrome("!h.pick"), "Escape did not cancel all picks.");
+  console.log("✓ Eight-item limit, Backspace and Escape clean up correctly");
 
-  await start(); await click(0, false); await ready();
-  await command('navigate', { tabId, url: fixture });
-  const stale = await chrome(`(async()=>{try{await h.sendPick('stale fixture',${JSON.stringify(ids[0].id)});return {error:null};}catch(error){return {error:String(error)};}})()`);
+  await start();
+  await click(0, false);
+  await ready();
+  await command("navigate", { tabId, url: fixture });
+  const stale = await chrome(
+    `(async()=>{try{await h.sendPick('stale fixture',${JSON.stringify(ids[0].id)});return {error:null};}catch(error){return {error:String(error)};}})()`,
+  );
   assert.match(stale.error || "", /page changed/i);
-  assert.equal(events.length, 2, 'Stale selection was delivered.');
-  assert.equal(Number(text(await command('javascript_tool', { tabId, text: 'window.pageClicks' }))), 0);
-  console.log('✓ Navigation blocks stale send; fixture clicks never activate the page');
-  console.log('All live multi-pick checks passed. No message was sent to a real AI session.');
+  assert.equal(events.length, 2, "Stale selection was delivered.");
+  assert.equal(Number(text(await command("javascript_tool", { tabId, text: "window.pageClicks" }))), 0);
+  console.log("✓ Navigation blocks stale send; fixture clicks never activate the page");
+  console.log("All live multi-pick checks passed. No message was sent to a real AI session.");
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error); process.exitCode = 1;
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
 } finally {
   if (tabId !== undefined) {
-    await chrome(`(() => {if(h.pick?.browser===h.findTab(${tabId})?.linkedBrowser)h.endPick();return true;})()`).catch(() => {});
-    await command('tabs_close_mcp', { tabId }).catch(error => { console.error('Fixture cleanup failed:', error); process.exitCode = 1; });
+    await chrome(`(() => {if(h.pick?.browser===h.findTab(${tabId})?.linkedBrowser)h.endPick();return true;})()`).catch(
+      () => {},
+    );
+    await command("tabs_close_mcp", { tabId }).catch((error) => {
+      console.error("Fixture cleanup failed:", error);
+      process.exitCode = 1;
+    });
   }
   for (const receiver of receivers) receiver.close();
-  if (tabId !== undefined) console.log('Disposable test tab and local receipt fixtures closed; permission settings unchanged.');
+  if (tabId !== undefined)
+    console.log("Disposable test tab and local receipt fixtures closed; permission settings unchanged.");
 }

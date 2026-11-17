@@ -43,7 +43,9 @@ export class Picker {
   #pending = null;
   #overlay = null;
 
-  constructor(env) { this.env = env; }
+  constructor(env) {
+    this.env = env;
+  }
 
   // fromContext: started from the context menu; the pick starts at the right-clicked element
   // and follows the mouse from there.
@@ -58,20 +60,28 @@ export class Picker {
     let hovered = null;
     let trail = []; // elements left with ↑; ↓ goes back down
     const selected = [];
-    const add = el => {
+    const add = (el) => {
       if (!el?.isConnected) return false;
       if (selected.includes(el)) return true;
-      if (selected.length === MAX_PICKS) { overlay.notice(L("Up to 8 elements; Shift-click one to remove it", "En fazla 8 öğe; çıkarmak için Shift+tıkla")); return false; }
+      if (selected.length === MAX_PICKS) {
+        overlay.notice(
+          L("Up to 8 elements; Shift-click one to remove it", "En fazla 8 öğe; çıkarmak için Shift+tıkla"),
+        );
+        return false;
+      }
       selected.push(el);
       overlay.select(selected);
       return true;
     };
-    const toggle = el => {
+    const toggle = (el) => {
       const index = selected.indexOf(el);
       if (index < 0) add(el);
-      else { selected.splice(index, 1); overlay.select(selected); }
+      else {
+        selected.splice(index, 1);
+        overlay.select(selected);
+      }
     };
-    const show = el => {
+    const show = (el) => {
       current = el;
       overlay.track(el);
     };
@@ -80,8 +90,8 @@ export class Picker {
       if (el?.isConnected) show((hovered = el));
     }
 
-    return new Promise(resolve => {
-      const onMove = event => {
+    return new Promise((resolve) => {
+      const onMove = (event) => {
         if (!event.isTrusted) return;
         const el = doc.elementFromPoint(event.clientX, event.clientY);
         if (!el || el === hovered) return;
@@ -89,17 +99,16 @@ export class Picker {
         trail = [];
         show(el);
       };
-      const onMouse = event => {
+      const onMouse = (event) => {
         if (!event.isTrusted) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (event.type === "click" && event.button === 0 && current) {
           if (event.shiftKey) toggle(current);
           else if (add(current)) finish(selected);
-        }
-        else if (event.type === "contextmenu") finish(null);
+        } else if (event.type === "contextmenu") finish(null);
       };
-      const onKey = event => {
+      const onKey = (event) => {
         if (!event.isTrusted) return;
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -109,9 +118,9 @@ export class Picker {
           if (!selected.length) add(current);
           finish(selected);
         } else if (event.key === "Backspace" && selected.length) {
-          selected.pop(); overlay.select(selected);
-        }
-        else if (event.key === "ArrowUp" && current?.parentElement && current.parentElement !== doc.documentElement) {
+          selected.pop();
+          overlay.select(selected);
+        } else if (event.key === "ArrowUp" && current?.parentElement && current.parentElement !== doc.documentElement) {
           trail.push(current);
           show(current.parentElement);
         } else if (event.key === "ArrowDown" && trail.length) show(trail.pop());
@@ -120,7 +129,7 @@ export class Picker {
       for (const type of MOUSE) win.addEventListener(type, onMouse, CAPTURE);
       for (const type of KEYS) win.addEventListener(type, onKey, CAPTURE);
 
-      const finish = elements => {
+      const finish = (elements) => {
         if (this.#pending?.finish !== finish) return;
         this.#pending = null;
         try {
@@ -135,8 +144,9 @@ export class Picker {
         }
         overlay.freeze();
         try {
-          if (elements.some(el => !el.isConnected)) throw new Error("A selected element disappeared. Select the elements again.");
-          const items = elements.map(el => this.#info(el));
+          if (elements.some((el) => !el.isConnected))
+            throw new Error("A selected element disappeared. Select the elements again.");
+          const items = elements.map((el) => this.#info(el));
           resolve(items.length === 1 ? items[0] : { items });
         } catch (e) {
           this.end();
@@ -168,7 +178,10 @@ export class Picker {
     const doc = this.env.document();
     const win = this.env.window();
     const host = doc.createElement("zen-mcp-pick");
-    host.setAttribute("style", "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;");
+    host.setAttribute(
+      "style",
+      "all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; display: block !important;",
+    );
     this.env.applyTheme(host, this.env.agent());
     const root = host.attachShadow({ mode: "closed" });
     const style = doc.createElement("style");
@@ -186,7 +199,12 @@ export class Picker {
     const place = () => {
       if (target?.isConnected) {
         const r = target.getBoundingClientRect();
-        Object.assign(box.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        Object.assign(box.style, {
+          left: `${r.left}px`,
+          top: `${r.top}px`,
+          width: `${r.width}px`,
+          height: `${r.height}px`,
+        });
         // The label sits above the element, or inside its top edge when there's no room.
         const top = r.top >= 24 ? r.top - 22 : Math.max(r.top, 0) + 4;
         label.style.left = `${Math.max(4, Math.min(r.left, win.innerWidth - label.offsetWidth - 4))}px`;
@@ -197,7 +215,12 @@ export class Picker {
         selectedBox.hidden = selectedLabel.hidden = !el.isConnected;
         if (!el.isConnected) continue;
         const r = el.getBoundingClientRect();
-        Object.assign(selectedBox.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        Object.assign(selectedBox.style, {
+          left: `${r.left}px`,
+          top: `${r.top}px`,
+          width: `${r.width}px`,
+          height: `${r.height}px`,
+        });
         selectedLabel.style.left = `${Math.max(4, Math.min(r.left, win.innerWidth - selectedLabel.offsetWidth - 4))}px`;
         selectedLabel.style.top = `${Math.max(0, Math.min(r.top - 22, win.innerHeight - 22))}px`;
       }
@@ -208,7 +231,7 @@ export class Picker {
 
     const overlay = {
       host,
-      track: el => {
+      track: (el) => {
         target = el;
         const r = el.getBoundingClientRect();
         const size = doc.createElement("span");
@@ -216,20 +239,32 @@ export class Picker {
         label.textContent = elementLabel(el);
         label.append(size);
       },
-      notice: message => { label.textContent = message; },
-      select: elements => {
-        for (const item of selections) { item.box.remove(); item.label.remove(); }
+      notice: (message) => {
+        label.textContent = message;
+      },
+      select: (elements) => {
+        for (const item of selections) {
+          item.box.remove();
+          item.label.remove();
+        }
         selections = elements.map((el, index) => {
-          const selectedBox = doc.createElement("div"), selectedLabel = doc.createElement("div");
-          selectedBox.className = "box picked"; selectedLabel.className = "label";
+          const selectedBox = doc.createElement("div"),
+            selectedLabel = doc.createElement("div");
+          selectedBox.className = "box picked";
+          selectedLabel.className = "label";
           selectedLabel.textContent = `${index + 1}. ${elementLabel(el)}`;
           root.append(selectedBox, selectedLabel);
           return { el, box: selectedBox, label: selectedLabel };
         });
       },
-      freeze: () => { target = null; box.hidden = label.hidden = true; },
+      freeze: () => {
+        target = null;
+        box.hidden = label.hidden = true;
+      },
       remove: () => {
-        try { win.cancelAnimationFrame(frame); } catch {}
+        try {
+          win.cancelAnimationFrame(frame);
+        } catch {}
         host.remove();
       },
     };
@@ -254,7 +289,13 @@ export class Picker {
       text: truncate(clean(el.innerText ?? el.textContent), MAX_PICK_TEXT),
       html: truncate(el.outerHTML, MAX_PICK_HTML),
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-      viewport: { width: win.innerWidth, height: win.innerHeight, scrollX: win.scrollX, scrollY: win.scrollY, dpr: win.devicePixelRatio },
+      viewport: {
+        width: win.innerWidth,
+        height: win.innerHeight,
+        scrollX: win.scrollX,
+        scrollY: win.scrollY,
+        dpr: win.devicePixelRatio,
+      },
       styles: pickStyles(el, win),
       components: componentChain(el, this.env.unwrap),
     };

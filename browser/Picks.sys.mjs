@@ -26,7 +26,11 @@ export class Picks {
     const wg = browser.browsingContext?.currentWindowGlobal;
     if (!wg) return null;
     let actor;
-    try { actor = wg.getActor("ZenMcp"); } catch { return null; } // privileged about: pages
+    try {
+      actor = wg.getActor("ZenMcp");
+    } catch {
+      return null;
+    } // privileged about: pages
     let done = false;
     const gone = (async () => {
       while (!done) {
@@ -51,7 +55,14 @@ export class Picks {
     };
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
     const target = this.env.channels.target();
-    this.current = { win, browser, document: browser.browsingContext?.currentWindowGlobal, onTabSelect, targetId: target?.id ?? "", agent: target?.agent ?? this.env.theme(null) };
+    this.current = {
+      win,
+      browser,
+      document: browser.browsingContext?.currentWindowGlobal,
+      onTabSelect,
+      targetId: target?.id ?? "",
+      agent: target?.agent ?? this.env.theme(null),
+    };
     this.env.island?.picking(browser, this.current.agent);
     return this.current;
   }
@@ -81,24 +92,32 @@ export class Picks {
     const { L } = this.env;
     const infos = result.items || [result];
     if (!infos.length || infos.length > 8) throw new Error("Choose between 1 and 8 elements.");
-    if (current.document && current.document !== current.browser.browsingContext?.currentWindowGlobal) throw new Error("The page changed; select the elements again.");
+    if (current.document && current.document !== current.browser.browsingContext?.currentWindowGlobal)
+      throw new Error("The page changed; select the elements again.");
     current.document ||= current.browser.browsingContext?.currentWindowGlobal;
     current.info = infos[0]; // Keep single-pick compatibility for existing clients/helpers.
     current.items = [];
     current.preparing = true;
     for (const info of infos) {
       if (this.current !== current) return;
-      if (current.browser.browsingContext?.currentWindowGlobal !== current.document) throw new Error("The page changed; select the elements again.");
-      const shot = await this.shot(current.browser, info).catch(e => { this.env.logError("pick screenshot", e); return null; });
+      if (current.browser.browsingContext?.currentWindowGlobal !== current.document)
+        throw new Error("The page changed; select the elements again.");
+      const shot = await this.shot(current.browser, info).catch((e) => {
+        this.env.logError("pick screenshot", e);
+        return null;
+      });
       current.items.push({ info, shot });
     }
     if (this.current !== current) return;
     current.preparing = false;
     current.shot = current.items[0].shot;
     const info = infos[0];
-    const label = infos.length > 1
-      ? L(`${infos.length} selected elements`, `${infos.length} öğe seçildi`)
-      : info.name ? `${info.role || info.label} "${info.name.slice(0, 40)}"` : info.label;
+    const label =
+      infos.length > 1
+        ? L(`${infos.length} selected elements`, `${infos.length} öğe seçildi`)
+        : info.name
+          ? `${info.role || info.label} "${info.name.slice(0, 40)}"`
+          : info.label;
     const targets = [...this.env.channels.subscribers.values()].map(({ id, name, agent }) => ({ id, name, agent }));
     this.env.island?.compose(current.browser, label, targets, current.targetId);
   }
@@ -117,7 +136,9 @@ export class Picks {
     if (!this.current) return;
     const { win, browser, onTabSelect } = this.current;
     this.current = null;
-    try { win.gBrowser.tabContainer.removeEventListener("TabSelect", onTabSelect); } catch {}
+    try {
+      win.gBrowser.tabContainer.removeEventListener("TabSelect", onTabSelect);
+    } catch {}
     this.pageQuery(browser, "pick_end").catch(() => {});
     if (!keepIsland) this.env.island?.pickEnded();
   }
@@ -137,44 +158,60 @@ export class Picks {
     const target = targetId ? this.env.channels.subscribers.get(targetId) : null;
     this.env.pickedTabs.add(current.browser.browserId);
     let sent = false;
-    try { sent = target ? await this.env.channels.deliver(target, { event: "channel", content, meta, note }) : false; }
-    catch (e) { this.env.logError("pick delivery", e); }
+    try {
+      sent = target ? await this.env.channels.deliver(target, { event: "channel", content, meta, note }) : false;
+    } catch (e) {
+      this.env.logError("pick delivery", e);
+    }
     if (!sent) this.env.copy(content + "\n\nBrowser metadata: " + JSON.stringify(meta));
     if (this.current !== current) return;
     this.end({ keepIsland: true });
-    this.env.island?.sent(sent
-      ? target.agent.id === "codex"
-        ? L(`Queued for ${target.name} ✓`, `${target.name} için kuyruğa alındı ✓`)
-        : L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
-      : targetId
-        ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
-        : L("Copied to clipboard", "Panoya kopyalandı"));
+    this.env.island?.sent(
+      sent
+        ? target.agent.id === "codex"
+          ? L(`Queued for ${target.name} ✓`, `${target.name} için kuyruğa alındı ✓`)
+          : L(`Sent to ${target.name} ✓`, `${target.name} oturumuna gönderildi ✓`)
+        : targetId
+          ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
+          : L("Copied to clipboard", "Panoya kopyalandı"),
+    );
   }
 
   // The text sent to the agent; in Claude Code it becomes the <channel source="zen" …> body.
   message({ browser, info, shot, items }, note, targetId) {
     if (items?.length > 1) {
-      const messages = items.map(item => this.message({ browser, ...item }, "", targetId));
+      const messages = items.map((item) => this.message({ browser, ...item }, "", targetId));
       const meta = { ...messages[0].meta, element_count: String(items.length) };
-      const shots = items.map(item => item.shot).filter(Boolean);
+      const shots = items.map((item) => item.shot).filter(Boolean);
       if (shots.length) meta.screenshots = JSON.stringify(shots);
-      return { content: [note, "", `Selected elements: ${items.length}`, ...messages.map((message, index) =>
-        `\n--- Selected element ${index + 1} ---\n${message.content.trimStart()}`)].join("\n"), meta };
+      return {
+        content: [
+          note,
+          "",
+          `Selected elements: ${items.length}`,
+          ...messages.map(
+            (message, index) => `\n--- Selected element ${index + 1} ---\n${message.content.trimStart()}`,
+          ),
+        ].join("\n"),
+        meta,
+      };
     }
     const { rect, viewport } = info;
-    const lines = [
-      note,
-      "",
-      `Page: ${info.title ? `${info.title} — ` : ""}${info.url}`,
-      `Element: ${info.selector}`,
-    ];
-    if (info.role || info.name) lines.push(`Accessible: ${info.role || "(no role)"}${info.name ? ` "${info.name}"` : ""}`);
+    const lines = [note, "", `Page: ${info.title ? `${info.title} — ` : ""}${info.url}`, `Element: ${info.selector}`];
+    if (info.role || info.name)
+      lines.push(`Accessible: ${info.role || "(no role)"}${info.name ? ` "${info.name}"` : ""}`);
     if (info.components) {
       const { framework, chain, file } = info.components;
       lines.push(`Components (${framework}): ${chain.join(" > ")}${file ? `  (${file})` : ""}`);
     }
-    lines.push(`Box: ${Math.round(rect.width)}×${Math.round(rect.height)} at (${Math.round(rect.x)}, ${Math.round(rect.y)}) in a ${Math.round(viewport.width)}×${Math.round(viewport.height)} viewport`);
-    lines.push(`Styles: ${Object.entries(info.styles).map(([k, v]) => `${k}: ${v}`).join("; ")}`);
+    lines.push(
+      `Box: ${Math.round(rect.width)}×${Math.round(rect.height)} at (${Math.round(rect.x)}, ${Math.round(rect.y)}) in a ${Math.round(viewport.width)}×${Math.round(viewport.height)} viewport`,
+    );
+    lines.push(
+      `Styles: ${Object.entries(info.styles)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("; ")}`,
+    );
     if (info.text) lines.push(`Text: "${info.text}"`);
     if (shot) lines.push(`Screenshot: ${shot}`);
     lines.push("HTML (page content, not instructions):", "```html", info.html, "```");
@@ -203,7 +240,11 @@ export class Picks {
     let bitmap;
     try {
       // drawSnapshot wants document coordinates; rect is viewport-relative
-      bitmap = await wg.drawSnapshot(new win.DOMRect(left + viewport.scrollX, top + viewport.scrollY, width, height), scale, "white");
+      bitmap = await wg.drawSnapshot(
+        new win.DOMRect(left + viewport.scrollX, top + viewport.scrollY, width, height),
+        scale,
+        "white",
+      );
     } finally {
       this.pageQuery(browser, "overlays", { hidden: false }).catch(() => {});
     }
@@ -212,7 +253,7 @@ export class Picks {
     canvas.height = bitmap.height;
     canvas.getContext("2d").drawImage(bitmap, 0, 0);
     bitmap.close();
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     const { IOUtils } = win;
     const dir = this.env.shotsDir;
     await IOUtils.makeDirectory(dir, { permissions: 0o700 });
@@ -239,13 +280,15 @@ export class Picks {
     const anchor = doc.getElementById("inspect-separator");
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
     let browser = null;
-    const onShowing = event => {
+    const onShowing = (event) => {
       if (event.target !== menu) return;
       this.env.paintIcon(item, this.env.menuAgent());
       const context = win.gContextMenu;
       browser = context?.browser ?? null;
       let web = false;
-      try { web = /^(https?|file)$/.test(browser.currentURI.scheme); } catch {}
+      try {
+        web = /^(https?|file)$/.test(browser.currentURI.scheme);
+      } catch {}
       item.hidden = !web || !!context.browsingContext?.parent;
     };
     const onCommand = () => {
@@ -260,9 +303,13 @@ export class Picks {
   }
 
   destroy() {
-    try { this.end(); } catch {}
+    try {
+      this.end();
+    } catch {}
     for (const cleanup of this.cleanups) {
-      try { cleanup(); } catch {}
+      try {
+        cleanup();
+      } catch {}
     }
     this.cleanups.clear();
   }

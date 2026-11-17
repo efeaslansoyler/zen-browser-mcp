@@ -17,16 +17,23 @@ export class Watches {
     const { text, selector, gone = false, change = false, repeat = false } = spec;
     if (change && !selector) throw new Error("change needs a selector whose text to watch.");
     if (!change && !text && !selector) throw new Error("text, selector or change is required.");
-    if ([...this.list.values()].filter(w => w.session === session).length >= MAX_PER_SESSION) {
+    if ([...this.list.values()].filter((w) => w.session === session).length >= MAX_PER_SESSION) {
       throw new Error(`At most ${MAX_PER_SESSION} watches per session; stop one first.`);
     }
     const interval = Math.min(Math.max(spec.interval ?? 2, 0.5), 60) * 1000;
     const timeout = Math.min(Math.max(spec.timeout ?? 3600, 10), 86400) * 1000;
     const id = this.nextId++;
     const watch = {
-      id, session, tabId, interval, until: Date.now() + timeout,
-      spec: { text, selector, gone, change, repeat }, events: this.env.events.path(`${id}`),
-      matched: false, last: undefined, started: Date.now(),
+      id,
+      session,
+      tabId,
+      interval,
+      until: Date.now() + timeout,
+      spec: { text, selector, gone, change, repeat },
+      events: this.env.events.path(`${id}`),
+      matched: false,
+      last: undefined,
+      started: Date.now(),
     };
     this.list.set(id, watch);
     this.#write(watch, { event: "started", url: browser.currentURI?.spec, ...this.#describe(watch) });
@@ -52,7 +59,11 @@ export class Watches {
     if (!this.list.has(watch.id)) return;
     const browser = this.env.owned(watch.tabId, watch.session);
     if (!browser) return this.end(watch.id, "tab closed or no longer owned by this session");
-    try { this.env.assertSite(browser); } catch (e) { return this.end(watch.id, e.message); }
+    try {
+      this.env.assertSite(browser);
+    } catch (e) {
+      return this.end(watch.id, e.message);
+    }
     const { spec } = watch;
     const url = browser.currentURI?.spec;
     try {
@@ -87,19 +98,35 @@ export class Watches {
     if (!watch) return null;
     this.env.clearTimeout(watch.timer);
     this.list.delete(id);
-    this.#write(watch, reason === "matched" ? { event: "matched", ...extra, final: true } : { event: "ended", reason, ...extra }, true);
+    this.#write(
+      watch,
+      reason === "matched" ? { event: "matched", ...extra, final: true } : { event: "ended", reason, ...extra },
+      true,
+    );
     return watch;
   }
 
-  forSession(session) { return [...this.list.values()].filter(w => w.session === session); }
+  forSession(session) {
+    return [...this.list.values()].filter((w) => w.session === session);
+  }
 
-  endSession(session, reason) { for (const w of this.forSession(session)) this.end(w.id, reason); }
+  endSession(session, reason) {
+    for (const w of this.forSession(session)) this.end(w.id, reason);
+  }
 
-  endAll(reason) { for (const id of [...this.list.keys()]) this.end(id, reason); }
+  endAll(reason) {
+    for (const id of [...this.list.keys()]) this.end(id, reason);
+  }
 
   static summary(watch) {
     const spec = Object.fromEntries(Object.entries(watch.spec).filter(([, value]) => value));
-    return { id: watch.id, tabId: watch.tabId, events: watch.events, ...spec, interval: watch.interval / 1000,
-      endsAt: new Date(watch.until).toISOString() };
+    return {
+      id: watch.id,
+      tabId: watch.tabId,
+      events: watch.events,
+      ...spec,
+      interval: watch.interval / 1000,
+      endsAt: new Date(watch.until).toISOString(),
+    };
   }
 }

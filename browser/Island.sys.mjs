@@ -6,7 +6,9 @@
 // View only: stopping, going to the tab, cancelling and the like are done by callbacks from
 // main.js.
 
-const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(new URL("./Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search);
+const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(
+  new URL("./Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search,
+);
 
 const XHTML = "http://www.w3.org/1999/xhtml";
 // UI language: Turkish if the browser is Turkish, English otherwise
@@ -17,9 +19,11 @@ const PREVIEW_WIDTH = 340; // live preview width (CSS px)
 const PREVIEW_EVERY = 400; // ms, ~2,5 kare/sn
 
 // spinning star: the "working" sign
-const SPARK = "data:image/svg+xml," + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`
-);
+const SPARK =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`,
+  );
 
 // Like Dynamic Island: a dark, fully rounded pill, the same in every theme (dark reads on light themes too)
 const CSS = `
@@ -275,10 +279,10 @@ const CSS = `
   }
 `;
 
-const isStopKey = event =>
+const isStopKey = (event) =>
   event.key === "Escape" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
 // Ctrl+Shift+F: pick elements (Ctrl+Shift+E is Zen's network monitor)
-const isPickKey = event =>
+const isPickKey = (event) =>
   event.key?.toLowerCase() === "f" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
 const SENT_FOR = 2500;
 
@@ -365,7 +369,7 @@ export class Island {
     target.addEventListener("change", () => {
       if (this.#pick?.mode !== "compose" || this.#pick.sending) return;
       this.#pick.targetId = target.value;
-      const selected = this.#pick.targets.find(t => t.id === target.value);
+      const selected = this.#pick.targets.find((t) => t.id === target.value);
       this.#pick.agent = selected?.agent ?? agentTheme(null);
       this.#actions.selectTarget?.(selected);
       this.#render();
@@ -387,13 +391,12 @@ export class Island {
         send.textContent = L("Sending…", "Gönderiliyor…");
         note.disabled = true;
         this.#actions.send(value, this.#pick.targetId);
-      }
-      else note.focus();
+      } else note.focus();
     };
     send.addEventListener("click", submit);
     discard.addEventListener("click", () => this.#actions.cancelPick());
     // Enter sends, Shift+Enter adds a line, Esc cancels
-    note.addEventListener("keydown", event => {
+    note.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         submit();
@@ -414,10 +417,12 @@ export class Island {
     el.addEventListener("mouseenter", () => this.#startPreview(win));
     el.addEventListener("mouseleave", () => this.#stopPreview(win));
     // A question without a tab answers with browser null; a tab that's gone answers nothing.
-    const answer = (result, ...choice) => () => {
-      const browser = this.#browser ? this.#browser.deref() : null;
-      if (browser !== undefined) this.#actions.answer(browser, result, answerNote.value.trim(), ...choice);
-    };
+    const answer =
+      (result, ...choice) =>
+      () => {
+        const browser = this.#browser ? this.#browser.deref() : null;
+        if (browser !== undefined) this.#actions.answer(browser, result, answerNote.value.trim(), ...choice);
+      };
     cancel.addEventListener("click", answer("cancelled"));
     ok.addEventListener("click", answer("done"));
     stop.addEventListener("click", () => {
@@ -426,7 +431,7 @@ export class Island {
     });
     // Ctrl+Shift+Esc: stop the agent (also while the page has focus; the browser sees keys first)
     // Ctrl+Shift+F: pick elements (pressing it again while picking cancels)
-    const onKey = event => {
+    const onKey = (event) => {
       if (isPickKey(event)) {
         event.preventDefault();
         event.stopPropagation();
@@ -445,7 +450,30 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, send, canvas, previewing: false, onKey, onResize, onTabSelect, answerNote, choices, answer });
+    this.#windows.set(win, {
+      el,
+      favicon,
+      host,
+      text,
+      hint,
+      mode,
+      stop,
+      message,
+      cancel,
+      goto,
+      ok,
+      note,
+      target,
+      send,
+      canvas,
+      previewing: false,
+      onKey,
+      onResize,
+      onTabSelect,
+      answerNote,
+      choices,
+      answer,
+    });
     this.#fillChoices(win);
     this.#render();
   }
@@ -523,13 +551,15 @@ export class Island {
 
   #fillChoices(win) {
     const parts = this.#windows.get(win);
-    parts.choices.replaceChildren(...this.#askOptions.map(option => {
-      const button = win.document.createElementNS(XHTML, "button");
-      button.className = "choice";
-      button.textContent = option;
-      button.addEventListener("click", parts.answer("done", option));
-      return button;
-    }));
+    parts.choices.replaceChildren(
+      ...this.#askOptions.map((option) => {
+        const button = win.document.createElementNS(XHTML, "button");
+        button.className = "choice";
+        button.textContent = option;
+        button.addEventListener("click", parts.answer("done", option));
+        return button;
+      }),
+    );
   }
 
   #clearChoices() {
@@ -617,8 +647,15 @@ export class Island {
   // Element picked: the note box; target is the receiving session's name (none: clipboard).
   compose(browser, label, targets = [], targetId = "") {
     this.#clearTimeout(this.#pickTimer);
-    const selected = targets.find(t => t.id === targetId);
-    this.#pick = { mode: "compose", browser: new WeakRef(browser), label, targets, targetId: selected?.id ?? "", agent: selected?.agent ?? agentTheme(null) };
+    const selected = targets.find((t) => t.id === targetId);
+    this.#pick = {
+      mode: "compose",
+      browser: new WeakRef(browser),
+      label,
+      targets,
+      targetId: selected?.id ?? "",
+      agent: selected?.agent ?? agentTheme(null),
+    };
     for (const parts of this.#windows.values()) {
       parts.note.disabled = false;
       parts.target.disabled = false;
@@ -651,7 +688,7 @@ export class Island {
   #hide() {
     if (this.#state !== "working") return;
     // don't vanish while the user watches the preview; idle() counts again when the mouse leaves
-    if ([...this.#windows.values()].some(p => p.previewing)) return;
+    if ([...this.#windows.values()].some((p) => p.previewing)) return;
     this.#state = "hidden";
     this.#render();
   }
@@ -672,12 +709,16 @@ export class Island {
         action = L("Select elements (up to 8)", "Öğeleri seç (en çok 8)");
         hintText = L("Shift-click: add/remove · Enter: done · Esc", "Shift+tık: ekle/çıkar · Enter: bitir · Esc");
       } else if (pick.mode === "compose") {
-        try { siteName = browser.currentURI.host; } catch {}
+        try {
+          siteName = browser.currentURI.host;
+        } catch {}
         action = pick.label;
       } else action = pick.text;
     }
     let icon = null;
-    try { icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser)); } catch {}
+    try {
+      icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser));
+    } catch {}
     for (const [win, parts] of this.#windows) {
       const { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, target } = parts;
       const theme = applyTheme(el, pick ? pick.agent : this.#agent);
@@ -691,17 +732,26 @@ export class Island {
       el.setAttribute("aria-label", theme.name);
       mode.setAttribute("mode", this.#mode);
       mode.textContent = this.#mode === "ask" ? L("ask", "onaylı") : L("auto", "otomatik");
-      mode.title = this.#mode === "ask"
-        ? L(`${theme.name} asks before every action. Click: auto (acts without asking)`, `${theme.name} her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)`)
-        : L(`${theme.name} acts without asking. Click: ask (asks before every action)`, `${theme.name} sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)`);
+      mode.title =
+        this.#mode === "ask"
+          ? L(
+              `${theme.name} asks before every action. Click: auto (acts without asking)`,
+              `${theme.name} her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)`,
+            )
+          : L(
+              `${theme.name} acts without asking. Click: ask (asks before every action)`,
+              `${theme.name} sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)`,
+            );
       const anywhere = state === "ask" && !pick && !this.#browser;
       const visible = stopped || anywhere || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
       host.textContent = stopped ? "" : siteName;
-      text.textContent = stopped ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`) : `${theme.name} · ${action}`;
+      text.textContent = stopped
+        ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`)
+        : `${theme.name} · ${action}`;
       hint.textContent = hintText;
       if (pick?.mode === "compose") {
-        const options = [...pick.targets, { id: "", name: L("Clipboard", "Pano") }].map(destination => {
+        const options = [...pick.targets, { id: "", name: L("Clipboard", "Pano") }].map((destination) => {
           const option = win.document.createElementNS(XHTML, "option");
           option.value = destination.id;
           option.textContent = destination.name;
@@ -765,7 +815,7 @@ export class Island {
           bitmap.close();
         } catch {}
       }
-      await new Promise(r => this.#setTimeout(r, PREVIEW_EVERY));
+      await new Promise((r) => this.#setTimeout(r, PREVIEW_EVERY));
     }
   }
 

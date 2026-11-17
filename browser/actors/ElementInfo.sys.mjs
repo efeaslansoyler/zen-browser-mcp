@@ -7,20 +7,44 @@ const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 // React/Next.js internals: noise in a component chain
 const FRAMEWORK_COMPONENTS = new Set([
-  "InnerLayoutRouter", "OuterLayoutRouter", "RedirectBoundary", "RedirectErrorBoundary",
-  "NotFoundBoundary", "NotFoundErrorBoundary", "HTTPAccessFallbackBoundary",
-  "HTTPAccessFallbackErrorBoundary", "LoadingBoundary", "ErrorBoundary", "ErrorBoundaryHandler",
-  "ScrollAndFocusHandler", "InnerScrollAndFocusHandler", "RenderFromTemplateContext", "AppRouter",
-  "Router", "HotReload", "ReactDevOverlay", "ServerRoot", "Root", "AppContainer",
-  "SegmentViewNode", "SegmentStateProvider", "LinkComponent", "Suspense", "Fragment",
+  "InnerLayoutRouter",
+  "OuterLayoutRouter",
+  "RedirectBoundary",
+  "RedirectErrorBoundary",
+  "NotFoundBoundary",
+  "NotFoundErrorBoundary",
+  "HTTPAccessFallbackBoundary",
+  "HTTPAccessFallbackErrorBoundary",
+  "LoadingBoundary",
+  "ErrorBoundary",
+  "ErrorBoundaryHandler",
+  "ScrollAndFocusHandler",
+  "InnerScrollAndFocusHandler",
+  "RenderFromTemplateContext",
+  "AppRouter",
+  "Router",
+  "HotReload",
+  "ReactDevOverlay",
+  "ServerRoot",
+  "Root",
+  "AppContainer",
+  "SegmentViewNode",
+  "SegmentStateProvider",
+  "LinkComponent",
+  "Suspense",
+  "Fragment",
 ]);
 
 // A short selector matching one element: stops at a unique ID or once the path is unique.
 export function cssPath(el, win) {
   const doc = el.ownerDocument;
-  const esc = s => win.CSS.escape(s);
-  const unique = sel => {
-    try { return doc.querySelectorAll(sel).length === 1; } catch { return false; }
+  const esc = (s) => win.CSS.escape(s);
+  const unique = (sel) => {
+    try {
+      return doc.querySelectorAll(sel).length === 1;
+    } catch {
+      return false;
+    }
   };
   const parts = [];
   for (let node = el; node?.nodeType === 1 && node !== doc.documentElement; node = node.parentElement) {
@@ -30,9 +54,11 @@ export function cssPath(el, win) {
     }
     let part = node.localName;
     // Utility classes (md:flex, w-[20px]) make selectors long; take the first two plain ones.
-    const classes = [...node.classList].filter(c => /^[a-zA-Z_-][\w-]*$/.test(c)).slice(0, 2);
-    part += classes.map(c => "." + esc(c)).join("");
-    const same = node.parentElement ? [...node.parentElement.children].filter(c => c.localName === node.localName) : [];
+    const classes = [...node.classList].filter((c) => /^[a-zA-Z_-][\w-]*$/.test(c)).slice(0, 2);
+    part += classes.map((c) => "." + esc(c)).join("");
+    const same = node.parentElement
+      ? [...node.parentElement.children].filter((c) => c.localName === node.localName)
+      : [];
     if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
     parts.unshift(part);
     if (unique(parts.join(" > "))) break;
@@ -51,7 +77,12 @@ export function pickStyles(el, win) {
   if (s.backgroundImage !== "none") out["background-image"] = truncate(s.backgroundImage, 200);
   if (s.padding && s.padding !== "0px") out.padding = s.padding;
   if (s.margin && s.margin !== "0px") out.margin = s.margin;
-  if (parseFloat(s.borderTopWidth) || parseFloat(s.borderRightWidth) || parseFloat(s.borderBottomWidth) || parseFloat(s.borderLeftWidth)) {
+  if (
+    parseFloat(s.borderTopWidth) ||
+    parseFloat(s.borderRightWidth) ||
+    parseFloat(s.borderBottomWidth) ||
+    parseFloat(s.borderLeftWidth)
+  ) {
     out.border = s.border || `${s.borderWidth} ${s.borderStyle} ${s.borderColor}`;
   }
   if (s.borderRadius && s.borderRadius !== "0px") out["border-radius"] = s.borderRadius;
@@ -64,7 +95,9 @@ export function pickStyles(el, win) {
   }
   if (s.opacity !== "1") out.opacity = s.opacity;
   // Tailwind puts transparent ring/shadow layers on every element; keep only visible ones.
-  const shadows = splitTopLevel(s.boxShadow).filter(l => l !== "none" && !/rgba\([^)]*,\s*0\)|\/\s*0\)|transparent/.test(l));
+  const shadows = splitTopLevel(s.boxShadow).filter(
+    (l) => l !== "none" && !/rgba\([^)]*,\s*0\)|\/\s*0\)|transparent/.test(l),
+  );
   if (shadows.length) out["box-shadow"] = truncate(shadows.join(", "), 160);
   return out;
 }
@@ -87,23 +120,37 @@ function splitTopLevel(value) {
 }
 
 // Production builds minify names ("_", "y", "Oe"); skip them rather than mislead.
-const isMinified = name => name.length <= 2;
+const isMinified = (name) => name.length <= 2;
 // Next.js internal boundaries such as __next_root_layout_boundary__
-const isInternal = name => /^__.*__$/.test(name);
+const isInternal = (name) => /^__.*__$/.test(name);
 
 // The component chain of a development React (fiber) or Vue build, outermost first: enough to
 // find the right file in the repo.
 export function componentChain(el, unwrap) {
   try {
     const raw = unwrap(el);
-    const key = Object.keys(raw).find(k => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+    const key = Object.keys(raw).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
     if (key) {
       const names = [];
       for (let fiber = raw[key]; fiber && names.length < 8; fiber = fiber.return) {
         const type = fiber.type;
         if (!type || typeof type === "string") continue;
-        const name = type.displayName || type.name || type.render?.displayName || type.render?.name || type.type?.displayName || type.type?.name;
-        if (typeof name === "string" && name && !isMinified(name) && !isInternal(name) && !FRAMEWORK_COMPONENTS.has(name) && names.at(-1) !== name) names.push(name);
+        const name =
+          type.displayName ||
+          type.name ||
+          type.render?.displayName ||
+          type.render?.name ||
+          type.type?.displayName ||
+          type.type?.name;
+        if (
+          typeof name === "string" &&
+          name &&
+          !isMinified(name) &&
+          !isInternal(name) &&
+          !FRAMEWORK_COMPONENTS.has(name) &&
+          names.at(-1) !== name
+        )
+          names.push(name);
       }
       return names.length ? { framework: "React", chain: names.reverse() } : null;
     }

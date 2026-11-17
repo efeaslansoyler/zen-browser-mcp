@@ -1,9 +1,30 @@
 // Read tools: page text, the accessibility tree, find, waiting, network/console, JavaScript, React, axe.
 // Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
 export function readTools(ctx) {
-  const { DialogOpen, MAX_PAGE_TEXT, Stopped, Watches, assertSiteAccess, assertSiteURL, browserFor,
-    expandFrames, frameOf, framesOf, longRef, network, operationSleep, permissionContext, query,
-    readContext, readOutput, samePermissionContext, sameReadContext, shortRefs, text, watches } = ctx;
+  const {
+    DialogOpen,
+    MAX_PAGE_TEXT,
+    Stopped,
+    Watches,
+    assertSiteAccess,
+    assertSiteURL,
+    browserFor,
+    expandFrames,
+    frameOf,
+    framesOf,
+    longRef,
+    network,
+    operationSleep,
+    permissionContext,
+    query,
+    readContext,
+    readOutput,
+    samePermissionContext,
+    sameReadContext,
+    shortRefs,
+    text,
+    watches,
+  } = ctx;
   return {
     // iframe text follows the page text, with its source
     async get_page_text({ tabId, diff = false, since }) {
@@ -29,13 +50,28 @@ export function readTools(ctx) {
       const context = readContext(browser);
       const frame = frameOf(browser, ref_id);
       const opts = { filter, depth, max_chars };
-      let { value } = await query(browser, "read_page", { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext }, 30000, frame);
+      let { value } = await query(
+        browser,
+        "read_page",
+        { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext },
+        30000,
+        frame,
+      );
       value = shortRefs(await expandFrames(browser, value, opts));
       if (value.length > max_chars) {
         const end = value.lastIndexOf("\n", max_chars);
-        value = value.slice(0, end < 0 ? max_chars : end) + `\n…(truncated at ${max_chars} characters; focus on a subtree with ref_id)`;
+        value =
+          value.slice(0, end < 0 ? max_chars : end) +
+          `\n…(truncated at ${max_chars} characters; focus on a subtree with ref_id)`;
       }
-      return readOutput(browser, ["read_page", filter || "all", depth ?? 30, longRef(ref_id) || null, max_chars], context, value, diff, since);
+      return readOutput(
+        browser,
+        ["read_page", filter || "all", depth ?? 30, longRef(ref_id) || null, max_chars],
+        context,
+        value,
+        diff,
+        since,
+      );
     },
 
     // searches every frame and merges the results by score
@@ -52,7 +88,14 @@ export function readTools(ctx) {
       }
       if (!results.length) return text(`Nothing matches "${q}". Look at the page structure with read_page.`);
       results.sort((a, b) => b.score - a.score);
-      return text(shortRefs(results.slice(0, 20).map(r => r.line).join("\n")));
+      return text(
+        shortRefs(
+          results
+            .slice(0, 20)
+            .map((r) => r.line)
+            .join("\n"),
+        ),
+      );
     },
 
     // Waits until text/selector appears (gone: disappears) and/or the network is idle. Polls,
@@ -61,7 +104,9 @@ export function readTools(ctx) {
       const browser = browserFor(tabId);
       if (!wanted && !selector && !network_idle) throw new Error("text, selector or network_idle is required.");
       if (selector) {
-        try { browser.ownerDocument.createDocumentFragment().querySelector(selector); } catch {
+        try {
+          browser.ownerDocument.createDocumentFragment().querySelector(selector);
+        } catch {
           throw new Error(`Invalid CSS selector: ${selector}`);
         }
       }
@@ -95,7 +140,10 @@ export function readTools(ctx) {
         }
         const elapsed = Date.now() - start;
         if (ok) return text(`Done (${(elapsed / 1000).toFixed(1)} s).`);
-        if (elapsed >= limit) throw new Error(`Not met within ${Math.min(timeout, 60)} s. For longer waits use the watch tool and monitor its events file.`);
+        if (elapsed >= limit)
+          throw new Error(
+            `Not met within ${Math.min(timeout, 60)} s. For longer waits use the watch tool and monitor its events file.`,
+          );
         await operationSleep(250);
       }
     },
@@ -105,7 +153,7 @@ export function readTools(ctx) {
       const session = ctx.activeSession;
       if (action === "list") return text({ watches: watches.forSession(session).map(Watches.summary) });
       if (action === "stop") {
-        const own = watches.forSession(session).find(w => w.id === id);
+        const own = watches.forSession(session).find((w) => w.id === id);
         if (!own) throw new Error(`No watch #${id} in this session; take ids from action list.`);
         watches.end(id, "stopped by the agent");
         return text(`Watch #${id} stopped.`);
@@ -113,7 +161,9 @@ export function readTools(ctx) {
       const browser = browserFor(tabId);
       assertSiteAccess(browser);
       if (spec.selector) {
-        try { browser.ownerDocument.createDocumentFragment().querySelector(spec.selector); } catch {
+        try {
+          browser.ownerDocument.createDocumentFragment().querySelector(spec.selector);
+        } catch {
           throw new Error(`Invalid CSS selector: ${spec.selector}`);
         }
       }
@@ -124,18 +174,28 @@ export function readTools(ctx) {
       const browser = browserFor(tabId);
       const log = network.get(browser.browserId);
       if (id != null) {
-        const r = log?.list.find(r => r.id === id);
-        if (!r) return text(`No request #${id} (the log is cleared when the page moves to another site); take ids from the list.`);
+        const r = log?.list.find((r) => r.id === id);
+        if (!r)
+          return text(
+            `No request #${id} (the log is cleared when the page moves to another site); take ids from the list.`,
+          );
         assertSiteURL(r.url);
         return network.details(browser, r, max_chars).then(text);
       }
-      let list = (log?.list ?? []).filter(r => {
-        try { assertSiteURL(r.url); return true; } catch { return false; }
+      let list = (log?.list ?? []).filter((r) => {
+        try {
+          assertSiteURL(r.url);
+          return true;
+        } catch {
+          return false;
+        }
       });
-      if (urlPattern) list = list.filter(r => r.url.includes(urlPattern));
-      const lines = list.slice(-limit).map(r => {
-        const status = r.error ?? (r.status ?? (r.duration == null ? "pending" : "no response"));
-        const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
+      if (urlPattern) list = list.filter((r) => r.url.includes(urlPattern));
+      const lines = list.slice(-limit).map((r) => {
+        const status = r.error ?? r.status ?? (r.duration == null ? "pending" : "no response");
+        const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`]
+          .filter(Boolean)
+          .join(", ");
         return `#${r.id} ${r.method} ${status} ${r.url}${extra ? `  (${extra})` : ""}`;
       });
       if (clear && log) {
@@ -172,10 +232,15 @@ export function readTools(ctx) {
           results.push({ frame: frame.id, ...value });
         } catch (error) {
           ctx.operation?.check();
-          if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext) throw error;
+          if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext)
+            throw error;
           results.push({ frame: frame.id, error: String(error.message || error), inspected: false });
         }
-        if (!samePermissionContext(context, permissionContext(browser)) || !sameReadContext(document, readContext(browser))) throw new Error("Page or permissions changed during React inspection; retry.");
+        if (
+          !samePermissionContext(context, permissionContext(browser)) ||
+          !sameReadContext(document, readContext(browser))
+        )
+          throw new Error("Page or permissions changed during React inspection; retry.");
       }
       return text(shortRefs(JSON.stringify({ frames: results, untrusted: true })));
     },
@@ -195,17 +260,37 @@ export function readTools(ctx) {
           continue;
         }
         try {
-          const { value } = await query(browser, "axe", { ...options, ref: longRef(ref), timeout_ms: Math.min(20000, deadline - Date.now()) }, Math.min(25000, deadline - Date.now() + 2000), frame);
+          const { value } = await query(
+            browser,
+            "axe",
+            { ...options, ref: longRef(ref), timeout_ms: Math.min(20000, deadline - Date.now()) },
+            Math.min(25000, deadline - Date.now() + 2000),
+            frame,
+          );
           results.push({ frame: frame.id, ...value });
         } catch (error) {
           ctx.operation?.check();
-          if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext) throw error;
+          if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext)
+            throw error;
           results.push({ frame: frame.id, error: String(error.message || error), scanned: false });
         }
-        if (!samePermissionContext(context, permissionContext(browser)) || !sameReadContext(document, readContext(browser))) throw new Error("Page or permissions changed during accessibility scan; retry.");
+        if (
+          !samePermissionContext(context, permissionContext(browser)) ||
+          !sameReadContext(document, readContext(browser))
+        )
+          throw new Error("Page or permissions changed during accessibility scan; retry.");
       }
-      return text(shortRefs(JSON.stringify({ frames: results, untrusted: true,
-        coverage: ref ? 'Referenced subtree in its frame; nested frames are not scanned.' : 'Each accessible frame scanned independently; cross-frame relationships are not evaluated.' })));
+      return text(
+        shortRefs(
+          JSON.stringify({
+            frames: results,
+            untrusted: true,
+            coverage: ref
+              ? "Referenced subtree in its frame; nested frames are not scanned."
+              : "Each accessible frame scanned independently; cross-frame relationships are not evaluated.",
+          }),
+        ),
+      );
     },
   };
 }

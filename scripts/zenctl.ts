@@ -24,9 +24,13 @@ async function reload() {
   const before = await ping();
   await call("reload");
   for (let i = 0; i < 50; i++) {
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     let now: Ping;
-    try { now = await ping(); } catch { continue; }
+    try {
+      now = await ping();
+    } catch {
+      continue;
+    }
     if (now.bridge === before.bridge) {
       // if the old version came back, the error was logged; otherwise the reload hasn't run yet
       if (now.startError && now.startError !== before.startError) break;
@@ -37,7 +41,9 @@ async function reload() {
     return;
   }
   const now = await ping().catch(() => ({}) as Ping);
-  throw new Error(`reload failed, bridge is on v${now.bridge ?? "?"}: ${now.startError ?? "new version did not answer"}\nlog: ${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/zen-mcp.log`);
+  throw new Error(
+    `reload failed, bridge is on v${now.bridge ?? "?"}: ${now.startError ?? "new version did not answer"}\nlog: ${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/zen-mcp.log`,
+  );
 }
 
 try {
@@ -46,7 +52,9 @@ try {
     process.exit(0);
   }
   const content =
-    cmd === "eval" ? await call("chrome_eval", { code: arg }) : await call(cmd, arg ? JSON.parse(arg) : {}, undefined, undefined, session);
+    cmd === "eval"
+      ? await call("chrome_eval", { code: arg })
+      : await call(cmd, arg ? JSON.parse(arg) : {}, undefined, undefined, session);
   for (const c of content) {
     if (c.type === "text") console.log(c.text);
     else {

@@ -35,24 +35,36 @@ export class NetworkLog {
     this.observer = { observe: (subject, topic) => this.#observe(subject, topic) };
   }
 
-  start() { for (const topic of TOPICS) Services.obs.addObserver(this.observer, topic); }
+  start() {
+    for (const topic of TOPICS) Services.obs.addObserver(this.observer, topic);
+  }
   stop() {
     for (const topic of TOPICS) {
-      try { Services.obs.removeObserver(this.observer, topic); } catch {}
+      try {
+        Services.obs.removeObserver(this.observer, topic);
+      } catch {}
     }
   }
 
-  get(browserId) { return this.logs.get(browserId); }
-  delete(browserId) { this.logs.delete(browserId); }
+  get(browserId) {
+    return this.logs.get(browserId);
+  }
+  delete(browserId) {
+    this.logs.delete(browserId);
+  }
 
   // requests longer than 10 s (long polling, streams) don't count
   busy(browserId, now = Date.now()) {
-    return (this.logs.get(browserId)?.list ?? []).some(r => r.duration == null && !r.error && now - r.start < 10000);
+    return (this.logs.get(browserId)?.list ?? []).some((r) => r.duration == null && !r.error && now - r.start < 10000);
   }
 
   #observe(subject, topic) {
     let channel;
-    try { channel = subject.QueryInterface(Ci.nsIHttpChannel); } catch { return; }
+    try {
+      channel = subject.QueryInterface(Ci.nsIHttpChannel);
+    } catch {
+      return;
+    }
     const bc = channel.loadInfo?.browsingContext;
     const browserId = bc?.browserId;
     if (!browserId || !this.env.tracked(browserId)) return;
@@ -68,7 +80,10 @@ export class NetworkLog {
       for (const r of log.list) r.id = log.nextId++;
     }
 
-    if (topic === "http-on-modify-request" || (topic === "http-on-failed-opening-request" && !log.byChannel.has(channel.channelId))) {
+    if (
+      topic === "http-on-modify-request" ||
+      (topic === "http-on-failed-opening-request" && !log.byChannel.has(channel.channelId))
+    ) {
       const type = CONTENT_TYPES[channel.loadInfo.externalContentPolicyType] ?? "other";
       // Like Claude in Chrome: old entries are cleared when the main document goes to another site
       if (type === "document" && bc.top === bc) {
@@ -80,7 +95,14 @@ export class NetworkLog {
         }
         log.host = host;
       }
-      const entry = { id: log.nextId++, method: channel.requestMethod, url: channel.URI.spec, type, status: null, start: Date.now() };
+      const entry = {
+        id: log.nextId++,
+        method: channel.requestMethod,
+        url: channel.URI.spec,
+        type,
+        status: null,
+        start: Date.now(),
+      };
       entry.requestHeaders = headersOf(channel, "visitRequestHeaders");
       if (BODY_TYPES.has(type)) entry.requestBody = uploadText(channel);
       log.list.push(entry);
@@ -120,9 +142,11 @@ export class NetworkLog {
   async details(browser, r, maxChars) {
     const win = browser.ownerDocument.defaultView;
     const lines = [`#${r.id} ${r.method} ${r.error ?? r.status ?? "pending"} ${r.url}`];
-    const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`].filter(Boolean).join(", ");
+    const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`]
+      .filter(Boolean)
+      .join(", ");
     if (extra) lines[0] += `  (${extra})`;
-    const headers = list => list?.length ? list.map(([k, v]) => `  ${k}: ${v}`).join("\n") : "  (none)";
+    const headers = (list) => (list?.length ? list.map(([k, v]) => `  ${k}: ${v}`).join("\n") : "  (none)");
     lines.push("", "Request headers:", headers(r.requestHeaders));
     if (r.requestBody) lines.push("", "Request body:", decode(win, r.requestBody, maxChars));
     lines.push("", "Response headers:", headers(r.responseHeaders));
@@ -182,7 +206,11 @@ function uploadText(channel) {
 // encoding decoded); the page receives the data unchanged.
 function captureBody(channel, entry, log) {
   let traceable;
-  try { traceable = channel.QueryInterface(Ci.nsITraceableChannel); } catch { return; }
+  try {
+    traceable = channel.QueryInterface(Ci.nsITraceableChannel);
+  } catch {
+    return;
+  }
   entry.body = "";
   entry.bodySize = 0;
   const tee = {
@@ -203,7 +231,9 @@ function captureBody(channel, entry, log) {
       original.onDataAvailable(request, copy, offset, count);
     },
     onStopRequest(request, status) {
-      try { trimBodies(log); } catch {}
+      try {
+        trimBodies(log);
+      } catch {}
       original.onStopRequest(request, status);
     },
   };
@@ -230,7 +260,7 @@ const DECOMPRESS_FORMATS = { gzip: "gzip", "x-gzip": "gzip", deflate: "deflate",
 async function decompress(win, raw, encoding) {
   const format = DECOMPRESS_FORMATS[encoding.trim().toLowerCase()];
   if (!format) throw new Error("bilinmeyen kodlama");
-  const bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
+  const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
   const stream = new win.Blob([bytes]).stream().pipeThrough(new win.DecompressionStream(format));
   const out = new Uint8Array(await new win.Response(stream).arrayBuffer());
   let binary = "";
@@ -242,7 +272,7 @@ async function decompress(win, raw, encoding) {
 function decode(win, raw, maxChars) {
   let t;
   try {
-    t = new win.TextDecoder().decode(Uint8Array.from(raw, c => c.charCodeAt(0)));
+    t = new win.TextDecoder().decode(Uint8Array.from(raw, (c) => c.charCodeAt(0)));
   } catch {
     t = raw;
   }

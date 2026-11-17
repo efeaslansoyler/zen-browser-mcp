@@ -13,7 +13,8 @@ const [cmd, ...args] = process.argv.slice(2);
 
 // Usage lines: [command, description], the descriptions aligned in one column.
 const usage = (rows: [string, string][]) => rows.map(([cmd, what]) => `  ${cmd.padEnd(30)}  ${what}`).join("\n");
-const help = L(`${PACKAGE} ${VERSION}: let AI agents use your Zen (or other Firefox-based) browser.
+const help = L(
+  `${PACKAGE} ${VERSION}: let AI agents use your Zen (or other Firefox-based) browser.
 
 Usage:
 ${usage([
@@ -26,7 +27,7 @@ ${usage([
   [`npx ${PACKAGE} codex-hooks install|uninstall`, "manage automatic Codex chat connection"],
   [`npx ${PACKAGE} config`, "show or change settings (mode, site rules)"],
 ])}`,
-`${PACKAGE} ${VERSION}: AI ajanlarının Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
+  `${PACKAGE} ${VERSION}: AI ajanlarının Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
 
 Kullanım:
 ${usage([
@@ -38,7 +39,8 @@ ${usage([
   [`npx ${PACKAGE} doctor`, "kurulumu kontrol eder"],
   [`npx ${PACKAGE} codex-hooks install|uninstall`, "otomatik Codex sohbet bağlantısını yönetir"],
   [`npx ${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
-])}`);
+])}`,
+);
 
 try {
   switch (cmd) {
@@ -56,10 +58,14 @@ try {
       break;
     }
     case "codex-hooks": {
-      if (args[0] !== "install" && args[0] !== "uninstall") throw new Error("Usage: zen-browser-mcp codex-hooks install|uninstall");
+      if (args[0] !== "install" && args[0] !== "uninstall")
+        throw new Error("Usage: zen-browser-mcp codex-hooks install|uninstall");
       console.log(configureCodexHooks(args[0]));
       if (args[0] === "uninstall") await stopCodexRelays();
-      if (args[0] === "install") console.log("Review and trust the Zen MCP lifecycle hooks once in Codex with /hooks. No hook trust is bypassed.");
+      if (args[0] === "install")
+        console.log(
+          "Review and trust the Zen MCP lifecycle hooks once in Codex with /hooks. No hook trust is bypassed.",
+        );
       break;
     }
     case "install":
