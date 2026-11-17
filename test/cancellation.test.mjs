@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
-import { Ownership } from '../browser/Ownership.sys.mjs';
+import { bridgeContext } from './support/bridge.mjs';
 import * as agent from '../browser/Agent.sys.mjs';
 const timers = { setTimeout, clearTimeout };
 
@@ -83,33 +83,24 @@ for (const kind of ['text', 'keys']) {
 }
 
 test('real parent batch and queue stay cancelled across immediate Stop/Resume', async () => {
-  const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-  const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
   const replies = [];
   const effects = [];
   let started;
   const first = new Promise(resolve => { started = resolve; });
-  const context = vm.createContext({ watches: { endAll() {}, endSession() {} }, browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
-    Cancellation, ...timers, state: { paused: false, tabs: new Map() },
-    operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
-    ownership: new Ownership(), sessions: new Map([['test-session', {}]]), sessionVersions: new Map(),
-    sessionInfo() { return {}; }, activeSession: null,
-    activeAgent: {}, island: null, activeCalls: 0,
+  const context = bridgeContext({
+    ...timers, state: { paused: false, tabs: new Map() },
+    sessions: new Map([['test-session', {}]]),
+    sessionInfo() { return {}; },
     liveTabs: () => [], cancelAsk() {}, logActivity() {},
     findTab() {}, paintTab() {}, describeWrite() {}, requirePermission() {},
-    agentTheme: () => ({ id: 'codex' }), lastUse: new Map(), commands: {},
+    agentTheme: () => ({ id: 'codex' }),
     text: value => [{ type: 'text', text: value }],
-    reply: (_, __, result) => replies.push(result), logError() {},
-    DialogOpen: class extends Error {}, shortRefs: x => x,
+    reply: (_, __, result) => replies.push(result), shortRefs: x => x,
     tools: {
       wait: async () => { started(); await context.operation.wait(30000, timers); return []; },
       effect: async () => { effects.push('ran'); return []; },
     },
   });
-  vm.runInContext(block('    class Stopped extends Error', '    // Adada evet/hayır sorusu') +
-    block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
-    block('    async function handle(', '    function onConnection(') +
-    'tools.browser_batch = ({' + block('      async browser_batch(', '      // Claude\'un kullanıcıya bırakması') + '}).browser_batch;', context);
   const batch = context.handle(JSON.stringify({ session: 'test-session', tool: 'browser_batch', args: { actions: [
     { name: 'wait' }, { name: 'effect' },
   ] } }));
@@ -129,17 +120,15 @@ test('real parent batch and queue stay cancelled across immediate Stop/Resume', 
 });
 
 test('cancel navigation stops loading and removes its listener and timeout', async () => {
-  const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-  const code = source.slice(source.indexOf('    function waitForLoad('), source.indexOf('    const sleep ='));
   const scope = new Cancellation();
   const handles = new Set();
   let stopped = 0, removed = 0;
   const browser = { addProgressListener() {}, removeProgressListener() { removed++; }, stop() { stopped++; } };
-  const context = vm.createContext({ watches: { endAll() {}, endSession() {} }, browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} }, operation: scope, pendingListeners: new Set(),
-    ChromeUtils: { generateQI() {} }, Ci: { nsIWebProgress: { NOTIFY_STATE_WINDOW: 1 } },
+  globalThis.ChromeUtils = { generateQI() {} };
+  globalThis.Ci = { nsIWebProgress: { NOTIFY_STATE_WINDOW: 1 }, nsIWebProgressListener: {} };
+  const context = bridgeContext({ operation: scope,
     setTimeout: fn => { handles.add(fn); return fn; }, clearTimeout: fn => handles.delete(fn),
   });
-  vm.runInContext(code, context);
   const loaded = context.waitForLoad(browser);
   scope.cancel();
   await loaded;
@@ -147,6 +136,8 @@ test('cancel navigation stops loading and removes its listener and timeout', asy
   assert.equal(removed, 1);
   assert.equal(handles.size, 0);
   assert.equal(context.pendingListeners.size, 0);
+  delete globalThis.ChromeUtils;
+  delete globalThis.Ci;
 });
 
 for (const kind of ['drag', 'wheel', 'click']) {
@@ -174,12 +165,12 @@ for (const kind of ['drag', 'wheel', 'click']) {
   });
 }
 
-test('parent cancellation module loads through the trusted resource scheme', () => {
+test('parent modules load through the trusted resource scheme', () => {
   const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-  const declaration = source.split('\n').find(line => line.includes('const { Cancellation }'));
-  assert(declaration, 'Cancellation import missing');
+  const loader = source.split('\n').find(line => line.includes('const load = name =>'));
+  assert(loader, 'module loader missing');
   let loaded;
-  vm.runInNewContext(declaration, {
+  vm.runInNewContext(loader + '\nload("Cancellation");', {
     dirURI: 'file:///home/example/browser/', version: 12,
     ChromeUtils: { importESModule(uri) {
       assert(uri.startsWith('resource://'), 'Firefox rejects untrusted module schemes');

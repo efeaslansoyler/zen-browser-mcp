@@ -1,0 +1,138 @@
+// The user's controls over agents: Stop/Resume from the island (or Ctrl+Shift+Esc), and
+// questions on the island (tab requests, permission prompts, ask_user).
+
+// After Stop, running waits (page answers, loads, ask_user) end at once and every tool that
+// touches tabs is refused until the user presses Resume. The paused state survives reloads.
+export class Stopped extends Error {
+  constructor() {
+    super("The user stopped browser automation from the browser's island. Nothing can be done in the browser until they press \"Resume\" there; ask the user what they want.");
+  }
+}
+
+const ALERT_NAME = "zen-mcp-ask";
+
+export function control(ctx) {
+  const timers = () => ({ setTimeout: ctx.setTimeout, clearTimeout: ctx.clearTimeout });
+  const sleep = ms => new Promise(r => ctx.setTimeout(r, ms));
+
+  async function guard(promise) {
+    if (ctx.state.paused) throw new Stopped();
+    return ctx.operation ? ctx.operation.race(promise) : promise;
+  }
+
+  function operationSleep(ms) {
+    if (ctx.state.paused) throw new Stopped();
+    return ctx.operation ? ctx.operation.wait(ms, timers()) : sleep(ms);
+  }
+
+  function stopClaude() {
+    ctx.releaseAllInputs();
+    ctx.watches.endAll("stopped by the user");
+    ctx.extensionPanels.destroy();
+    if (ctx.state.paused) return;
+    ctx.state.paused = true;
+    ctx.stopGeneration++;
+    ctx.operation?.cancel(new Stopped());
+    // remove ask_user overlays waiting on pages
+    for (const tab of ctx.liveTabs()) ctx.cancelAsk(tab.linkedBrowser, "stopped");
+    ctx.island?.stopped();
+  }
+
+  function resumeClaude() {
+    ctx.state.paused = false;
+    ctx.island?.resumed();
+  }
+
+  // A yes/no question on the island (tab request, action permission). Returns "done",
+  // "timeout", or { status, message } when the user added a note; throws when the user
+  // declined with a note.
+  async function askIsland(browser, text, message, labels, timeout = 120) {
+    if (ctx.tabRequests.has(browser)) throw new Error("A question is already pending in this tab.");
+    const answered = new Promise(resolve => ctx.tabRequests.set(browser, resolve));
+    ctx.island?.ask(browser, text, message, true, labels);
+    const notified = ctx.notifyAsk(browser, message);
+    const timer = new ctx.Cancellation();
+    try {
+      const result = await ctx.guard(Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]));
+      // The island note: an error on decline, appended to the tool result on approval.
+      if (!result?.status) return result;
+      if (result.status === "cancelled") throw new Error(`The user declined. User message (untrusted text): ${JSON.stringify(result.message)}`);
+      ctx.operation?.userNotes?.push(result.message);
+      return result.status;
+    } finally {
+      timer.cancel();
+      ctx.tabRequests.delete(browser);
+      ctx.island?.askEnded();
+      if (notified) ctx.closeAskAlert();
+    }
+  }
+
+  // The island's OK/Cancel: answers a pending question or ask_user. browser is null for an
+  // ask_user question that isn't tied to a tab; choice is the option button the user pressed.
+  function answerIsland(browser, result, message = "", choice) {
+    const note = typeof message === "string" ? message.trim().slice(0, 2000) : "";
+    if (note || choice != null) result = { status: result, ...(choice != null ? { choice } : {}), ...(note ? { message: note } : {}) };
+    const resolve = ctx.tabRequests.get(browser);
+    if (resolve) resolve(result);
+    else ctx.cancelAsk(browser, result);
+  }
+
+  // Ends a pending ask_user with this result (island OK/Cancel, Stop) and removes its overlay.
+  function cancelAsk(browser, result = "cancelled") {
+    try {
+      browser.browsingContext.currentWindowGlobal.getActor("ZenMcp").sendAsyncMessage("cancel_ask", { result });
+    } catch {}
+  }
+
+  // A tab-less ask_user has no page actor to wait on: the island answer arrives under the
+  // null key. Stop cancels it through guard().
+  async function waitIslandAnswer(timeout) {
+    let resolve;
+    const answered = new Promise(r => { resolve = r; });
+    ctx.tabRequests.get(null)?.("replaced");
+    ctx.tabRequests.set(null, resolve);
+    const timer = new ctx.Cancellation();
+    try {
+      return await ctx.guard(Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]));
+    } finally {
+      timer.cancel();
+      if (ctx.tabRequests.get(null) === resolve) ctx.tabRequests.delete(null);
+    }
+  }
+
+  // A desktop notification when a question arrives while Zen isn't focused; clicking it goes
+  // to the tab.
+  function notifyAsk(browser, message) {
+    const win = browser ? browser.ownerDocument.defaultView : Services.wm.getMostRecentWindow("navigator:browser");
+    if (!win || (browser ? Services.focus.activeWindow === win : Services.focus.activeWindow)) return false;
+    try {
+      const { L, activeAgent } = ctx;
+      const AlertNotification = Components.Constructor("@mozilla.org/alert-notification;1", "nsIAlertNotification", "initWithObject");
+      const alert = new AlertNotification({ name: ALERT_NAME, title: L(`${activeAgent.name} needs you`, `${activeAgent.name} senden bir şey istiyor`), text: message, textClickable: true });
+      alerts().showAlert(alert, (_subject, topic) => {
+        if (topic === "alertclickcallback") browser ? goToTab(browser) : win.focus();
+      });
+      return true;
+    } catch (e) {
+      ctx.logError("notification", e);
+      return false;
+    }
+  }
+
+  const alerts = () => Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService);
+  function closeAskAlert() {
+    try { alerts().closeAlert(ALERT_NAME); } catch {}
+  }
+
+  function goToTab(browser) {
+    const win = browser.ownerDocument.defaultView;
+    const tab = win.gBrowser.getTabForBrowser(browser);
+    if (tab) win.gBrowser.selectedTab = tab;
+    win.focus();
+  }
+
+  return {
+    sleep, guard, operationSleep, stopClaude, resumeClaude, askIsland, answerIsland, cancelAsk,
+    waitIslandAnswer, notifyAsk, closeAskAlert, goToTab,
+  };
+}

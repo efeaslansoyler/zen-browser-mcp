@@ -1,7 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
 import { ReadSnapshots } from '../browser/ReadSnapshots.sys.mjs';
 import { Ownership } from '../browser/Ownership.sys.mjs';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
@@ -9,8 +7,7 @@ import { agentTheme } from '../browser/Agent.sys.mjs';
 import { TabMenu } from '../browser/TabMenu.sys.mjs';
 import { Channels } from '../browser/Channels.sys.mjs';
 import { Picks } from '../browser/Picks.sys.mjs';
-const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
+import { bridgeContext } from './support/bridge.mjs';
 const timers = { setTimeout, clearTimeout };
 
 test('owners are session IDs; the same agent type grants no shared access', () => {
@@ -39,15 +36,8 @@ function harness() {
   const store = new Map();
   let next = 1, timerId = 0, started;
   const first = new Promise(resolve => { started = resolve; });
-  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
+  const context = bridgeContext({
     assertSiteAccess() {}, ruleFor: () => "default",
-    Ownership, Cancellation, agentTheme, activeAgent: agentTheme({ id: 'codex' }), activeSession: null,
-    readSnapshots: new ReadSnapshots(), ownership: new Ownership(), sessions: new Map(), sessionVersions: new Map(),
-    ownerConnections: new Map(), disconnectTimers: new Map(),
-    operation: null, stopGeneration: 0, toolQueue: Promise.resolve(),
-    state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
-    network: { delete() {}, stop() {} }, downloads: { stop() {} }, watches: { endAll() {}, endSession() {} }, tabRequests: new Map(), MARK: 'zen-mcp',
-    lastUse: new Map(), activeCalls: 0, island: null, commands: {},
     findTab: id => tabs.get(id), browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }], windowTabs: win => win.gBrowser.tabs, restoreMarks() {},
     SessionStore: {
       setCustomTabValue(tab, key, value) { store.set(`${tab.linkedBrowser.browserId}:${key}`, value); },
@@ -60,8 +50,7 @@ function harness() {
     requirePermission: async () => ({ context: {}, asked: false }),
     permissionContext: () => ({}), samePermissionContext: () => true,
     hostOf: () => 'fixture.test', describeAction: () => '', logActivity() {},
-    L: en => en, shortRefs: x => x, logError() {},
-    DialogOpen: class extends Error {}, Stopped: class extends Error {},
+    shortRefs: x => x,
     setTimeout(fn) { chromeTimers.set(++timerId, fn); return timerId; },
     clearTimeout(id) { chromeTimers.delete(id); },
     text: value => [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
@@ -86,15 +75,6 @@ function harness() {
     return tab;
   }
   context.createTab = () => { const tab = addTab(); context.mark(tab); return tab; };
-  vm.runInContext(block('    function sessionInfo(', '    function browserWindows(') +
-    block('    function liveTabs(', '    // Claude in Chrome gibi') +
-    block('    function paintTab(', '    function restoreMarks(') +
-    block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
-    block('    async function handle(', '    function onConnection(') +
-    'Object.assign(tools, ({' + block('      async tabs_context_mcp(', '      // Birkaç tool çağrısı') + '}));' +
-    'tools.browser_batch = ({' + block('      async browser_batch(', '      // Claude\'un kullanıcıya bırakması') + '}).browser_batch;' +
-    'tools.tab_work = async args => coordinateTab(args, activeSession);' +
-    'tools.request_tab = ({' + block('      async request_tab(', '\n    };\n\n    // geliştirme komutları') + '}).request_tab;', context);
   const request = async (session, tool, args = {}, agent = "codex") => {
     const output = {};
     await context.handle(JSON.stringify({ session, agent: { id: agent }, tool, args }), null, output);
@@ -268,10 +248,9 @@ test('native tab closure cancels a pending wait and removes pick eligibility', a
   const h = harness();
   const tabId = h.own('A');
   h.context.state.pickedTabs.add(tabId);
-  vm.runInContext(block('    const onTabClose =', '    function watchWindow(') + 'globalThis.closeEvent = onTabClose;', h.context);
   const pending = h.request('A', 'wait', { tabId });
   await h.first;
-  h.context.closeEvent({ target: h.tabs.get(tabId) });
+  h.context.onTabClose({ target: h.tabs.get(tabId) });
   assert.match((await pending).error, /revoked or transferred/);
   assert.equal(h.context.state.pickedTabs.has(tabId), false);
 });
@@ -371,16 +350,7 @@ test('bridge reload closes lifecycle transports without discarding runtime owner
   const tabId = h.own('A');
   let closed = 0;
   h.context.connectOwnerSession('A', { close() { closed++; } }, agentTheme({ id: 'codex' }), '/project');
-  Object.assign(h.context, {
-    shuttingDown: false, sessionSweep: null, channels: { closeAll() {} }, picks: { destroy() {} },
-    sss: { unregisterSheet() {}, USER_SHEET: 1 }, markSheet: {}, menuCleanups: new Set(),
-    Services: { obs: { removeObserver() {} } }, tabMenu: { destroy() {} },
-    onWindowReady() {}, browserWindows: () => [], server: null,
-    ChromeUtils: { unregisterWindowActor() {} }, localFile: () => ({ remove() {} }),
-    socketPath: '/fixture.sock', Cr: { NS_OK: 0 },
-  });
-  vm.runInContext(block('    function stop() {', '    globalThis.zenMcpStop?.();'), h.context);
-  h.context.stop();
+  h.context.closeConnections();
   assert.equal(closed, 1);
   assert.equal(h.context.ownership.owner(tabId), 'A');
   assert(h.context.sessions.has('A'));

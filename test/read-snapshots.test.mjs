@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
 import { readTools } from '../browser/ReadTools.sys.mjs';
 import { ReadSnapshots, linePatch } from '../browser/ReadSnapshots.sys.mjs';
+import { bridgeContext } from './support/bridge.mjs';
 const context = () => ({ url: 'https://fixture.test/', ownerVersion: 1, frames: [[1, {}]] });
 const id = value => value.match(/^snapshot: (\S+)/)[1];
 const body = value => value.slice(value.indexOf('\n\n') + 2);
@@ -147,17 +146,14 @@ function parentHarness() {
   browser.browsingContext.id = 1;
   const snapshots = new ReadSnapshots();
   let page = longText;
-  const context = vm.createContext({ controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
-    assertSiteAccess() {}, readSnapshots: snapshots, activeSession: 'A', operation: null,
+  const context = bridgeContext({
+    assertSiteAccess() {}, readSnapshots: snapshots, activeSession: 'A',
     ownership: { version: () => 1, check() {} }, MAX_PAGE_TEXT: 100000,
     browserFor: () => browser, framesOf: () => [browser.browsingContext], frameOf: () => browser.browsingContext,
     longRef: value => value, shortRefs: value => value, expandFrames: async (_, value) => value,
     text: value => [{ type: 'text', text: value }],
     query: async (_, name) => name === 'text' ? { title: 'Fixture', url: browser.currentURI.spec, text: page } : { value: page },
   });
-  const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-  const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
-  vm.runInContext(block('    function readContext(', '    // ---- tool\'lar'), context);
   // Built per call so tests can swap context helpers (e.g. query) after setup.
   const read = async (name, args = {}) => (await readTools(context)[name]({ tabId: 1, ...args }))[0].text;
   return { context, browser, read, change: value => { page = value; } };

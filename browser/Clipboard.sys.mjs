@@ -34,3 +34,81 @@ export function clipboardShortcut({ key, mods }) {
   }
   return null;
 }
+
+// The system clipboard for agents: every operation needs the user's approval on the island,
+// even in auto mode, and the target must not change while the prompt is open.
+export function systemClipboard(ctx) {
+  function readClipboardText() {
+    const clipboard = Cc["@mozilla.org/widget/clipboard;1"].getService(Ci.nsIClipboard);
+    if (!clipboard.hasDataMatchingFlavors(["text/plain"], clipboard.kGlobalClipboard)) return "";
+    const transfer = Cc["@mozilla.org/widget/transferable;1"].createInstance(Ci.nsITransferable);
+    transfer.init(null);
+    transfer.addDataFlavor("text/plain");
+    clipboard.getData(transfer, clipboard.kGlobalClipboard);
+    const value = {};
+    transfer.getTransferData("text/plain", value);
+    return value.value.QueryInterface(Ci.nsISupportsString).data;
+  }
+
+  async function performClipboard(browser, args) {
+    const { L } = ctx;
+    const source = ctx.controlledSource(browser);
+    const check = context => {
+      ctx.operation?.check();
+      ctx.ownership.check(source.browserId, ctx.activeSession);
+      ctx.assertSiteAccess(browser);
+      if (context && (!ctx.samePermissionContext(context.policy, ctx.permissionContext(source)) ||
+          browser.browsingContext.currentWindowGlobal !== context.document)) {
+        throw new Error("The clipboard target or permission settings changed while awaiting approval; nothing was done.");
+      }
+    };
+    const surface = ctx.operation?.extensionSurface;
+    const panel = surface?.browser === browser
+      ? ctx.extensionPanels.get(source, ctx.activeSession, surface.tabId, surface.extensionId).popup.panel : null;
+    const noAutoHide = panel?.getAttribute("noautohide");
+    if (panel) panel.setAttribute("noautohide", "true");
+    const access = new ClipboardAccess({
+      check,
+      prepare: async input => {
+        const context = { policy: ctx.permissionContext(source), document: browser.browsingContext.currentWindowGlobal };
+        if (["copy", "paste", "cut"].includes(input.action)) {
+          context.frame = input.ref ? ctx.frameOf(browser, input.ref) : await ctx.focusedFrame(browser);
+          context.frameDocument = context.frame.currentWindowGlobal;
+          context.target = (await ctx.query(browser, "clipboard_prepare", { action: input.action, ref: input.ref && ctx.longRef(input.ref) }, 5000, context.frame)).value;
+        }
+        check(context);
+        return context;
+      },
+      ask: async input => {
+        const what = {
+          read: L("read text from your system clipboard", "sistem panondaki metni okumak"),
+          write: L(`replace your system clipboard with ${input.text?.length ?? 0} characters`, `sistem panonun üzerine ${input.text?.length ?? 0} karakter yazmak`),
+          copy: L("copy the target selection to your system clipboard", "hedefteki seçimi sistem panona kopyalamak"),
+          paste: L("paste your system clipboard into the target", "sistem panondakini hedefe yapıştırmak"),
+          cut: L("cut the target selection to your system clipboard", "hedefteki seçimi kesip sistem panona almak"),
+        }[input.action];
+        const name = ctx.activeAgent.name;
+        const result = await ctx.askIsland(source, L("System clipboard permission", "Sistem panosu izni") + ` · ${ctx.hostOf(source) || source.contentTitle || source.currentURI.spec}`,
+          L(`${name} wants to ${what}. This clipboard is shared with your other applications.`, `${name} şunu yapmak istiyor: ${what}. Bu pano diğer uygulamalarınla ortaktır.`),
+          { ok: L("Allow once", "Bir kez izin ver"), cancel: L("Deny", "Verme") });
+        return result === "done";
+      },
+      read: readClipboardText,
+      write: value => Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value),
+      command: async (input, context) => {
+        if (context.frame.currentWindowGlobal !== context.frameDocument) throw new Error("The clipboard target frame changed; nothing was done.");
+        await ctx.query(browser, "clipboard_execute", { token: context.target.token, action: input.action }, 5000, context.frame);
+      },
+    });
+    try {
+      return await access.run(args);
+    } finally {
+      if (panel) {
+        if (noAutoHide === null) panel.removeAttribute("noautohide");
+        else panel.setAttribute("noautohide", noAutoHide);
+      }
+    }
+  }
+
+  return { performClipboard };
+}

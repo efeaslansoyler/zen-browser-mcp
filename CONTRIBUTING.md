@@ -37,14 +37,10 @@ protocol, the island, ownership, permissions, downloads, the Codex watcher and m
 real bridge and actor code against small in-memory DOM fixtures; no browser needed. If a
 sandbox blocks child processes, run `npm run build && node --test --test-isolation=none test/*.test.mjs`.
 
-Two kinds of tests exist:
-
-- Tests for tool modules call the module factory (`readTools(ctx)` …) with a fake `ctx`.
-  Prefer this for new code.
-- Some ownership, permission and cancellation tests still slice `main.js` between marker
-  comments and run the pieces in a VM. They break when functions move or a helper is
-  defined outside the sliced range; when that happens, keep the helper inside the range or
-  move the code into a module.
+Bridge tests build the same `ctx` as `main.js` with `bridgeContext()` from
+`test/support/bridge.mjs`: the real modules, plus the fakes you pass in. Because modules call
+each other through `ctx`, a fake replaces the real function everywhere. Tool groups can also
+be tested alone by calling their factory (`readTools(ctx)` …) with a hand-made `ctx`.
 
 `test/main-smoke.test.mjs` loads all of `main.js` with stubs and starts it, which catches
 temporal dead zone mistakes and missing wiring.

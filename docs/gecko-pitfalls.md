@@ -17,8 +17,11 @@ something that "should work".
 - A bare `nsITimer` without a reference may be garbage collected before it fires: use `Timer.sys.mjs`.
 - `security.sandbox.content.read_path_whitelist` must be set before the first content process
   starts (`main.js` writes it to the default branch during autoconfig).
-- When passing values into a module factory, watch for temporal dead zones: use a getter or a
-  lazy call if the value is defined later in `main.js`.
+- Tool group factories (`readTools(ctx)` …) destructure `ctx` when they are created, so
+  `main.js` builds them last; other modules read `ctx` at call time.
+- A `.sys.mjs` module has its own global: `globalThis` there is not `main.js`'s autoconfig
+  scope. State that must survive a reload (`globalThis.zenMcp*`) is kept in `main.js` and
+  handed to modules through `ctx`.
 
 ## Sockets and streams
 

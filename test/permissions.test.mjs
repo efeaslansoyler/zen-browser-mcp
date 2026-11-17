@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
 import { siteRule, normalizeConfig } from '../browser/SiteRules.sys.mjs';
-import { Ownership } from '../browser/Ownership.sys.mjs';
 import { permissions } from '../browser/Permissions.sys.mjs';
-const source = fs.readFileSync(new URL('../browser/main.js', import.meta.url), 'utf8');
-const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
+import { Ownership } from '../browser/Ownership.sys.mjs';
+import { bridgeContext } from './support/bridge.mjs';
+
+// Gecko globals the real site checks and navigation use.
+globalThis.Services = {
+  uriFixup: { getFixupURIInfo: url => ({ preferredURI: { spec: new URL(url).href } }) },
+  io: { newURI: url => ({ host: new URL(url).hostname }) },
+};
 
 function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://ordinary.test', answer } = {}) {
   const settings = normalizeConfig({ mode, sensitive, sites });
@@ -20,15 +23,14 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
   navigate(site);
   const ownership = new Ownership();
   ownership.assign(1, 'test-session');
-  const context = vm.createContext({ sessions: new Map(), ChromeUtils: { importESModule: () => ({ permissions }) }, version: 'test', heldInputFrames: new Map(), browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, controlledSource: browser => browser, extensionPanels: { list: async () => [], destroy() {}, releaseSession() {}, releaseTab() {} },
-    siteRule, framesOf: () => [], Services: { uriFixup: { getFixupURIInfo: url => ({ preferredURI: { spec: new URL(url).href } }) }, io: { newURI: url => ({ host: new URL(url).hostname }) } },
+  const context = bridgeContext({
+    framesOf: () => [],
     ownership, activeSession: 'test-session',
     browserFor: id => { ownership.check(id, 'test-session'); return browser; },
-    readConfig: () => settings, operation: null, state: { paused: false, tabs: new Set([1]) },
-    activeAgent: { name: 'Codex' }, activeCalls: 0,
+    readConfig: () => settings, state: { paused: false, tabs: new Set([1]) },
+    activeAgent: { name: 'Codex' },
     findTab: () => ({ linkedBrowser: browser }), paintTab() {}, describeAction: () => '', logActivity() {},
-    island: null, L: en => en, shortRefs: x => x, Stopped: class extends Error {},
-    DialogOpen: class extends Error {},
+    shortRefs: x => x,
     askIsland: async (...args) => {
       prompts.push({ host: browser.currentURI.host, message: args[2] });
       return answer ? answer({ prompts, browser, navigate, settings }) : 'done';
@@ -47,9 +49,6 @@ function harness({ mode = 'auto', sensitive = [], sites = {}, site = 'https://or
       changePolicy: async args => { Object.assign(settings, args.settings); return []; },
     },
   });
-  vm.runInContext(block('    const hostOf =', "    // ---- tool'lar:") +
-    block('    async function runTool(', '    // ---- etkinlik günlüğü:') +
-    'tools.browser_batch = ({' + block('      async browser_batch(', '      // Claude\'un kullanıcıya bırakması') + '}).browser_batch;', context);
   const action = (name, input = {}) => ({ name, input: { tabId: 1, ...input } });
   const batch = actions => context.tools.browser_batch({ actions });
   return { context, browser, prompts, effects, settings, navigate, batch, action };
@@ -256,13 +255,13 @@ test('permission module describes actions and scopes approvals without slicing m
   assert.equal(await p.describeWrite('computer', { action: 'left_click', ref: 'ref_1' }, browser), 'button "Pay": click');
   assert.equal(await p.describeWrite('computer', { action: 'screenshot' }, browser), null);
   assert.equal(await p.describeWrite('navigate', { url: 'back' }, browser), 'go back');
-  // "sor" kuralı olan sitede gezinme serbest, işlem sorulur
+  // On an "ask" site navigation is free; actions are asked
   assert.equal(p.needsPermission('navigate', browser), false);
   assert.equal(p.needsPermission('computer', browser), true);
   const { context, asked: prompted } = await p.requirePermission(browser, [{ tool: 'computer', args: { action: 'left_click', ref: 'ref_1' } }]);
   assert.equal(prompted, true);
   assert.equal(asked[0], 'Claude wants to: button "Pay": click');
-  // onay belgeye ve sahiplik sürümüne bağlı
+  // An approval belongs to the document and the ownership version
   assert(p.samePermissionContext(context, p.permissionContext(browser)));
   ownership.assign(1, 'other');
   assert(!p.samePermissionContext(context, p.permissionContext(browser)));

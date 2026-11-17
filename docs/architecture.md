@@ -35,10 +35,22 @@ The loader is a few lines of [autoconfig](https://support.mozilla.org/kb/customi
 `resource://zenmcp/` to `~/.local/share/zen-mcp` and loads `main.js` with `loadSubScript`. A
 development install makes that folder a symlink to the repo's `browser/`.
 
+Modules share state and helpers through one `ctx` object: each factory (`tabs(ctx)`,
+`pageQueries(ctx)`, …) returns functions that `main.js` adds to `ctx`, and modules call each
+other through `ctx` at call time. That makes load order irrelevant and lets tests replace any
+function with a fake (see `test/support/bridge.mjs`).
+
 | File | Role |
 |---|---|
-| `main.js` | Bridge core: socket server, tab tracking and marks, sessions and ownership, permissions, `query`/frame/input helpers, tab tools |
-| `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups; `main.js` passes shared helpers through a `ctx` object |
+| `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
+| `ToolRunner.sys.mjs` | Request handling: the tool queue, per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
+| `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` status, queue and handoff |
+| `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
+| `PageQuery.sys.mjs` | `query` to a frame's actor, refs across frames, coordinate translation, load waits, page dialogs |
+| `PageInput.sys.mjs` | Mouse, keys, held input and screenshots |
+| `Control.sys.mjs` | Stop/Resume and island questions (`askIsland`, tab-less `ask_user`, notifications) |
+| `Config.sys.mjs`, `Activity.sys.mjs` | `config.json` and site access checks; island action text and the activity log |
+| `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
 | `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user`, approvals, dialogs, pick note box |
 | `Agent.sys.mjs` | Agent identity and theme (Claude orange, Codex mint, others blue); shared by Node and Gecko |
 | `Ownership.sys.mjs` | Per-session tab ownership, `tab_work` tasks and the handoff queue |
