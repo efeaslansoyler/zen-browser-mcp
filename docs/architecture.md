@@ -21,7 +21,9 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | File | Role |
 |---|---|
 | `cli.ts` | `npx zen-mcp`: no arguments runs the MCP server; `install`, `uninstall`, `doctor`, `config`, `codex-hooks` |
-| `server.ts` | Tool schemas and descriptions, server instructions, agent identity, per-call session, Claude conversation title |
+| `server.ts` | The MCP server: registers the tools, agent identity and per-call session, channel and lifecycle subscriptions |
+| `tools.ts`, `instructions.ts` | Tool schemas, descriptions and answer timeouts; server instructions |
+| `claude.ts` | Channel detection and the Claude conversation title |
 | `zen.ts` | Socket client: one request per connection (`call`) and long-lived subscriptions (`subscribe`) |
 | `paths.ts` | Package name and every user-visible path in one place |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
@@ -107,7 +109,7 @@ Ctrl+Shift+F or the page menu starts the picker; Shift+click selects several ele
 component chain, styles, text, trimmed HTML, PNG per element) goes to the target:
 
 - **Claude Code** through [channels](https://code.claude.com/docs/en/channels): when Claude
-  runs with `--dangerously-load-development-channels server:zen`, `server.ts` detects the flag
+  runs with `--dangerously-load-development-channels server:zen`, `claude.ts` detects the flag
   from `/proc`, declares `claude/channel` and forwards events as `notifications/claude/channel`.
 - **Codex** through `codex queue` (see [codex.md](codex.md)).
 - Without a target the text is copied to the clipboard.

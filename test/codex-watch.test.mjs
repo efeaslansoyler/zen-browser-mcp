@@ -40,7 +40,7 @@ test('codex tool calls are owned by their thread, others keep the process sessio
 });
 
 test('claude title follows the current conversation; /rename wins over the generated title', async () => {
-  const { claudeTitle } = await import('../dist/server.js');
+  const { claudeTitle } = await import('../dist/claude.js');
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
