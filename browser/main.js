@@ -126,7 +126,8 @@ function logError(where, e) {
     const { TabMenu } = load("TabMenu");
     const { Channels, ascii } = load("Channels");
     const { Picks } = load("Picks");
-    const { Recordings, RECORDING_KEY, STEP_TOPIC } = load("Recordings");
+    const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
+    const { Recipes, recipeTools, geckoIO } = load("Recipes");
     const { NetworkLog } = load("NetworkLog");
     const { EventFiles } = load("EventFiles");
     const { DownloadLog } = load("DownloadLog");
@@ -405,14 +406,16 @@ function logError(where, e) {
       menuAgent,
     });
 
-    // "Show me once": the user's steps in a recorded tab.
+    // "Show me once": the user's steps in a recorded tab, saved as recipes.
     ctx.recordings = new Recordings({
       setShared: (browserIds) => {
         Services.ppmm.sharedData.set(RECORDING_KEY, browserIds);
         Services.ppmm.sharedData.flush();
       },
       now: () => Date.now(),
+      capture: (step) => captureStep({ ...step, color: ctx.activeAgent.accent }),
     });
+    ctx.recipes = new Recipes({ dir: `${stateHome}/${zenMcpApp}/recipes`, io: geckoIO });
     const onRecordStep = (_subject, _topic, data) => {
       try {
         ctx.recordings.accept(JSON.parse(data));
@@ -460,7 +463,15 @@ function logError(where, e) {
 
     // ---- tools (MCP content arrays) and development commands ----
 
-    Object.assign(ctx.tools, tabTools(ctx), batchTool(ctx), readTools(ctx), inputTools(ctx), browserTools(ctx));
+    Object.assign(
+      ctx.tools,
+      tabTools(ctx),
+      batchTool(ctx),
+      readTools(ctx),
+      inputTools(ctx),
+      browserTools(ctx),
+      recipeTools(ctx),
+    );
 
     // The version of the installed browser files (install writes .version; a dev symlink has none).
     function fileVersion() {

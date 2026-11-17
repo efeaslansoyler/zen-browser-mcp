@@ -164,9 +164,12 @@ export class Recorder {
     // A typed value comes before the step that follows it (Enter submits it).
     if (action !== "type") this.flush();
     const doc = this.env.document();
+    const r = el?.getBoundingClientRect?.();
     this.env.post({
       action,
       ...(el ? { target: this.#describe(el) } : {}),
+      // where the element is in this frame's viewport, for the step's screenshot
+      ...(r ? { rect: { x: r.left, y: r.top, width: r.width, height: r.height } } : {}),
       ...extra,
       url: doc.URL,
       title: doc.title,

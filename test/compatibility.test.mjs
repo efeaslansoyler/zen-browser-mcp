@@ -34,7 +34,7 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
     await client.connect(clientTransport);
     try {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 29);
+      assert.equal(tools.length, 30);
       const computer = tools.find((t) => t.name === "computer");
       const schema = computer.inputSchema;
       for (const key of ["coordinate", "start_coordinate"]) {
@@ -96,6 +96,7 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         ask_user: { tabId: 1, message: "Please check", coordinate: [1, 2] },
         hand_to_user: { tabId: 1, message: "Log in, then press Done" },
         highlight: { tabId: 1, items: [{ ref: "ref_1", label: "Username" }] },
+        recipes: { action: "get", id: "bilet-ara" },
         request_tab: { tabId: 1, reason: "Inspect the selected element" },
         file_upload: { tabId: 1, ref: "ref_1", paths: ["/tmp/test.txt"] },
         handle_dialog: { tabId: 1, accept: false },

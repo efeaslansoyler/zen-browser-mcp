@@ -20,6 +20,8 @@ const env = process.env;
 export const DATA_DIR = path.join(env.XDG_DATA_HOME || path.join(home, ".local/share"), NAME);
 export const CONFIG_FILE = path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), NAME, "config.json");
 export const STATE_DIR = path.join(env.XDG_STATE_HOME || path.join(home, ".local/state"), NAME);
+// "show me once" recipes; not in DATA_DIR, which installs replace
+export const RECIPES_DIR = path.join(STATE_DIR, "recipes");
 // Desktop MCP clients may not inherit the login session's XDG_RUNTIME_DIR.
 // On Linux, use the existing per-user runtime directory before falling back to tmp.
 const userRuntime = process.platform === "linux" && process.getuid ? `/run/user/${process.getuid()}` : undefined;

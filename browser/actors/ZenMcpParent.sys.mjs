@@ -7,6 +7,7 @@ export class ZenMcpParent extends JSWindowActorParent {
     const context = this.browsingContext;
     const message = {
       browserId: context.browserId,
+      frameId: context.id,
       isTop: context === context.top,
       pageUrl: context.top.currentWindowGlobal?.documentURI?.spec ?? "",
       step: data,

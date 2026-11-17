@@ -141,7 +141,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "find":
           return { value: this.#reader.find(data.query) };
         case "frame_rect":
-          return this.#frameRect(data.bcId);
+          return this.#frameRect(data.bcId, data.scroll !== false);
         case "frame_at":
           return { value: this.#frameAt(data.x, data.y) };
         case "active_frame":
@@ -448,10 +448,11 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   // The iframe's content box in this frame's viewport; scrolled into view if needed.
-  #frameRect(bcId) {
+  // scroll: false for recordings, which must not move the user's page.
+  #frameRect(bcId, scroll = true) {
     const el = this.#frameElement(bcId);
     if (!el) throw new Error("iframe not found (the page may have changed).");
-    if (!reader.fullyInViewport(el, this.contentWindow))
+    if (scroll && !reader.fullyInViewport(el, this.contentWindow))
       el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     return this.#contentOrigin(el);
   }

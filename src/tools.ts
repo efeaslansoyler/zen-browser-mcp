@@ -445,6 +445,22 @@ tool(
 );
 
 tool(
+  "recipes",
+  [
+    'Recipes are workflows the user showed you once in the browser ("show me once"), saved under a name.',
+    "list (optionally for a page url's site) shows them; get returns one as numbered steps to repeat with your own tools: start at its URL, find each element again with find or read_page, and hand secret steps (passwords, codes) to the user with hand_to_user. images: true adds a screenshot path per step.",
+    "delete asks the user on the island first.",
+  ].join(" "),
+  {
+    action: z.enum(["list", "get", "delete"]).optional().describe("Default list."),
+    id: z.string().optional().describe("Recipe id from list (for get and delete)."),
+    url: z.string().optional().describe("list: only recipes for this URL's site."),
+    images: z.boolean().optional().describe("get: include each step's screenshot path."),
+  },
+  () => 140000,
+);
+
+tool(
   "hand_to_user",
   [
     "Hand a step to the user when they must do it themselves in a tab: logging in or any credentials, 2FA codes, captchas, confirming a payment or a deletion, accepting terms.",

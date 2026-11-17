@@ -5,8 +5,13 @@
 // Steps come from content processes, so they are untrusted: only known fields are kept, strings
 // are cut to size and steps from tabs that aren't recorded are dropped.
 //
+// Every step gets a screenshot right after it arrives (captureStep below); the captures run
+// one after another and stop() waits for them. Steps on secret fields get none.
+//
 // env: { setShared(browserIds): publishes the recorded tabs to every content process,
-//        now(): ms }
+//        now(): ms,
+//        capture({ recording, index, rect, frameId }): → { image, crop } file names in
+//          recording.dir, or null }
 
 export const RECORDING_KEY = "zen-mcp:recording";
 export const STEP_TOPIC = "zen-mcp-record-step";
@@ -24,33 +29,37 @@ export class Recordings {
   }
 
   // onStep(recording, step) runs after each new or merged step (live counter on the island).
-  start(browser, { onStep = () => {} } = {}) {
+  start(browser, { onStep = () => {}, dir = null } = {}) {
     if (this.#active.has(browser.browserId)) throw new Error("This tab is already being recorded.");
     const recording = {
+      dir, // where the step images go; null: no images
       browserId: browser.browserId,
       startUrl: browser.currentURI?.spec ?? "",
       startedAt: this.env.now(),
       steps: [],
       truncated: false,
       onStep,
+      captures: Promise.resolve(),
     };
     this.#active.set(browser.browserId, recording);
     this.#publish();
     return recording;
   }
 
-  // Ends the recording and returns it (null if the tab wasn't recorded).
-  stop(browserId) {
+  // Ends the recording and returns it once its screenshots are written (null if the tab
+  // wasn't recorded).
+  async stop(browserId) {
     const recording = this.#active.get(browserId);
     if (!recording) return null;
     this.#active.delete(browserId);
     this.#publish();
-    const { onStep, ...result } = recording;
+    await recording.captures;
+    const { onStep, captures, ...result } = recording;
     return result;
   }
 
   stopAll() {
-    for (const browserId of [...this.#active.keys()]) this.stop(browserId);
+    for (const browserId of [...this.#active.keys()]) this.stop(browserId).catch(() => {});
   }
 
   isRecording(browserId) {
@@ -73,9 +82,22 @@ export class Recordings {
     } else {
       recording.steps.push({ ...step, at: this.env.now() - recording.startedAt });
     }
+    const index = recording.steps.length - 1;
+    if (recording.dir && !step.secret) this.#capture(recording, index, cleanRect(message.step.rect), message.frameId);
     try {
-      recording.onStep(recording, recording.steps.at(-1));
+      recording.onStep(recording, recording.steps[index]);
     } catch {}
+  }
+
+  #capture(recording, index, rect, frameId) {
+    const step = recording.steps[index];
+    recording.captures = recording.captures
+      .then(() => this.env.capture({ recording, index, rect, frameId }))
+      .then((files) => {
+        // a merged type step replaced this one meanwhile: the newer capture names the files
+        if (files && recording.steps[index] === step) Object.assign(step, files);
+      })
+      .catch(() => {});
   }
 
   #clean({ isTop, pageUrl, step }) {
@@ -116,6 +138,91 @@ export class Recordings {
   }
 }
 
+function cleanRect(rect) {
+  if (!rect || typeof rect !== "object") return null;
+  const values = [rect.x, rect.y, rect.width, rect.height];
+  if (!values.every((v) => Number.isFinite(v) && Math.abs(v) < 1e6)) return null;
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+}
+
 function sameTarget(a, b) {
   return a.target?.selector === b.target?.selector && a.url === b.url && a.frameUrl === b.frameUrl;
+}
+
+// A rect in an iframe → the top page's viewport: adds the frame offsets without scrolling.
+async function topRect(browserId, rect, frameId) {
+  let frame = BrowsingContext.get(frameId);
+  if (!rect || frame?.top?.browserId !== browserId) return null;
+  for (; frame.parent; frame = frame.parent) {
+    const o = await frame.parent.currentWindowGlobal
+      ?.getActor("ZenMcp")
+      .sendQuery("frame_rect", { bcId: frame.id, scroll: false })
+      .catch(() => null);
+    if (!o || o.error) return null;
+    rect = { ...rect, x: rect.x + o.x, y: rect.y + o.y };
+  }
+  return rect;
+}
+
+const MAX_WIDTH = 1280;
+const PAD = 16;
+
+// The step's screenshot: the tab's viewport (scaled to at most 1280 px wide) with a ring around
+// the element, and a crop of the element with some margin. JPEGs in recording.dir; returns
+// their names. rect is in the step's frame (CSS px); without it there is no ring and no crop.
+export async function captureStep({ recording, index, rect, frameId, color }) {
+  const browser = BrowsingContext.getCurrentTopByBrowserId(recording.browserId)?.embedderElement;
+  if (!browser) return null;
+  rect = await topRect(recording.browserId, rect, frameId);
+  const dir = recording.dir;
+  const wg = browser.browsingContext?.currentWindowGlobal;
+  if (!wg) return null;
+  const doc = browser.ownerDocument;
+  const bitmap = await wg.drawSnapshot(null, 1, "white");
+  const s = Math.min(1, MAX_WIDTH / bitmap.width);
+  const canvas = doc.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+  canvas.width = Math.round(bitmap.width * s);
+  canvas.height = Math.round(bitmap.height * s);
+  const g = canvas.getContext("2d");
+  g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const box = rect && {
+    x: rect.x * s - 4,
+    y: rect.y * s - 4,
+    width: rect.width * s + 8,
+    height: rect.height * s + 8,
+  };
+  if (box) {
+    // the same look as the highlight tool: agent color with a white inner and dark outer edge
+    g.lineJoin = "round";
+    const ring = (width, style) => {
+      g.lineWidth = width;
+      g.strokeStyle = style;
+      g.strokeRect(box.x, box.y, box.width, box.height);
+    };
+    ring(7, "rgba(0, 0, 0, 0.35)");
+    ring(5, color);
+    ring(1.5, "rgba(255, 255, 255, 0.9)");
+  }
+  const jpeg = async (source) =>
+    new Uint8Array(await (await new Promise((resolve) => source.toBlob(resolve, "image/jpeg", 0.85))).arrayBuffer());
+  await IOUtils.makeDirectory(dir, { permissions: 0o700 });
+  const name = String(index + 1).padStart(3, "0");
+  const files = { image: `${name}.jpg` };
+  await IOUtils.write(`${dir}/${files.image}`, await jpeg(canvas));
+  if (box) {
+    const left = Math.max(0, Math.floor(box.x - PAD));
+    const top = Math.max(0, Math.floor(box.y - PAD));
+    const width = Math.min(canvas.width, Math.ceil(box.x + box.width + PAD)) - left;
+    const height = Math.min(canvas.height, Math.ceil(box.y + box.height + PAD)) - top;
+    if (width > 4 && height > 4) {
+      const crop = doc.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+      crop.width = width;
+      crop.height = height;
+      crop.getContext("2d").drawImage(canvas, left, top, width, height, 0, 0, width, height);
+      files.crop = `${name}-crop.jpg`;
+      await IOUtils.write(`${dir}/${files.crop}`, await jpeg(crop));
+    }
+  }
+  return files;
 }

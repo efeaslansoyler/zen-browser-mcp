@@ -195,7 +195,7 @@ function recordings() {
   return { r, shared: () => shared, tick: (ms) => (now += ms) };
 }
 
-test("Recordings publishes the recorded tabs and keeps only steps from them", () => {
+test("Recordings publishes the recorded tabs and keeps only steps from them", async () => {
   const { r, shared, tick } = recordings();
   const live = [];
   r.start({ browserId: 7, currentURI: { spec: "https://shop.test/" } }, { onStep: (_r, s) => live.push(s) });
@@ -211,15 +211,15 @@ test("Recordings publishes the recorded tabs and keeps only steps from them", ()
   r.accept({ browserId: 8, isTop: true, step: { action: "click", url: "https://other.test/" } });
   r.accept({ browserId: 7, isTop: true, step: { action: "eval", code: "x" } });
 
-  const result = r.stop(7);
+  const result = await r.stop(7);
   assert.deepEqual(shared(), []);
   assert.equal(result.startUrl, "https://shop.test/");
   assert.deepEqual(result.steps, [{ action: "click", target: { selector: "#go" }, url: "https://shop.test/", at: 50 }]);
   assert.equal(live.length, 1);
-  assert.equal(r.stop(7), null);
+  assert.equal(await r.stop(7), null);
 });
 
-test("Recordings merges repeated typing into one field and cleans untrusted fields", () => {
+test("Recordings merges repeated typing into one field and cleans untrusted fields", async () => {
   const { r } = recordings();
   r.start({ browserId: 1 });
   const type = (value) => ({
@@ -235,7 +235,7 @@ test("Recordings merges repeated typing into one field and cleans untrusted fiel
     isTop: true,
     step: { action: "type", secret: true, value: "leak", url: "https://shop.test/" },
   });
-  const { steps } = r.stop(1);
+  const { steps } = await r.stop(1);
   assert.deepEqual(steps[0], {
     action: "type",
     target: { selector: "#q" },
@@ -282,4 +282,49 @@ test("the actor records only trusted events in recorded tabs and sends them to t
   assert.equal(sent[0][0], "record_step");
   assert.equal(sent[0][1].action, "click");
   assert.equal(sent[0][1].target.selector, "#buy");
+});
+
+test("Recordings captures each step in order and stop waits for the images", async () => {
+  const calls = [];
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const r = new Recordings({
+    setShared() {},
+    now: () => 0,
+    async capture({ index, rect, frameId }) {
+      calls.push([index, rect, frameId]);
+      if (index === 0) await gate;
+      return { image: `${index + 1}.jpg` };
+    },
+  });
+  r.start({ browserId: 3 }, { dir: "/tmp/rec" });
+  const step = (action, value, rect) => ({
+    browserId: 3,
+    frameId: 9,
+    isTop: true,
+    step: { action, value, target: { selector: "#q" }, url: "u", rect },
+  });
+  r.accept(step("click", undefined, { x: 1, y: 2, width: 3, height: 4 }));
+  r.accept(step("type", "a", { x: NaN, y: 0, width: 1, height: 1 }));
+  r.accept(step("type", "ab"));
+  r.accept({ ...step("type"), step: { action: "type", secret: true, url: "u" } });
+  let done = false;
+  const stopped = r.stop(3).then((result) => ((done = true), result));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(done, false);
+  release();
+  const { steps } = await stopped;
+  assert.deepEqual(calls, [
+    [0, { x: 1, y: 2, width: 3, height: 4 }, 9],
+    [1, null, 9],
+    [1, null, 9],
+  ]);
+  assert.deepEqual(
+    steps.map((s) => [s.action, s.image, "rect" in s]),
+    [
+      ["click", "1.jpg", false],
+      ["type", "2.jpg", false],
+      ["type", undefined, false],
+    ],
+  );
 });

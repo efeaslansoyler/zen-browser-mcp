@@ -8,6 +8,7 @@ import { stopCodexRelays } from "./codex-relay.ts";
 import { configureCodexHooks, handleCodexHook } from "./codex-hooks.ts";
 import { PACKAGE, VERSION } from "./paths.ts";
 import { serve } from "./server.ts";
+import { recipesCommand } from "./recipes.ts";
 import { skillCommand } from "./skill.ts";
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -28,6 +29,7 @@ ${usage([
   [`npx ${PACKAGE} skill install|uninstall`, "add the agent skill to Claude Code and Codex"],
   [`npx ${PACKAGE} codex-hooks install|uninstall`, "manage automatic Codex chat connection"],
   [`npx ${PACKAGE} config`, "show or change settings (mode, site rules)"],
+  [`npx ${PACKAGE} recipes [list]|show|rm <id>`, "recipes the user showed the agent once"],
 ])}`,
   `${PACKAGE} ${VERSION}: AI ajanlarının Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
 
@@ -42,6 +44,7 @@ ${usage([
   [`npx ${PACKAGE} skill install|uninstall`, "ajan skill'ini Claude Code ve Codex'e ekler"],
   [`npx ${PACKAGE} codex-hooks install|uninstall`, "otomatik Codex sohbet bağlantısını yönetir"],
   [`npx ${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
+  [`npx ${PACKAGE} recipes [list]|show|rm <id>`, "ajana bir kez gösterdiğin tarifler"],
 ])}`,
 );
 
@@ -85,6 +88,9 @@ try {
       break;
     case "skill":
       skillCommand(args[0]);
+      break;
+    case "recipes":
+      console.log(await recipesCommand(args));
       break;
     case "--version":
     case "-v":
