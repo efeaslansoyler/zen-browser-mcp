@@ -9,6 +9,9 @@
 const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(
   new URL("./Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search,
 );
+const { renderReview, REVIEW_CSS } = ChromeUtils.importESModule(
+  new URL("./RecordingReview.sys.mjs", import.meta.url).href + new URL(import.meta.url).search,
+);
 
 const XHTML = "http://www.w3.org/1999/xhtml";
 // UI language: Turkish if the browser is Turkish, English otherwise
@@ -269,6 +272,11 @@ const CSS = `
     }
     &[state="dialog"] .cancel { display: none; }
     & :is(.goto, .ok)[hidden] { display: none; }
+${REVIEW_CSS}
+  }
+
+  @keyframes zen-mcp-rec {
+    50% { opacity: 0.45; }
   }
 
   @keyframes zen-mcp-spin {
@@ -290,7 +298,7 @@ export class Island {
   #agent = agentTheme({ id: "claude" });
   #windows = new Map(); // window → DOM parts and listeners
   #sheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(CSS));
-  #state = "hidden"; // hidden | working | ask | dialog | stopped
+  #state = "hidden"; // hidden | working | ask | dialog | stopped | recording | review
   #text = "";
   #message = "";
   #askDone = false; // ask_user wait: "done" → OK on the island
@@ -302,6 +310,8 @@ export class Island {
   // { mode: "picking" | "compose" | "sent", browser (WeakRef), label, target, text }
   #pick = null;
   #pickTimer = null;
+  #fresh = false; // recording, no step yet: the message stays open
+  #review = null; // { model, version }: the review panel after a recording
   #mode = "auto"; // "auto" | "ask"
   #actions;
   #setTimeout;
@@ -330,6 +340,7 @@ export class Island {
     el.id = ID;
     el.hidden = true;
     const row = node("div", "row");
+    const recdot = node("span", "recdot");
     const spark = node("span", "spark");
     spark.title = "Claude";
     const info = node("span", "info");
@@ -341,7 +352,10 @@ export class Island {
     const mode = node("button", "mode");
     mode.addEventListener("click", () => this.#actions.toggleMode());
     const stop = node("button", "stop");
-    row.append(spark, info, mode, stop);
+    // show_me: the recording's own buttons stay in the one-line island
+    const recCancel = node("button", "rec-button", L("Cancel", "Vazgeç"));
+    const recFinish = node("button", "rec-button primary", L("Finish", "Bitir"));
+    row.append(recdot, spark, info, mode, recCancel, recFinish, stop);
     const detail = node("div", "detail");
     const message = node("div", "message");
     const buttons = node("div", "buttons");
@@ -378,7 +392,8 @@ export class Island {
     const send = node("button", "primary", L("Send", "Gönder"));
     footer.append(target, discard, send);
     compose.append(note, footer);
-    el.append(row, detail, compose, preview);
+    const reviewHost = node("div", "review-host");
+    el.append(row, detail, reviewHost, compose, preview);
     doc.documentElement.append(el);
 
     const submit = () => {
@@ -425,6 +440,8 @@ export class Island {
       };
     cancel.addEventListener("click", answer("cancelled"));
     ok.addEventListener("click", answer("done"));
+    recCancel.addEventListener("click", answer("cancelled"));
+    recFinish.addEventListener("click", answer("done"));
     stop.addEventListener("click", () => {
       if (this.#state === "stopped") this.#actions.resume();
       else this.#actions.stop();
@@ -473,6 +490,9 @@ export class Island {
       answerNote,
       choices,
       answer,
+      reviewHost,
+      reviewView: null,
+      reviewVersion: -1,
     });
     this.#fillChoices(win);
     this.#render();
@@ -509,7 +529,7 @@ export class Island {
 
   // The agent is working in a tab; stays visible while the action runs.
   working(browser, text) {
-    if (this.#state === "stopped" || this.#state === "ask") return;
+    if (["stopped", "ask", "recording", "review"].includes(this.#state)) return;
     this.#clearTimeout(this.#hideTimer);
     this.#state = "working";
     this.#text = text;
@@ -574,8 +594,79 @@ export class Island {
     for (const win of this.#windows.keys()) this.#fillChoices(win);
   }
 
+  // show_me: the one-line recording island; text is "Recording · 3 steps". fresh: no step
+  // yet, so the agent's message stays open.
+  recording(browser, text, message) {
+    if (this.#state === "stopped") return;
+    this.#clearTimeout(this.#hideTimer);
+    this.#state = "recording";
+    this.#text = text;
+    this.#message = message;
+    this.#fresh = true;
+    this.#browser = new WeakRef(browser);
+    this.#render();
+  }
+
+  recordingProgress(text) {
+    if (this.#state !== "recording") return;
+    this.#text = text;
+    this.#fresh = false;
+    this.#render();
+  }
+
+  // After Finish: the review panel (RecordingReview.sys.mjs) for the model. Save and Cancel
+  // answer like ask_user's buttons: "done" with the model's result as the choice.
+  review(browser, text, model) {
+    if (this.#state === "stopped") return;
+    this.#clearTimeout(this.#hideTimer);
+    this.#state = "review";
+    this.#text = text;
+    this.#review = { model, version: 0 };
+    this.#browser = new WeakRef(browser);
+    this.#render();
+  }
+
+  #reviewChanged() {
+    if (!this.#review) return;
+    this.#review.version++;
+    this.#render();
+  }
+
+  // Builds the panel in the window that shows the island; rebuilt only after a change in the
+  // panel, so other renders keep the user's typing and focus.
+  #renderReview(win, parts, visible) {
+    const review = this.#state === "review" && visible ? this.#review : null;
+    if (!review) {
+      parts.reviewView?.dispose();
+      parts.reviewView = null;
+      parts.reviewVersion = -1;
+      parts.reviewHost.replaceChildren();
+      return;
+    }
+    if (parts.reviewVersion === review.version) return;
+    const first = parts.reviewView === null;
+    const mode = parts.reviewMode;
+    parts.reviewView?.dispose();
+    const answer = (result, choice) => {
+      const browser = this.#browser?.deref();
+      if (browser) this.#actions.answer(browser, result, "", choice);
+    };
+    parts.reviewView = renderReview(win.document, review.model, {
+      changed: () => this.#reviewChanged(),
+      save: () => answer("done", review.model.result()),
+      cancel: () => answer("cancelled"),
+      setTimeout: this.#setTimeout,
+      clearTimeout: this.#clearTimeout,
+    });
+    parts.reviewVersion = review.version;
+    parts.reviewMode = review.model.mode;
+    parts.reviewHost.replaceChildren(parts.reviewView.node);
+    if (first || mode !== review.model.mode) parts.reviewView.focus?.();
+  }
+
   askEnded() {
-    if (this.#state !== "ask") return;
+    if (!["ask", "recording", "review"].includes(this.#state)) return;
+    this.#review = null;
     this.#clearChoices();
     // a tab-less question leaves no tab to show "working" for
     if (!this.#browser) {
@@ -590,7 +681,7 @@ export class Island {
 
   // The page opened alert/confirm/prompt; stays until dialogEnded (or a new action).
   dialog(browser, text, message) {
-    if (this.#state === "stopped" || this.#state === "ask") return;
+    if (["stopped", "ask", "recording", "review"].includes(this.#state)) return;
     this.#clearTimeout(this.#hideTimer);
     this.#state = "dialog";
     this.#text = text;
@@ -619,6 +710,7 @@ export class Island {
     this.#clearTimeout(this.#hideTimer);
     this.#state = "stopped";
     this.#text = "";
+    this.#review = null;
     this.#clearChoices();
     this.#render();
   }
@@ -752,6 +844,8 @@ export class Island {
       const anywhere = state === "ask" && !pick && !this.#browser;
       const visible = stopped || anywhere || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
+      el.toggleAttribute("fresh", state === "recording" && this.#fresh);
+      this.#renderReview(win, parts, visible);
       host.textContent = stopped ? "" : siteName;
       text.textContent = stopped
         ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`)

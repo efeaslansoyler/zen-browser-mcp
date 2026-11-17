@@ -610,7 +610,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #flash(element) {
     let shown;
     try {
-      shown = highlight(this.#env, [{ element, label: L("Recorded", "Kaydedildi"), number: "✓" }]);
+      shown = highlight(this.#env, [{ element, label: "", number: "✓" }]);
     } catch {
       return; // only a hint
     }

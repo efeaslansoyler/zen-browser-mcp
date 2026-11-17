@@ -165,6 +165,7 @@ async function topRect(browserId, rect, frameId) {
 }
 
 const MAX_WIDTH = 1280;
+const round = (n) => Math.round(n * 1000) / 1000;
 const PAD = 16;
 
 // The step's screenshot: the tab's viewport (scaled to at most 1280 px wide) with a ring around
@@ -225,6 +226,15 @@ export async function captureStep({ recording, index, rect, frameId, color }) {
   await IOUtils.makeDirectory(dir, { permissions: 0o700 });
   const name = String(index + 1).padStart(3, "0");
   const files = { image: `${name}.jpg` };
+  // where the element is in the image (fractions), so Play can zoom in on it
+  if (box)
+    files.focus = {
+      x: round(box.x / canvas.width),
+      y: round(box.y / canvas.height),
+      width: round(box.width / canvas.width),
+      height: round(box.height / canvas.height),
+      aspect: round(canvas.height / canvas.width),
+    };
   await IOUtils.write(`${dir}/${files.image}`, await jpeg(canvas));
   if (box) {
     const left = Math.max(0, Math.floor(box.x - PAD));

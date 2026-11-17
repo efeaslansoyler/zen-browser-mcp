@@ -33,6 +33,7 @@ export type RecipeIO = {
 };
 export function slug(name: string): string;
 export function originOf(url: string): string;
+export function localDay(iso: string): string;
 export function describeStep(step: RecipeStep): string;
 export function formatRecipe(recipe: Recipe, options?: { dir?: string; images?: boolean }): string;
 export class Recipes {

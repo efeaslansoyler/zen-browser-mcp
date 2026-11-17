@@ -2,7 +2,7 @@
 // their folder (the browser doesn't have to run).
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Recipes, formatRecipe, type RecipeIO } from "../browser/Recipes.sys.mjs";
+import { Recipes, formatRecipe, localDay, type RecipeIO } from "../browser/Recipes.sys.mjs";
 import { L } from "./i18n.ts";
 import { RECIPES_DIR } from "./paths.ts";
 
@@ -26,7 +26,7 @@ export async function recipesCommand(args: string[], store = new Recipes({ dir: 
     const all = await store.list();
     if (!all.length) return L(`No recipes in ${store.dir}.`, `${store.dir} içinde tarif yok.`);
     return all
-      .map((r) => `${r.id.padEnd(30)}  ${r.name}  (${r.steps} ${L("steps", "adım")}, ${r.createdAt.slice(0, 10)})`)
+      .map((r) => `${r.id.padEnd(30)}  ${r.name}  (${r.steps} ${L("steps", "adım")}, ${localDay(r.createdAt)})`)
       .join("\n");
   }
   if ((action === "show" || action === "rm") && id) {

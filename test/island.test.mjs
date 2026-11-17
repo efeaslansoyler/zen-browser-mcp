@@ -17,6 +17,10 @@ class Element {
   removeAttribute(k) {
     this.attrs.delete(k);
   }
+  toggleAttribute(k, on) {
+    if (on) this.attrs.set(k, "");
+    else this.attrs.delete(k);
+  }
   listeners = new Map();
   addEventListener(event, callback) {
     this.listeners.set(event, callback);
@@ -116,7 +120,7 @@ test("island switches clients, confirmation, pause and Claude selection without 
     select.listeners.get("change")();
     expectTheme("Claude", "#d97757");
     assert.equal(selections[0].id, "claude-session");
-    const compose = el.children[2];
+    const compose = el.querySelector(".compose");
     const note = compose.children[0];
     const sendButton = compose.children[1].children[2];
     note.value = "Change this button";

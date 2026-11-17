@@ -128,6 +128,7 @@ function logError(where, e) {
     const { Picks } = load("Picks");
     const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
     const { Recipes, recipeTools, geckoIO } = load("Recipes");
+    const { ReviewModel } = load("RecordingReview");
     const { NetworkLog } = load("NetworkLog");
     const { EventFiles } = load("EventFiles");
     const { DownloadLog } = load("DownloadLog");
@@ -416,6 +417,8 @@ function logError(where, e) {
       capture: (step) => captureStep({ ...step, color: ctx.activeAgent.accent }),
     });
     ctx.recipes = new Recipes({ dir: `${stateHome}/${zenMcpApp}/recipes`, io: geckoIO });
+    ctx.ReviewModel = ReviewModel;
+    ctx.fileURL = (path) => Services.io.newFileURI(localFile(path)).spec;
     const onRecordStep = (_subject, _topic, data) => {
       try {
         ctx.recordings.accept(JSON.parse(data));

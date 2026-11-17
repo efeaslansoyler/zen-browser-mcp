@@ -4,6 +4,7 @@
 //   node scripts/zenctl.ts <tool> '{"tabId": 12}'           (images summarized on stdout)
 //   node scripts/zenctl.ts --session dev <tool> '{…}'      (calls with the same name share tabs)
 import { writeFileSync } from "node:fs";
+import { callTimeout } from "../src/tools.ts";
 import { call } from "../src/zen.ts";
 
 // each call is its own session; with --session, consecutive calls use the same tabs
@@ -51,10 +52,12 @@ try {
     await reload();
     process.exit(0);
   }
+  const args = cmd === "eval" ? {} : arg ? JSON.parse(arg) : {};
+  // the tool's own timeout, as the MCP server uses it (show_me waits for minutes)
   const content =
     cmd === "eval"
       ? await call("chrome_eval", { code: arg })
-      : await call(cmd, arg ? JSON.parse(arg) : {}, undefined, undefined, session);
+      : await call(cmd, args, callTimeout(cmd, args), undefined, session);
   for (const c of content) {
     if (c.type === "text") console.log(c.text);
     else {

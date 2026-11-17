@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { Recipes, formatRecipe, slug, recipeTools } from "../browser/Recipes.sys.mjs";
 import { nodeIO, recipesCommand } from "../src/recipes.ts";
+import { ReviewModel, stepLabel } from "../browser/RecordingReview.sys.mjs";
 
 function store() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zen-recipes-"));
@@ -137,7 +138,7 @@ test("recipes CLI lists, shows and removes", async () => {
   await assert.rejects(recipesCommand(["rm"], recipes), /Usage/);
 });
 
-function showMeContext({ answer, steps }) {
+function showMeContext({ answers, steps }) {
   const { root, recipes } = store();
   const calls = [];
   const frames = [{ currentWindowGlobal: { getActor: () => ({ sendQuery: async (name) => calls.push(name) }) } }];
@@ -147,18 +148,25 @@ function showMeContext({ answer, steps }) {
     browsingContext: { getAllBrowsingContextsInSubtree: () => frames },
   };
   let recording = null;
+  let model = null;
   const ctx = {
     L: (en) => en,
     text: (value) => [{ type: "text", text: value }],
     runtimeDir: root,
     app: "zen-mcp",
     recipes,
+    ReviewModel,
+    fileURL: (path) => `file://${path}`,
     browserFor: () => browser,
     notifyAsk: () => false,
     closeAskAlert() {},
     island: {
-      ask: (...args) => calls.push(["ask", args[1], args[3], args[4]]),
-      askProgress: (title) => calls.push(["progress", title]),
+      recording: (_b, title) => calls.push(["recording", title]),
+      recordingProgress: (title) => calls.push(["progress", title]),
+      review: (_b, title, m) => {
+        model = m;
+        calls.push(["review", title]);
+      },
       askEnded: () => calls.push("ended"),
     },
     recordings: {
@@ -179,46 +187,147 @@ function showMeContext({ answer, steps }) {
     },
     async waitIslandAnswer(timeout, key) {
       calls.push(["wait", timeout, key === browser]);
-      return answer;
+      const answer = answers.shift();
+      return typeof answer === "function" ? answer(model) : answer;
     },
   };
   return { ctx, calls, recipes };
 }
 
-test("show_me records until Finish and saves the steps with the user's note", async () => {
-  const steps = [
-    { action: "type", target: { role: "searchbox", name: "Search" }, value: "derby", url: "https://tickets.test/" },
-    { action: "key", key: "Enter", url: "https://tickets.test/" },
-  ];
-  const { ctx, calls, recipes } = showMeContext({ answer: { status: "done", message: "Team name changes" }, steps });
+const shown = [
+  {
+    action: "type",
+    target: { role: "searchbox", name: "Search" },
+    value: "derby",
+    url: "https://tickets.test/",
+    crop: "001-crop.jpg",
+  },
+  { action: "click", target: { role: "button", name: "Ads" }, url: "https://tickets.test/" },
+  { action: "key", key: "Enter", url: "https://tickets.test/" },
+];
+
+test("show_me records on one line, then saves what the user kept in the review", async () => {
+  const { ctx, calls, recipes } = showMeContext({
+    steps: shown,
+    answers: [
+      "done",
+      (model) => {
+        assert.equal(model.name, "Tickets");
+        assert.match(model.items[0].thumb, /^file:\/\/.*001-crop\.jpg$/);
+        model.toggleVariable(0);
+        model.renameVariable(0, "{team}");
+        model.toggleRemoved(1);
+        model.note = "Team changes";
+        return { status: "done", choice: model.result() };
+      },
+    ],
+  });
   const [{ text }] = await recipeTools(ctx).show_me({ tabId: 1, message: "Show me", timeout: 99999 });
   assert.match(text, /^Saved the demonstration as recipe tickets\./);
-  assert.match(text, /1\. type "derby" into searchbox "Search"/);
+  assert.match(text, /Variables \(change every time\): \{team\}/);
+  assert.match(text, /1\. type \{team\} \(example: "derby"\) into searchbox "Search"/);
+  assert.match(text, /2\. press Enter/);
+  assert.doesNotMatch(text, /Ads/);
   assert.deepEqual(calls, [
-    ["ask", "Recording · do it in the tab", true, { ok: "Finish", cancel: "Cancel" }],
+    ["recording", "Recording · do it in the tab"],
     ["progress", "Recording · 1 step"],
     ["progress", "Recording · 2 steps"],
+    ["progress", "Recording · 3 steps"],
     ["wait", 3600, true],
     "record_flush",
     "stop",
+    ["review", "Review the recording · 3 steps"],
+    ["wait", 3600, true],
     "ended",
   ]);
   const [saved] = await recipes.list();
-  assert.equal(saved.name, "Tickets");
-  assert.equal(saved.note, "Team name changes");
+  assert.equal(saved.note, "Team changes");
+  assert.equal(saved.steps, 2);
 });
 
-test("show_me saves nothing when the user cancels or shows nothing", async () => {
-  for (const [answer, steps, expected] of [
-    ["cancelled", [{ action: "key", key: "Enter" }], /cancelled; nothing was saved/],
-    ["timeout", [{ action: "key", key: "Enter" }], /did not finish within 900 s/],
-    ["done", [], /without doing any steps/],
+test("show_me overwrites a recipe with the same name when the user saves under it", async () => {
+  const { ctx, recipes } = showMeContext({
+    steps: shown,
+    answers: ["done", (model) => ({ status: "done", choice: { ...model.result(), name: "OLD one" } })],
+  });
+  await recipes.save({ startUrl: "https://tickets.test/", steps: shown }, { name: "Old one" });
+  await recipeTools(ctx).show_me({ tabId: 1, message: "Show me" });
+  const all = await recipes.list();
+  assert.deepEqual(
+    all.map((r) => [r.id, r.name, r.steps]),
+    [["old-one", "OLD one", 3]],
+  );
+});
+
+test("show_me saves nothing when the user cancels, times out or shows nothing", async () => {
+  for (const [answers, steps, expected] of [
+    [["cancelled"], shown, /cancelled; nothing was saved/],
+    [["timeout"], shown, /did not finish within 900 s/],
+    [["done"], [], /without doing any steps/],
+    [["done", "cancelled"], shown, /cancelled; nothing was saved/],
   ]) {
-    const { ctx, recipes } = showMeContext({ answer, steps });
+    const { ctx, recipes, calls } = showMeContext({ answers, steps });
     const [{ text }] = await recipeTools(ctx).show_me({ tabId: 1, message: "Show me" });
     assert.match(text, expected);
     assert.deepEqual(await recipes.list(), []);
+    assert.equal(calls.at(-1), "ended");
   }
-  const { ctx } = showMeContext({ answer: "done", steps: [] });
+  const { ctx } = showMeContext({ answers: [], steps: [] });
   await assert.rejects(recipeTools(ctx).show_me({ tabId: 1, message: " " }), /message/);
+});
+
+test("the review model: names, removals, variables and play order", () => {
+  const L = (en) => en;
+  const steps = [
+    ...shown,
+    { action: "type", secret: true, target: { name: "Password" } },
+    { action: "select", value: "Category 2", target: { name: "Category" } },
+  ];
+  const model = new ReviewModel({ name: "Derby", steps, existingNames: ["derby", "Other"], L });
+  assert.equal(model.exists, true);
+  model.name = "Derby tickets";
+  assert.equal(model.exists, false);
+  assert.deepEqual(
+    model.items.map((i) => i.text),
+    [
+      "Type “derby” → Search",
+      "Click “Ads”",
+      "Press Enter",
+      "Fill in the secret field “Password”",
+      "Choose “Category 2” → Category",
+    ],
+  );
+  model.toggleVariable(1); // a click can't vary
+  model.toggleVariable(3); // nor a secret
+  model.toggleVariable(4);
+  assert.equal(model.items[4].variable, "category");
+  model.toggleRemoved(0);
+  model.toggleRemoved(2);
+  assert.deepEqual(model.result(), { name: "Derby tickets", note: "", removed: [0, 2], variables: { 4: "category" } });
+
+  model.play();
+  assert.equal(model.index, 1);
+  assert.equal(model.step(1), true);
+  assert.equal(model.index, 3);
+  assert.equal(model.step(1), true);
+  assert.equal(model.step(1), false);
+  model.backToList();
+  assert.equal(model.mode, "list");
+  for (const i of [1, 3, 4]) model.toggleRemoved(i);
+  assert.equal(model.canSave, false);
+  assert.equal(stepLabel({ action: "check", checked: false, target: { name: "Terms" } }, L), "Uncheck “Terms”");
+});
+
+test("Play zooms in around the element and keeps it in the frame", async () => {
+  const { zoomOn } = await import("../browser/RecordingReview.sys.mjs");
+  assert.deepEqual(zoomOn(undefined), { backgroundSize: "contain", backgroundPosition: "center" });
+  // a small button at the top left of a wide page: zoomed 3×, pinned to the top-left corner
+  const small = zoomOn({ x: 0.02, y: 0.01, width: 0.03, height: 0.02, aspect: 0.6 });
+  assert.equal(small.backgroundSize, `${Math.round((290 / 0.6) * 3)}px auto`);
+  assert.equal(small.backgroundPosition, "0.0% 0.0%");
+  // a big element in the middle: no zoom, centered
+  assert.deepEqual(zoomOn({ x: 0.2, y: 0.3, width: 0.6, height: 0.4, aspect: 0.6 }), {
+    backgroundSize: `${Math.round(290 / 0.6)}px auto`,
+    backgroundPosition: "50.0% 50.0%",
+  });
 });
