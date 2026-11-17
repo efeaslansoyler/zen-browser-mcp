@@ -1,6 +1,6 @@
 # Documentation
 
-For installing and using zen-mcp, start with the [README](../README.md)
+For installing and using zen-browser-mcp, start with the [README](../README.md)
 ([Türkçe](../README.tr.md)). These pages are for contributors and the curious.
 
 | Page | What's in it |

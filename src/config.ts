@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { L } from "./i18n.ts";
-import { CONFIG_FILE, NAME } from "./paths.ts";
+import { CONFIG_FILE, PACKAGE } from "./paths.ts";
 
 import { normalizeConfig, normalizeDomain, type Config } from "../browser/SiteRules.sys.mjs";
 
@@ -31,8 +31,8 @@ export function configCommand(args: string[]) {
       `mod: ${config.mode}  (${config.mode === "ask" ? "Ajan her işlemden önce izin ister" : "Ajan sormadan işlem yapar"})`));
     console.log(L("site rules:", "site kuralları:"), config.sites);
     console.log(L(`workspace: ${config.workspace ?? "(the space you're in)"}`, `çalışma alanı: ${config.workspace ?? "(bulunduğun alan)"}`));
-    console.log(L(`\nUsage:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <domain>…\n  npx ${NAME} config site list\n  npx ${NAME} config workspace <name>|current`,
-      `\nKullanım:\n  npx ${NAME} config mode auto|ask\n  npx ${NAME} config site ask|block|default <alan-adı>…\n  npx ${NAME} config site list\n  npx ${NAME} config workspace <ad>|current`));
+    console.log(L(`\nUsage:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <domain>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <name>|current`,
+      `\nKullanım:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <alan-adı>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <ad>|current`));
     return;
   }
   if (cmd === "mode") {

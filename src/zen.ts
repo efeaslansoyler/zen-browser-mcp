@@ -1,7 +1,7 @@
 // Talks to the bridge in the browser: one request line and one reply line per connection.
 import net from "node:net";
 import { randomUUID } from "node:crypto";
-import { NAME, SOCKET as socketPath } from "./paths.ts";
+import { PACKAGE, SOCKET as socketPath } from "./paths.ts";
 
 export type Content =
   | { type: "text"; text: string }
@@ -34,7 +34,7 @@ export function call(tool: string, args: object = {}, timeout = 60_000, agent?: 
     socket.on("error", (e: NodeJS.ErrnoException) =>
       reject(
         e.code === "ENOENT" || e.code === "ECONNREFUSED"
-          ? new Error(`Could not connect to the browser (${e.code}, socket: ${socketPath}). Is it open? Install with \`npx ${NAME} install\`, check with \`npx ${NAME} doctor\`.`)
+          ? new Error(`Could not connect to the browser (${e.code}, socket: ${socketPath}). Is it open? Install with \`npx ${PACKAGE} install\`, check with \`npx ${PACKAGE} doctor\`.`)
           : e.code === "EPERM" || e.code === "EACCES"
             ? new Error(`Access denied to the browser socket (${e.code}, socket: ${socketPath}). Check the MCP client's sandbox and socket permissions.`)
             : e,

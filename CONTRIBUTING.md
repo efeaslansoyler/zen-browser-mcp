@@ -90,7 +90,7 @@ To try risky changes on a copy:
 To screenshot browser UI (the island, menus), use the window's
 `browsingContext.currentWindowGlobal.drawSnapshot(rect, scale, color)`.
 
-To try the published package: `npm pack`, then `npx -y ./zen-mcp-<version>.tgz`.
+To try the published package: `npm pack`, then `npx -y ./zen-browser-mcp-<version>.tgz`.
 
 ## Codex
 

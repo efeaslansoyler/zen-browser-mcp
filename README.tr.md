@@ -1,4 +1,4 @@
-# zen-mcp
+# zen-browser-mcp
 
 [![English](https://img.shields.io/badge/lang-English-blue)](README.md)
 [![Türkçe](https://img.shields.io/badge/dil-Türkçe-red)](README.tr.md)
@@ -9,7 +9,7 @@ ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren k
 Claude Code, Codex ve diğer MCP istemcileriyle çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
 
-[![zen-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/media/demo.gif)](docs/media/demo.mp4)
+[![zen-browser-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Neden
 
@@ -38,7 +38,7 @@ tarayıcılarda da çalışır.
 ## Kurulum
 
 ```sh
-npx zen-mcp install
+npx zen-browser-mcp install
 ```
 
 Tarayıcını bulur, kurulum klasörüne küçük bir yükleyici ekler (klasör root'unsa `sudo`
@@ -49,15 +49,15 @@ işaretli bir blok olarak eklenir; başka hiçbir şey değişmez.
 Sonra tarayıcıyı yeniden başlat ve sunucuyu Claude Code'a ekle:
 
 ```sh
-claude mcp add --scope user zen -- npx -y zen-mcp
+claude mcp add --scope user zen -- npx -y zen-browser-mcp
 ```
 
-Her şeyi `npx zen-mcp doctor` ile kontrol edebilirsin. Yeni sürümler, Claude Code sunucuyu
+Her şeyi `npx zen-browser-mcp doctor` ile kontrol edebilirsin. Yeni sürümler, Claude Code sunucuyu
 başlattığında tarayıcı tarafını kendiliğinden günceller; sudo ya da tarayıcıyı yeniden
 başlatmak gerekmez.
 
 > Bazı tarayıcı güncellemeleri kurulum klasörünü değiştirir (macOS uygulama güncellemeleri,
-> tarball kurulumları). `doctor` yükleyicinin gittiğini söylerse `npx zen-mcp install`'ı
+> tarball kurulumları). `doctor` yükleyicinin gittiğini söylerse `npx zen-browser-mcp install`'ı
 > yeniden çalıştır.
 
 ## Codex ve diğer MCP istemcileri
@@ -174,7 +174,7 @@ stiller, metin, kısaltılmış HTML, öğenin görüntü yolu ve geliştirme s�
 - **Claude Code:** `claude --dangerously-load-development-channels server:zen` ile channels'ı
   aç; oturum kendiliğinden bağlanır.
 - **Codex:** bir kez `node dist/cli.js codex-hooks install` çalıştır (kurulu pakette
-  `npx zen-mcp codex-hooks install`), sonra Codex'te `/hooks` ekranından üç Zen hook'una güven.
+  `npx zen-browser-mcp codex-hooks install`), sonra Codex'te `/hooks` ekranından üç Zen hook'una güven.
   SessionStart, Codex'in verdiği gerçek sohbet UUID'siyle alıcıyı başlatır;
   UserPromptSubmit bağlantıyı yeniler; SessionEnd kapatır. Sohbet açılınca/devam ettirilince
   ilk tarayıcı aracı çağrısından önce otomatik bağlanır. Aynı sohbet için ikinci alıcı
@@ -312,7 +312,7 @@ yalnız tarayıcı köprüsünü reload etmek çalışan MCP sunucusunu yenileme
 
 Ajan sekmeleri bulunduğun çalışma alanında açılır. Önüne çıkmasınlar istersen sekme sağ tık
 menüsü → **Ajan ayarları** → **Yeni ajan sekmeleri şurada açılır** ile bir alan seç (ya da
-`npx zen-mcp config workspace <ad>`, geri almak için `current`). Alan yoksa sana geçiş
+`npx zen-browser-mcp config workspace <ad>`, geri almak için `current`). Alan yoksa sana geçiş
 yapılmadan oluşturulur. Ajanlar gizli alanda da her zamanki gibi çalışır: okuma, girdi ve
 ekran görüntüsü için sekmenin görünmesi gerekmez; adadaki sekmeye git düğmesi seni oraya götürür.
 
@@ -342,11 +342,11 @@ değişiklikleri onayı geçersiz kılar; izin reddedilirse kalan adımlar çal�
 Genel modu adadan veya sekme sağ tık menüsünden değiştirebilirsin. CLI karşılıkları:
 
 ```sh
-npx zen-mcp config mode ask
-npx zen-mcp config site ask accounts.google.com
-npx zen-mcp config site block bankam.com
-npx zen-mcp config site default accounts.google.com
-npx zen-mcp config site list
+npx zen-browser-mcp config mode ask
+npx zen-browser-mcp config site ask accounts.google.com
+npx zen-browser-mcp config site block bankam.com
+npx zen-browser-mcp config site default accounts.google.com
+npx zen-browser-mcp config site list
 ```
 
 Ayarlar `~/.config/zen-mcp/config.json` dosyasında durur ve hemen geçerli olur:
@@ -403,12 +403,12 @@ Kurmadan önce lütfen oku.
   oturumlarınla işlem yapar. Önemli işler için onaylı modu ya da hassas siteleri kullan,
   adayı takip et.
 - **Ağ ayrıntılarında çerez ve yetkilendirme başlıkları gizlenir.**
-- Her şeyi `npx zen-mcp uninstall` ile kaldırırsın.
+- Her şeyi `npx zen-browser-mcp uninstall` ile kaldırırsın.
 
 ## Nasıl çalışır
 
 ```
-Claude Code ──stdio MCP──▶ npx zen-mcp ──Unix soket──▶ tarayıcı köprüsü (yetkili, tarayıcının içinde)
+Claude Code ──stdio MCP──▶ npx zen-browser-mcp ──Unix soket──▶ tarayıcı köprüsü (yetkili, tarayıcının içinde)
                                                         ├─ tarayıcı penceresinde ada ve menüler
                                                         └─ her çerçevede sayfa actor'ı: girdi, sayfa ağacı, seçici
 ```
@@ -419,7 +419,7 @@ da böyle yapar, ama uzaktan kontrol açılmaz.
 
 ## Sorun giderme
 
-- `npx zen-mcp doctor` her parçayı kontrol eder ve ne yapacağını söyler.
+- `npx zen-browser-mcp doctor` her parçayı kontrol eder ve ne yapacağını söyler.
 - Köprünün hataları `$XDG_RUNTIME_DIR/zen-mcp.log` dosyasına gider (macOS'ta `$TMPDIR`).
 - Kurduktan sonra tarayıcıyı bir kez yeniden başlat; yükleyici yalnız açılışta çalışır.
 

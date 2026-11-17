@@ -1,6 +1,6 @@
 # Architecture
 
-zen-mcp lets AI agents (Claude Code, Codex, any MCP client) use the browser you already have
+zen-browser-mcp lets AI agents (Claude Code, Codex, any MCP client) use the browser you already have
 open: Zen or another Firefox-based browser, your window, your logins. Input reaches pages as
 real, trusted events without starting the remote agent or WebDriver, so `navigator.webdriver`
 stays `false`.
@@ -20,7 +20,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 
 | File | Role |
 |---|---|
-| `cli.ts` | `npx zen-mcp`: no arguments runs the MCP server; `install`, `uninstall`, `doctor`, `config`, `codex-hooks` |
+| `cli.ts` | `npx zen-browser-mcp`: no arguments runs the MCP server; `install`, `uninstall`, `doctor`, `config`, `codex-hooks` |
 | `server.ts` | The MCP server: registers the tools, agent identity and per-call session, channel and lifecycle subscriptions |
 | `tools.ts`, `instructions.ts` | Tool schemas, descriptions and answer timeouts; server instructions |
 | `claude.ts` | Channel detection and the Claude conversation title |
@@ -33,7 +33,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 ### Browser side (`browser/`)
 
 The loader is a few lines of [autoconfig](https://support.mozilla.org/kb/customizing-firefox-using-autoconfig):
-`npx zen-mcp install` adds a marked block to the browser's `.cfg` that maps
+`npx zen-browser-mcp install` adds a marked block to the browser's `.cfg` that maps
 `resource://zenmcp/` to `~/.local/share/zen-mcp` and loads `main.js` with `loadSubScript`. A
 development install makes that folder a symlink to the repo's `browser/`.
 

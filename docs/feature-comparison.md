@@ -1,11 +1,11 @@
 # Feature comparison with agent-browser
 
 Reference: [agent-browser commands](https://agent-browser.dev/commands), a CDP/WebDriver based
-agent CLI for Chromium and Safari. zen-mcp's goal is different: work together with the user
+agent CLI for Chromium and Safari. zen-browser-mcp's goal is different: work together with the user
 in their everyday Firefox-based browser instead of launching a separate one. Rows below are
 rough equivalents, not API or engine parity.
 
-| Area | zen-mcp |
+| Area | zen-browser-mcp |
 |---|---|
 | Snapshot, refs, interactive tree | `read_page`, `find`, `form_input` |
 | Page text and text diff | `get_page_text`, `diff`/`since` on reads |
@@ -32,7 +32,7 @@ rough equivalents, not API or engine parity.
 | CDP / headless / launching a browser | Out of scope: the everyday browser and window |
 | Proxy / geolocation / TLS settings | Not available; global profile settings are never changed |
 | Recording / streaming / profiling | Not available |
-| Element picks, island, Stop, task handoff | zen-mcp's own focus |
+| Element picks, island, Stop, task handoff | zen-browser-mcp's own focus |
 | Installed extension popups | `extensions`; tab switch asks even in auto mode |
 
 ## Limits

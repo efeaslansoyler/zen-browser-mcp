@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { L } from "./i18n.ts";
-import { DATA_DIR, NAME, PACKAGE_DIR, SERVER_NAME, VERSION } from "./paths.ts";
+import { DATA_DIR, NAME, PACKAGE, PACKAGE_DIR, SERVER_NAME, VERSION } from "./paths.ts";
 import { call } from "./zen.ts";
 
 const BEGIN = `// BEGIN ${NAME}`;
@@ -21,7 +21,7 @@ export type Browser = { name: string; dir: string };
 // The loader: loads main.js with system privileges if DATA_DIR exists. The path is computed
 // from environment variables at run time (the same way as src/paths.ts).
 function loaderBlock() {
-  return `${BEGIN}: loads ${NAME} (Claude browser bridge). Remove with \`npx ${NAME} uninstall\`.
+  return `${BEGIN}: loads ${PACKAGE} (browser bridge for AI agents). Remove with \`npx ${PACKAGE} uninstall\`.
 try {
   const { classes: Cc, interfaces: Ci } = Components;
   const dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
@@ -146,7 +146,7 @@ function planInstall(dir: string): Plan {
       writes: [
         {
           file: path.join(dir, "defaults", "pref", `${NAME}-prefs.js`),
-          content: `// ${NAME}: loads ${NAME}.cfg (autoconfig). Remove with \`npx ${NAME} uninstall\`.\npref("general.config.filename", "${NAME}.cfg");\npref("general.config.obscure_value", 0);\npref("general.config.sandbox_enabled", false);\n`,
+          content: `// ${NAME}: loads ${NAME}.cfg (autoconfig). Remove with \`npx ${PACKAGE} uninstall\`.\npref("general.config.filename", "${NAME}.cfg");\npref("general.config.obscure_value", 0);\npref("general.config.sandbox_enabled", false);\n`,
         },
         // autoconfig skips the first line of the .cfg file
         { file: path.join(dir, `${NAME}.cfg`), content: `// ${NAME} autoconfig (the first line is skipped)\n${block}` },
@@ -161,8 +161,8 @@ function planInstall(dir: string): Plan {
   }
   if (existing.sandbox !== "false") {
     throw new Error(L(
-      `The existing autoconfig runs sandboxed (general.config.sandbox_enabled is not false), so ${NAME} can't load from it.`,
-      `Mevcut autoconfig sandbox'ta çalışıyor (general.config.sandbox_enabled false değil); ${NAME} oradan yüklenemez.`,
+      `The existing autoconfig runs sandboxed (general.config.sandbox_enabled is not false), so ${PACKAGE} can't load from it.`,
+      `Mevcut autoconfig sandbox'ta çalışıyor (general.config.sandbox_enabled false değil); ${PACKAGE} oradan yüklenemez.`,
     ));
   }
   let text = "// autoconfig (the first line is skipped)\n";
@@ -312,19 +312,19 @@ export async function install(args: string[]) {
 Next:
   1. Restart the browser (the loader runs at startup).
   2. Add the MCP server to your client:
-       claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}
-       codex mcp add ${SERVER_NAME} -- npx -y ${NAME}
+       claude mcp add --scope user ${SERVER_NAME} -- npx -y ${PACKAGE}
+       codex mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}
   3. Optional, to send page elements from the browser to Claude Code (channels, research preview):
        claude --dangerously-load-development-channels server:${SERVER_NAME}
-Check everything with: npx ${NAME} doctor`, `
+Check everything with: npx ${PACKAGE} doctor`, `
 Sırada:
   1. Tarayıcıyı yeniden başlat (yükleyici açılışta çalışır).
   2. MCP sunucusunu istemcine ekle:
-       claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}
-       codex mcp add ${SERVER_NAME} -- npx -y ${NAME}
+       claude mcp add --scope user ${SERVER_NAME} -- npx -y ${PACKAGE}
+       codex mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}
   3. İsteğe bağlı, tarayıcıdan öğe seçip Claude Code'a göndermek için (channels, araştırma önizlemesi):
        claude --dangerously-load-development-channels server:${SERVER_NAME}
-Hepsini kontrol etmek için: npx ${NAME} doctor`));
+Hepsini kontrol etmek için: npx ${PACKAGE} doctor`));
 }
 
 export async function uninstall(args: string[]) {

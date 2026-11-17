@@ -1,4 +1,4 @@
-# zen-mcp
+# zen-browser-mcp
 
 [![English](https://img.shields.io/badge/lang-English-blue)](README.md)
 [![Türkçe](https://img.shields.io/badge/dil-Türkçe-red)](README.tr.md)
@@ -8,7 +8,7 @@ Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse a
 input, and a small island at the top of the window that shows what the agent is doing. Works with
 Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based browsers work too.
 
-[![zen-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/media/demo.gif)](docs/media/demo.mp4)
+[![zen-browser-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Why
 
@@ -37,7 +37,7 @@ Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based brows
 ## Install
 
 ```sh
-npx zen-mcp install
+npx zen-browser-mcp install
 ```
 
 This finds your browser, adds a small loader to its installation folder (it asks for `sudo`
@@ -48,14 +48,14 @@ loader is appended to it as a marked block; nothing else is changed.
 Then restart the browser and add the server to Claude Code:
 
 ```sh
-claude mcp add --scope user zen -- npx -y zen-mcp
+claude mcp add --scope user zen -- npx -y zen-browser-mcp
 ```
 
-Check everything with `npx zen-mcp doctor`. New versions update the browser side by
+Check everything with `npx zen-browser-mcp doctor`. New versions update the browser side by
 themselves when Claude Code starts the server, without sudo or a browser restart.
 
 > Some browser updates replace the installation folder (macOS app updates, tarball installs).
-> If `doctor` says the loader is gone, run `npx zen-mcp install` again.
+> If `doctor` says the loader is gone, run `npx zen-browser-mcp install` again.
 
 ## Codex and other MCP clients
 
@@ -174,7 +174,7 @@ element screenshot path and, on development builds, the React/Vue component chai
 - **Claude Code:** enable [channels](https://code.claude.com/docs/en/channels) with
   `claude --dangerously-load-development-channels server:zen`. The channel subscribes automatically.
 - **Codex:** install lifecycle hooks once with `node dist/cli.js codex-hooks install`
-  (or `npx zen-mcp codex-hooks install` for an installed package), then review and trust
+  (or `npx zen-browser-mcp codex-hooks install` for an installed package), then review and trust
   the three Zen hooks in Codex's `/hooks` screen. SessionStart starts a receiver using the
   exact host-provided session UUID; UserPromptSubmit refreshes it; SessionEnd stops it.
   Opening or resuming a chat connects automatically, even before its first browser tool call.
@@ -314,7 +314,7 @@ tool; reloading the browser bridge alone does not refresh an existing MCP server
 
 Agent tabs open in the workspace you're in. To keep them out of your way, pick a space in the
 tab context menu → **Agent settings** → **New agent tabs open in** (or
-`npx zen-mcp config workspace <name>`, `current` to undo). A missing space is created without
+`npx zen-browser-mcp config workspace <name>`, `current` to undo). A missing space is created without
 switching to it. Agents work in a hidden space as usual: reading, input and screenshots don't
 need the tab to be visible, and the island's go-to-tab button takes you there.
 
@@ -344,11 +344,11 @@ policy edits invalidate it. Denying approval stops the remaining batch steps.
 Switch the general mode from the island or the tab context menu. CLI equivalents:
 
 ```sh
-npx zen-mcp config mode ask
-npx zen-mcp config site ask accounts.google.com
-npx zen-mcp config site block mybank.com
-npx zen-mcp config site default accounts.google.com
-npx zen-mcp config site list
+npx zen-browser-mcp config mode ask
+npx zen-browser-mcp config site ask accounts.google.com
+npx zen-browser-mcp config site block mybank.com
+npx zen-browser-mcp config site default accounts.google.com
+npx zen-browser-mcp config site list
 ```
 
 Settings live in `~/.config/zen-mcp/config.json` and apply immediately:
@@ -404,12 +404,12 @@ Please read this before installing.
 - **Pages can try to trick Claude** (prompt injection), and Claude acts with your logins. Use
   ask mode or sensitive sites for anything that matters, and watch the island.
 - **Cookies and authorization headers are hidden** from network details.
-- Remove everything with `npx zen-mcp uninstall`.
+- Remove everything with `npx zen-browser-mcp uninstall`.
 
 ## How it works
 
 ```
-Claude Code ──stdio MCP──▶ npx zen-mcp ──Unix socket──▶ browser bridge (privileged, in the browser)
+Claude Code ──stdio MCP──▶ npx zen-browser-mcp ──Unix socket──▶ browser bridge (privileged, in the browser)
                                                          ├─ island and menus in the browser window
                                                          └─ a page actor in every frame: input, page tree, picker
 ```
@@ -420,7 +420,7 @@ way Firefox's WebDriver does it, but without starting the remote agent.
 
 ## Troubleshooting
 
-- `npx zen-mcp doctor` checks each piece and tells you what to do.
+- `npx zen-browser-mcp doctor` checks each piece and tells you what to do.
 - Bridge errors go to `$XDG_RUNTIME_DIR/zen-mcp.log` (or `$TMPDIR` on macOS).
 - After installing, restart the browser once; the loader only runs at startup.
 

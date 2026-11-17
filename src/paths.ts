@@ -1,10 +1,14 @@
-// The package name and user-visible paths in one place: a rename changes only this file (and
-// the zenMcpName the loader passes to browser/main.js). The browser side computes the same paths
+// The package name and user-visible paths in one place: renaming the paths changes only this
+// file (and the zenMcpName the loader passes to browser/main.js). The browser side computes the same paths
 // from the same environment variables; the XDG layout is used on every platform.
 import os from "node:os";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
+// The npm package: what users type after npx.
+export const PACKAGE = "zen-browser-mcp";
+// The name on disk and in the browser (folders, socket, log, loader markers). It differs from
+// the package name on purpose: changing it would move every user's files and settings.
 export const NAME = "zen-mcp";
 // The suggested server name in Claude Code: the channel flag "server:<name>" matches it
 export const SERVER_NAME = "zen";

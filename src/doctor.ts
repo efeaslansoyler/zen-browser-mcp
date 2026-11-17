@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { L } from "./i18n.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
 import { readConfig } from "./config.ts";
-import { CONFIG_FILE, DATA_DIR, LOG_FILE, NAME, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
+import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
 import { call } from "./zen.ts";
 
 const ok = (s: string) => console.log(`✓ ${s}`);
@@ -15,7 +15,7 @@ export async function doctor() {
     problems++;
     bad(s, fix);
   };
-  console.log(`${NAME} ${VERSION}\n`);
+  console.log(`${PACKAGE} ${VERSION}\n`);
 
   const major = Number(process.versions.node.split(".")[0]);
   if (major >= 22) ok(`Node ${process.versions.node}`);
@@ -31,11 +31,11 @@ export async function doctor() {
   if (!loaded.length) {
     const flatpak = unsupportedInstalls();
     fail(L("No browser has the loader.", "Hiçbir tarayıcıda yükleyici yok."),
-      `npx ${NAME} install` + (flatpak.length ? L(` (Flatpak/Snap can't be supported: ${flatpak.join(", ")})`, ` (Flatpak/Snap desteklenemiyor: ${flatpak.join(", ")})`) : ""));
+      `npx ${PACKAGE} install` + (flatpak.length ? L(` (Flatpak/Snap can't be supported: ${flatpak.join(", ")})`, ` (Flatpak/Snap desteklenemiyor: ${flatpak.join(", ")})`) : ""));
   }
 
   const files = installedVersion();
-  if (!files || !fs.existsSync(DATA_DIR)) fail(L(`No browser files in ${DATA_DIR}.`, `${DATA_DIR} içinde tarayıcı dosyaları yok.`), `npx ${NAME} install`);
+  if (!files || !fs.existsSync(DATA_DIR)) fail(L(`No browser files in ${DATA_DIR}.`, `${DATA_DIR} içinde tarayıcı dosyaları yok.`), `npx ${PACKAGE} install`);
   else if (files === "dev") ok(L(`${DATA_DIR} → development symlink`, `${DATA_DIR} → geliştirme bağı`));
   else if (files !== VERSION) console.log(`  ${L(`browser files ${files}, package ${VERSION}: updated when the MCP client starts the server`, `tarayıcı dosyaları ${files}, paket ${VERSION}: MCP istemcisi sunucuyu başlatınca güncellenir`)}`);
   else ok(L(`browser files ${files}`, `tarayıcı dosyaları ${files}`));
@@ -55,8 +55,8 @@ export async function doctor() {
   const config = readConfig();
   ok(L(`mode ${config.mode}, ${Object.keys(config.sites).length} site rule(s) (${CONFIG_FILE})`, `mod ${config.mode}, ${Object.keys(config.sites).length} site kuralı (${CONFIG_FILE})`));
 
-  console.log(L(`\nIn Claude Code: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}`, `\nClaude Code'da: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${NAME}`));
-  console.log(`Codex: codex mcp add ${SERVER_NAME} -- npx -y ${NAME}`);
+  console.log(L(`\nIn Claude Code: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${PACKAGE}`, `\nClaude Code'da: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${PACKAGE}`));
+  console.log(`Codex: codex mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}`);
   console.log(problems ? L(`\n${problems} problem(s).`, `\n${problems} sorun var.`) : L("\nAll good.", "\nHer şey yolunda."));
   if (problems) process.exitCode = 1;
 }

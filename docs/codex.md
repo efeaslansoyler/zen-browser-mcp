@@ -37,7 +37,7 @@ that talks to the Codex service:
 
 ## Hooks (fallback)
 
-`npx zen-mcp codex-hooks install` adds SessionStart, UserPromptSubmit and SessionEnd hooks to
+`npx zen-browser-mcp codex-hooks install` adds SessionStart, UserPromptSubmit and SessionEnd hooks to
 `~/.codex/hooks.json` (other hooks are kept; the old file is backed up). Each hook first tries
 to start the watcher. Only if the Codex service can't be reached does it start the older
 per-conversation receiver (`codex-relay.ts`), which connects after the first message and stops

@@ -1,16 +1,17 @@
 {
-  "name": "zen-mcp",
+  "name": "zen-browser-mcp",
   "version": "0.1.0",
   "description": "Let AI agents use your Zen (and other Firefox-based) browser with real input, your own sessions, and a live status island.",
   "type": "module",
   "bin": {
-    "zen-mcp": "dist/cli.js"
+    "zen-browser-mcp": "dist/cli.js"
   },
   "files": [
     "dist",
     "browser",
     "README.md",
     "README.tr.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
