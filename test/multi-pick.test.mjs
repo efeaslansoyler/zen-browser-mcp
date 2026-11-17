@@ -1,9 +1,6 @@
-import * as inputMotion from "../browser/InputMotion.sys.mjs";
 import test from 'node:test';
+import { loadActor } from './support/actor.mjs';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
-import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import * as themes from '../browser/Agent.sys.mjs';
 import { Picks } from '../browser/Picks.sys.mjs';
 
@@ -35,15 +32,11 @@ function harness() {
     addEventListener(type, callback) { listeners.set(type, callback); },
     removeEventListener(type, callback) { if (listeners.get(type) === callback) listeners.delete(type); },
   };
-  const context = vm.createContext({ URL, JSWindowActorChild: class {},
-    ChromeUtils: { importESModule(url) { if (url.includes('InputMotion')) return inputMotion;
-      if (url.includes('Cancellation')) return { Cancellation }; if (url.includes('Timer')) return { setTimeout, clearTimeout }; return themes; } },
+  const Actor = loadActor({
     Services: { locale: { appLocaleAsBCP47: 'en' } },
     Cu: { waiveXrays: value => value },
   });
-  const source = fs.readFileSync(new URL('../browser/actors/ZenMcpChild.sys.mjs', import.meta.url), 'utf8');
-  vm.runInContext(source.replaceAll('import.meta.url', JSON.stringify('file:///browser/actors/ZenMcpChild.sys.mjs')).replace('export class ZenMcpChild', 'globalThis.Actor = class ZenMcpChild'), context);
-  const actor = new context.Actor(); actor.document = document; actor.contentWindow = window;
+  const actor = new Actor(); actor.document = document; actor.contentWindow = window;
   const send = (name, data = {}) => actor.receiveMessage({ name, data });
   const emit = (type, args = {}) => {
     const event = { type, isTrusted: true, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; }, ...args };

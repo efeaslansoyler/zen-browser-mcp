@@ -1,0 +1,280 @@
+// Mouse and keyboard input, produced in this process with the page's windowUtils through the
+// browser's own EventUtils, the path Zen's WebDriver code uses. The page sees trusted
+// (isTrusted) input and it works while the tab is in the background: no need to select the tab
+// or touch the user's window. Coordinates are CSS px in the frame's viewport.
+//
+// Before a click the target is hit tested at the point, so a click never lands on an overlay
+// that covers the element. mouse_down and key_down hold input for one session until released
+// or until a watchdog lets go.
+//
+// env: { document(), window(), eventUtils(), element(ref), ref(el), cursor, ripple(x, y),
+//        mousePath, typingPlan, elementLabel, L, setTimeout, clearTimeout }
+
+export class InputDriver {
+  #heldKeys = new Map();
+  #heldButtons = new Map();
+  #heldOwner = null;
+  #releaseTimer = null;
+  #pointer = null;
+
+  constructor(env) { this.env = env; }
+
+  state() { return { keys: [...this.#heldKeys.keys()], buttons: [...this.#heldButtons.keys()] }; }
+
+  #heldModifiers() {
+    const mods = {};
+    for (const [key, name] of [["KEY_Shift", "shiftKey"], ["KEY_Control", "ctrlKey"], ["KEY_Alt", "altKey"], ["KEY_Meta", "metaKey"]]) {
+      if (this.#heldKeys.has(key)) mods[name] = true;
+    }
+    return mods;
+  }
+
+  #armRelease(session, hold_ms = 30000) {
+    if (!session) throw new Error("An exact input session is required.");
+    if (this.#heldOwner && this.#heldOwner !== session) throw new Error("Held input belongs to another session.");
+    if (!Number.isFinite(hold_ms) || hold_ms < 100 || hold_ms > 30000) throw new Error("hold_ms must be 100..30000.");
+    this.#heldOwner = session;
+    this.env.clearTimeout(this.#releaseTimer);
+    this.#releaseTimer = this.env.setTimeout(() => this.release(), hold_ms);
+  }
+
+  // Lets go of every held button and key.
+  release() {
+    const win = this.env.window();
+    this.env.clearTimeout(this.#releaseTimer);
+    for (const [button, point] of this.#heldButtons) {
+      try { this.env.eventUtils().synthesizeMouseAtPoint(point[0], point[1], { ...this.#heldModifiers(), type: "mouseup", button }, win); } catch {}
+    }
+    this.#heldButtons.clear();
+    for (const key of [...this.#heldKeys.keys()].reverse()) {
+      const sentKey = this.#heldKeys.get(key);
+      this.#heldKeys.delete(key);
+      try { this.env.eventUtils().synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keyup" }, win); } catch {}
+    }
+    this.#heldOwner = null;
+    return this.state();
+  }
+
+  async #moveInput(x, y, scope, options, modifiers = {}, buttons = 0) {
+    const win = this.env.window();
+    const from = this.#pointer || [win.innerWidth / 2, win.innerHeight / 2];
+    for (const point of this.env.mousePath(from, [x, y], options)) {
+      await scope.wait(point.delay, this.env);
+      scope.check();
+      this.env.eventUtils().synthesizeMouseAtPoint(point.x, point.y, { ...this.#heldModifiers(), ...modifiers, type: "mousemove", buttons }, win);
+      this.#pointer = [point.x, point.y];
+      for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
+      await this.env.cursor.move(point.x, point.y, scope, true);
+    }
+  }
+
+  // silent: no virtual cursor or ripple (development and demos: like the user's own click)
+  async input({ kind, x, y, to, button = 0, count = 1, modifiers = {}, keys, text, dx = 0, dy = 0, multiplier = [1, 1], silent = false, ref, session, hold_ms, movement, duration_ms, steps, seed, typing, delay_ms }, scope) {
+    const { cursor, L } = this.env;
+    const win = this.env.window();
+    const eu = this.env.eventUtils();
+    if (this.#heldOwner && session !== this.#heldOwner) throw new Error("Held input belongs to another session.");
+    if (kind === "key_down" || kind === "mouse_down") scope.onCancel(() => this.release());
+    const motion = { movement, duration_ms, steps, seed };
+    const buttons = [...this.#heldButtons.keys()].reduce((mask, button) => mask | [1, 4, 2][button], 0);
+    const move = async (px, py, dragging = buttons) => {
+      if (movement && movement !== "instant") await this.#moveInput(px, py, scope, motion, modifiers, dragging);
+      else await cursor.move(px, py, scope, movement === "instant");
+    };
+    scope.onCancel(() => cursor.hide());
+    const mouse = (px, py, event) => {
+      scope.check();
+      this.#pointer = [px, py];
+      for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
+      eu.synthesizeMouseAtPoint(px, py, { ...this.#heldModifiers(), ...modifiers, buttons, ...event }, win);
+    };
+    switch (kind) {
+      case "click": {
+        // Keep the expected node, not just its coordinates, across cursor animation.
+        const expected = ref ? this.env.element(ref) : this.hitAt(x, y);
+        const label = ref || "Coordinate target";
+        this.assertHit(expected, x, y, label);
+        try {
+          if (!silent) {
+            await move(x, y);
+            cursor.press();
+          }
+          mouse(x, y, { type: "mousemove" });
+          for (let i = 1; i <= count; i++) {
+            scope.check();
+            this.assertHit(expected, x, y, label);
+            mouse(x, y, { type: "mousedown", button, clickCount: i });
+            mouse(x, y, { type: "mouseup", button, clickCount: i });
+          }
+          if (button === 0) this.#focusAt(x, y);
+          if (!silent) this.env.ripple(x, y);
+          return "done";
+        } finally {
+          cursor.unpress();
+        }
+      }
+      case "mouse_move":
+      case "hover":
+        await move(x, y);
+        mouse(x, y, { type: "mousemove" });
+        return "done";
+      case "drag": {
+        await move(x, y);
+        cursor.press();
+        mouse(x, y, { type: "mousemove" });
+        mouse(x, y, { type: "mousedown" });
+        let released = false;
+        let last = [x, y];
+        const release = () => {
+          if (released) return;
+          released = true;
+          const point = movement && movement !== "instant" ? this.#pointer || last : last;
+          eu.synthesizeMouseAtPoint(...point, { ...this.#heldModifiers(), type: "mouseup" }, win);
+          cursor.unpress();
+        };
+        const off = scope.onCancel(release);
+        try {
+          if (movement && movement !== "instant") {
+            await this.#moveInput(to[0], to[1], scope, motion, modifiers, 1);
+            last = [to[0], to[1]];
+          } else for (let i = 1; i <= 10; i++) {
+            await scope.wait(0, this.env);
+            last = [x + ((to[0] - x) * i) / 10, y + ((to[1] - y) * i) / 10];
+            mouse(...last, { type: "mousemove", buttons: 1 });
+          }
+        } finally { off(); release(); }
+        await move(to[0], to[1]);
+        return "done";
+      }
+      case "wheel":
+        await move(x, y);
+        return await this.#wheel(x, y, dx, dy, multiplier, scope);
+      case "mouse_down": {
+        this.#armRelease(session, hold_ms);
+        if (this.#heldButtons.has(button)) return this.state();
+        const expected = ref ? this.env.element(ref) : this.hitAt(x, y);
+        this.assertHit(expected, x, y, ref || "Coordinate target");
+        await move(x, y);
+        this.assertHit(expected, x, y, ref || "Coordinate target");
+        mouse(x, y, { type: "mousemove" });
+        mouse(x, y, { type: "mousedown", button });
+        this.#heldButtons.set(button, [x, y]);
+        return this.state();
+      }
+      case "mouse_up": {
+        const point = this.#heldButtons.get(button);
+        if (point) {
+          this.#heldButtons.delete(button);
+          eu.synthesizeMouseAtPoint(...point, { ...this.#heldModifiers(), type: "mouseup", button }, win);
+        }
+        return this.state();
+      }
+      case "key_down": {
+        if (!keys || keys.length !== 1) throw new Error("key_down accepts one key.");
+        this.#armRelease(session, hold_ms);
+        const { key } = keys[0];
+        if (!this.#heldKeys.has(key)) {
+          const sentKey = this.#heldModifiers().shiftKey && /^[a-z]$/.test(key) ? key.toUpperCase() : key;
+          eu.synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keydown" }, win);
+          this.#heldKeys.set(key, sentKey);
+        }
+        return this.state();
+      }
+      case "key_up": {
+        const key = keys?.[0]?.key;
+        const sentKey = this.#heldKeys.get(key);
+        if (this.#heldKeys.delete(key)) eu.synthesizeKey(sentKey, { ...this.#heldModifiers(), type: "keyup" }, win);
+        if (!this.#heldKeys.size && !this.#heldButtons.size) this.release();
+        return this.state();
+      }
+      case "keys":
+        cursor.label(L("pressing keys", "tuşa basıyor"));
+        for (const { key, mods } of keys) {
+          await scope.wait(0, this.env);
+          scope.check();
+          const merged = { ...this.#heldModifiers(), ...mods };
+          eu.synthesizeKey(merged.shiftKey && /^[a-z]$/.test(key) ? key.toUpperCase() : key, merged, win);
+        }
+        return "done";
+      case "text":
+        if (Object.keys(this.#heldModifiers()).length) throw new Error("Release held modifiers before typing text; use key actions for shortcuts.");
+        cursor.label(L("typing…", "yazıyor…"));
+        for (const chunk of this.env.typingPlan(text, { typing, delay_ms, seed })) {
+          await scope.wait(chunk.delay, this.env);
+          scope.check();
+          if (chunk.text === "\n") eu.synthesizeKey("KEY_Enter", {}, win);
+          else eu.sendString(chunk.text, win);
+        }
+        return "done";
+      default:
+        throw new Error(`Unknown input kind: ${kind}`);
+    }
+  }
+
+  // A click in a background tab doesn't move focus; focus the focusable element at the point
+  // (the same result as the user's click).
+  #focusAt(x, y) {
+    const doc = this.env.document();
+    const target = doc.elementFromPoint(x, y);
+    const focusable = target?.closest(
+      'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [contenteditable=""], [contenteditable="true"], [tabindex]'
+    );
+    if (focusable && doc.activeElement !== focusable) focusable.focus();
+  }
+
+  // A wheel event is sent (so the page's wheel listeners run). The browser multiplies the
+  // delta by mousewheel.default.delta_multiplier_*, so the event delta is divided by it. In a
+  // background tab the wheel doesn't scroll; then the requested amount is scrolled directly.
+  async #wheel(x, y, dx, dy, [mx, my], scope) {
+    const win = this.env.window();
+    const scroller = this.#scrollerAt(x, y);
+    const before = [scroller.scrollLeft, scroller.scrollTop];
+    const dpr = win.devicePixelRatio;
+    this.env.eventUtils().synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
+    await scope.wait(150, this.env);
+    scope.check();
+    const moved = [scroller.scrollLeft - before[0], scroller.scrollTop - before[1]];
+    if (!moved[0] && !moved[1]) {
+      scroller.scrollBy({ left: dx, top: dy, behavior: "instant" });
+    }
+    return "done";
+  }
+
+  // The nearest scrollable ancestor of the element at the point, or the page itself.
+  #scrollerAt(x, y) {
+    const doc = this.env.document();
+    const win = this.env.window();
+    for (let el = doc.elementFromPoint(x, y); el && el !== doc.documentElement; el = el.parentElement) {
+      const style = win.getComputedStyle(el);
+      const scrollable = /(auto|scroll|overlay)/.test(style.overflowY + style.overflowX);
+      if (scrollable && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)) return el;
+    }
+    return doc.scrollingElement || doc.documentElement;
+  }
+
+  hitAt(x, y) {
+    let hit = this.env.document().elementFromPoint(x, y);
+    for (let depth = 0; depth < 16 && hit?.shadowRoot?.elementFromPoint; depth++) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === hit) break;
+      hit = inner;
+    }
+    return hit;
+  }
+
+  assertHit(expected, x, y, label) {
+    const win = this.env.window();
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= win.innerWidth || y >= win.innerHeight) {
+      throw new Error(`Click blocked: ${label} is outside the viewport. Refresh screenshot/read_page.`);
+    }
+    if (!expected?.isConnected) throw new Error(`Click blocked: ${label} is gone or has no hit target. Refresh screenshot/read_page.`);
+    if (expected.matches?.(":disabled")) throw new Error(`Click blocked: ${label} is disabled.`);
+    const hit = this.hitAt(x, y);
+    // Follow composed ancestry so an icon or shadow child inside a button is legitimate.
+    for (let node = hit; node; node = node.assignedSlot || node.parentNode || node.getRootNode?.().host) {
+      if (node === expected) return;
+    }
+    const blocker = hit ? `${this.env.elementLabel(hit)} [${this.env.ref(hit)}]` : "no element";
+    throw new Error(`Click blocked: ${label} is covered or moved at (${Math.round(x)}, ${Math.round(y)}); hit ${blocker}. Refresh screenshot/read_page and resolve the obstruction before retrying. No click was sent to the blocker.`);
+  }
+}

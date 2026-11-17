@@ -1,11 +1,10 @@
-import * as inputMotion from "../browser/InputMotion.sys.mjs";
 import test from 'node:test';
+import { loadActor } from './support/actor.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { Cancellation } from '../browser/Cancellation.sys.mjs';
 import { bridgeContext } from './support/bridge.mjs';
-import * as agent from '../browser/Agent.sys.mjs';
 const timers = { setTimeout, clearTimeout };
 
 test('cancel clears outstanding timers and cannot be undone by starting new work', async () => {
@@ -34,25 +33,15 @@ function actorHarness() {
   let firstEvent;
   const first = new Promise(resolve => { firstEvent = resolve; });
   const emit = value => { events.push(value); firstEvent(); };
-  const source = fs.readFileSync(new URL('../browser/actors/ZenMcpChild.sys.mjs', import.meta.url), 'utf8');
-  const context = vm.createContext({ watches: { endAll() {}, endSession() {} }, browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {}, extensionPanels: { destroy() {}, releaseSession() {}, releaseTab() {} },
-    JSWindowActorChild: class {}, URL, Cancellation, Ci: {}, Cc: {},
-    ChromeUtils: { importESModule(url) {
-      if (url.includes('InputMotion')) return inputMotion;
-      if (url.includes('Cancellation')) return { Cancellation };
-      if (url.includes('Timer')) return timers;
-      return agent;
-    } },
+  const Actor = loadActor({ Ci: {}, Cc: {},
     Services: { locale: { appLocaleAsBCP47: 'en' }, scriptloader: { loadSubScript(_, eu) {
       eu.sendString = text => emit(['text', text]);
       eu.synthesizeKey = (key,options={}) => emit(['key', key,options.type||'press',!!options.shiftKey]);
       eu.synthesizeMouseAtPoint = (x, y, event) => emit(['mouse', event.type, x, y]);
       eu.synthesizeWheelAtPoint = () => emit(['wheel']);
     } } },
-  });
-  // Run the real actor class with browser APIs stubbed at the platform boundary.
-  vm.runInContext(source.replaceAll('import.meta.url', JSON.stringify('file:///browser/actors/ZenMcpChild.sys.mjs')).replace('export class ZenMcpChild', 'globalThis.Actor = class ZenMcpChild'), context);
-  const actor = new context.Actor();
+  }, { timers });
+  const actor = new Actor();
   actor.contentWindow = { innerWidth: 100, innerHeight: 100, devicePixelRatio: 1 };
   const node = () => ({ isConnected: true, style: { setProperty() {} }, setAttribute() {},
     classList: { add() {}, remove() {} }, append() {}, attachShadow() { return node(); } });

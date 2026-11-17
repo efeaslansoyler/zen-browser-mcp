@@ -1,11 +1,8 @@
-import * as inputMotion from "../browser/InputMotion.sys.mjs";
 import test from 'node:test';
+import { loadActor } from './support/actor.mjs';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import vm from 'node:vm';
 import { inputTools } from '../browser/InputTools.sys.mjs';
-import { Cancellation } from '../browser/Cancellation.sys.mjs';
-import * as agent from '../browser/Agent.sys.mjs';
 import { bridgeContext } from './support/bridge.mjs';
 
 // Execute the real actor with only the DOM/platform boundary substituted.
@@ -24,14 +21,7 @@ function harness() {
   };
   const target = node('target'), blocker = node('modal');
   let hit = target, afterMove;
-  const context = vm.createContext({ browserSettings: { restoreTab() {}, destroy() {} }, heldFrame: () => null, releaseInputs() {}, releaseAllInputs() {}, rememberInputs() {},
-    JSWindowActorChild: class {}, URL, Cancellation, Ci: {}, Cc: {},
-    ChromeUtils: { importESModule(url) {
-      if (url.includes('InputMotion')) return inputMotion;
-      if (url.includes('Cancellation')) return { Cancellation };
-      if (url.includes('Timer')) return { setTimeout, clearTimeout };
-      return agent;
-    } },
+  const Actor = loadActor({ Ci: {}, Cc: {},
     Services: { locale: { appLocaleAsBCP47: 'en' }, scriptloader: { loadSubScript(_, eu) {
       eu.synthesizeMouseAtPoint = (x, y, event) => {
         events.push(event.type);
@@ -39,9 +29,7 @@ function harness() {
       };
     } } },
   });
-  const source = fs.readFileSync(new URL('../browser/actors/ZenMcpChild.sys.mjs', import.meta.url), 'utf8');
-  vm.runInContext(source.replaceAll('import.meta.url', JSON.stringify('file:///browser/actors/ZenMcpChild.sys.mjs')).replace('export class ZenMcpChild', 'globalThis.Actor = class ZenMcpChild'), context);
-  const actor = new context.Actor();
+  const actor = new Actor();
   actor.contentWindow = { innerWidth: 800, innerHeight: 600, getComputedStyle: () => ({ paddingLeft: '0', paddingTop: '0' }) };
   actor.browsingContext = { id: 1 };
   actor.document = { activeElement: null, hidden: true, elementFromPoint: () => hit,

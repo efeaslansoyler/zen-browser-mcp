@@ -60,7 +60,9 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Cancellation.sys.mjs` | Real Stop: cancels waits, typing, drags and navigation in flight |
 | `NetworkLog.sys.mjs`, `DownloadLog.sys.mjs` | Network requests and downloads of agent tabs |
 | `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
-| `actors/ZenMcpChild.sys.mjs` | Runs in every frame: virtual cursor and input (the browser's own `EventUtils` with the page's `windowUtils`), page tree and refs, `form_input`, console, picker overlay, `file_upload`, axe |
+| `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe |
+| `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles and component chains for picks |
+| `actors/InputDriver`, `Overlays`, `Picker` | Input through the browser's own `EventUtils` with hit testing; virtual cursor, ripple and `ask_user` outline; the element picker |
 
 ## Wire protocol
 

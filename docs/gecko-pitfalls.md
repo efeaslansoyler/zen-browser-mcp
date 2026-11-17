@@ -22,6 +22,10 @@ something that "should work".
 - A `.sys.mjs` module has its own global: `globalThis` there is not `main.js`'s autoconfig
   scope. State that must survive a reload (`globalThis.zenMcp*`) is kept in `main.js` and
   handed to modules through `ctx`.
+- A static `import` between `.sys.mjs` files drops the `?v=` query that makes a bridge reload
+  load new code, so the imported module stays on its old version until the browser restarts.
+  Load modules with `ChromeUtils.importESModule(url + version query)` instead; the actor
+  helpers get each other's functions from the actor.
 
 ## Sockets and streams
 

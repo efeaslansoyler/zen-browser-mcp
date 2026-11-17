@@ -1,27 +1,19 @@
 import test from 'node:test';
+import { loadActor } from './support/actor.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import vm from 'node:vm';
-import { Cancellation } from '../browser/Cancellation.sys.mjs';
-import * as agent from '../browser/Agent.sys.mjs';
 function harness(run) {
   const sandboxes = [], timers = new Set();
-  const context = vm.createContext({ JSWindowActorChild: class {}, URL,
-    ChromeUtils: { importESModule(url) {
-      if(url.includes('Cancellation'))return { Cancellation };
-      if(url.includes('Timer'))return { setTimeout(fn, ms) { const t=setTimeout(fn,ms);timers.add(t);return t; }, clearTimeout(t) {timers.delete(t);clearTimeout(t);} };
-      return agent;
-    } },
+  const timerStub = { setTimeout(fn, ms) { const t=setTimeout(fn,ms);timers.add(t);return t; }, clearTimeout(t) {timers.delete(t);clearTimeout(t);} };
+  const Actor = loadActor({
     Services: { locale: { appLocaleAsBCP47: 'en' }, scriptloader: { loadSubScript(url, sandbox) {
       assert(url.includes('/vendor/axe.min.js')); sandbox.loaded = true;
     } } },
     Cu: { Sandbox() { const sandbox={};sandboxes.push(sandbox);return sandbox; }, waiveXrays: value => value,
       cloneInto: value => value, nukeSandbox: sandbox => {sandbox.nuked = true;},
       evalInSandbox(code,sandbox) { assert.equal(code,'axe.run(scanTarget, scanOptions)');return run(sandbox); } },
-  });
-  const source=fs.readFileSync(new URL('../browser/actors/ZenMcpChild.sys.mjs',import.meta.url),'utf8');
-  vm.runInContext(source.replaceAll('import.meta.url',JSON.stringify('file:///browser/actors/ZenMcpChild.sys.mjs')).replace('export class ZenMcpChild','globalThis.Actor = class ZenMcpChild'),context);
-  const actor=new context.Actor(); actor.document={};actor.contentWindow={};actor.browsingContext={id:1};
+  }, { timers: timerStub });
+  const actor=new Actor(); actor.document={};actor.contentWindow={};actor.browsingContext={id:1};
   return { actor, sandboxes, timers, send: (name,data={})=>actor.receiveMessage({name,data}) };
 }
 const result = nodes => ({testEngine:{version:'test'},violations:[{id:'image-alt',tags:['wcag2a'],nodes}],incomplete:[],passes:[],inapplicable:[]});
