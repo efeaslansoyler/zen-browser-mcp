@@ -385,7 +385,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `downloads` | sekmeden indirilen dosyalar: durum, yol, boyut/ilerleme; `wait` dosya bitene kadar bekler ve sha256'sını verir; `cancel` indirmeyi durdurup yarım dosyayı siler |
 | `javascript_tool`, `handle_dialog` | sayfada JS çalıştırma; `alert`/`confirm`/`prompt` cevaplama |
 | `connect_session` | Codex sohbetini tarayıcıdan seçim alacak şekilde bağlama |
-| `ask_user`, `request_tab` | bir adımı sana bırakma; sekmene erişim isteme |
+| `ask_user`, `request_tab` | bir adımı sana bırakma ya da soru sorma (cevap butonlarıyla, sekmeli ya da sekmesiz); sekmene erişim isteme |
 
 ## Güvenlik
 

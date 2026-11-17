@@ -256,6 +256,13 @@ const CSS = `
       gap: 6px;
       justify-content: flex-end;
     }
+    /* ask_user options: one button per answer, wrapping under the message */
+    & .choices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      &[hidden] { display: none; }
+    }
     &[state="dialog"] .cancel { display: none; }
     & :is(.goto, .ok)[hidden] { display: none; }
   }
@@ -284,6 +291,7 @@ export class Island {
   #message = "";
   #askDone = false; // ask_user wait: "done" → adada Tamam
   #askLabels = {}; // { ok, cancel }: düğme yazıları (request_tab: Ver / Verme)
+  #askOptions = []; // ask_user options: answer buttons that replace OK
   #browser = null; // son işlem yapılan sekme (WeakRef)
   #hideTimer = null;
   // kullanıcının öğe seçimi Claude'un durumunun üstüne biner, bitince ada o duruma döner:
@@ -295,7 +303,7 @@ export class Island {
   #setTimeout;
   #clearTimeout;
 
-  // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled"),
+  // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled", note, choice?),
   //            pick(win), send(note), cancelPick(), toggleMode() }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
@@ -342,7 +350,8 @@ export class Island {
     answerNote.rows = 1;
     answerNote.setAttribute("aria-label", answerNote.placeholder);
     answerNote.maxLength = 2000;
-    detail.append(message, answerNote, buttons);
+    const choices = node("div", "choices");
+    detail.append(message, choices, answerNote, buttons);
     const preview = node("div", "preview");
     preview.title = L("Go to tab", "Sekmeye git");
     const canvas = node("canvas");
@@ -404,9 +413,10 @@ export class Island {
     preview.addEventListener("click", goToTab);
     el.addEventListener("mouseenter", () => this.#startPreview(win));
     el.addEventListener("mouseleave", () => this.#stopPreview(win));
-    const answer = result => () => {
-      const browser = this.#browser?.deref();
-      if (browser) this.#actions.answer(browser, result, answerNote.value.trim());
+    // A question without a tab answers with browser null; a tab that's gone answers nothing.
+    const answer = (result, ...choice) => () => {
+      const browser = this.#browser ? this.#browser.deref() : null;
+      if (browser !== undefined) this.#actions.answer(browser, result, answerNote.value.trim(), ...choice);
     };
     cancel.addEventListener("click", answer("cancelled"));
     ok.addEventListener("click", answer("done"));
@@ -435,7 +445,8 @@ export class Island {
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
-    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, send, canvas, previewing: false, onKey, onResize, onTabSelect, answerNote });
+    this.#windows.set(win, { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, note, target, send, canvas, previewing: false, onKey, onResize, onTabSelect, answerNote, choices, answer });
+    this.#fillChoices(win);
     this.#render();
   }
 
@@ -488,7 +499,9 @@ export class Island {
   // Claude kullanıcıdan bir şey istiyor: genişle, mesajı göster; askEnded'e kadar kalır.
   // done: Tamam düğmesi (wait: "done"); yoksa kullanıcı sayfadaki öğeye tıklayınca biter.
   // labels: düğme yazıları, ör. { ok: "Ver", cancel: "Verme" }
-  ask(browser, text, message, done, labels = {}) {
+  // options: answer buttons instead of OK; browser null: a question not tied to a tab,
+  // shown in every window
+  ask(browser, text, message, done, labels = {}, options = []) {
     if (this.#state === "stopped") return;
     this.#clearTimeout(this.#hideTimer);
     this.#state = "ask";
@@ -496,18 +509,43 @@ export class Island {
     this.#message = message;
     this.#askDone = done;
     this.#askLabels = labels;
+    this.#askOptions = options ?? [];
     for (const parts of this.#windows.values()) parts.answerNote.value = "";
+    for (const win of this.#windows.keys()) this.#fillChoices(win);
     // "gönderildi" bildirimi beklemesin; seçim ya da not yazımı sürüyorsa o üstte kalır
     if (this.#pick?.mode === "sent") {
       this.#clearTimeout(this.#pickTimer);
       this.#pick = null;
     }
-    this.#browser = new WeakRef(browser);
+    this.#browser = browser ? new WeakRef(browser) : null;
     this.#render();
+  }
+
+  #fillChoices(win) {
+    const parts = this.#windows.get(win);
+    parts.choices.replaceChildren(...this.#askOptions.map(option => {
+      const button = win.document.createElementNS(XHTML, "button");
+      button.className = "choice";
+      button.textContent = option;
+      button.addEventListener("click", parts.answer("done", option));
+      return button;
+    }));
+  }
+
+  #clearChoices() {
+    this.#askOptions = [];
+    for (const win of this.#windows.keys()) this.#fillChoices(win);
   }
 
   askEnded() {
     if (this.#state !== "ask") return;
+    this.#clearChoices();
+    // a tab-less question leaves no tab to show "working" for
+    if (!this.#browser) {
+      this.#state = "hidden";
+      this.#render();
+      return;
+    }
     this.#state = "working";
     this.#render();
     this.idle();
@@ -544,6 +582,7 @@ export class Island {
     this.#clearTimeout(this.#hideTimer);
     this.#state = "stopped";
     this.#text = "";
+    this.#clearChoices();
     this.#render();
   }
 
@@ -655,7 +694,8 @@ export class Island {
       mode.title = this.#mode === "ask"
         ? L(`${theme.name} asks before every action. Click: auto (acts without asking)`, `${theme.name} her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)`)
         : L(`${theme.name} acts without asking. Click: ask (asks before every action)`, `${theme.name} sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)`);
-      const visible = stopped || (state !== "hidden" && win === owner);
+      const anywhere = state === "ask" && !pick && !this.#browser;
+      const visible = stopped || anywhere || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
       host.textContent = stopped ? "" : siteName;
       text.textContent = stopped ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`) : `${theme.name} · ${action}`;
@@ -676,9 +716,10 @@ export class Island {
       stop.title = stopped ? "" : L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
       message.textContent = this.#message;
       parts.answerNote.hidden = state !== "ask";
+      parts.choices.hidden = state !== "ask" || !this.#askOptions.length;
       // zaten Claude'un sekmesindeyse "Sekmeye git" gereksiz; Tamam yoksa birincil düğme o
-      goto.hidden = win.gBrowser.selectedBrowser === browser;
-      ok.hidden = !(state === "ask" && this.#askDone);
+      goto.hidden = !browser || win.gBrowser.selectedBrowser === browser;
+      ok.hidden = !(state === "ask" && this.#askDone && !this.#askOptions.length);
       ok.textContent = this.#askLabels.ok ?? L("OK", "Tamam");
       cancel.textContent = this.#askLabels.cancel ?? L("Cancel", "Vazgeç");
       goto.classList.toggle("primary", ok.hidden);

@@ -381,17 +381,19 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
   register(
     "ask_user",
     [
-      "Hand a step to the user when they must do it themselves (confirming a payment or deletion, solving a captcha, logging in, choosing something only they know).",
+      "Hand a step to the user when they must do it themselves (confirming a payment or deletion, solving a captcha, logging in, choosing something only they know), or ask them a question.",
       "Shows your message in the browser island at the top of the user's browser window (with a desktop notification if the browser is not focused) and outlines the element (ref from read_page/find, or a screenshot coordinate) in the agent's color in the tab; the tab is not switched, the user opens it from the island. Waits for the user.",
       "wait: \"click\" returns when the user clicks the outlined element; \"done\" (default) shows OK/Cancel in the island and returns which they pressed. The user can always cancel.",
-      "Write the message in the user's language and say exactly what to do.",
+      "options: 2-6 short answers shown as buttons instead of OK; the result has the chosen one as choice. Without tabId the question is not tied to a tab (no outline, no ref/coordinate, no wait: \"click\").",
+      "Results may carry an optional userMessage typed by the user. Write the message in the user's language and say exactly what to do.",
     ].join(" "),
     {
-      tabId,
+      tabId: tabId.optional().describe("Tab the step or question is about. Omit for a general question."),
       message: z.string().describe("What the user should do, e.g. \"Check the amount and press Confirm if it's right.\" Write it in the user's language."),
       ref: z.string().optional().describe("Element to outline (from read_page or find)."),
       coordinate: z.array(z.number()).length(2).optional().describe("Or a point in the latest screenshot; the element there is outlined."),
       wait: z.enum(["click", "done"]).optional(),
+      options: z.array(z.string().min(1).max(80)).min(2).max(6).optional().describe("Answers to offer as buttons, e.g. [\"Red\", \"Blue\"]. Needs wait: \"done\"."),
       timeout: z.number().optional().describe("Seconds to wait (default 300)."),
     },
     (args) => ((args.timeout ?? 300) + 20) * 1000,

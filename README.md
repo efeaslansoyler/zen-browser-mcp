@@ -387,7 +387,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
-| `ask_user`, `request_tab` | hand a step to you; ask for access to your tab |
+| `ask_user`, `request_tab` | hand a step to you or ask a question (with answer buttons, with or without a tab); ask for access to your tab |
 
 ## Security
 

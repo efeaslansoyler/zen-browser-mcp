@@ -25,3 +25,29 @@ test('shared island permission rejects with denial notes, records approval notes
   assert.deepEqual(operation.userNotes, ['Only the title']);
   assert.equal(ended, 3);
 });
+
+test('tab-less ask_user answers carry the choice and end on answer, replacement and timeout', async () => {
+  const context = vm.createContext({ Cancellation, operation: null, setTimeout, clearTimeout,
+    guard: promise => promise, notifyAsk: () => false,
+    island: { ask() {}, askEnded() {} }, cancelAsk() { throw new Error('no page to cancel'); },
+  });
+  vm.runInContext(source.slice(start, end), context);
+  const helperStart = source.indexOf('    async function waitIslandAnswer(');
+  vm.runInContext(source.slice(helperStart, source.indexOf('    // ask_user gelince', helperStart)), context);
+
+  let pending = context.waitIslandAnswer(5);
+  context.answerIsland(null, 'done', ' bigger ', 'Blue');
+  assert.deepEqual({ ...await pending }, { status: 'done', choice: 'Blue', message: 'bigger' });
+
+  pending = context.waitIslandAnswer(5);
+  context.answerIsland(null, 'cancelled');
+  assert.equal(await pending, 'cancelled');
+
+  const first = context.waitIslandAnswer(5);
+  const second = context.waitIslandAnswer(5);
+  assert.equal(await first, 'replaced');
+  context.answerIsland(null, 'done', '', 'A');
+  assert.deepEqual({ ...await second }, { status: 'done', choice: 'A' });
+
+  assert.equal(await context.waitIslandAnswer(0.01), 'timeout');
+});

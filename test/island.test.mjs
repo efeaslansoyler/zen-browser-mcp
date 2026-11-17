@@ -117,3 +117,69 @@ test('island switches clients, confirmation, pause and Claude selection without 
     globalThis.ChromeUtils = originalChromeUtils;
   }
 });
+
+test('island asks with option buttons and without a tab', async () => {
+  const originalServices = globalThis.Services;
+  const originalChromeUtils = globalThis.ChromeUtils;
+  globalThis.Services = { locale: { appLocaleAsBCP47: 'en' }, io: { newURI: x => x } };
+  globalThis.ChromeUtils = { importESModule: () => agentModule };
+  try {
+    const { Island } = await import('../browser/Island.sys.mjs');
+    const makeWindow = () => {
+      const documentElement = new Element();
+      return {
+        document: { documentElement, createElementNS: () => new Element() },
+        windowUtils: { loadSheet() {}, removeSheet() {}, AUTHOR_SHEET: 1 },
+        gBrowser: { tabContainer: new Element() },
+        addEventListener() {}, removeEventListener() {},
+      };
+    };
+    const win = makeWindow();
+    const other = makeWindow();
+    const browser = { ownerDocument: { defaultView: win }, currentURI: { host: 'example.test' } };
+    const answers = [];
+    const island = new Island({ answer: (...args) => answers.push(args) }, { setTimeout: () => 1, clearTimeout() {} });
+    island.attach(win);
+    island.attach(other);
+    const el = win.document.documentElement.children[0];
+    const otherEl = other.document.documentElement.children[0];
+
+    island.ask(browser, 'needs you', 'Which color?', true, {}, ['Red', 'Blue']);
+    const choices = el.querySelector('.choices');
+    assert.equal(choices.hidden, false);
+    assert.deepEqual(choices.children.map(button => button.textContent), ['Red', 'Blue']);
+    assert.equal(el.querySelector('.ok').hidden, true);
+    assert.equal(otherEl.hidden, true, 'a tab question stays in its own window');
+    el.querySelector('.answer-note').value = ' darker ';
+    choices.children[1].listeners.get('click')();
+    assert.deepEqual(answers.pop(), [browser, 'done', 'darker', 'Blue']);
+    island.askEnded();
+    assert.equal(choices.children.length, 0);
+    assert.equal(el.querySelector('.ok').hidden, true);
+
+    island.ask(null, 'needs you', 'Which site should I use?', true, {}, ['A', 'B']);
+    assert.equal(el.hidden, false);
+    assert.equal(otherEl.hidden, false, 'a tab-less question shows in every window');
+    assert.equal(el.querySelector('.goto').hidden, true);
+    otherEl.querySelector('.choices').children[0].listeners.get('click')();
+    assert.deepEqual(answers.pop(), [null, 'done', '', 'A']);
+    el.querySelector('.cancel').listeners.get('click')();
+    assert.deepEqual(answers.pop(), [null, 'cancelled', '']);
+    island.askEnded();
+    assert.equal(el.hidden, true);
+    assert.equal(otherEl.hidden, true);
+
+    island.ask(null, 'needs you', 'Stop me', true, {}, ['A', 'B']);
+    island.stopped();
+    assert.equal(el.querySelector('.choices').children.length, 0, 'stop clears the answer buttons');
+    island.resumed();
+
+    island.ask(null, 'needs you', 'Ready?', true);
+    assert.equal(el.querySelector('.choices').hidden, true);
+    assert.equal(el.querySelector('.ok').hidden, false);
+    island.destroy();
+  } finally {
+    globalThis.Services = originalServices;
+    globalThis.ChromeUtils = originalChromeUtils;
+  }
+});
