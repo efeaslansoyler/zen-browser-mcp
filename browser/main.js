@@ -126,6 +126,7 @@ function logError(where, e) {
     const { TabMenu } = load("TabMenu");
     const { Channels, ascii } = load("Channels");
     const { Picks } = load("Picks");
+    const { Recordings, RECORDING_KEY, STEP_TOPIC } = load("Recordings");
     const { NetworkLog } = load("NetworkLog");
     const { EventFiles } = load("EventFiles");
     const { DownloadLog } = load("DownloadLog");
@@ -404,6 +405,22 @@ function logError(where, e) {
       menuAgent,
     });
 
+    // "Show me once": the user's steps in a recorded tab.
+    ctx.recordings = new Recordings({
+      setShared: (browserIds) => {
+        Services.ppmm.sharedData.set(RECORDING_KEY, browserIds);
+        Services.ppmm.sharedData.flush();
+      },
+      now: () => Date.now(),
+    });
+    const onRecordStep = (_subject, _topic, data) => {
+      try {
+        ctx.recordings.accept(JSON.parse(data));
+      } catch (e) {
+        logError("record", e);
+      }
+    };
+
     // HTTP requests of agent tabs.
     ctx.network = new NetworkLog((globalThis.zenMcpNetwork ||= new Map()), {
       tracked: (browserId) => state.tabs.has(browserId),
@@ -645,6 +662,7 @@ function logError(where, e) {
       sweep();
       for (const win of ctx.browserWindows()) ctx.watchWindow(win);
       Services.obs.addObserver(onWindowReady, "browser-delayed-startup-finished");
+      Services.obs.addObserver(onRecordStep, STEP_TOPIC);
       // A previous version that vanished without stop() (e.g. loaded from another scope) left
       // its registration behind.
       try {
@@ -654,14 +672,19 @@ function logError(where, e) {
         parent: { esModuleURI: `resource://zenmcp/actors/ZenMcpParent.sys.mjs?v=${version}` },
         child: {
           esModuleURI: `resource://zenmcp/actors/ZenMcpChild.sys.mjs?v=${version}`,
-          // the right-clicked element for "Show to agent…"
+          // the right-clicked element for "Show to agent…"; the others feed recordings
           events: {
             contextmenu: { capture: true, mozSystemGroup: true },
             pagehide: { capture: true, mozSystemGroup: true },
+            click: { capture: true, mozSystemGroup: true },
+            change: { capture: true, mozSystemGroup: true },
+            keydown: { capture: true, mozSystemGroup: true },
+            input: { capture: true, mozSystemGroup: true },
           },
         },
         // Entering web content processes needs explicit consent (Marionette does the same);
-        // the child only answers messages from the parent.
+        // the child answers the parent's queries and sends only recorded steps, which the
+        // parent accepts from recorded tabs alone and treats as untrusted data.
         safeForUntrustedWebProcess: true,
         // iframes too (including out-of-process cross-site frames)
         allFrames: true,
@@ -707,6 +730,10 @@ function logError(where, e) {
       try {
         Services.obs.removeObserver(onWindowReady, "browser-delayed-startup-finished");
       } catch {}
+      try {
+        Services.obs.removeObserver(onRecordStep, STEP_TOPIC);
+      } catch {}
+      ctx.recordings.stopAll();
       for (const win of ctx.browserWindows()) ctx.unwatchWindow(win);
       try {
         server?.close();

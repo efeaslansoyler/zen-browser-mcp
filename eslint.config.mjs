@@ -19,6 +19,7 @@ const gecko = {
   BrowsingContext: "readonly",
   URL: "readonly",
   TextDecoder: "readonly",
+  console: "readonly",
   JSWindowActorChild: "readonly",
   JSWindowActorParent: "readonly",
 };

@@ -47,6 +47,9 @@ something that "should work".
   `browser.browsingContext` becomes a new object. Check `bc.isInBFCache` / `bc.top.isInBFCache`
   (and `isDiscarded`) as well.
 - A closed shadow root's contents don't appear in a window listener's `composedPath()`.
+- A window without focus gets no focus, blur or blur-time `change` events for text fields;
+  track typing with `input` events. Enter in a form clicks its submit button with a trusted
+  click whose `detail` is 0 (so do Space and Enter on a focused button).
 - Hyprland suspends windows on hidden workspaces (`document.hidden`, no focus, no APZ
   scrolling); that's why input is never sent at the window level.
 

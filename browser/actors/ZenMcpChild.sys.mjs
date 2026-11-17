@@ -1,7 +1,8 @@
 // Runs in the content process, in every frame of every page (iframes included). Errors are
 // returned as { error } instead of thrown: sendQuery doesn't carry error messages well.
 //
-// The actor answers the parent's queries and owns the per-page state: element refs (valid for
+// The actor answers the parent's queries and, while its tab is recorded ("show me once"),
+// sends the user's steps to the parent with sendAsyncMessage. It owns the per-page state: element refs (valid for
 // this actor instance, i.e. this page load), held input, the cursor and pending questions.
 // The work is in the helper modules next to this file. They are loaded with this module's
 // ?v= query so a bridge reload picks up new code, and they never import each other: whatever
@@ -17,6 +18,7 @@ const info = load("./ElementInfo.sys.mjs");
 const { VirtualCursor, ripple, outlineAndWait, highlight } = load("./Overlays.sys.mjs");
 const { Picker } = load("./Picker.sys.mjs");
 const { InputDriver } = load("./InputDriver.sys.mjs");
+const { Recorder } = load("./Recorder.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
 // Text the user sees (cursor label, element descriptions) follows the browser language;
@@ -24,6 +26,9 @@ const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/
 const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
 
 const MAX_TEXT = 100000;
+// Recordings.sys.mjs puts the recorded tabs' browserIds here.
+const RECORDING_KEY = "zen-mcp:recording";
+const RECORD_EVENTS = new Set(["click", "change", "keydown", "input", "pagehide"]);
 
 export class ZenMcpChild extends JSWindowActorChild {
   #operations = new Map();
@@ -61,9 +66,18 @@ export class ZenMcpChild extends JSWindowActorChild {
   #cursor = (this.#env.cursor = new VirtualCursor(this.#env));
   #input = new InputDriver(this.#env);
   #picker = new Picker(this.#env);
+  #recorder = new Recorder({ ...this.#env, post: (step) => this.sendAsyncMessage("record_step", step) });
 
-  // The right-clicked element, for "Show to agent…" (main.js subscribes the actor to this event).
+  // main.js subscribes the actor to these events: the right-clicked element for "Show to
+  // agent…", and the user's input while the tab is recorded.
   handleEvent(event) {
+    if (RECORD_EVENTS.has(event.type) && event.isTrusted && this.#recording()) {
+      try {
+        this.#recorder.handle(event);
+      } catch (e) {
+        console.error("zen-mcp recorder", e);
+      }
+    }
     if (event.type === "pagehide") {
       this.#input.release();
       return;
@@ -73,6 +87,14 @@ export class ZenMcpChild extends JSWindowActorChild {
     let target = event.composedPath()[0] ?? event.target;
     if (target?.nodeType !== 1) target = target?.parentElement;
     this.#contextTarget = target ? new WeakRef(target) : null;
+  }
+
+  #recording() {
+    try {
+      return !!Services.cpmm.sharedData.get(RECORDING_KEY)?.includes(this.browsingContext.browserId);
+    } catch {
+      return false;
+    }
   }
 
   async receiveMessage({ name, data }) {

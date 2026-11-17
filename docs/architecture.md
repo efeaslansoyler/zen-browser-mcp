@@ -59,13 +59,16 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Ownership.sys.mjs` | Per-session tab ownership, `tab_work` tasks and the handoff queue |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
+| `Recordings.sys.mjs` | "Show me once": publishes the recorded tabs to content processes, cleans and collects their steps |
 | `SiteRules.sys.mjs` | Global mode and per-site `ask`/`block` rules |
 | `Cancellation.sys.mjs` | Real Stop: cancels waits, typing, drags and navigation in flight |
 | `NetworkLog.sys.mjs`, `DownloadLog.sys.mjs` | Network requests and downloads of agent tabs |
 | `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
-| `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe |
+| `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe. Its one message to the parent is a recorded step |
+| `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |
 | `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles and component chains for picks |
 | `actors/InputDriver`, `Overlays`, `Picker` | Input through the browser's own `EventUtils` with hit testing; virtual cursor, ripple, `ask_user` outline and `highlight` frames; the element picker |
+| `actors/Recorder` | Turns the user's input in a recorded tab into steps (click, type, select, check, upload, key); secret fields never carry values |
 
 ## Wire protocol
 
