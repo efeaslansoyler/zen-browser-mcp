@@ -6,6 +6,7 @@ import path from "node:path";
 import { Recipes, formatRecipe, slug, recipeTools } from "../browser/Recipes.sys.mjs";
 import { nodeIO, recipesCommand } from "../src/recipes.ts";
 import { ReviewModel, stepLabel } from "../browser/RecordingReview.sys.mjs";
+import { Demonstrations, demonstrationTools } from "../browser/Demonstrations.sys.mjs";
 
 function store() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zen-recipes-"));
@@ -222,7 +223,7 @@ test("show_me records on one line, then saves what the user kept in the review",
       },
     ],
   });
-  const [{ text }] = await recipeTools(ctx).show_me({ tabId: 1, message: "Show me", timeout: 99999 });
+  const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me", timeout: 99999 });
   assert.match(text, /^Saved the demonstration as recipe tickets\./);
   assert.match(text, /Variables \(change every time\): \{team\}/);
   assert.match(text, /1\. type \{team\} \(example: "derby"\) into searchbox "Search"/);
@@ -251,7 +252,7 @@ test("show_me overwrites a recipe with the same name when the user saves under i
     answers: ["done", (model) => ({ status: "done", choice: { ...model.result(), name: "OLD one" } })],
   });
   await recipes.save({ startUrl: "https://tickets.test/", steps: shown }, { name: "Old one" });
-  await recipeTools(ctx).show_me({ tabId: 1, message: "Show me" });
+  await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" });
   const all = await recipes.list();
   assert.deepEqual(
     all.map((r) => [r.id, r.name, r.steps]),
@@ -267,13 +268,13 @@ test("show_me saves nothing when the user cancels, times out or shows nothing", 
     [["done", "cancelled"], shown, /cancelled; nothing was saved/],
   ]) {
     const { ctx, recipes, calls } = showMeContext({ answers, steps });
-    const [{ text }] = await recipeTools(ctx).show_me({ tabId: 1, message: "Show me" });
+    const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" });
     assert.match(text, expected);
     assert.deepEqual(await recipes.list(), []);
     assert.equal(calls.at(-1), "ended");
   }
   const { ctx } = showMeContext({ answers: [], steps: [] });
-  await assert.rejects(recipeTools(ctx).show_me({ tabId: 1, message: " " }), /message/);
+  await assert.rejects(demonstrationTools(ctx).show_me({ tabId: 1, message: " " }), /message/);
 });
 
 test("the review model: names, removals, variables and play order", () => {
@@ -303,7 +304,14 @@ test("the review model: names, removals, variables and play order", () => {
   assert.equal(model.items[4].variable, "category");
   model.toggleRemoved(0);
   model.toggleRemoved(2);
-  assert.deepEqual(model.result(), { name: "Derby tickets", note: "", removed: [0, 2], variables: { 4: "category" } });
+  assert.deepEqual(model.result(), {
+    name: "Derby tickets",
+    note: "",
+    removed: [0, 2],
+    variables: { 4: "category" },
+    targetId: "",
+    tryNow: false,
+  });
 
   model.play();
   assert.equal(model.index, 1);
@@ -330,4 +338,72 @@ test("Play zooms in around the element and keeps it in the frame", async () => {
     backgroundSize: `${Math.round(290 / 0.6)}px auto`,
     backgroundPosition: "50.0% 50.0%",
   });
+});
+
+test("show_me tells the agent to try the recipe when the user asked for it", async () => {
+  const { ctx } = showMeContext({
+    steps: shown,
+    answers: [
+      "done",
+      (model) => {
+        assert.equal(model.canTry, true); // the asking agent can always try
+        model.tryNow = true;
+        return { status: "done", choice: model.result() };
+      },
+    ],
+  });
+  const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" });
+  assert.match(text, /The user asks you to try this recipe now: open a new tab/);
+});
+
+test("a recording the user started is saved and sent to the chosen session", async () => {
+  const { ctx, calls, recipes } = showMeContext({
+    steps: shown,
+    answers: [],
+  });
+  delete ctx.waitIslandAnswer; // the user's flow answers through tabRequests, not an agent operation
+  ctx.tabRequests = new Map();
+  ctx.setTimeout = setTimeout;
+  ctx.clearTimeout = clearTimeout;
+  const island = ctx.island;
+  island.working = (_b, text) => calls.push(["notice", text]);
+  island.idle = () => {};
+  const delivered = [];
+  const sessions = new Map([["s1", { id: "s1", name: "Claude · shop", agent: { id: "claude" } }]]);
+  const demos = new Demonstrations({
+    L: (en) => en,
+    ctx,
+    channels: {
+      subscribers: sessions,
+      deliver: async (target, message) => (delivered.push([target.id, message]), true),
+    },
+    assertSiteAccess() {},
+    copy() {},
+    logError: (where, e) => {
+      throw e;
+    },
+  });
+  const browser = ctx.browserFor();
+  const answer = (value) => ctx.tabRequests.get(browser)(value);
+  let model;
+  island.review = (_b, _title, m) => (model = m);
+  const run = demos.start(browser);
+  await new Promise((resolve) => setImmediate(resolve));
+  answer("done"); // Finish
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(model.targets, [{ id: "s1", name: "Claude · shop", agent: { id: "claude" } }]);
+  assert.equal(model.canTry, false);
+  model.setTarget("s1");
+  model.tryNow = true;
+  answer({ status: "done", choice: model.result() });
+  await run;
+
+  assert.equal((await recipes.list()).length, 1);
+  assert.equal(delivered.length, 1);
+  const [id, message] = delivered[0];
+  assert.equal(id, "s1");
+  assert.match(message.content, /^The user showed you a task in the browser and saved it as recipe tickets\./);
+  assert.match(message.content, /try this recipe now/);
+  assert.equal(message.meta.recipe, "tickets");
+  assert.deepEqual(calls.at(-1), ["notice", "Saved and sent to Claude · shop ✓"]);
 });

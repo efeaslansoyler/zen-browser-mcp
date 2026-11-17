@@ -1,6 +1,7 @@
 // "Show me once": the review on the island after the user presses Finish. The user names the
 // recipe, deletes wrong steps, marks values that change every time ("↻ Changes") and can play
-// the steps back from their screenshots before saving.
+// the steps back from their screenshots before saving. "Let the agent try it now" asks the agent
+// to run the recipe at once; a recording the user started also picks the session to send to.
 //
 // ReviewModel holds the state and has no DOM; renderReview builds the panel for one window
 // from it. The island rebuilds the panel after clicks and keeps it while the user types.
@@ -91,11 +92,15 @@ export function cleanVariable(name) {
 }
 
 export class ReviewModel {
-  // steps: the recording's steps; images: { thumb(step), image(step) } → URL or null
-  constructor({ name, steps, existingNames = [], L, images = {} }) {
+  // steps: the recording's steps; images: { thumb(step), image(step) } → URL or null;
+  // targets: sessions to send to ([{ id, name }]), null when an agent asked (show_me)
+  constructor({ name, steps, existingNames = [], targets = null, L, images = {} }) {
     this.L = L;
     this.name = name ?? "";
     this.note = "";
+    this.targets = targets;
+    this.targetId = "";
+    this.tryNow = false;
     this.existing = new Set(existingNames.map((n) => n.toLocaleLowerCase("tr")));
     this.items = steps.map((step) => ({
       step,
@@ -121,6 +126,16 @@ export class ReviewModel {
 
   get canSave() {
     return !!this.name.trim() && this.kept.length > 0;
+  }
+
+  // Trying needs an agent: the one that asked, or the chosen session.
+  get canTry() {
+    return this.targets === null || !!this.targetId;
+  }
+
+  setTarget(id) {
+    this.targetId = this.targets?.some((t) => t.id === id) ? id : "";
+    if (!this.canTry) this.tryNow = false;
   }
 
   toggleRemoved(i) {
@@ -153,6 +168,8 @@ export class ReviewModel {
       note: this.note.trim(),
       removed: this.items.flatMap((item, i) => (item.removed ? [i] : [])),
       variables,
+      targetId: this.targetId,
+      tryNow: this.tryNow && this.canTry,
     };
   }
 
@@ -343,6 +360,29 @@ export function renderReview(doc, model, hooks) {
   note.addEventListener("input", () => (model.note = note.value));
   root.append(note);
 
+  // where it goes: the session picker (the user's own recording) and "try it now"
+  const options = node("div", "options");
+  let target = null;
+  if (model.targets !== null) {
+    target = node("select", "target");
+    target.setAttribute("aria-label", L("Send to", "Gönderilecek yer"));
+    for (const t of [{ id: "", name: L("Only save", "Sadece kaydet") }, ...model.targets]) {
+      const option = node("option", "", t.name);
+      option.value = t.id;
+      target.append(option);
+    }
+    target.value = model.targetId;
+    options.append(target);
+  }
+  const tryLabel = node("label", "try");
+  const tryBox = node("input");
+  tryBox.type = "checkbox";
+  tryBox.checked = model.tryNow;
+  tryBox.addEventListener("change", () => (model.tryNow = tryBox.checked));
+  tryLabel.append(tryBox, L("Let the agent try it now", "Agent hemen denesin"));
+  options.append(tryLabel);
+  root.append(options);
+
   const footer = node("div", "footer");
   const play = button("", L("▶ Play", "▶ Oynat"), () => {
     model.play();
@@ -354,9 +394,20 @@ export function renderReview(doc, model, hooks) {
   });
   const refresh = () => {
     warn.hidden = !model.exists;
-    save.textContent = model.exists ? L("Overwrite", "Üzerine yaz") : L("Save", "Kaydet");
+    save.textContent = model.exists
+      ? L("Overwrite", "Üzerine yaz")
+      : model.targetId
+        ? L("Save and send", "Kaydet ve gönder")
+        : L("Save", "Kaydet");
     save.disabled = !model.canSave;
+    tryBox.disabled = !model.canTry;
+    tryBox.checked = model.tryNow;
+    tryLabel.toggleAttribute("disabled", !model.canTry);
   };
+  target?.addEventListener("change", () => {
+    model.setTarget(target.value);
+    refresh();
+  });
   name.addEventListener("input", () => {
     model.name = name.value;
     refresh();
@@ -382,7 +433,10 @@ export const REVIEW_CSS = `
   &:is([state="recording"], [state="review"]) .spark { display: none; }
   & .rec-button { display: none; }
   &[state="recording"] .rec-button { display: block; }
-  /* recording: one line that leaves the page free; the message shows on hover (and before the first step) */
+  /* recording: one line that leaves the page free; the message shows on hover (and before the
+     first step). A fixed width: pressing Finish can record a typed value and collapse the
+     island before the click ends, and the buttons must not move under the mouse. */
+  &[state="recording"] { width: 400px; }
   &[state="recording"] .detail { display: none; }
   &[state="recording"]:is(:hover, [fresh]) .detail { display: flex; }
   &[state="recording"] :is(.answer-note, .buttons, .choices) { display: none !important; }
@@ -424,6 +478,12 @@ export const REVIEW_CSS = `
   & .tools button:hover { background: rgba(255, 255, 255, 0.12); opacity: 1; }
   & .tools .vary.active { background: rgba(var(--zen-agent-rgb, 217, 119, 87), 0.25); color: #ffc3ac; opacity: 1; }
   & .review-note { width: 100%; height: 32px; }
+  & .options { display: flex; align-items: center; gap: 10px; }
+  & .options .target { flex: 1; min-width: 0; max-width: 240px; height: 24px; padding: 0 6px; border: 1px solid #555; border-radius: 6px;
+    background: #252525; color: inherit; font: inherit; font-size: 11.5px; }
+  & .try { display: flex; align-items: center; gap: 6px; font-size: 11.5px; cursor: pointer; }
+  & .try[disabled] { opacity: 0.4; cursor: default; }
+  & .try input { margin: 0; accent-color: var(--zen-agent-accent, #d97757); }
   & .review .footer { display: flex; align-items: center; gap: 6px; }
   & .review .spacer { flex: 1; }
   & .review button:disabled { opacity: 0.4; cursor: default; }

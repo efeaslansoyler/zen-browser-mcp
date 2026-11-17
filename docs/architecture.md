@@ -60,8 +60,9 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
 | `Recordings.sys.mjs` | "Show me once": publishes the recorded tabs to content processes, cleans and collects their steps, screenshots each step |
+| `Demonstrations.sys.mjs` | "Show me once" end to end: record, review, save; `show_me`, and "Record steps for an agent…" in the page menu with sending to a session |
 | `RecordingReview.sys.mjs` | The island's review after a recording: name, delete steps, values that change every time, Play |
-| `Recipes.sys.mjs` | Saved recordings (`~/.local/state/zen-mcp/recipes/<id>/`), their text for agents, the `show_me` and `recipes` tools; the CLI uses it too |
+| `Recipes.sys.mjs` | Saved recordings (`~/.local/state/zen-mcp/recipes/<id>/`), their text for agents, the `recipes` tool; the CLI uses it too |
 | `SiteRules.sys.mjs` | Global mode and per-site `ask`/`block` rules |
 | `Cancellation.sys.mjs` | Real Stop: cancels waits, typing, drags and navigation in flight |
 | `NetworkLog.sys.mjs`, `DownloadLog.sys.mjs` | Network requests and downloads of agent tabs |

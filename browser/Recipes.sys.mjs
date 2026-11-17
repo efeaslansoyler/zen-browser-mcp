@@ -193,6 +193,11 @@ export class Recipes {
     return recipe;
   }
 
+  // The recipe as text for an agent (formatRecipe with its folder for image paths).
+  text(recipe, { images = false } = {}) {
+    return formatRecipe(recipe, { dir: `${this.dir}/${recipe.id}`, images });
+  }
+
   async get(id) {
     let text;
     try {
@@ -225,108 +230,11 @@ export class Recipes {
   }
 }
 
-const MAX_SHOW_TIMEOUT = 3600;
-
-// show_me records a demonstration and saves it; the recipes tool lists, returns and (after the
-// user confirms on the island) deletes recipes.
+// The recipes tool: lists, returns and (after the user confirms on the island) deletes recipes.
+// show_me, which makes them, is in Demonstrations.sys.mjs.
 export function recipeTools(ctx) {
   const { L, text } = ctx;
-  let recordingId = 0;
   return {
-    // The user does the task in the tab while every step is recorded; the island shows one
-    // line with a live step count and Finish / Cancel (the agent's message on hover). After
-    // Finish the user reviews the steps on the island (RecordingReview.sys.mjs) and saves.
-    // Blocks until the user saves or cancels.
-    async show_me({ tabId, message, name, timeout = 900 }) {
-      const browser = ctx.browserFor(tabId);
-      if (typeof message !== "string" || !message.trim()) throw new Error("message must say what to show.");
-      if (ctx.recordings.isRecording(browser.browserId)) throw new Error("This tab is already being recorded.");
-      timeout = Math.min(Math.max(Number(timeout) || 900, 30), MAX_SHOW_TIMEOUT);
-      const dir = `${ctx.runtimeDir}/${ctx.app}-recordings/${Date.now()}-${++recordingId}`;
-      const title = (n) =>
-        n === 0
-          ? L("Recording · do it in the tab", "Kaydediliyor · sekmede yap")
-          : L(`Recording · ${n} step${n === 1 ? "" : "s"}`, `Kaydediliyor · ${n} adım`);
-      ctx.island?.recording(browser, title(0), message);
-      const notified = ctx.notifyAsk(browser, message);
-      ctx.recordings.start(browser, { dir, onStep: (r) => ctx.island?.recordingProgress(title(r.steps.length)) });
-      const discard = () => ctx.recipes.io.remove(dir).catch(() => {});
-      let answer, recording;
-      try {
-        answer = await ctx.waitIslandAnswer(timeout, browser);
-      } catch (e) {
-        ctx.island?.askEnded();
-        discard();
-        throw e;
-      } finally {
-        // typed values that have no step yet, then the steps and their images
-        await Promise.all(
-          browser.browsingContext.getAllBrowsingContextsInSubtree().map(async (bc) => {
-            try {
-              await bc.currentWindowGlobal?.getActor("ZenMcp").sendQuery("record_flush", {});
-            } catch {}
-          }),
-        );
-        recording = await ctx.recordings.stop(browser.browserId);
-        if (notified) ctx.closeAskAlert();
-      }
-      const notSaved = async (why) => {
-        ctx.island?.askEnded();
-        await discard();
-        return text(why);
-      };
-      const cancelled = (status) =>
-        notSaved(
-          status === "timeout"
-            ? `The user did not finish within ${timeout} s; nothing was saved.`
-            : "The user cancelled; nothing was saved.",
-        );
-      if ((answer?.status ?? answer) !== "done") return cancelled(answer?.status ?? answer);
-      if (!recording?.steps.length) return notSaved("The user finished without doing any steps; nothing was saved.");
-
-      // the review: name, delete steps, mark values that change, play back
-      const existing = await ctx.recipes.list();
-      const image = (file) => (file ? ctx.fileURL(`${dir}/${file}`) : null);
-      const model = new ctx.ReviewModel({
-        name: name?.trim() || browser.contentTitle || originOf(recording.startUrl) || "Recipe",
-        steps: recording.steps,
-        existingNames: existing.map((r) => r.name),
-        L,
-        images: { thumb: (step) => image(step.crop ?? step.image), image: (step) => image(step.image) },
-      });
-      const n = recording.steps.length;
-      ctx.island?.review(browser, L(`Review the recording · ${n} steps`, `Kaydı gözden geçir · ${n} adım`), model);
-      let review;
-      try {
-        review = await ctx.waitIslandAnswer(MAX_SHOW_TIMEOUT, browser);
-      } catch (e) {
-        await discard();
-        throw e;
-      } finally {
-        ctx.island?.askEnded();
-      }
-      if ((review?.status ?? review) !== "done" || !review.choice) return cancelled(review?.status ?? review);
-      const { choice } = review;
-      const replace = existing.find(
-        (r) => r.name.toLocaleLowerCase("tr") === String(choice.name).toLocaleLowerCase("tr"),
-      );
-      const recipe = await ctx.recipes.save(recording, {
-        name: choice.name,
-        note: choice.note,
-        removed: choice.removed,
-        variables: choice.variables,
-        replace: replace?.id ?? null,
-        imagesDir: dir,
-      });
-      await discard();
-      return text(
-        [
-          `Saved the demonstration as recipe ${recipe.id}${recording.truncated ? " (cut at the step limit)" : ""}.`,
-          formatRecipe(recipe, { dir: `${ctx.recipes.dir}/${recipe.id}` }),
-        ].join("\n"),
-      );
-    },
-
     async recipes({ action = "list", id, url, images = false }) {
       const store = ctx.recipes;
       if (action === "list") {

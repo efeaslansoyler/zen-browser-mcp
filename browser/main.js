@@ -129,6 +129,7 @@ function logError(where, e) {
     const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
     const { Recipes, recipeTools, geckoIO } = load("Recipes");
     const { ReviewModel } = load("RecordingReview");
+    const { Demonstrations, demonstrationTools } = load("Demonstrations");
     const { NetworkLog } = load("NetworkLog");
     const { EventFiles } = load("EventFiles");
     const { DownloadLog } = load("DownloadLog");
@@ -427,6 +428,18 @@ function logError(where, e) {
       }
     };
 
+    // Recordings the user starts from the page menu ("Record steps for an agent…").
+    ctx.demonstrations = new Demonstrations({
+      L,
+      ctx,
+      channels: ctx.channels,
+      assertSiteAccess: (browser) => ctx.assertSiteAccess(browser),
+      copy: (value) => Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value),
+      logError,
+      paintIcon: paintMenuIcon,
+      menuAgent,
+    });
+
     // HTTP requests of agent tabs.
     ctx.network = new NetworkLog((globalThis.zenMcpNetwork ||= new Map()), {
       tracked: (browserId) => state.tabs.has(browserId),
@@ -474,6 +487,7 @@ function logError(where, e) {
       inputTools(ctx),
       browserTools(ctx),
       recipeTools(ctx),
+      demonstrationTools(ctx),
     );
 
     // The version of the installed browser files (install writes .version; a dev symlink has none).
@@ -619,6 +633,7 @@ function logError(where, e) {
       ctx.island?.attach(win);
       ctx.tabMenu.attach(win);
       ctx.picks.attachPageMenu(win);
+      ctx.demonstrations.attachPageMenu(win);
     }
 
     // Saved values of lazy tabs become readable only a while after the window opens (neither at
@@ -728,6 +743,7 @@ function logError(where, e) {
       clearTimeout(sessionSweep);
       ctx.operation?.cancel(new Stopped());
       ctx.picks.destroy();
+      ctx.demonstrations.destroy();
       ctx.channels.closeAll();
       ctx.closeConnections();
       try {
