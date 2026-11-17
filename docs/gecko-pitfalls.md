@@ -42,6 +42,10 @@ something that "should work".
   `mousewheel.default.delta_multiplier_*` (200), so divide before sending.
 - A pending `sendQuery` is not rejected when the actor is destroyed: watch for
   `currentWindowGlobal` changes.
+- With bfcache, a navigation can move the old page into the cache together with its own
+  BrowsingContext: that context's `currentWindowGlobal` never changes and the tab's
+  `browser.browsingContext` becomes a new object. Check `bc.isInBFCache` / `bc.top.isInBFCache`
+  (and `isDiscarded`) as well.
 - A closed shadow root's contents don't appear in a window listener's `composedPath()`.
 - Hyprland suspends windows on hidden workspaces (`document.hidden`, no focus, no APZ
   scrolling); that's why input is never sent at the window level.

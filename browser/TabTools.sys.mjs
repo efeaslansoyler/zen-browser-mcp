@@ -12,7 +12,25 @@ export function tabTools(ctx) {
     const notified = ctx.notifyAsk(browser, message);
     let result;
     try {
-      if (browser)
+      if (browser && handOver && wait === "done") {
+        // The step may navigate (login → 2FA → home), so the answer comes from the island; the
+        // outline is a hint that ends with its page.
+        const outline = ctx
+          .query(
+            browser,
+            "ask_user",
+            { ref: ctx.longRef(ref), x, y, message, wait, timeout },
+            (timeout + 10) * 1000,
+            ctx.frameOf(browser, ref),
+          )
+          .catch(() => {});
+        try {
+          result = await ctx.waitIslandAnswer(timeout, browser);
+        } finally {
+          ctx.cancelAsk(browser, "done"); // removes the outline if its page is still there
+          await outline;
+        }
+      } else if (browser)
         ({ value: result } = await ctx.query(
           browser,
           "ask_user",

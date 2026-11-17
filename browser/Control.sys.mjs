@@ -90,21 +90,23 @@ export function control(ctx) {
     } catch {}
   }
 
-  // A tab-less ask_user has no page actor to wait on: the island answer arrives under the
-  // null key. Stop cancels it through guard().
-  async function waitIslandAnswer(timeout) {
+  // Waits for the island's answer instead of a page: a tab-less ask_user has no page, and a
+  // hand-over must outlive the pages the user goes through (login → 2FA → home). Stop cancels
+  // it through guard().
+  // key: the tab's browser for a hand-over that must survive navigations, null otherwise.
+  async function waitIslandAnswer(timeout, key = null) {
     let resolve;
     const answered = new Promise((r) => {
       resolve = r;
     });
-    ctx.tabRequests.get(null)?.("replaced");
-    ctx.tabRequests.set(null, resolve);
+    ctx.tabRequests.get(key)?.("replaced");
+    ctx.tabRequests.set(key, resolve);
     const timer = new ctx.Cancellation();
     try {
       return await ctx.guard(Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]));
     } finally {
       timer.cancel();
-      if (ctx.tabRequests.get(null) === resolve) ctx.tabRequests.delete(null);
+      if (ctx.tabRequests.get(key) === resolve) ctx.tabRequests.delete(key);
     }
   }
 

@@ -55,3 +55,56 @@ test("ask_user is a question: no Done label, and an outline needs a tab", async 
     choice: "Blue",
   });
 });
+
+test("a hand-over survives the pages the user goes through and ends on the island's Done", async () => {
+  const browser = { browserId: 1, browsingContext: {} };
+  const cancelled = [];
+  let outlineEnded;
+  const ctx = bridgeContext({
+    browserFor: () => browser,
+    frameOf: () => browser.browsingContext,
+    notifyAsk: () => false,
+    island: { ask() {}, askEnded() {} },
+    guard: (promise) => promise,
+    cancelAsk: (_, result) => cancelled.push(result),
+    // The outline's page goes away when the user logs in.
+    query: () =>
+      new Promise((_, reject) => {
+        outlineEnded = () => reject(new ctx.PageGone("The page changed."));
+      }),
+    text: (value) => [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
+  });
+  const pending = ctx.tools.hand_to_user({ tabId: 1, message: "Log in, then press Done" });
+  await new Promise((resolve) => setImmediate(resolve));
+  outlineEnded();
+  await new Promise((resolve) => setImmediate(resolve));
+  ctx.answerIsland(browser, "done");
+  assert.match((await pending)[0].text, /says the step is done/);
+  assert.deepEqual(cancelled, ["done"], "the outline is removed if its page is still there");
+  assert.equal(ctx.tabRequests.size, 0);
+});
+
+test("a query notices its page going into bfcache, where its own context stays unchanged", async () => {
+  const wg = { getActor: () => ({ sendQuery: () => new Promise(() => {}), sendAsyncMessage() {} }) };
+  const frame = { currentWindowGlobal: wg, top: { isInBFCache: false } };
+  const browser = {
+    browserId: 1,
+    browsingContext: frame,
+    ownerDocument: {
+      defaultView: {
+        gBrowser: {
+          getTabDialogBox() {
+            throw new Error("no dialogs");
+          },
+        },
+      },
+    },
+  };
+  frame.top = frame;
+  frame.isInBFCache = false;
+  const ctx = bridgeContext({ activeSession: "A", assertSiteAccess() {}, guard: (promise) => promise });
+  ctx.ownership.assign(1, "A");
+  const pending = ctx.query(browser, "ask_user", {}, 30000, frame);
+  frame.isInBFCache = true;
+  await assert.rejects(pending, (e) => e instanceof ctx.PageGone);
+});

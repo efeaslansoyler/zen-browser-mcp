@@ -192,7 +192,10 @@ export function pageQueries(ctx) {
         await watcher.wait(250, timers);
         if (done) return;
         throwIfDialog(browser);
-        if (frame.currentWindowGlobal !== wg) throw new PageGone("The page changed.");
+        // With bfcache the old page keeps its own BrowsingContext, whose currentWindowGlobal
+        // never changes: a navigation shows up as that context entering the cache.
+        if (frame.currentWindowGlobal !== wg || frame.isDiscarded || frame.top?.isInBFCache)
+          throw new PageGone("The page changed.");
         ownership.check(ctx.controlledSource(browser).browserId, scope?.session || ctx.activeSession);
         ctx.assertSiteAccess(browser);
       }
