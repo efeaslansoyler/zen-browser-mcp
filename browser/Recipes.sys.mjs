@@ -198,10 +198,77 @@ export class Recipes {
   }
 }
 
-// The recipes tool: list, get and (after the user confirms on the island) delete.
+const MAX_SHOW_TIMEOUT = 3600;
+
+// show_me records a demonstration and saves it; the recipes tool lists, returns and (after the
+// user confirms on the island) deletes recipes.
 export function recipeTools(ctx) {
   const { L, text } = ctx;
+  let recordingId = 0;
   return {
+    // The user does the task in the tab while every step is recorded; the island shows the
+    // agent's message, a live step count and Finish / Cancel. Blocks until the user finishes.
+    async show_me({ tabId, message, name, timeout = 900 }) {
+      const browser = ctx.browserFor(tabId);
+      if (typeof message !== "string" || !message.trim()) throw new Error("message must say what to show.");
+      if (ctx.recordings.isRecording(browser.browserId)) throw new Error("This tab is already being recorded.");
+      timeout = Math.min(Math.max(Number(timeout) || 900, 30), MAX_SHOW_TIMEOUT);
+      const dir = `${ctx.runtimeDir}/${ctx.app}-recordings/${Date.now()}-${++recordingId}`;
+      const title = (n) =>
+        n === 0
+          ? L("Recording · do it in the tab", "Kaydediliyor · sekmede yap")
+          : L(`Recording · ${n} step${n === 1 ? "" : "s"}`, `Kaydediliyor · ${n} adım`);
+      ctx.island?.ask(browser, title(0), message, true, {
+        ok: L("Finish", "Bitir"),
+        cancel: L("Cancel", "Vazgeç"),
+      });
+      const notified = ctx.notifyAsk(browser, message);
+      ctx.recordings.start(browser, { dir, onStep: (r) => ctx.island?.askProgress(title(r.steps.length)) });
+      let answer, recording;
+      try {
+        answer = await ctx.waitIslandAnswer(timeout, browser);
+      } finally {
+        // typed values that have no step yet, then the steps and their images
+        await Promise.all(
+          browser.browsingContext.getAllBrowsingContextsInSubtree().map(async (bc) => {
+            try {
+              await bc.currentWindowGlobal?.getActor("ZenMcp").sendQuery("record_flush", {});
+            } catch {}
+          }),
+        );
+        recording = await ctx.recordings.stop(browser.browserId);
+        ctx.island?.askEnded();
+        if (notified) ctx.closeAskAlert();
+      }
+      const status = answer?.status ?? answer;
+      const note = answer?.message ?? "";
+      const discard = () => ctx.recipes.io.remove(dir).catch(() => {});
+      if (status !== "done") {
+        await discard();
+        return text(
+          status === "timeout"
+            ? `The user did not finish within ${timeout} s; nothing was saved.`
+            : "The user cancelled; nothing was saved.",
+        );
+      }
+      if (!recording?.steps.length) {
+        await discard();
+        return text("The user finished without doing any steps; nothing was saved.");
+      }
+      const recipe = await ctx.recipes.save(recording, {
+        name: name?.trim() || browser.contentTitle || originOf(recording.startUrl) || "Recipe",
+        note,
+        imagesDir: dir,
+      });
+      await discard();
+      return text(
+        [
+          `Saved the demonstration as recipe ${recipe.id}${recording.truncated ? " (cut at the step limit)" : ""}.`,
+          formatRecipe(recipe, { dir: `${ctx.recipes.dir}/${recipe.id}` }),
+        ].join("\n"),
+      );
+    },
+
     async recipes({ action = "list", id, url, images = false }) {
       const store = ctx.recipes;
       if (action === "list") {

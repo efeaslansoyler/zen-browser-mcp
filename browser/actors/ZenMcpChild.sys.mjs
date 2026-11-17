@@ -66,7 +66,14 @@ export class ZenMcpChild extends JSWindowActorChild {
   #cursor = (this.#env.cursor = new VirtualCursor(this.#env));
   #input = new InputDriver(this.#env);
   #picker = new Picker(this.#env);
-  #recorder = new Recorder({ ...this.#env, post: (step) => this.sendAsyncMessage("record_step", step) });
+  #recorder = new Recorder({
+    ...this.#env,
+    post: (step, el) => {
+      this.sendAsyncMessage("record_step", step);
+      if (el) this.#flash(el);
+    },
+  });
+  #flashes = new Set();
 
   // main.js subscribes the actor to these events: the right-clicked element for "Show to
   // agent…", and the user's input while the tab is recorded.
@@ -183,6 +190,10 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#overlays(data.hidden) };
         case "highlight":
           return { value: this.#highlight(data.items ?? []) };
+        case "record_flush":
+          // show_me is ending: typed values that have no step yet
+          this.#recorder.flush();
+          return { value: true };
         case "cancel_ask":
           // The user answered on the island or stopped the agent (no reply expected).
           this.#ask?.finish(data?.result ?? "stopped");
@@ -210,6 +221,7 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   didDestroy() {
     this.#highlights?.remove();
+    for (const shown of this.#flashes) shown.remove();
     this.#input.release();
     this.#annotation?.remove();
     for (const scope of this.#operations.values()) scope.cancel();
@@ -592,6 +604,21 @@ export class ZenMcpChild extends JSWindowActorChild {
     if (first && !reader.inViewport(first, this.contentWindow))
       first.scrollIntoView({ block: "center", behavior: "instant" });
     return resolved.length;
+  }
+
+  // A recorded element lights up briefly, so the user sees what was recorded.
+  #flash(element) {
+    let shown;
+    try {
+      shown = highlight(this.#env, [{ element, label: L("Recorded", "Kaydedildi"), number: "✓" }]);
+    } catch {
+      return; // only a hint
+    }
+    this.#flashes.add(shown);
+    setTimeout(() => {
+      shown.remove();
+      this.#flashes.delete(shown);
+    }, 900);
   }
 
   // Keep the cursor, ripples, pick outline and highlights out of the agent's own screenshots.

@@ -562,6 +562,13 @@ export class Island {
     );
   }
 
+  // A running ask's title changes (show_me: "Recording · 3 steps").
+  askProgress(text) {
+    if (this.#state !== "ask") return;
+    this.#text = text;
+    this.#render();
+  }
+
   #clearChoices() {
     this.#askOptions = [];
     for (const win of this.#windows.keys()) this.#fillChoices(win);

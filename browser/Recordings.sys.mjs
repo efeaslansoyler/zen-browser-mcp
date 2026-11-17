@@ -178,7 +178,23 @@ export async function captureStep({ recording, index, rect, frameId, color }) {
   const wg = browser.browsingContext?.currentWindowGlobal;
   if (!wg) return null;
   const doc = browser.ownerDocument;
-  const bitmap = await wg.drawSnapshot(null, 1, "white");
+  // without the "Recorded" flash and the agent's cursor or highlights
+  const frames = browser.browsingContext.getAllBrowsingContextsInSubtree();
+  const overlays = (hidden) =>
+    Promise.all(
+      frames.map((bc) => {
+        try {
+          return bc.currentWindowGlobal?.getActor("ZenMcp").sendQuery("overlays", { hidden });
+        } catch {}
+      }),
+    ).catch(() => {});
+  await overlays(true);
+  let bitmap;
+  try {
+    bitmap = await wg.drawSnapshot(null, 1, "white");
+  } finally {
+    overlays(false);
+  }
   const s = Math.min(1, MAX_WIDTH / bitmap.width);
   const canvas = doc.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
   canvas.width = Math.round(bitmap.width * s);

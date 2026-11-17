@@ -53,6 +53,11 @@ export function activity(ctx) {
             ? L("removing highlights", "işaretleri kaldırıyor")
             : L("pointing something out", "bir şey gösteriyor"),
         hand_to_user: () => L("needs you to do something", "senin bir şey yapmanı bekliyor"),
+        show_me: () => L("is watching you show it", "göstermeni izliyor"),
+        recipes: () =>
+          args.action === "delete"
+            ? L("deleting a recipe", "bir tarifi siliyor")
+            : L("looking at recipes", "tariflere bakıyor"),
         request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
         tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
         wait_for: () => L("waiting", "bekliyor"),

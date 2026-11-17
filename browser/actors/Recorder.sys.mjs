@@ -13,7 +13,8 @@
 // carry secret: true instead of a value. A field that was a password once stays secret, so a
 // "show password" toggle doesn't reveal it.
 //
-// env: { document(), window(), post(step), reader: the PageReader module, info: the ElementInfo module }
+// env: { document(), window(), post(step, element), reader: the PageReader module,
+//        info: the ElementInfo module }
 
 const MAX_VALUE = 2000;
 const MAX_TEXT = 200;
@@ -165,15 +166,18 @@ export class Recorder {
     if (action !== "type") this.flush();
     const doc = this.env.document();
     const r = el?.getBoundingClientRect?.();
-    this.env.post({
-      action,
-      ...(el ? { target: this.#describe(el) } : {}),
-      // where the element is in this frame's viewport, for the step's screenshot
-      ...(r ? { rect: { x: r.left, y: r.top, width: r.width, height: r.height } } : {}),
-      ...extra,
-      url: doc.URL,
-      title: doc.title,
-    });
+    this.env.post(
+      {
+        action,
+        ...(el ? { target: this.#describe(el) } : {}),
+        // where the element is in this frame's viewport, for the step's screenshot
+        ...(r ? { rect: { x: r.left, y: r.top, width: r.width, height: r.height } } : {}),
+        ...extra,
+        url: doc.URL,
+        title: doc.title,
+      },
+      el,
+    );
   }
 
   // Enough for an agent to find the element again with find or read_page.

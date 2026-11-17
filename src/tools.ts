@@ -445,6 +445,26 @@ tool(
 );
 
 tool(
+  "show_me",
+  [
+    'Ask the user to show you a task once in an owned tab ("show me how you do it"); every step they take is recorded and saved as a recipe that any later session can repeat (see recipes).',
+    "Use it for workflows the user does repeatedly or that are hard to discover, instead of guessing. The island shows your message, a live step count and Finish; the call blocks until the user finishes or cancels, then returns the recipe as numbered steps.",
+    "Values typed into password, card and one-time-code fields are never recorded. Open the starting page first. Write the message in the user's language.",
+  ].join(" "),
+  {
+    tabId,
+    message: z.string().describe('What to show, e.g. "Show me how you search for tickets; press Finish when done."'),
+    name: z
+      .string()
+      .max(80)
+      .optional()
+      .describe('Recipe name to suggest, e.g. "Search tickets" (default: the page title).'),
+    timeout: z.number().optional().describe("Seconds to wait for the user (default 900, max 3600)."),
+  },
+  (args) => (Math.min(args.timeout ?? 900, 3600) + 60) * 1000,
+);
+
+tool(
   "recipes",
   [
     'Recipes are workflows the user showed you once in the browser ("show me once"), saved under a name.',

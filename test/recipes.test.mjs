@@ -136,3 +136,89 @@ test("recipes CLI lists, shows and removes", async () => {
   assert.match(await recipesCommand(["rm", "bilet-ara"], recipes), /removed/);
   await assert.rejects(recipesCommand(["rm"], recipes), /Usage/);
 });
+
+function showMeContext({ answer, steps }) {
+  const { root, recipes } = store();
+  const calls = [];
+  const frames = [{ currentWindowGlobal: { getActor: () => ({ sendQuery: async (name) => calls.push(name) }) } }];
+  const browser = {
+    browserId: 4,
+    contentTitle: "Tickets",
+    browsingContext: { getAllBrowsingContextsInSubtree: () => frames },
+  };
+  let recording = null;
+  const ctx = {
+    L: (en) => en,
+    text: (value) => [{ type: "text", text: value }],
+    runtimeDir: root,
+    app: "zen-mcp",
+    recipes,
+    browserFor: () => browser,
+    notifyAsk: () => false,
+    closeAskAlert() {},
+    island: {
+      ask: (...args) => calls.push(["ask", args[1], args[3], args[4]]),
+      askProgress: (title) => calls.push(["progress", title]),
+      askEnded: () => calls.push("ended"),
+    },
+    recordings: {
+      isRecording: () => recording !== null,
+      start(_browser, { dir, onStep }) {
+        recording = { startUrl: "https://tickets.test/", steps: [], dir };
+        for (const step of steps) {
+          recording.steps.push(step);
+          onStep(recording, step);
+        }
+      },
+      async stop() {
+        calls.push("stop");
+        const result = recording;
+        recording = null;
+        return result;
+      },
+    },
+    async waitIslandAnswer(timeout, key) {
+      calls.push(["wait", timeout, key === browser]);
+      return answer;
+    },
+  };
+  return { ctx, calls, recipes };
+}
+
+test("show_me records until Finish and saves the steps with the user's note", async () => {
+  const steps = [
+    { action: "type", target: { role: "searchbox", name: "Search" }, value: "derby", url: "https://tickets.test/" },
+    { action: "key", key: "Enter", url: "https://tickets.test/" },
+  ];
+  const { ctx, calls, recipes } = showMeContext({ answer: { status: "done", message: "Team name changes" }, steps });
+  const [{ text }] = await recipeTools(ctx).show_me({ tabId: 1, message: "Show me", timeout: 99999 });
+  assert.match(text, /^Saved the demonstration as recipe tickets\./);
+  assert.match(text, /1\. type "derby" into searchbox "Search"/);
+  assert.deepEqual(calls, [
+    ["ask", "Recording · do it in the tab", true, { ok: "Finish", cancel: "Cancel" }],
+    ["progress", "Recording · 1 step"],
+    ["progress", "Recording · 2 steps"],
+    ["wait", 3600, true],
+    "record_flush",
+    "stop",
+    "ended",
+  ]);
+  const [saved] = await recipes.list();
+  assert.equal(saved.name, "Tickets");
+  assert.equal(saved.note, "Team name changes");
+});
+
+test("show_me saves nothing when the user cancels or shows nothing", async () => {
+  for (const [answer, steps, expected] of [
+    ["cancelled", [{ action: "key", key: "Enter" }], /cancelled; nothing was saved/],
+    ["timeout", [{ action: "key", key: "Enter" }], /did not finish within 900 s/],
+    ["done", [], /without doing any steps/],
+  ]) {
+    const { ctx, recipes } = showMeContext({ answer, steps });
+    const [{ text }] = await recipeTools(ctx).show_me({ tabId: 1, message: "Show me" });
+    assert.match(text, expected);
+    assert.deepEqual(await recipes.list(), []);
+  }
+  const { ctx } = showMeContext({ answer: "done", steps: [] });
+  await assert.rejects(recipeTools(ctx).show_me({ tabId: 1, message: " " }), /message/);
+});
