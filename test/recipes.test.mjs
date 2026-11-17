@@ -7,7 +7,7 @@ import { Recipes, formatRecipe, slug, recipeTools } from "../browser/Recipes.sys
 import { nodeIO, recipesCommand } from "../src/recipes.ts";
 import { ReviewModel, stepLabel } from "../browser/RecordingReview.sys.mjs";
 import { Demonstrations, demonstrationTools } from "../browser/Demonstrations.sys.mjs";
-import { Inbox } from "../browser/Inbox.sys.mjs";
+import { Inbox, sendTargets, sentNotice } from "../browser/Inbox.sys.mjs";
 
 function store() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zen-recipes-"));
@@ -370,7 +370,9 @@ test("a recording the user started is saved and sent to the chosen session", asy
   island.working = (_b, text) => calls.push(["notice", text]);
   island.idle = () => {};
   const delivered = [];
-  const sessions = new Map([["s1", { id: "s1", name: "Claude · shop", agent: { id: "claude" } }]]);
+  const sessions = new Map([
+    ["s1", { id: "s1", name: "Claude · shop", agent: { id: "claude" }, ack: true, push: "t3" }],
+  ]);
   const deliver = async (target, message) => (delivered.push([target.id, message]), true);
   ctx.inbox = new Inbox({
     endpoint: (session) => sessions.get(session) ?? null,
@@ -379,6 +381,8 @@ test("a recording the user started is saved and sent to the chosen session", asy
     expired() {},
     now: () => 0,
   });
+  ctx.sendTargets = () => sendTargets([], sessions.values(), (en) => en);
+  ctx.sentNotice = (status, target) => sentNotice(status, target, (en) => en);
   const demos = new Demonstrations({
     L: (en) => en,
     ctx,
@@ -400,7 +404,7 @@ test("a recording the user started is saved and sent to the chosen session", asy
   await new Promise((resolve) => setImmediate(resolve));
   answer("done"); // Finish
   await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.deepEqual(model.targets, [{ id: "s1", name: "Claude · shop", agent: { id: "claude" } }]);
+  assert.deepEqual(model.targets, [{ id: "s1", name: "Claude · shop · now", agent: { id: "claude" } }]);
   assert.equal(model.canTry, false);
   model.setTarget("s1");
   model.tryNow = true;
@@ -414,5 +418,5 @@ test("a recording the user started is saved and sent to the chosen session", asy
   assert.match(message.content, /^The user showed you a task in the browser and saved it as recipe tickets\./);
   assert.match(message.content, /try this recipe now/);
   assert.equal(message.meta.recipe, "tickets");
-  assert.deepEqual(calls.at(-1), ["notice", "Saved and sent to Claude · shop ✓"]);
+  assert.deepEqual(calls.at(-1), ["notice", "Saved; Sent to Claude · shop ✓"]);
 });

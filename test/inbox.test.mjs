@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Inbox, inboxText } from "../browser/Inbox.sys.mjs";
+import { Inbox, inboxText, sendTargets, sentNotice } from "../browser/Inbox.sys.mjs";
 
 function inbox({ endpoints = {}, live = ["a", "b"] } = {}) {
   const pushed = [];
@@ -50,4 +50,33 @@ test("an unknown session gets nothing; a session that ends hands its items to th
   assert.deepEqual(expired, [["a", ["late"]]]);
   box.end("a");
   assert.equal(expired.length, 1);
+});
+
+test("the send list is every connected session, labelled with how it receives", () => {
+  const L = (en) => en;
+  const live = [
+    { id: "old", name: "Old process", agent: { id: "claude" } },
+    { id: "t3", name: "T3 thread", agent: { id: "claude" } },
+  ];
+  const subs = [
+    { id: "t3", name: "T3 thread", agent: { id: "claude" }, ack: true, push: "t3" },
+    { id: "term", name: "Terminal", agent: { id: "claude" }, ack: true, push: null, hook: true },
+    { id: "codex:1", name: "Codex chat", agent: { id: "codex" }, ack: true, push: "codex" },
+  ];
+  const targets = sendTargets(live, subs, L);
+  assert.deepEqual(
+    targets.map((t) => [t.id, t.how, t.label]),
+    [
+      ["old", "next", "Old process · on its next action"],
+      ["t3", "now", "T3 thread · now"],
+      ["term", "prompt", "Terminal · when you write"],
+      ["codex:1", "now", "Codex chat · now"],
+    ],
+  );
+  const by = Object.fromEntries(targets.map((t) => [t.id, t]));
+  assert.equal(sentNotice("sent", by.t3, L), "Sent to T3 thread ✓");
+  assert.equal(sentNotice("sent", by["codex:1"], L), "Queued for Codex chat ✓");
+  assert.equal(sentNotice("waiting", by.term, L), "Terminal sees it when you write to it");
+  assert.equal(sentNotice("waiting", by.old, L), "Old process gets it with its next browser action");
+  assert.equal(sentNotice("missing", undefined, L), "Delivery failed; copied to clipboard");
 });

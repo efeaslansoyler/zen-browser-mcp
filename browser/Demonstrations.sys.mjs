@@ -173,7 +173,7 @@ export class Demonstrations {
     if (this.running.has(browser)) return;
     this.running.add(browser);
     try {
-      const targets = [...this.env.channels.subscribers.values()].map(({ id, name, agent }) => ({ id, name, agent }));
+      const targets = ctx.sendTargets().map(({ id, label, agent }) => ({ id, name: label, agent }));
       const result = await demonstrate(ctx, browser, {
         message: L(
           "Do the task in this tab; every click and entry is recorded (passwords are not). Press Finish when done.",
@@ -194,7 +194,7 @@ export class Demonstrations {
 
   async #deliver(browser, { recipe, choice }) {
     const { L, ctx } = this.env;
-    const target = choice.targetId ? this.env.channels.subscribers.get(choice.targetId) : null;
+    const target = choice.targetId ? ctx.sendTargets().find((t) => t.id === choice.targetId) : null;
     let notice = L(`Saved “${recipe.name}”`, `“${recipe.name}” kaydedildi`);
     if (choice.targetId) {
       const content = [
@@ -210,16 +210,7 @@ export class Demonstrations {
         this.env.logError("recipe delivery", e);
       }
       if (status === "missing") this.env.copy(content);
-      const name = target?.name ?? "";
-      notice =
-        status === "sent"
-          ? L(`Saved and sent to ${name} ✓`, `Kaydedildi, ${name} oturumuna gönderildi ✓`)
-          : status === "waiting"
-            ? L(
-                `Saved; ${name} gets it with its next browser action`,
-                `Kaydedildi; ${name} bir sonraki tarayıcı işleminde alacak`,
-              )
-            : L("Saved; sending failed, copied to clipboard", "Kaydedildi; gönderilemedi, panoya kopyalandı");
+      notice = L(`Saved; ${ctx.sentNotice(status, target)}`, `Kaydedildi; ${ctx.sentNotice(status, target)}`);
     }
     ctx.island?.working(browser, notice);
     ctx.island?.idle();

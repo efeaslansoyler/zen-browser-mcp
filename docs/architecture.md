@@ -134,6 +134,10 @@ asks for a note and a target session) and recipes the user recorded go through
    conversation ID (`inbox_take`), which the MCP process reported when it connected.
 3. If the session ends first, or there is no target, the text is copied to the clipboard.
 
+The target list in the island (picks, recipe review) has every connected session, the same as
+"Give to session", each labelled with how it receives: now, when you write (prompt hook) or on
+its next action. After sending, the island says which of these happened.
+
 ## Downloads
 
 `DownloadLog` adds a view to Gecko's download list and keeps downloads whose source browsing

@@ -6,6 +6,7 @@
 // env:
 //   env.L(en, tr), env.island (getter; changes on reload), env.channels (Channels),
 //   env.inbox (Inbox: sends to a session now or with its next tool result),
+//   env.targets(): sessions to send to, with labels; env.sentNotice(status, target),
 //   env.theme(agent), env.ownerOf(browserId), env.pickedTabs (Set),
 //   env.assertSiteAccess(browser), env.logError(where, e), env.sleep(ms),
 //   env.copy(text): to the clipboard, env.paintIcon(item, agent), env.menuAgent(),
@@ -119,7 +120,8 @@ export class Picks {
         : info.name
           ? `${info.role || info.label} "${info.name.slice(0, 40)}"`
           : info.label;
-    const targets = [...this.env.channels.subscribers.values()].map(({ id, name, agent }) => ({ id, name, agent }));
+    // every connected session, labelled with how it receives the pick
+    const targets = this.env.targets().map(({ id, label, agent }) => ({ id, name: label, agent }));
     this.env.island?.compose(current.browser, label, targets, current.targetId);
   }
 
@@ -156,7 +158,7 @@ export class Picks {
     current.sending = true;
     const { content, meta } = this.message(current, note, targetId);
     // Pin to the user's selected destination. Never reroute if it disconnects.
-    const target = targetId ? this.env.channels.subscribers.get(targetId) : null;
+    const target = targetId ? this.env.targets().find((t) => t.id === targetId) : null;
     this.env.pickedTabs.add(current.browser.browserId);
     let status = "missing";
     try {
@@ -167,17 +169,8 @@ export class Picks {
     if (status === "missing") this.env.copy(content + "\n\nBrowser metadata: " + JSON.stringify(meta));
     if (this.current !== current) return;
     this.end({ keepIsland: true });
-    const name = target?.name ?? "";
     this.env.island?.sent(
-      status === "sent"
-        ? target?.agent.id === "codex"
-          ? L(`Queued for ${name} ✓`, `${name} için kuyruğa alındı ✓`)
-          : L(`Sent to ${name} ✓`, `${name} oturumuna gönderildi ✓`)
-        : status === "waiting"
-          ? L(`${name} gets it with its next browser action`, `${name} bir sonraki tarayıcı işleminde alacak`)
-          : targetId
-            ? L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı")
-            : L("Copied to clipboard", "Panoya kopyalandı"),
+      targetId ? this.env.sentNotice(status, target) : L("Copied to clipboard", "Panoya kopyalandı"),
     );
   }
 

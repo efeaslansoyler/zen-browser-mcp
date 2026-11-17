@@ -125,7 +125,7 @@ function logError(where, e) {
     const { permissions } = load("Permissions");
     const { TabMenu } = load("TabMenu");
     const { Channels, ascii } = load("Channels");
-    const { Inbox, inboxText } = load("Inbox");
+    const { Inbox, inboxText, sendTargets, sentNotice } = load("Inbox");
     const { Picks } = load("Picks");
     const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
     const { Recipes, recipeTools, geckoIO, originOf } = load("Recipes");
@@ -405,11 +405,16 @@ function logError(where, e) {
     });
     ctx.inboxText = inboxText;
 
+    ctx.sendTargets = () => sendTargets(ctx.liveSessions(), ctx.channels.subscribers.values(), L);
+    ctx.sentNotice = (status, target) => sentNotice(status, target, L);
+
     // Picking elements and sending them to an agent: Ctrl+Shift+F or the page context menu.
     ctx.picks = new Picks({
       L,
       channels: ctx.channels,
       inbox: ctx.inbox,
+      targets: () => ctx.sendTargets(),
+      sentNotice: (status, target) => ctx.sentNotice(status, target),
       theme: agentTheme,
       pickedTabs: state.pickedTabs,
       get island() {

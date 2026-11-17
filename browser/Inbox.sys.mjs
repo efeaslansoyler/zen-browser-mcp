@@ -72,3 +72,36 @@ export function inboxText(items) {
     ...parts.map((part, i) => (items.length > 1 ? `--- ${i + 1} ---\n${part}` : part)),
   ].join("\n\n");
 }
+
+// Where the user can send a pick or recipe: every connected session (the same list as "Give to
+// session"), each with how it receives it. how: "now" (pushed), "prompt" (with the user's next
+// message, prompt hook) or "next" (with its next browser tool call).
+export function sendTargets(liveSessions, subscribers, L) {
+  const targets = new Map();
+  for (const info of liveSessions)
+    targets.set(info.id, { id: info.id, name: info.name, agent: info.agent, how: "next" });
+  for (const sub of subscribers) {
+    const how = sub.ack && sub.push ? "now" : sub.hook ? "prompt" : "next";
+    targets.set(sub.id, { id: sub.id, name: sub.name, agent: sub.agent, how });
+  }
+  const when = {
+    now: L("now", "hemen"),
+    prompt: L("when you write", "yazınca"),
+    next: L("on its next action", "sonraki işleminde"),
+  };
+  return [...targets.values()].map((t) => ({ ...t, label: `${t.name} · ${when[t.how]}` }));
+}
+
+// What the island says after sending to a target (from sendTargets).
+export function sentNotice(status, target, L) {
+  const name = target?.name ?? "";
+  if (status === "sent")
+    return target?.agent?.id === "codex"
+      ? L(`Queued for ${name} ✓`, `${name} için kuyruğa alındı ✓`)
+      : L(`Sent to ${name} ✓`, `${name} oturumuna gönderildi ✓`);
+  if (status === "waiting")
+    return target?.how === "prompt"
+      ? L(`${name} sees it when you write to it`, `${name} ona yazdığında görecek`)
+      : L(`${name} gets it with its next browser action`, `${name} bir sonraki tarayıcı işleminde alacak`);
+  return L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı");
+}

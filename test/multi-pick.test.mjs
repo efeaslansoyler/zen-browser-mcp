@@ -3,7 +3,7 @@ import { loadActor } from "./support/actor.mjs";
 import assert from "node:assert/strict";
 import * as themes from "../browser/Agent.sys.mjs";
 import { Picks } from "../browser/Picks.sys.mjs";
-import { Inbox } from "../browser/Inbox.sys.mjs";
+import { Inbox, sendTargets, sentNotice } from "../browser/Inbox.sys.mjs";
 
 function harness() {
   class Node {
@@ -234,6 +234,13 @@ function picks(env = {}) {
       expired() {},
       now: () => 0,
     }),
+    targets: () =>
+      sendTargets(
+        [],
+        [...channels.subscribers].map(([id, sub]) => ({ id, ack: true, push: "codex", ...sub })),
+        (en) => en,
+      ),
+    sentNotice: (status, target) => sentNotice(status, target, (en) => en),
     island: null,
     assertSiteAccess() {},
     logError() {},
