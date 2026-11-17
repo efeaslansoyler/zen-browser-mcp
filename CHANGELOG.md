@@ -24,6 +24,8 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **The island**: live status with a preview on hover, Stop/Resume
   (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd>), page dialogs, and `ask_user` questions
   with OK/Cancel or answer buttons, with or without a tab.
+- **`highlight`**: frames with short labels around elements the agent points out to the user,
+  several at once and across iframes, without waiting.
 - **`hand_to_user`**: steps only the user should do (logging in, 2FA, captchas, payments) are
   handed over in the island and the agent continues when the user presses **Done**, so
   credentials never pass through the agent.

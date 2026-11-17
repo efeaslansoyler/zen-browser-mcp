@@ -217,6 +217,96 @@ export function ripple(env, x, y) {
   env.setTimeout(() => host.remove(), 700);
 }
 
+// Readable on any page: a crisp ring (a thin light gap, then the agent color) that follows the
+// element's own corner radius, and dark labels like the island's, beside the element.
+const HIGHLIGHT_CSS = `
+  .ring {
+    position: fixed; box-sizing: border-box; pointer-events: none;
+    border: 3px solid var(--zen-agent-accent, #d97757);
+    box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.95), 0 0 0 1px rgba(0, 0, 0, 0.35);
+    animation: appear 0.16s ease-out;
+  }
+  .tag {
+    position: fixed; pointer-events: none; display: flex; align-items: center; gap: 6px;
+    padding: 3px 9px 3px 3px; border-radius: 999px;
+    background: #1c1c1f; color: #fff;
+    font: 600 12px/18px system-ui, sans-serif; white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    animation: appear 0.16s ease-out;
+  }
+  .num {
+    min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 999px;
+    background: var(--zen-agent-accent, #d97757); color: var(--zen-agent-foreground, #fff);
+    font: 700 11px/18px system-ui, sans-serif; text-align: center;
+  }
+  @keyframes appear {
+    from { opacity: 0; scale: 0.96; }
+  }
+`;
+
+const GAP = 3; // between the element and its ring
+const SIDE = 8; // between the ring and its label
+
+// highlight: rings with labels around elements the agent points out to the user. They follow
+// their elements and stay until removed; nothing waits for the user.
+// items: [{ element, label, number }]: number is the badge, label the text (may be empty).
+export function highlight(env, items) {
+  const doc = env.document();
+  const win = env.window();
+  const { host, root } = overlayHost(env, "zen-mcp-highlight", HIGHLIGHT_CSS);
+  const parts = items.map(({ element, label, number }) => {
+    const ring = doc.createElement("div");
+    ring.className = "ring";
+    const tag = doc.createElement("div");
+    tag.className = "tag";
+    const num = doc.createElement("span");
+    num.className = "num";
+    num.textContent = number;
+    tag.append(num);
+    if (label) tag.append(label);
+    else tag.style.padding = "3px";
+    root.append(ring, tag);
+    // the element's own corner radius, so a pill gets a pill and a card a card
+    const radius = parseFloat(win.getComputedStyle(element).borderTopLeftRadius) || 0;
+    ring.style.borderRadius = `${radius + GAP}px`;
+    return { element, ring, tag };
+  });
+  let frame = 0;
+  const place = () => {
+    for (const { element, ring, tag } of parts) {
+      ring.hidden = tag.hidden = !element.isConnected;
+      if (!element.isConnected) continue;
+      const r = element.getBoundingClientRect();
+      Object.assign(ring.style, {
+        left: `${r.left - GAP}px`,
+        top: `${r.top - GAP}px`,
+        width: `${r.width + GAP * 2}px`,
+        height: `${r.height + GAP * 2}px`,
+      });
+      // Beside the element, centered vertically: right if there's room, else left, else inside
+      // its top-right corner. Stacked fields get labels at different heights.
+      const width = tag.offsetWidth;
+      const right = r.right + GAP + SIDE;
+      const left = r.left - GAP - SIDE - width;
+      const x = right + width <= win.innerWidth - 4 ? right : left >= 4 ? left : Math.max(4, r.right - width - 4);
+      const inside = x !== right && x !== left;
+      tag.style.left = `${x}px`;
+      tag.style.top = `${inside ? r.top + 4 : r.top + r.height / 2 - tag.offsetHeight / 2}px`;
+    }
+    frame = win.requestAnimationFrame(place);
+  };
+  doc.documentElement.append(host);
+  place();
+  return {
+    remove() {
+      try {
+        win.cancelAnimationFrame(frame);
+      } catch {}
+      host.remove();
+    },
+  };
+}
+
 // ask_user: outline the element and wait. The message and buttons are on the island; the page
 // only gets the outline (nothing at all without a target, then the answer comes from the
 // island through cancel_ask). Only trusted clicks count; they are watched in the system group,

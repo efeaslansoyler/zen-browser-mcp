@@ -406,6 +406,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
+| `highlight` | frame elements with short labels to point them out to you (several at once, iframes included) |
 | `ask_user`, `hand_to_user`, `request_tab` | ask you a question (with answer buttons, with or without a tab); hand you a step only you should do (logging in, 2FA, a captcha, a payment) and continue when you press **Done**; ask for access to your tab |
 
 ## Security

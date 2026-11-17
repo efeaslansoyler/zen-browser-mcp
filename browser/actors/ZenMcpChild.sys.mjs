@@ -14,7 +14,7 @@ const { mousePath, typingPlan } = load("../InputMotion.sys.mjs");
 const { Cancellation } = load("../Cancellation.sys.mjs");
 const reader = load("./PageReader.sys.mjs");
 const info = load("./ElementInfo.sys.mjs");
-const { VirtualCursor, ripple, outlineAndWait } = load("./Overlays.sys.mjs");
+const { VirtualCursor, ripple, outlineAndWait, highlight } = load("./Overlays.sys.mjs");
 const { Picker } = load("./Picker.sys.mjs");
 const { InputDriver } = load("./InputDriver.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -159,6 +159,8 @@ export class ZenMcpChild extends JSWindowActorChild {
         }
         case "overlays":
           return { value: this.#overlays(data.hidden) };
+        case "highlight":
+          return { value: this.#highlight(data.items ?? []) };
         case "cancel_ask":
           // The user answered on the island or stopped the agent (no reply expected).
           this.#ask?.finish(data?.result ?? "stopped");
@@ -185,6 +187,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   didDestroy() {
+    this.#highlights?.remove();
     this.#input.release();
     this.#annotation?.remove();
     for (const scope of this.#operations.values()) scope.cancel();
@@ -552,11 +555,27 @@ export class ZenMcpChild extends JSWindowActorChild {
     });
   }
 
-  // Keep the cursor, ripples and pick outline out of the agent's own screenshots.
+  // Replaces this frame's highlights; an empty list removes them. items: [{ ref | x, y, label, number }]
+  #highlights = null;
+  #highlight(items) {
+    const resolved = items.map(({ ref, x, y, label, number }) => {
+      const element = ref ? this.#element(ref) : this.document.elementFromPoint(x, y);
+      if (!element) throw new Error(`Nothing to highlight at (${Math.round(x)}, ${Math.round(y)}).`);
+      return { element, label, number };
+    });
+    this.#highlights?.remove();
+    this.#highlights = resolved.length ? highlight(this.#env, resolved) : null;
+    const first = resolved[0]?.element;
+    if (first && !reader.inViewport(first, this.contentWindow))
+      first.scrollIntoView({ block: "center", behavior: "instant" });
+    return resolved.length;
+  }
+
+  // Keep the cursor, ripples, pick outline and highlights out of the agent's own screenshots.
   #overlays(hidden) {
     this.#cursor.setHidden(hidden);
     if (hidden) for (const ripple of this.document.querySelectorAll("zen-mcp-ripple")) ripple.remove();
-    for (const pick of this.document.querySelectorAll("zen-mcp-pick")) {
+    for (const pick of this.document.querySelectorAll("zen-mcp-pick, zen-mcp-highlight")) {
       pick.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
     }
     return "done";

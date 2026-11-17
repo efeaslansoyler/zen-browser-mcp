@@ -415,6 +415,36 @@ tool(
 );
 
 tool(
+  "highlight",
+  [
+    "Point elements out to the user: draws frames with short labels around one or more elements in an owned tab (iframes included), e.g. the fields of a login form before hand_to_user, the wrong prices on a page, or the options in an ask_user question.",
+    "Doesn't wait for the user. Each call replaces the tab's highlights; they also go away when the page changes. Pass clear: true to remove them when they no longer help. They don't appear in your screenshots.",
+  ].join(" "),
+  {
+    tabId,
+    items: z
+      .array(
+        z.object({
+          ref: z.string().optional().describe("Element from read_page or find."),
+          coordinate: z.array(z.number()).length(2).optional().describe("Or a point in the latest screenshot."),
+          label: z
+            .string()
+            .max(60)
+            .optional()
+            .describe(
+              'Short label, e.g. "Username" or "Wrong price". Optional: every element also gets a number badge.',
+            ),
+        }),
+      )
+      .min(1)
+      .max(20)
+      .optional()
+      .describe("Elements to highlight (each with ref or coordinate)."),
+    clear: z.boolean().optional().describe("Remove this tab's highlights."),
+  },
+);
+
+tool(
   "hand_to_user",
   [
     "Hand a step to the user when they must do it themselves in a tab: logging in or any credentials, 2FA codes, captchas, confirming a payment or a deletion, accepting terms.",

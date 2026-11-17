@@ -138,6 +138,47 @@ export function tabTools(ctx) {
       return waitForUser("ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout });
     },
 
+    // Frames with short labels around elements the agent points out to the user; nothing
+    // waits. Elements can be in different frames; every call replaces the tab's highlights.
+    async highlight({ tabId, items, clear = false }) {
+      const browser = ctx.browserFor(tabId);
+      if (clear) items = [];
+      else if (!Array.isArray(items) || !items.length || items.length > 20)
+        throw new Error("items must list 1 to 20 elements (or pass clear: true).");
+      const byFrame = new Map(); // browsing context id → items in that frame
+      for (const [i, item] of items.entries()) {
+        // Every item gets a number badge; the label text is optional.
+        const label = typeof item?.label === "string" ? item.label.trim().slice(0, 60) : "";
+        const number = String(i + 1);
+        let frame, data;
+        if (item?.ref != null) {
+          frame = ctx.frameOf(browser, item.ref);
+          data = { ref: ctx.longRef(item.ref), label, number };
+        } else if (Array.isArray(item?.coordinate)) {
+          const [x, y] = ctx.toPagePoint(browser, item.coordinate);
+          const inner = await ctx.deepest(browser, x, y);
+          frame = inner.frame;
+          data = { x: inner.x, y: inner.y, label, number };
+        } else throw new Error(`Item ${i + 1} needs a ref or a coordinate.`);
+        if (!byFrame.has(frame.id)) byFrame.set(frame.id, []);
+        byFrame.get(frame.id).push(data);
+      }
+      for (const frame of ctx.framesOf(browser)) {
+        const frameItems = byFrame.get(frame.id) ?? [];
+        try {
+          await ctx.query(browser, "highlight", { items: frameItems }, 5000, frame);
+        } catch (e) {
+          // Clearing a frame that is going away doesn't matter; failing to draw does.
+          if (frameItems.length) throw e;
+        }
+      }
+      return text(
+        clear
+          ? "Highlights removed."
+          : `Highlighted ${items.length} element(s) for the user. They stay until the page changes, you call highlight again, or you pass clear: true.`,
+      );
+    },
+
     // A step the user must do themselves (log in, 2FA, captcha, confirm a payment…). The tab
     // isn't brought forward: the island expands with the message, "Go to tab" and "Done", and
     // a desktop notification goes out if Zen isn't focused. Credentials never pass the agent.

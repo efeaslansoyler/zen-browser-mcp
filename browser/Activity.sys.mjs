@@ -48,6 +48,10 @@ export function activity(ctx) {
         read_network_requests: () => L("checking network requests", "ağ isteklerine bakıyor"),
         handle_dialog: () => L("answering a dialog", "diyaloğu cevaplıyor"),
         ask_user: () => L("asks you", "sana soruyor"),
+        highlight: () =>
+          args.clear
+            ? L("removing highlights", "işaretleri kaldırıyor")
+            : L("pointing something out", "bir şey gösteriyor"),
         hand_to_user: () => L("needs you to do something", "senin bir şey yapmanı bekliyor"),
         request_tab: () => L("asks for this tab", "sekmeye erişmek istiyor"),
         tabs_close_mcp: () => L("closing the tab", "sekmeyi kapatıyor"),
