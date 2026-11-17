@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promptHook, configureClaudeHook, claudeHookInstalled, hookCommand, hooksCommand } from "../src/hooks.ts";
+import {
+  promptHook,
+  configureClaudeHook,
+  claudeHookInstalled,
+  hookCommand,
+  hooksCommand,
+  configureAntigravityHook,
+  antigravityHookInstalled,
+} from "../src/hooks.ts";
 
 test("the prompt hook adds what waits for its conversation, and nothing otherwise", async () => {
   const asked = [];
@@ -11,11 +19,11 @@ test("the prompt hook adds what waits for its conversation, and nothing otherwis
     asked.push([tool, args, timeout]);
     return [{ type: "text", text: args.clientSession === "with-items-1" ? "The user sent you this…" : "" }];
   };
-  const out = JSON.parse(await promptHook("claude", { session_id: "with-items-1", prompt: "go" }, browser));
+  const out = JSON.parse(await promptHook("claude", { session_id: "with-items-1", prompt: "go" }, browser, [10, 1]));
   assert.deepEqual(out, {
     hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: "The user sent you this…" },
   });
-  assert.deepEqual(asked[0], ["inbox_take", { client: "claude", clientSession: "with-items-1" }, 2000]);
+  assert.deepEqual(asked[0], ["inbox_take", { client: "claude", clientSession: "with-items-1", pids: [10, 1] }, 2000]);
   assert.equal(await promptHook("codex", { session_id: "empty-session" }, browser), "");
   // bad input or no browser: silent
   assert.equal(await promptHook("claude", { session_id: "../x y" }, browser), "");
@@ -52,14 +60,50 @@ test("installing the Claude Code hook keeps the user's other hooks and settings"
 
 test("hooks install covers the clients that are installed", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "zen-home-"));
-  assert.match(hooksCommand("install", home, {}), /No Claude Code or Codex found/);
+  assert.match(hooksCommand("install", home, {}), /No Claude Code, Codex or Antigravity CLI found/);
   fs.mkdirSync(path.join(home, ".claude"));
   fs.mkdirSync(path.join(home, ".codex"));
+  fs.mkdirSync(path.join(home, ".gemini", "antigravity-cli"), { recursive: true });
   const out = hooksCommand("install", home, {});
+  assert.match(out, /Antigravity CLI: prompt hook in .*\.gemini\/config\/hooks\.json/);
   assert.match(out, /Claude Code: prompt hook in .*\.claude\/settings\.json/);
   assert.match(out, /Codex: hooks in .*\.codex\/hooks\.json/);
   assert.equal(claudeHookInstalled(path.join(home, ".claude", "settings.json")), true);
   hooksCommand("uninstall", home, {});
   assert.equal(claudeHookInstalled(path.join(home, ".claude", "settings.json")), false);
   assert.throws(() => hooksCommand("maybe", home, {}), /Usage/);
+});
+
+test("Antigravity's hook finds the conversation by its process and injects a system message", async () => {
+  const asked = [];
+  const browser = async (tool, args) => {
+    asked.push(args);
+    return [{ type: "text", text: args.pids.includes(4242) ? "The user sent you this…" : "" }];
+  };
+  const input = { conversationId: "2aa390f1-f633-4f6d-9e28-48429beccf18", hookEventName: "PreInvocation" };
+  const out = JSON.parse(await promptHook("antigravity", input, browser, [4300, 4242, 1]));
+  assert.deepEqual(out, { injectSteps: [{ systemMessage: { systemMessage: "The user sent you this…" } }] });
+  assert.equal(asked[0].clientSession, "2aa390f1-f633-4f6d-9e28-48429beccf18");
+  assert.equal(await promptHook("antigravity", {}, browser, [99]), "");
+});
+
+test("the Antigravity hook is one named entry in its hooks.json", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-agy-"));
+  const file = path.join(dir, "hooks.json");
+  fs.writeFileSync(file, JSON.stringify({ linter: { PostToolUse: [] } }));
+  configureAntigravityHook("install", file);
+  const hooks = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(Object.keys(hooks), ["linter", "zen-browser"]);
+  assert.deepEqual(hooks["zen-browser"].PreInvocation, [
+    { type: "command", command: hookCommand("antigravity"), timeout: 5 },
+  ]);
+  assert.equal(antigravityHookInstalled(file), true);
+  configureAntigravityHook("uninstall", file);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), { linter: { PostToolUse: [] } });
+  assert.equal(antigravityHookInstalled(file), false);
+  // agy creates an empty file at first
+  const empty = path.join(dir, "empty.json");
+  fs.writeFileSync(empty, "");
+  configureAntigravityHook("install", empty);
+  assert.equal(antigravityHookInstalled(empty), true);
 });

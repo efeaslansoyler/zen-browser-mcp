@@ -80,6 +80,8 @@ export type SubscriptionInfo = {
   push?: string | null;
   // the client's own conversation ID (Claude Code: CLAUDE_CODE_SESSION_ID), for prompt hooks
   clientSession?: string;
+  // the client's process: prompt hooks without a conversation ID find it among their ancestors
+  clientPid?: number;
   // the client has the zen prompt hook installed (hooks install)
   hook?: boolean;
 };

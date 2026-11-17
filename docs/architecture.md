@@ -129,9 +129,13 @@ asks for a note and a target session) and recipes the user recorded go through
      coming from zen.
 2. **Otherwise it waits** in the bridge and goes, once, with whichever comes first: the
    session's next tool result, or the user's next message in that conversation when the prompt
-   hooks are installed (`hooks install`: Claude Code's `UserPromptSubmit`, and the Codex
-   lifecycle hook). The hook (`cli.js hook claude`) asks the bridge with the client's own
-   conversation ID (`inbox_take`), which the MCP process reported when it connected.
+   hooks are installed (`hooks install`: Claude Code's `UserPromptSubmit`, the Codex lifecycle
+   hook, and Antigravity CLI's `PreInvocation` in `~/.gemini/config/hooks.json`). The hook
+   (`cli.js hook claude|antigravity`) asks the bridge (`inbox_take`) with the client's own
+   conversation ID, which the MCP process reported when it connected (Claude Code's
+   `CLAUDE_CODE_SESSION_ID`). Antigravity gives its MCP servers no conversation ID, so the hook
+   also sends its ancestor PIDs and the bridge matches the MCP process's parent (the `agy`
+   process) among them.
 3. If the session ends first, or there is no target, the text is copied to the clipboard.
 
 The target list in the island (picks, recipe review) has every connected session, the same as

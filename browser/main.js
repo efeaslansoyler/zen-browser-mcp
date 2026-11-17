@@ -529,13 +529,18 @@ function logError(where, e) {
     Object.assign(ctx.commands, {
       // A prompt hook (src/hooks.ts) asks for what waits for its conversation: the client's own
       // conversation ID maps to the zen session.
-      inbox_take({ client, clientSession }) {
-        if (typeof clientSession !== "string" || !clientSession) return ctx.text("");
+      inbox_take({ client, clientSession, pids }) {
         let session = null;
-        if (client === "codex") session = `codex:${clientSession}`;
-        else
+        if (client === "codex") session = clientSession ? `codex:${clientSession}` : null;
+        else {
+          const ancestors = new Set(Array.isArray(pids) ? pids : []);
           for (const sub of ctx.channels.subscribers.values())
-            if (sub.clientSession === clientSession) session = sub.id;
+            if (clientSession && sub.clientSession === clientSession) session = sub.id;
+          // no conversation ID in the MCP process (Antigravity CLI): the hook's ancestor client
+          if (!session)
+            for (const sub of ctx.channels.subscribers.values())
+              if (!sub.clientSession && sub.clientPid && ancestors.has(sub.clientPid)) session = sub.id;
+        }
         return ctx.text(session ? ctx.inboxText(ctx.inbox.take(session)) : "");
       },
       ping() {

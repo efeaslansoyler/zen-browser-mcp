@@ -37,6 +37,7 @@ export class Channels {
       toolsOnly = false,
       push = null,
       clientSession = null,
+      clientPid = null,
       hook = false,
     },
     transport,
@@ -58,6 +59,7 @@ export class Channels {
           // the client's own conversation ID (prompt hooks ask with it) and whether that client
           // has the zen prompt hook installed
           clientSession: typeof clientSession === "string" ? clientSession : null,
+          clientPid: Number.isInteger(clientPid) ? clientPid : null,
           hook: hook === true,
           threadId,
           transport,

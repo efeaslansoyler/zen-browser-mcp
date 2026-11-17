@@ -37,7 +37,7 @@ export function channelArgs(args: string[]): boolean {
 }
 
 // A process's arguments and parent: /proc on Linux, ps on macOS (arguments split at spaces).
-function processInfo(pid: number): { args: string[]; ppid: number } | null {
+export function processInfo(pid: number): { args: string[]; ppid: number } | null {
   try {
     const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
     // /proc/<pid>/stat: "pid (name) state ppid ..."
@@ -51,6 +51,18 @@ function processInfo(pid: number): { args: string[]; ppid: number } | null {
   } catch {
     return null;
   }
+}
+
+// This process's ancestors (parent first): a hook finds its client's process among them.
+export function ancestorPids(depth = 8): number[] {
+  const pids: number[] = [];
+  for (let pid = process.ppid; pid > 1 && pids.length < depth;) {
+    pids.push(pid);
+    const parent = processInfo(pid)?.ppid;
+    if (!parent || parent === pid) break;
+    pid = parent;
+  }
+  return pids;
 }
 
 // The Claude Code conversation's title (as listed by `claude -r`): the /rename name, otherwise

@@ -74,7 +74,8 @@ try {
       break;
     }
     case "hook": {
-      if (args[0] !== "claude") throw new Error("Usage: zen-browser-mcp hook claude");
+      if (args[0] !== "claude" && args[0] !== "antigravity")
+        throw new Error("Usage: zen-browser-mcp hook claude|antigravity");
       let input = "";
       for await (const chunk of process.stdin) {
         input += chunk;
@@ -84,7 +85,7 @@ try {
       try {
         value = JSON.parse(input);
       } catch {}
-      const output = await promptHook("claude", value);
+      const output = await promptHook(args[0], value);
       if (output) console.log(output);
       break;
     }
