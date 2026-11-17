@@ -65,7 +65,7 @@ başlatmak gerekmez.
 Standart tarayıcı araçları stdio MCP üzerinden çalışır. Yerel geliştirme kurulumu:
 
 ```sh
-codex mcp add zen -- node /tam/yol/zen-mcp/src/server.ts
+codex mcp add zen -- node /tam/yol/zen-browser-mcp/src/server.ts
 ```
 
 Diğer MCP istemcileri de aynı komutu veya derlenmiş `dist/cli.js` dosyasını başlatabilir.
@@ -426,7 +426,7 @@ da böyle yapar, ama uzaktan kontrol açılmaz.
 ## Geliştirme
 
 ```sh
-git clone https://github.com/efeaslansoyler/zen-mcp && cd zen-mcp
+git clone https://github.com/efeaslansoyler/zen-browser-mcp && cd zen-browser-mcp
 npm install && npm run build
 ln -s "$PWD/browser" ~/.local/share/zen-mcp   # tarayıcı tarafı doğrudan repodan
 node dist/cli.js install                         # yükleyiciyi tarayıcına ekler

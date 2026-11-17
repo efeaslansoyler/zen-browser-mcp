@@ -6,7 +6,7 @@ Thanks for helping. Read [docs/architecture.md](docs/architecture.md) first and
 ## Setup
 
 ```sh
-git clone https://github.com/efeaslansoyler/zen-mcp && cd zen-mcp
+git clone https://github.com/efeaslansoyler/zen-browser-mcp && cd zen-browser-mcp
 npm install && npm run build
 ln -s "$PWD/browser" ~/.local/share/zen-mcp   # browser side straight from the repo
 node dist/cli.js install                         # adds the loader; restart the browser once

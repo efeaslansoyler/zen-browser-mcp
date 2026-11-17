@@ -62,7 +62,7 @@ themselves when Claude Code starts the server, without sudo or a browser restart
 The standard browser tools use stdio MCP. For a local development checkout:
 
 ```sh
-codex mcp add zen -- node /absolute/path/to/zen-mcp/src/server.ts
+codex mcp add zen -- node /absolute/path/to/zen-browser-mcp/src/server.ts
 ```
 
 Other MCP clients can launch the same command, or the built package's `dist/cli.js`.
@@ -427,7 +427,7 @@ way Firefox's WebDriver does it, but without starting the remote agent.
 ## Development
 
 ```sh
-git clone https://github.com/efeaslansoyler/zen-mcp && cd zen-mcp
+git clone https://github.com/efeaslansoyler/zen-browser-mcp && cd zen-browser-mcp
 npm install && npm run build
 ln -s "$PWD/browser" ~/.local/share/zen-mcp   # browser side straight from the repo
 node dist/cli.js install                         # adds the loader to your browser

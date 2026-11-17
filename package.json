@@ -24,12 +24,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/efeaslansoyler/zen-mcp.git"
+    "url": "git+https://github.com/efeaslansoyler/zen-browser-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/efeaslansoyler/zen-mcp/issues"
+    "url": "https://github.com/efeaslansoyler/zen-browser-mcp/issues"
   },
-  "homepage": "https://github.com/efeaslansoyler/zen-mcp#readme",
+  "homepage": "https://github.com/efeaslansoyler/zen-browser-mcp#readme",
   "private": true,
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

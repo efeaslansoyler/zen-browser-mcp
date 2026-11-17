@@ -83,4 +83,4 @@ the commit log.
 - Auto/ask modes, sensitive sites, the activity log, the CLI and package layout, README and
   MIT license.
 
-[0.1.0]: https://github.com/efeaslansoyler/zen-mcp/releases/tag/v0.1.0
+[0.1.0]: https://github.com/efeaslansoyler/zen-browser-mcp/releases/tag/v0.1.0
