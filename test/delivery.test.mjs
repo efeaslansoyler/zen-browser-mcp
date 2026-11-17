@@ -97,3 +97,30 @@ test("Codex adapter preserves a single note, numbered multiple contexts and scre
   assert.match(message, /"element_count":"2"/);
   assert(message.includes("/tmp/one.png") && message.includes("/tmp/two.png"));
 });
+
+test("a T3 Code thread gets the event through `t3 thread send`, the message on stdin", async () => {
+  const { runT3Send, t3Message, t3Thread } = await import("../src/delivery.ts");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  assert.equal(t3Thread({}), null);
+  assert.equal(t3Thread({ T3CODE_THREAD_ID: "x; rm -rf /", T3CODE_CLI_PATH: "/bin/t3" }), null);
+  assert.deepEqual(t3Thread({ T3CODE_THREAD_ID: "32e2affa-2d8e", T3CODE_CLI_PATH: "/bin/t3" }), {
+    cli: "/bin/t3",
+    threadId: "32e2affa-2d8e",
+  });
+
+  const message = t3Message({ event: "channel", content: "Make the button blue", meta: { url: "https://x.test/" } });
+  assert.match(message, /^\[zen\] The user sent you this from the browser/);
+  assert.match(message, /Make the button blue\n\nBrowser metadata: \{"url":"https:\/\/x\.test\/"\}$/);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-t3-"));
+  const cli = path.join(dir, "t3");
+  fs.writeFileSync(cli, `#!/bin/sh\necho "$@" > "${dir}/args"\ncat > "${dir}/stdin"\n`, { mode: 0o755 });
+  await runT3Send(cli, "thread-1", "hello $(whoami) `id`");
+  assert.equal(fs.readFileSync(path.join(dir, "args"), "utf8"), "thread send thread-1 -\n");
+  assert.equal(fs.readFileSync(path.join(dir, "stdin"), "utf8"), "hello $(whoami) `id`");
+
+  fs.writeFileSync(cli, "#!/bin/sh\necho 'no such thread' >&2\nexit 3\n", { mode: 0o755 });
+  await assert.rejects(runT3Send(cli, "thread-1", "x"), /t3 thread send failed: no such thread/);
+});

@@ -124,6 +124,9 @@ asks for a note and a target session) and recipes the user recorded go through
      `notifications/claude/channel`. Claude Code ignores the flag in `-p` mode and under the
      Agent SDK (stream-json input, e.g. T3 Code), so those sessions have no push path.
    - **Codex** through `codex queue` (see [codex.md](codex.md)).
+   - **T3 Code** threads (`T3CODE_THREAD_ID` and `T3CODE_CLI_PATH` in the environment) through
+     `t3 thread send <thread> -`: the message arrives as the thread's next turn, marked as
+     coming from zen.
 2. **Otherwise it waits** in the bridge and goes with the session's next tool result, once.
 3. If the session ends first, or there is no target, the text is copied to the clipboard.
 

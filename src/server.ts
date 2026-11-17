@@ -8,13 +8,14 @@ import { SERVER_NAME, VERSION } from "./paths.ts";
 import { syncBrowserFiles } from "./install.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
-import { NO_PUSH, THREAD_ID } from "./delivery.ts";
+import { NO_PUSH, THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
 import { channelEnabled, claudeTitle } from "./claude.ts";
 import { channelInstructions, clientInstructions } from "./instructions.ts";
 import { TOOLS, callTimeout } from "./tools.ts";
 import { identifyAgent } from "../browser/Agent.sys.mjs";
 
 const channel = channelEnabled();
+const t3 = channel ? null : t3Thread();
 
 type ConnectSession = (
   input: { threadId: string; label?: string },
@@ -117,16 +118,18 @@ function connectOwner(agent: { id: string; name: string }) {
     ack: true,
     agent,
     title,
-    push: channel ? "channel" : null,
+    push: channel ? "channel" : t3 ? "t3" : null,
   });
 }
 async function push(event: any) {
   if (event?.event !== "channel") return;
-  if (!channel) throw new Error(NO_PUSH);
-  await server.server.notification({
-    method: "notifications/claude/channel",
-    params: { content: event.content, meta: event.meta },
-  });
+  if (channel)
+    await server.server.notification({
+      method: "notifications/claude/channel",
+      params: { content: event.content, meta: event.meta },
+    });
+  else if (t3) await runT3Send(t3.cli, t3.threadId, t3Message(event));
+  else throw new Error(NO_PUSH);
 }
 const server = createServer(call, async ({ threadId, label }) => {
   await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
