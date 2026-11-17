@@ -35,6 +35,10 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **Element picks**: pick one or more elements on any page (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>
   or the context menu), write a note and send them to a Claude Code session (channels) or a
   Codex conversation, with selector, styles, a screenshot and the React/Vue component chain.
+- **Show me once**: the user shows a task once (`show_me`, or right-click → "Record steps for
+  an agent…") and it becomes a recipe: semantic steps with a screenshot each, reviewed on the
+  island (rename, delete steps, mark values that change, play back), saved locally and offered
+  to agents on the same site (`tabs_context_mcp`, `recipes`). Secret fields are never recorded.
 - **Permissions**: auto and ask modes, per-site `ask` and `block` rules, approvals scoped to
   the document, origin, settings and owner, and island approval for every clipboard operation.
 - **Tab context menu**: give a tab to a session, take it back, agent settings and the agent
@@ -49,7 +53,7 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   a separate container without the user's cookies and logins.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
   snapshot, and unchanged screenshots can skip the image.
-- **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill` and `codex-hooks`; the browser
+- **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill`, `codex-hooks` and `recipes`; the browser
   side updates itself when the package version changes.
 - **Agent skill** (`skills/zen-browser`) for Claude Code and Codex: which tool to use when, from
   choosing the user's open tab to handing over logins. Short server instructions point the same

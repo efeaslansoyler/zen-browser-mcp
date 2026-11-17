@@ -70,6 +70,21 @@ export function tabTools(ctx) {
     );
   }
 
+  // Recipes ("show me once") for the sites of these tabs: a few lines, only when there are any.
+  async function recipesFor(described) {
+    let matching = [];
+    try {
+      const origins = new Set(described.map((tab) => ctx.originOf(tab.url ?? "")).filter(Boolean));
+      if (origins.size) matching = (await ctx.recipes.list()).filter((r) => origins.has(r.origin)).slice(0, 10);
+    } catch {} // no recipes folder yet, or a broken one: nothing to list
+
+    if (!matching.length) return {};
+    return {
+      recipes: matching.map(({ id, name, steps, startUrl }) => ({ id, name, steps, startUrl })),
+      recipesNote: "Tasks the user showed you once on these sites: recipes action get returns the steps to repeat.",
+    };
+  }
+
   return {
     async tab_work(args) {
       return ctx.coordinateTab(args, ctx.activeSession);
@@ -89,18 +104,21 @@ export function tabTools(ctx) {
         )
         .map(ctx.describeTab);
       const session = ctx.sessions.get(activeSession);
+      const recipes = await recipesFor([...tabs.map(ctx.describeTab), ...userTabs]);
       if (!tabs.length)
         return text({
           userTabs,
           session,
           tabs: [],
           extensions: await ctx.extensionPanels.list(),
+          ...recipes,
           note: "No owned tabs. Request an existing userTabs tab with request_tab and wait for approval, or create a new tab.",
         });
       return text({
         userTabs,
         session,
         extensions: await ctx.extensionPanels.list(),
+        ...recipes,
         tabs: tabs.map((tab) => ({
           ...ctx.describeTab(tab),
           coordination: ctx.coordinationStatus(tab.linkedBrowser.browserId, activeSession),

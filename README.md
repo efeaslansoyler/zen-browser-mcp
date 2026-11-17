@@ -183,6 +183,8 @@ element screenshot path and, on development builds, the React/Vue component chai
 
 - **Claude Code:** enable [channels](https://code.claude.com/docs/en/channels) with
   `claude --dangerously-load-development-channels server:zen`. The channel subscribes automatically.
+  Claude Code ignores the flag in `-p` mode and in apps that run it through the Agent SDK
+  (T3 Code, for example); those sessions get picks through the clipboard.
 - **Codex:** install lifecycle hooks once with `node dist/cli.js codex-hooks install`
   (or `npx zen-browser-mcp codex-hooks install` for an installed package), then review and trust
   the three Zen hooks in Codex's `/hooks` screen. SessionStart starts a receiver using the
@@ -202,6 +204,32 @@ never silently sent to another chat. Double-clicking Send does not duplicate del
 
 Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
 if it needs live access, and you approve or decline in the browser.
+
+### Show me once
+
+Some things are faster to show than to explain. An agent can ask you to show it a task once
+(`show_me`): the island turns into a one-line recorder ("Recording · 3 steps") while you do the
+task in the tab, and each recorded element flashes briefly. You can also start a recording
+yourself with right-click → **Record steps for an agent…** on any page.
+
+When you press **Finish**, the island shows the steps for review:
+
+- Name the recipe. Saving under an existing name overwrites that recipe (the button says so).
+- Delete wrong steps (✕) and mark values that change every time (**↻ Changes**): the agent then
+  asks you for them, or takes them from your request, instead of repeating the recorded value.
+- **Play** the steps from their screenshots, zoomed in on each element (← → to step, Esc to go
+  back).
+- Add a note, and tick **Let the agent try it now**. For a recording you started, choose a
+  session to send it to, like an element pick.
+
+Clicks, typing, selections, checkboxes, uploads and special keys are recorded, in iframes too;
+scrolling and mouse movement are not. Values typed into password, card and one-time-code
+fields are never recorded: such steps say "secret" and the agent hands them back to you.
+
+Recipes are saved in `~/.local/state/zen-mcp/recipes/` (steps and screenshots, nothing leaves
+your computer). `tabs_context_mcp` tells agents about the recipes for the sites you have open,
+and the `recipes` tool lists and returns them as steps to repeat with their own tools; deleting
+one asks you first. From the terminal: `npx zen-browser-mcp recipes [list] | show <id> | rm <id>`.
 
 ## Input and tab emulation
 
@@ -407,6 +435,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
 | `highlight` | frame elements with short labels to point them out to you (several at once, iframes included) |
+| `show_me`, `recipes` | ask you to show a task once and save it as a recipe; list, read and (after you confirm) delete recipes |
 | `ask_user`, `hand_to_user`, `request_tab` | ask you a question (with answer buttons, with or without a tab); hand you a step only you should do (logging in, 2FA, a captcha, a payment) and continue when you press **Done**; ask for access to your tab |
 
 ## Security

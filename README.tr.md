@@ -182,7 +182,8 @@ isteğini yaz ve adadaki listeden hedef oturumu seç. Sayfa adresi, seçici, eri
 stiller, metin, kısaltılmış HTML, öğenin görüntü yolu ve geliştirme sürümündeki bileşen zinciri gönderilir.
 
 - **Claude Code:** `claude --dangerously-load-development-channels server:zen` ile channels'ı
-  aç; oturum kendiliğinden bağlanır.
+  aç; oturum kendiliğinden bağlanır. Claude Code bu flag'i `-p` modunda ve onu Agent SDK ile
+  çalıştıran uygulamalarda (örneğin T3 Code) yok sayar; o oturumlara seçimler panoyla gider.
 - **Codex:** bir kez `node dist/cli.js codex-hooks install` çalıştır (kurulu pakette
   `npx zen-browser-mcp codex-hooks install`), sonra Codex'te `/hooks` ekranından üç Zen hook'una güven.
   SessionStart, Codex'in verdiği gerçek sohbet UUID'siyle alıcıyı başlatır;
@@ -201,6 +202,32 @@ Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 
 Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;
 adadan onaylar veya reddedersin.
+
+### Bir kez göster
+
+Bazı işleri anlatmaktansa göstermek daha hızlı. Ajan bir işi sana bir kez göstermeni isteyebilir
+(`show_me`): sen işi sekmede yaparken ada tek satırlık bir kayıt göstergesine döner
+("Kaydediliyor · 3 adım") ve kaydedilen her öğe kısa bir an yanıp söner. Kaydı kendin de
+başlatabilirsin: herhangi bir sayfada sağ tık → **Ajan için adımları kaydet…**.
+
+**Bitir**'e basınca ada adımları gözden geçirmen için gösterir:
+
+- Tarife bir ad ver. Var olan bir adla kaydetmek o tarifin üzerine yazar (buton bunu söyler).
+- Yanlış adımları sil (✕), her seferinde değişen değerleri işaretle (**↻ Değişir**): ajan
+  kaydedilen değeri tekrarlamak yerine onu isteğinden alır ya da sana sorar.
+- Adımları ekran görüntüleriyle, her öğeye yakınlaşarak **Oynat** (← → ile adım adım, Esc ile
+  listeye dönüş).
+- Bir not ekle, istersen **Agent hemen denesin**'i işaretle. Kaydı sen başlattıysan, bir öğe
+  seçimi gibi göndereceğin oturumu seç.
+
+Tıklamalar, yazılanlar, seçimler, onay kutuları, dosya yüklemeleri ve özel tuşlar iframe'ler
+dahil kaydedilir; kaydırma ve fare hareketi kaydedilmez. Şifre, kart ve tek kullanımlık kod
+alanlarına yazılanlar hiç kaydedilmez: o adımlar "gizli" görünür ve ajan onları sana bırakır.
+
+Tarifler `~/.local/state/zen-mcp/recipes/` altında saklanır (adımlar ve ekran görüntüleri;
+bilgisayarından çıkmaz). `tabs_context_mcp` ajanlara açık sitelerin tariflerini söyler; `recipes`
+aracı onları listeler ve kendi araçlarıyla tekrarlanacak adımlar olarak verir; silmeden önce
+sana sorar. Terminalden: `npx zen-browser-mcp recipes [list] | show <id> | rm <id>`.
 
 ## Girdi ve sekme benzetimi
 
@@ -405,6 +432,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `javascript_tool`, `handle_dialog` | sayfada JS çalıştırma; `alert`/`confirm`/`prompt` cevaplama |
 | `connect_session` | Codex sohbetini tarayıcıdan seçim alacak şekilde bağlama |
 | `highlight` | öğeleri kısa etiketli çerçevelerle sana gösterme (aynı anda birden çok, iframe'ler dahil) |
+| `show_me`, `recipes` | bir işi bir kez göstermeni isteyip tarif olarak kaydetme; tarifleri listeleme, okuma ve (sen onaylayınca) silme |
 | `ask_user`, `hand_to_user`, `request_tab` | sana soru sorma (cevap butonlarıyla, sekmeli ya da sekmesiz); yalnız senin yapman gereken bir adımı sana bırakma (giriş, 2FA, captcha, ödeme) ve **Bitti**'ye basınca devam etme; sekmene erişim isteme |
 
 ## Güvenlik

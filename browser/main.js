@@ -127,7 +127,7 @@ function logError(where, e) {
     const { Channels, ascii } = load("Channels");
     const { Picks } = load("Picks");
     const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
-    const { Recipes, recipeTools, geckoIO } = load("Recipes");
+    const { Recipes, recipeTools, geckoIO, originOf } = load("Recipes");
     const { ReviewModel } = load("RecordingReview");
     const { Demonstrations, demonstrationTools } = load("Demonstrations");
     const { NetworkLog } = load("NetworkLog");
@@ -419,6 +419,7 @@ function logError(where, e) {
     });
     ctx.recipes = new Recipes({ dir: `${stateHome}/${zenMcpApp}/recipes`, io: geckoIO });
     ctx.ReviewModel = ReviewModel;
+    ctx.originOf = originOf;
     ctx.fileURL = (path) => Services.io.newFileURI(localFile(path)).spec;
     const onRecordStep = (_subject, _topic, data) => {
       try {

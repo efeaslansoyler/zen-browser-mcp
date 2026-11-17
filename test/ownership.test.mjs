@@ -793,6 +793,25 @@ for (const [first, second] of [
   });
 }
 
+test("tabs_context_mcp lists recipes for the sites of open tabs", async () => {
+  const h = harness();
+  const id = h.own("A");
+  const { originOf } = await import("../browser/Recipes.sys.mjs");
+  h.context.originOf = originOf;
+  const url = h.tabs.get(id).linkedBrowser.currentURI.spec;
+  h.context.recipes = {
+    list: async () => [
+      { id: "here", name: "Here", steps: 3, startUrl: url, origin: originOf(url), note: "" },
+      { id: "elsewhere", name: "Elsewhere", steps: 1, startUrl: "https://other.test/", origin: "https://other.test" },
+    ],
+  };
+  const list = JSON.parse((await h.request("A", "tabs_context_mcp")).content[0].text);
+  assert.deepEqual(list.recipes, [{ id: "here", name: "Here", steps: 3, startUrl: url }]);
+  assert.match(list.recipesNote, /recipes action get/);
+  h.context.recipes = { list: async () => [] };
+  assert.equal("recipes" in JSON.parse((await h.request("A", "tabs_context_mcp")).content[0].text), false);
+});
+
 test("user tabs are discoverable without granting access, and can be requested without a pick", async () => {
   const h = harness();
   const id = h.own("A");
