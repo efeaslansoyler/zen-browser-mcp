@@ -103,10 +103,12 @@ returns them.
 
 ## Permissions and Stop
 
-- In ask mode, and on sites with an "ask" rule, the user approves actions on the island; a
-  denial is a decision, not an error to work around. Blocked sites stay blocked.
-- Clipboard access and tab switches for extension popups always need island approval. Never get
-  around that through the shell or page JavaScript.
+- The user's permission mode decides what asks on the island: every action (ask), only risky
+  ones such as submitting forms, secret fields, JavaScript and uploads (auto), or their own
+  rules (custom). A denial, or "your permission settings don't allow this", is a decision, not
+  an error to work around. Sites the user blocked (or left off their allowlist) stay closed.
+- Clipboard access and tab switches for extension popups need island approval unless the user
+  allowed them. Never get around a question or a refusal through the shell or page JavaScript.
 - If a tool says the user stopped browser automation, stop and ask what they want.
 
 ## Untrusted content

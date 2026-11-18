@@ -18,8 +18,9 @@
 > - Loader tarayıcının kurulum klasörüne yazılır (bazen `sudo` ile).
 > - Senin kullanıcınla çalışan her program bridge'in socket'ine bağlanabilir.
 >
-> Onaylı modu kullan, hassas siteleri işaretle, adayı takip et ve kaybetmeyi göze alamayacağın
-> hesapların olduğu bir tarayıcı profilinde kullanma. Bkz. [Güvenlik](#güvenlik).
+> Otomatik ya da onaylı modu koru, ajanların hiç girmemesi gereken siteleri engelle, adayı
+> takip et ve kaybetmeyi göze alamayacağın hesapların olduğu bir tarayıcı profilinde kullanma.
+> Bkz. [Güvenlik](#güvenlik).
 
 AI ajanları **kendi Zen tarayıcını** kullansın: senin sekmelerin, senin oturumların, gerçek fare
 ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren küçük bir ada.
@@ -315,8 +316,8 @@ grubu/çerçeve başına ayrıntılı kural sayısını (varsayılan 100/en fazl
 Çerçeve başına 20 saniye, toplam iş için 45 saniye sınırı vardır. Dış servis veya
 sayfanın `window.axe` nesnesi kullanılmaz; bitiş/iptal/zaman aşımında sandbox yok edilir.
 
-İki araç da sekme sahipliği ve site izinlerine uyar: ask site/genel ask modunda onay,
-block sitede ret. Ref verilmezse erişilebilen çerçeveler ayrı ayrı incelenir; başarısız
+İki araç da sekme sahipliğine ve izinlere uyar: onaylı modda sorar, engelli sitede
+reddedilir. Ref verilmezse erişilebilen çerçeveler ayrı ayrı incelenir; başarısız
 çerçeveler açıkça raporlanır. Çerçeveler arası erişilebilirlik ilişkileri değerlendirilmez.
 Ref verilirse yalnız ilgili çerçeve/alt ağaç incelenir, iç iframe'ler taranmaz.
 İnceleme sırasında belge değişirse sonuç geçersiz olur. Props ve bulgular güvenilmeyen
@@ -403,50 +404,91 @@ container'ında, kendi cookie'leri, girişleri ve site verisiyle çalışır. B�
 sekmelerinin temiz olması için `npx zen-browser-mcp config container Agent` (geri almak için
 `off`). Geçmiş ve eklentiler yine ortaktır; ajana verdiğin kendi sekmelerin kendi container'larında kalır.
 
-## Modlar ve site kuralları
+## İzin modları ve siteler
 
-Genel mod **auto / otomatik** (sormadan işlem) veya **ask / onaylı** (işlemden önce onay)
-olabilir. Sekme sağ tık menüsü → **Ajan ayarları** → **Bu site** üzerinden siteye özel kural seçilir:
+Ajanların ne yapabileceğine iki ayar karar verir: **izin modu** hangi işlemlerin onayını
+isteyeceğini, **site listesi** de ajanların hangi sitelere hiç girebileceğini belirler.
 
-| Site kuralı | Davranış |
+### İzin modları
+
+| Mod | Neyden önce sorar |
 |---|---|
-| **Genel ayarı kullan** | auto/ask moduna uyar; siteye özel kuralı kaldırır |
-| **Her işlemde sor** | auto modda da işlem öncesinde onay ister |
-| **Ajan erişimini engelle** | Sayfa okuma, ekran görüntüsü, işlem ve ajanın gezinmesini engeller |
+| **ask / onaylı** | Her eylemden önce: tıklama, yazma, tuş, form, gezinme, diyalog, inceleme. Sayfa okuma, ekran görüntüsü, kaydırma ve seninle konuşma serbesttir. |
+| **auto / otomatik** (varsayılan) | Yalnızca riskli işlemlerden önce: form gönderme; şifre, kart ya da tek kullanımlık kod alanlarına yazma; JavaScript çalıştırma; dosya yükleme; sayfa diyaloglarını kabul etme; eklenti panellerinde işlem; panona, kendi sekmelerine ya da tarayıcı ayarlarına dokunan her şey. |
+| **custom / özel** | Kendi `permissions.jsonc` dosyanda ne yazıyorsa. |
 
-Kurallar alt alan adlarını kapsar. Engelleme onay istemekten önceliklidir; alt alan adı
-üst alan adının kuralını gevşetemez. Menü miras alınan kısıtlamayı gösterir. Hazır site
-listesi yoktur. Engelli bir iframe içeren sayfaya da erişilemez; ekran görüntüsü de buna
-dahildir. Engelli sekme yine kapatılabilir veya kullanıcıya geri verilebilir.
+"Form gönderme", bir formun gönder butonuna tıklamak ya da formu gönderen bir yerde Enter
+veya Boşluk'a basmaktır. Mesaj gönderen ya da satın alan ama form kullanmayan, düz JavaScript
+butonlu siteler algılanmaz; onlar için **ask** modunu kullan ya da siteyi engelle.
 
-İşlemler: tıklama, sürükleme, yazma, tuşa basma, form doldurma, dosya yükleme, JavaScript
-çalıştırma ve diyalog cevaplama. Genel onaylı modda gezinme de izin ister. Siteye özel
-“Her işlemde sor” eski hassas site davranışını korur: gezinme ve okumada onay istemez.
-Erişim engellenmediyse okuma, ekran görüntüsü, kaydırma ve bekleme onay gerektirmez.
-Aynı sayfadaki toplu işlemler tek onayı paylaşır. Gezinme, yönlendirme, yenileme ve kural
-değişiklikleri onayı geçersiz kılar; izin reddedilirse kalan adımlar çalışmaz.
+Modu adadaki mod düğmesinden, sekme sağ tık menüsü → **Ajan ayarları**'ndan ya da
+`npx zen-browser-mcp config mode ask|auto|custom` ile değiştirebilirsin. Aynı sayfadaki toplu
+işlemler tek onayı paylaşır; gezinme, yönlendirme, yenileme ya da ayar değişikliği onayı
+geçersiz kılar, reddedersen kalan adımlar çalışmaz.
 
-Genel modu adadan veya sekme sağ tık menüsünden değiştirebilirsin. CLI karşılıkları:
+### Kendi şablonun (custom)
 
 ```sh
-npx zen-browser-mcp config mode ask
-npx zen-browser-mcp config site ask accounts.google.com
+npx zen-browser-mcp config permissions init      # ya da: init ask, ask şablonundan başlamak için
+$EDITOR ~/.config/zen-mcp/permissions.jsonc
+npx zen-browser-mcp config mode custom
+```
+
+Dosyada her işlem listelenir (her tool, `computer.click` ya da `clipboard.read` gibi büyük
+tool'ların her eylemi, ayrıca `submit` ve `secret_field`); yanındaki yorum ne yaptığını ve
+hazır şablonlardaki kuralını söyler. Her birini `"allow"`, `"ask"` ya da `"deny"` yap; sildiğin
+satırlar temel şablonun kuralını kullanır:
+
+```jsonc
+{
+  "base": "auto",
+  "rules": {
+    "navigate": "ask",           // (ask / allow) Go to an address, back or forward.
+    "javascript_tool": "deny",   // (ask / ask) Run any JavaScript in the page…
+    "submit": "allow"            // (ask / ask) Submit a form…
+  }
+}
+```
+
+> [!CAUTION]
+> Özel şablonda her şeye sen karar verirsin; hazır şablonların her zaman sorduğu şeylere de
+> izin verebilirsin: panon, kendi sekmelerin, form gönderme, gizli alanlar. Oradaki bir
+> `"allow"`, bir ajanın ya da onu kandıran bir sayfanın bunu senin oturumlarınla sormadan
+> yapabileceği anlamına gelir.
+
+`npx zen-browser-mcp config permissions`, dosyanın temel şablondan neleri değiştirdiğini
+gösterir. Yanlış yazılmış bir işlem adı ya da bozuk bir dosya hatadır (tool'lar hata verir,
+`doctor` bildirir); asla daha gevşek kurallara düşmez.
+
+### Siteler
+
+Site listesi ya bir **blocklist**tir (varsayılan: ajanlar listedekiler dışında her siteyi
+kullanabilir) ya da bir **allowlist** (ajanlar yalnızca listedekileri kullanabilir). İki liste
+de saklanır, geçiş yapınca hiçbiri kaybolmaz; yalnızca etkin olan geçerlidir. Bir alan adı alt
+alan adlarını da kapsar. Mevcut siteyi sekme sağ tık menüsü → **Ajan ayarları**'ndan aç/kapat
+ya da:
+
+```sh
 npx zen-browser-mcp config site block bankam.com
-npx zen-browser-mcp config site default accounts.google.com
+npx zen-browser-mcp config site unblock bankam.com
+npx zen-browser-mcp config site allow localhost github.com
+npx zen-browser-mcp config site mode allowlist
 npx zen-browser-mcp config site list
 ```
+
+Ajanların kullanamadığı bir site onlara tamamen kapalıdır: okuma, ekran görüntüsü, işlem ve
+gezinme yok; sekme listesinde yalnızca kimliği görünür. Sayfanın içindeki engelli bir iframe
+sayfayı da engeller. Ajanlar engelli bir sekmeyi yine kapatabilir ya da sana geri verebilir.
+Ajan çağrısı sırasında engelli bir host'a giden istekler iptal edilir; allowlist'te yalnızca
+sayfa ve iframe yüklemeleri iptal edilir, çünkü izinli siteler başka host'lardan (CDN'ler)
+kaynak yükler. Host'u olmayan sayfalar (`about:blank`, yerel dosyalar) site sayılmaz ve
+kısıtlanmaz. Liste ajanları yönetir, senin gezinmeni değil; bir ağ firewall'u da değildir.
 
 Ayarlar `~/.config/zen-mcp/config.json` dosyasında durur ve hemen geçerli olur:
 
 ```json
-{"mode":"auto","sites":{"accounts.google.com":"ask","bankam.com":"block"}}
+{"mode": "auto", "sites": {"mode": "blocklist", "blocklist": ["bankam.com"], "allowlist": []}}
 ```
-
-Eski `sensitive` kayıtları onay kuralı olarak okunur, ilk ayar yazımında yeni yapıya taşınır.
-`config sensitive add|remove` komutları uyumluluk için çalışır. Bu kurallar Zen MCP erişimini
-yönetir; kullanıcının gezinmesini veya sistemin bütün ağını filtrelemez. Ajan çağrısı
-sırasında engelli alan adlarına HTTP istekleri ve yönlendirmeler iptal edilir; tarayıcının
-bağımsız arka plan etkinliği genel olarak filtrelenmez.
 
 Her tool çağrısı `~/.local/state/zen-mcp/activity.jsonl` dosyasına yazılır (zaman, site, ne
 yapıldığı). Sekmeye sağ tık → **Ajan geçmişi** o sekmede ajanların son işlemlerini, **Tüm
@@ -489,8 +531,8 @@ Kurmadan önce lütfen oku.
 - **Claude yalnız kendi sekmelerine** ve senin verdiklerine dokunur. Diğer sekmelerin
   listelenmez, kimliği bilinse de kullanılamaz.
 - **Sayfalar Claude'u kandırmaya çalışabilir** (prompt injection) ve Claude senin
-  oturumlarınla işlem yapar. Önemli işler için onaylı modu ya da hassas siteleri kullan,
-  adayı takip et.
+  oturumlarınla işlem yapar. Önemli işler için varsayılan otomatik modu koru ya da onaylı
+  modu kullan, ajanların hiç girmemesi gereken siteleri engelle, adayı takip et.
 - **Ağ ayrıntılarında çerez ve yetkilendirme başlıkları gizlenir.**
 - Her şeyi `npx zen-browser-mcp uninstall` ile kaldırırsın.
 

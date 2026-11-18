@@ -18,8 +18,8 @@
 > - The loader goes into the browser's installation folder (sometimes with `sudo`).
 > - Any program running as your user can connect to the bridge's socket.
 >
-> Use ask mode, mark sensitive sites, watch the island, and don't use it in a browser profile
-> whose accounts you can't afford to risk. See [Security](#security).
+> Keep auto or ask mode, block sites agents should never touch, watch the island, and don't use
+> it in a browser profile whose accounts you can't afford to risk. See [Security](#security).
 
 Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse and keyboard
 input, and a small island at the top of the window that shows what the agent is doing. Works with
@@ -315,8 +315,8 @@ Scans time out after 20 seconds per frame, with a 45-second total work budget.
 No remote service or page-global `axe` installation is used; the sandbox is destroyed
 on completion, cancellation or timeout.
 
-Both tools use owned tabs and existing site permissions, including approval on ask
-sites/in ask mode and denial on blocked sites. Without a ref, accessible frames are
+Both tools use owned tabs and the usual permissions: they ask in ask mode and are refused on
+blocked sites. Without a ref, accessible frames are
 inspected separately; failed frames are reported explicitly. Cross-frame accessibility
 relationships are not evaluated. With a ref, only its frame/subtree is inspected;
 nested frames are excluded. Navigation during inspection invalidates the result.
@@ -403,50 +403,89 @@ cookies, logins and site data, in the same window. To make every new agent tab c
 `npx zen-browser-mcp config container Agent` (`off` to undo). History and extensions are still
 shared, and tabs you hand over keep their own container.
 
-## Modes and site rules
+## Permission modes and sites
 
-The general mode is **auto** (act without asking) or **ask** (request approval before
-an action). Each site can have one rule in the tab context menu → **Agent settings** → **This site**:
+Two settings decide what agents may do: the **permission mode** says which operations need
+your approval, and the **site list** says where agents may go at all.
 
-| Site rule | Behavior |
+### Permission modes
+
+| Mode | Asks you before |
 |---|---|
-| **Use general setting** | Follow auto/ask; removes this site's explicit rule |
-| **Ask before every action** | Require approval even in auto mode |
-| **Block agent access** | Deny page reads, screenshots, actions and agent navigation |
+| **ask** | Every action: clicks, typing, keys, forms, navigation, dialogs, inspection. Reading pages, screenshots, scrolling and talking to you are free. |
+| **auto** (default) | Only risky operations: submitting a form, typing into password, card or one-time-code fields, running JavaScript, uploading files, accepting page dialogs, acting in extension panels, and anything touching your clipboard, your own tabs or browser settings. |
+| **custom** | Whatever your own `permissions.jsonc` says. |
 
-Rules cover subdomains. Blocking wins over asking; a child domain cannot weaken a
-parent-domain rule. The menu indicates inherited restrictions. There is no built-in list.
-Blocked embedded frames also prevent access to the parent page, including screenshots.
-A blocked tab can still be closed or returned to the user.
+"Submitting a form" means clicking a form's submit button, or pressing Enter or Space where
+that submits it. Sites that send messages or buy things with plain JavaScript buttons outside
+a form are not detected; use **ask** for those, or block them.
 
-Actions are clicks, dragging, typing, key presses, filling forms, uploading files, running
-JavaScript and answering dialogs. In general ask mode, navigation also requires approval;
-a site's ask rule retains the old sensitive-site behavior (navigation and reads are free).
-Reading, screenshots, scrolling and waiting require no approval unless site access is blocked.
-Batch actions on an unchanged page share one approval; navigation, redirects, reloads or
-policy edits invalidate it. Denying approval stops the remaining batch steps.
+Switch the mode with the island's mode button or the tab context menu → **Agent settings**,
+or `npx zen-browser-mcp config mode ask|auto|custom`. Batch actions on an unchanged page share
+one approval; navigation, redirects, reloads or settings edits invalidate it, and denying
+stops the remaining steps.
 
-Switch the general mode from the island or the tab context menu. CLI equivalents:
+### Your own template (custom)
 
 ```sh
-npx zen-browser-mcp config mode ask
-npx zen-browser-mcp config site ask accounts.google.com
+npx zen-browser-mcp config permissions init      # or: init ask, to start from the ask template
+$EDITOR ~/.config/zen-mcp/permissions.jsonc
+npx zen-browser-mcp config mode custom
+```
+
+The file lists every operation (each tool, and each action of the bigger ones such as
+`computer.click` or `clipboard.read`, plus `submit` and `secret_field`) with a comment that
+says what it does and its built-in rules. Set each to `"allow"`, `"ask"` or `"deny"`; lines you
+delete keep the base template's rule:
+
+```jsonc
+{
+  "base": "auto",
+  "rules": {
+    "navigate": "ask",           // (ask / allow) Go to an address, back or forward.
+    "javascript_tool": "deny",   // (ask / ask) Run any JavaScript in the page…
+    "submit": "allow"            // (ask / ask) Submit a form…
+  }
+}
+```
+
+> [!CAUTION]
+> In a custom template you decide everything, including allowing what the built-in templates
+> always ask: your clipboard, your own tabs, submitting forms, secret fields. An `"allow"`
+> there means an agent, or a page that tricks it, can do it with your logins without a question.
+
+`npx zen-browser-mcp config permissions` shows what your file changes from its base. A typo in
+an operation name, or a broken file, is an error (tools fail and `doctor` reports it); it
+never falls back to looser rules.
+
+### Sites
+
+The site list is a **blocklist** (default: agents can use every site except the listed ones)
+or an **allowlist** (agents can use only the listed ones). Both lists are kept, so you can switch
+without losing either; only the active one applies. A domain covers its subdomains. Toggle the
+current site in the tab context menu → **Agent settings**, or:
+
+```sh
 npx zen-browser-mcp config site block mybank.com
-npx zen-browser-mcp config site default accounts.google.com
+npx zen-browser-mcp config site unblock mybank.com
+npx zen-browser-mcp config site allow localhost github.com
+npx zen-browser-mcp config site mode allowlist
 npx zen-browser-mcp config site list
 ```
+
+A site agents may not use is closed to them completely: no reads, screenshots, actions or
+navigation, and the tab list shows only its ID. A blocked frame inside a page blocks the page
+too. Agents can still close a blocked tab or hand it back. During an agent call, requests to a
+blocked host are cancelled; with an allowlist only page and frame loads are, because allowed
+sites load resources from other hosts (CDNs). Pages without a host (`about:blank`, local
+files) aren't sites and are not restricted. The list governs agents, not your own browsing,
+and it is not a network firewall.
 
 Settings live in `~/.config/zen-mcp/config.json` and apply immediately:
 
 ```json
-{"mode":"auto","sites":{"accounts.google.com":"ask","mybank.com":"block"}}
+{"mode": "auto", "sites": {"mode": "blocklist", "blocklist": ["mybank.com"], "allowlist": []}}
 ```
-
-Old `sensitive` entries are read as ask rules and migrated on the next settings write;
-`config sensitive add|remove` remains supported. Rules govern Zen MCP access, not the
-user's browsing or a system-wide network firewall. During an agent call, HTTP requests
-and redirects to blocked hosts are cancelled; the browser's independent background
-activity is not globally filtered.
 
 Every tool call is logged to `~/.local/state/zen-mcp/activity.jsonl` (time, site, what was
 done). Right-click a tab → **Agent history** for the last actions agents took there, or
@@ -488,8 +527,9 @@ Please read this before installing.
   connect, as they could also edit your browser profile.
 - **Claude only touches its own tabs** and the ones you hand over. Your other tabs aren't
   listed and can't be used, even by ID.
-- **Pages can try to trick Claude** (prompt injection), and Claude acts with your logins. Use
-  ask mode or sensitive sites for anything that matters, and watch the island.
+- **Pages can try to trick Claude** (prompt injection), and Claude acts with your logins. Keep
+  the default auto mode or use ask mode for anything that matters, block sites agents should
+  never use, and watch the island.
 - **Cookies and authorization headers are hidden** from network details.
 - Remove everything with `npx zen-browser-mcp uninstall`.
 

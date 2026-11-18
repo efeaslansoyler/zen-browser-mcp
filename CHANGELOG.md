@@ -45,8 +45,12 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   an agent…") and it becomes a recipe: semantic steps with a screenshot each, reviewed on the
   island (rename, delete steps, mark values that change, play back), saved locally and offered
   to agents on the same site (`tabs_context_mcp`, `recipes`). Secret fields are never recorded.
-- **Permissions**: auto and ask modes, per-site `ask` and `block` rules, approvals scoped to
-  the document, origin, settings and owner, and island approval for every clipboard operation.
+- **Permissions**: permission templates for every tool and action: **ask** (every action),
+  **auto** (only risky ones: submitting forms, secret fields, JavaScript, uploads, dialogs,
+  extension panels, the user's clipboard, tabs and browser settings) and **custom** (the
+  user's own allow/ask/deny rules in a commented `permissions.jsonc`, `config permissions
+  init`). Sites are a blocklist or an allowlist. Approvals are scoped to the document,
+  origin, settings and owner.
 - **Tab context menu**: give a tab to a session, take it back, agent settings and the agent
   history of the tab.
 - **Inspection**: React component trees and `axe-core` accessibility audits, run locally.
@@ -59,7 +63,7 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   a separate container without the user's cookies and logins.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
   snapshot, and unchanged screenshots can skip the image.
-- **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill`, `hooks`, `codex-hooks` and `recipes`; the browser
+- **CLI**: `install`, `uninstall`, `doctor`, `config` (mode, permissions, sites), `skill`, `hooks`, `codex-hooks` and `recipes`; the browser
   side updates itself when the package version changes.
 - **Agent skill** (`skills/zen-browser`) for Claude Code and Codex: which tool to use when, from
   choosing the user's open tab to handing over logins. Short server instructions point the same
@@ -78,6 +82,9 @@ the commit log.
   and recipes that says how each session receives.
 - Own icons for Antigravity and OpenCode, the Claude logo, and a combined icon on menus when
   sessions of several agents are connected.
+- Permission templates (ask, auto, custom) instead of two modes and per-site ask rules: auto
+  asks only risky operations, custom follows `permissions.jsonc`. Sites became a blocklist or
+  an allowlist that only decides access.
 
 ### 2026-11-17
 

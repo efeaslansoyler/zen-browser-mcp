@@ -104,12 +104,30 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
 
 ## Permissions
 
-`~/.config/zen-mcp/config.json`: `{"mode": "auto" | "ask", "sites": {"example.com": "ask" | "block"}, "workspace": "Agents", "container": "Agent"}`
+`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent"}`
 (`workspace` is optional: the Zen space new agent tabs open in).
-Site rules cover subdomains, `block` wins, and a subdomain can't loosen its parent. Every
-`browser_batch` step is re-checked against the current document, origin and rules; a redirect
-or new document invalidates earlier approvals. Clipboard access, tab switches for extension
-popups and `browser_settings` changes always ask, even in auto mode.
+
+- **Operations and templates** (`Policy.sys.mjs`, shared with the CLI): every tool call is an
+  operation (`operationOf`: a tool, or `tool.action` for `computer`, `clipboard`,
+  `extensions`, `browser_settings`, `handle_dialog`, `recipes`), plus `submit`,
+  `secret_field` and `tab_work.handoff`. A mode gives each one a rule: `allow`, `ask` or
+  `deny`. The `ask` and `auto` columns of `SECTIONS` are the built-in templates; `custom`
+  reads `permissions.jsonc` (a base template plus the user's rules, parsed by
+  `parsePermissions`; errors fail closed). A test checks that every MCP tool and action has an
+  operation.
+- **One decision** (`Permissions.sys.mjs`): `requirePermission` checks a page call (every
+  step of a batch, against the current document, origin and settings; a redirect or new
+  document invalidates earlier approvals), `requireToolPermission` a call without a page, and
+  `gate(key)` the operations that keep their own prompt (clipboard, `request_tab`,
+  `browser_settings` changes, extension tab switches, recipe deletes, tab handoffs).
+  A click, Enter or Space is also checked against `submit`, and typing against `secret_field`,
+  when that could make the rule stricter: the page answers a `risk` query (`PageReader.risk`:
+  a submit button of a form, Enter in a form's text field, a password, card or one-time-code
+  field).
+- **Sites** (`SiteRules.sys.mjs`) only decide access: `siteAllowed(host, sites)` with the
+  active list; a domain covers its subdomains, and hostless pages aren't sites. During an
+  agent call `NetworkLog` cancels requests to a host agents may not use; with an allowlist only
+  document loads (allowed sites use CDNs).
 
 ## Sending to a session (browser → agent)
 

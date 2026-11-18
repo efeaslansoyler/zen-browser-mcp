@@ -64,7 +64,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 |---|---|
 | `check-compat.ts --reload` | Claude, Codex and generic identities: read, write, click, keys, screenshots, theming |
 | `check-input.ts` | Held keys and buttons, human-like input, `browser_settings` |
-| `check-permissions.ts` | Modes, site rules, batch re-checks, redirects, iframes |
+| `check-permissions.ts` | Permission modes, the site blocklist, batch re-checks, redirects, iframes |
 | `check-ownership.ts`, `check-coordination.ts` | Session ownership, `tab_work` handoffs |
 | `check-cancellation.ts`, `check-hit-test.ts` | Stop, covered-click detection |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |

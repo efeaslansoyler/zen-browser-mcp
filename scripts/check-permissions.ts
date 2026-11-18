@@ -1,4 +1,4 @@
-// Local-only fixtures. Adds 127.0.0.1 to sensitive sites temporarily, preserving config.
+// Local-only fixtures. Changes the mode and blocks 127.0.0.1 temporarily, preserving config.
 // Run from your terminal: node scripts/check-permissions.ts
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -7,6 +7,7 @@ import path from "node:path";
 import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
+import { normalizeConfig } from "../browser/SiteRules.sys.mjs";
 const text = (result: Content[]) =>
   result
     .filter((c) => c.type === "text")
@@ -21,16 +22,16 @@ let tabId: number | undefined,
   temporary = "",
   backupFile: string | undefined;
 const original = fs.existsSync(configFile) ? fs.readFileSync(configFile) : undefined;
-let sensitiveURL = "";
+let otherURL = ""; // another origin: 127.0.0.1 instead of localhost
 const server = http.createServer((request, response) => {
   if (request.url === "/redirect") {
-    response.writeHead(302, { Location: sensitiveURL });
+    response.writeHead(302, { Location: otherURL });
     response.end();
     return;
   }
   if (request.url === "/embed") {
     response.setHeader("Content-Type", "text/html");
-    response.end(`<!doctype html><title>Embedded fixture</title><iframe src="${sensitiveURL}"></iframe>`);
+    response.end(`<!doctype html><title>Embedded fixture</title><iframe src="${otherURL}"></iframe>`);
     return;
   }
   response.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -64,15 +65,12 @@ async function answer(result: "done" | "cancelled") {
 try {
   const state = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!state.paused, "Resume automation before running this test.");
-  const settings = original ? JSON.parse(original.toString()) : { mode: "auto", sensitive: [] };
+  const settings = normalizeConfig(original ? JSON.parse(original.toString()) : {});
+  assert(settings.mode === "auto", "This test requires the auto mode; no settings have been changed.");
   assert(
-    settings.mode !== "ask",
-    "This automatic test requires your existing auto mode; no settings have been changed.",
-  );
-  const existing = settings.sensitive || [];
-  assert(
-    !existing.some((host: string) => ["localhost", "127.0.0.1"].includes(host.replace(/^\*?\./, ""))),
-    "Local fixture hosts are already sensitive; no settings have been changed.",
+    settings.sites.mode === "blocklist" &&
+      !settings.sites.blocklist.some((host: string) => ["localhost", "127.0.0.1"].includes(host)),
+    "This test needs a blocklist without the local fixture hosts; no settings have been changed.",
   );
   console.log(text(await call("reload")));
   let ready = false;
@@ -93,10 +91,11 @@ try {
   const address = server.address();
   assert(address && typeof address !== "string");
   const ordinaryURL = `http://localhost:${address.port}/`;
-  sensitiveURL = `http://127.0.0.1:${address.port}/`;
+  otherURL = `http://127.0.0.1:${address.port}/`;
   tabId = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   await command("navigate", { tabId, url: ordinaryURL });
-  temporary = JSON.stringify({ ...settings, sensitive: [...existing, "127.0.0.1"] }, null, 2) + "\n";
+  // auto mode, as the user has it: javascript_tool is a risky write that asks
+  temporary = JSON.stringify(settings, null, 2) + "\n";
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
   if (original) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-permission-backup-"));
@@ -111,12 +110,13 @@ try {
     const pending = settle(
       command("browser_batch", {
         actions: [
-          { name: "navigate", input: { tabId, url: redirect ? ordinaryURL + "redirect" : sensitiveURL } },
+          { name: "navigate", input: { tabId, url: redirect ? ordinaryURL + "redirect" : otherURL } },
           write(),
           write(),
         ],
       }),
     );
+    // navigation is free in auto mode; the risky writes ask on the page they run on
     await answer("cancelled");
     const result = await pending;
     assert(!result.error, String(result.error));
@@ -125,13 +125,13 @@ try {
     const content = text(await command("get_page_text", { tabId }));
     assert(content.includes("untouched") && !content.includes(token), "A denied write ran");
     console.log(
-      `✓ ${redirect ? "HTTP redirect" : "Direct navigation"} to sensitive site asks; denial blocks remaining writes`,
+      `✓ After ${redirect ? "an HTTP redirect" : "navigation"} to another origin, risky writes ask there; denial blocks the rest`,
     );
   }
   await command("navigate", { tabId, url: ordinaryURL });
   const allowed = settle(
     command("browser_batch", {
-      actions: [{ name: "navigate", input: { tabId, url: sensitiveURL } }, write(), write()],
+      actions: [{ name: "navigate", input: { tabId, url: otherURL } }, write(), write()],
     }),
   );
   await answer("done");
@@ -139,6 +139,10 @@ try {
   assert(!result.error && !result.value?.isError, "Same-document writes failed after approval");
   assert(text(await command("get_page_text", { tabId })).includes(token));
   console.log("✓ Approval allows grouped writes on the unchanged destination document");
+  // ask mode: opening an extension panel asks
+  temporary = JSON.stringify({ ...settings, mode: "ask" }, null, 2) + "\n";
+  await sleep(20);
+  fs.writeFileSync(configFile, temporary, { mode: 0o600 });
   const extensionAttempt = settle(command("extensions", { tabId, action: "open", extensionId: token }));
   await answer("cancelled");
   const extensionDenied = await extensionAttempt;
@@ -147,14 +151,22 @@ try {
     "Extension invocation must use source-site approval",
   );
   console.log("✓ Extension toolbar invocation respects source-site approval and denial");
+  temporary = JSON.stringify(settings, null, 2) + "\n"; // back to auto
+  await sleep(20);
+  fs.writeFileSync(configFile, temporary, { mode: 0o600 });
 
-  // Switch the same local fixture from legacy sensitive to the unified blocked rule.
+  // Block the same local fixture.
   const ordinaryTab = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   const embeddedTab = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   try {
     await command("navigate", { tabId: ordinaryTab, url: ordinaryURL });
     await command("navigate", { tabId: embeddedTab, url: ordinaryURL + "embed" });
-    temporary = JSON.stringify({ ...settings, sites: { ...settings.sites, "127.0.0.1": "block" } }, null, 2) + "\n";
+    temporary =
+      JSON.stringify(
+        { ...settings, sites: { ...settings.sites, blocklist: [...settings.sites.blocklist, "127.0.0.1"] } },
+        null,
+        2,
+      ) + "\n";
     await sleep(20);
     fs.writeFileSync(configFile, temporary, { mode: 0o600 });
     for (const tool of ["get_page_text", "read_page", "javascript_tool", "computer"]) {
@@ -174,7 +186,7 @@ try {
       "A blocked iframe must prevent parent screenshots",
     );
     console.log("✓ Loaded blocked iframe prevents screenshot access to its ordinary parent page");
-    for (const url of [sensitiveURL, ordinaryURL + "redirect"]) {
+    for (const url of [otherURL, ordinaryURL + "redirect"]) {
       const result = await settle(command("navigate", { tabId: ordinaryTab, url }));
       assert(result.error && /blocked/.test(String(result.error)), `Navigation must reject ${url}: ${result.error}`);
     }
@@ -188,20 +200,21 @@ try {
       h.prepareTabMenu(win,[tab]);
       const menu=win.document.getElementById('tabContextMenu');
       const labels=menu.querySelector('#zen-mcp-context-give-permissions');
-      return labels ? [...labels.querySelectorAll('[data-zen-site-rule]')].map(el=>({label:el.getAttribute('label'),checked:el.getAttribute('checked')})) : null;
+      if (!labels) return null;
+      const site=labels.querySelector('[data-zen-site]');
+      return {
+        lists: [...labels.querySelectorAll('[data-zen-site-list]')].map(el=>el.getAttribute('checked')),
+        site: { label: site.getAttribute('label'), checked: site.getAttribute('checked') },
+      };
     })()`);
-    assert(menu?.length === 3 && menu[2].checked === "true", JSON.stringify(menu));
-    assert.equal(
-      menu.filter((item: any) => item.checked !== null).length,
-      1,
-      "Only the selected XUL item may have a checked attribute",
-    );
-    console.log("✓ Real tab context menu shows three site rules and selected block");
+    assert.deepEqual(menu?.lists, ["true", null], JSON.stringify(menu));
+    assert.deepEqual(menu?.site, { label: "Block 127.0.0.1", checked: "true" }, JSON.stringify(menu));
+    console.log("✓ Real tab context menu shows the blocklist and this site blocked");
   } finally {
     await command("tabs_close_mcp", { tabId: embeddedTab });
     await command("tabs_close_mcp", { tabId: ordinaryTab });
   }
-  console.log("All live permission and site-rule checks passed.");
+  console.log("All live permission and site-list checks passed.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
