@@ -215,3 +215,31 @@ test("the page tells submit buttons, Enter in a form field and secret fields apa
   assert.deepEqual(reader.risk({ focused: true, space: true }), { submit: true, secret: false });
   assert.deepEqual(reader.risk({ ref: "ref_1" }), { submit: true, secret: false });
 });
+
+test("CLI: custom needs a valid permissions.jsonc, init writes the example once", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "zen-perms-"));
+  const file = path.join(directory, "zen-mcp/permissions.jsonc");
+  const run = (...args) =>
+    execFileSync(process.execPath, ["dist/cli.js", "config", ...args], {
+      env: { ...process.env, XDG_CONFIG_HOME: directory, LANG: "en_US.UTF-8" },
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+  try {
+    assert.throws(() => run("mode", "custom"), /doesn't exist/);
+    run("permissions", "init", "ask");
+    assert.equal(parsePermissions(fs.readFileSync(file, "utf8")).base, "ask");
+    assert.throws(() => run("permissions", "init"), /already exists/);
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/("navigate": +)"ask"/, '$1"allow"'));
+    assert.match(run("permissions"), /navigate: ask → allow/);
+    assert.match(run("mode", "custom"), /mode: custom/);
+    fs.writeFileSync(file, '{"rules": {"javascrpt_tool": "deny"}}');
+    assert.throws(() => run("mode", "custom"), /unknown operation "javascrpt_tool"/);
+  } finally {
+    fs.rmSync(directory, { recursive: true });
+  }
+});

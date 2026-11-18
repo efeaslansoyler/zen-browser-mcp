@@ -6,8 +6,8 @@ import { skillStatus } from "./skill.ts";
 import { claudeHookInstalled, claudeSettingsFile } from "./hooks.ts";
 import { openCodePluginFile, openCodePluginInstalled } from "./opencode.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
-import { readConfig } from "./config.ts";
-import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
+import { readConfig, readPermissions } from "./config.ts";
+import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, PERMISSIONS_FILE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
 import { call } from "./zen.ts";
 
 const ok = (s: string) => console.log(`✓ ${s}`);
@@ -104,6 +104,16 @@ export async function doctor() {
   }
 
   const config = readConfig();
+  if (config.mode === "custom")
+    try {
+      readPermissions();
+      ok(L(`custom permissions: ${PERMISSIONS_FILE}`, `özel izinler: ${PERMISSIONS_FILE}`));
+    } catch (e) {
+      fail(
+        (e as Error).message,
+        L(`fix the file, or: npx ${PACKAGE} config mode auto`, `dosyayı düzelt ya da: npx ${PACKAGE} config mode auto`),
+      );
+    }
   ok(
     L(
       `mode ${config.mode}, ${Object.keys(config.sites).length} site rule(s) (${CONFIG_FILE})`,

@@ -19,6 +19,8 @@ const env = process.env;
 // the browser-side files (browser/): the loader loads from here
 export const DATA_DIR = path.join(env.XDG_DATA_HOME || path.join(home, ".local/share"), NAME);
 export const CONFIG_FILE = path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), NAME, "config.json");
+// the custom permission template; only the user edits it (config.json is rewritten by the browser)
+export const PERMISSIONS_FILE = path.join(path.dirname(CONFIG_FILE), "permissions.jsonc");
 export const STATE_DIR = path.join(env.XDG_STATE_HOME || path.join(home, ".local/state"), NAME);
 // "show me once" recipes; not in DATA_DIR, which installs replace
 export const RECIPES_DIR = path.join(STATE_DIR, "recipes");

@@ -3,7 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { L } from "./i18n.ts";
-import { CONFIG_FILE, PACKAGE } from "./paths.ts";
+import { CONFIG_FILE, PACKAGE, PERMISSIONS_FILE } from "./paths.ts";
+import { examplePermissions, parsePermissions, ruleOf } from "../browser/Policy.sys.mjs";
 
 import { normalizeConfig, normalizeDomain, type Config } from "../browser/SiteRules.sys.mjs";
 
@@ -22,17 +23,66 @@ function writeConfig(config: Config) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 
+const MODE_TEXT = {
+  ask: ["Agent asks before every action", "Ajan her işlemden önce izin ister"],
+  auto: ["Agent asks only before risky operations", "Ajan yalnızca riskli işlemlerden önce izin ister"],
+  custom: [`Your own rules in ${PERMISSIONS_FILE}`, `Kendi kuralların: ${PERMISSIONS_FILE}`],
+};
+
+// The custom template, or throws with what is wrong with it.
+export function readPermissions() {
+  if (!fs.existsSync(PERMISSIONS_FILE))
+    throw new Error(
+      L(
+        `${PERMISSIONS_FILE} doesn't exist. Create it with: npx ${PACKAGE} config permissions init`,
+        `${PERMISSIONS_FILE} yok. Oluşturmak için: npx ${PACKAGE} config permissions init`,
+      ),
+    );
+  return parsePermissions(fs.readFileSync(PERMISSIONS_FILE, "utf8"));
+}
+
+// `config permissions [init [ask|auto]]`: creates the example file, or shows what it changes.
+function permissionsCommand([action, base = "auto"]: string[]) {
+  if (action === "init") {
+    if (base !== "ask" && base !== "auto") throw new Error("Use: config permissions init [ask|auto]");
+    if (fs.existsSync(PERMISSIONS_FILE))
+      throw new Error(
+        L(
+          `${PERMISSIONS_FILE} already exists; edit it, or delete it to start over.`,
+          `${PERMISSIONS_FILE} zaten var; düzenle ya da baştan başlamak için sil.`,
+        ),
+      );
+    fs.mkdirSync(path.dirname(PERMISSIONS_FILE), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(PERMISSIONS_FILE, examplePermissions(base), { mode: 0o600 });
+    console.log(
+      L(
+        `✓ ${PERMISSIONS_FILE} (every operation, starting from the ${base} template)\n  Edit it, then: npx ${PACKAGE} config mode custom`,
+        `✓ ${PERMISSIONS_FILE} (tüm işlemler, ${base} şablonundan başlayarak)\n  Düzenle, sonra: npx ${PACKAGE} config mode custom`,
+      ),
+    );
+    return;
+  }
+  if (action) throw new Error("Use: config permissions [init [ask|auto]]");
+  const custom = readPermissions();
+  const changed = Object.entries(custom.rules).filter(([key, rule]) => rule !== ruleOf(key, custom.base));
+  console.log(`${PERMISSIONS_FILE}\n`);
+  console.log(L(`base: ${custom.base}`, `temel: ${custom.base}`));
+  console.log(
+    changed.length
+      ? L("changed from the base:", "temelden farklı olanlar:") +
+          "\n" +
+          changed.map(([key, rule]) => `  ${key}: ${ruleOf(key, custom.base)} → ${rule}`).join("\n")
+      : L("nothing changed from the base", "temelden farklı bir şey yok"),
+  );
+}
+
 export function configCommand(args: string[]) {
   const config = readConfig();
   const [cmd, ...rest] = args;
   if (!cmd) {
     console.log(`${CONFIG_FILE}\n`);
-    console.log(
-      L(
-        `mode: ${config.mode}  (${config.mode === "ask" ? "Agent asks before every action" : "Agent acts without asking"})`,
-        `mod: ${config.mode}  (${config.mode === "ask" ? "Ajan her işlemden önce izin ister" : "Ajan sormadan işlem yapar"})`,
-      ),
-    );
+    const [en, tr] = MODE_TEXT[config.mode];
+    console.log(L(`mode: ${config.mode}  (${en})`, `mod: ${config.mode}  (${tr})`));
     console.log(L("site rules:", "site kuralları:"), config.sites);
     console.log(
       L(
@@ -48,18 +98,24 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <domain>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode auto|ask\n  npx ${PACKAGE} config site ask|block|default <alan-adı>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off`,
+        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site ask|block|default <domain>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off`,
+        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site ask|block|default <alan-adı>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off`,
       ),
     );
     return;
   }
   if (cmd === "mode") {
     const mode = rest[0];
-    if (mode !== "auto" && mode !== "ask")
-      throw new Error(L("mode must be auto or ask.", "mod auto ya da ask olmalı."));
+    if (mode !== "auto" && mode !== "ask" && mode !== "custom")
+      throw new Error(L("mode must be ask, auto or custom.", "mod ask, auto ya da custom olmalı."));
+    if (mode === "custom") readPermissions(); // a missing or broken file is reported now, not on the next action
     writeConfig({ ...config, mode });
-    console.log(L(`✓ mode: ${mode}`, `✓ mod: ${mode}`));
+    const [en, tr] = MODE_TEXT[mode];
+    console.log(L(`✓ mode: ${mode} (${en})`, `✓ mod: ${mode} (${tr})`));
+    return;
+  }
+  if (cmd === "permissions") {
+    permissionsCommand(rest);
     return;
   }
   if (cmd === "workspace") {

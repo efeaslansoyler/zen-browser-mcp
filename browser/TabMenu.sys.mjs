@@ -5,7 +5,7 @@
 //   env.sessions(): connected sessions, env.ownerName(tab), env.menuAgent(),
 //   env.paintIcon(item, agent): the agent's icon and color,
 //   env.give(tab, sessionId), env.takeBack(tab),
-//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hostOf(browser), env.ruleFor(host),
+//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hasCustomPermissions(), env.hostOf(browser), env.ruleFor(host),
 //   env.workspaces(win): Zen workspace names (null outside Zen),
 //   env.history(tabId): the latest agent actions in that tab (lines), env.openHistory(win): the full history page
 const MENU_ID = "zen-mcp-context-give";
@@ -136,9 +136,11 @@ export class TabMenu {
       const config = env.readConfig();
       heading(L("General mode · all sites", "Genel mod · tüm siteler"));
       for (const [mode, label] of [
-        ["auto", L("Automatic", "Otomatik")],
+        ["auto", L("Automatic · asks before risky actions", "Otomatik · riskli işlemlerde sorar")],
         ["ask", L("Ask before every action", "Her işlemde sor")],
+        ["custom", L("Custom · permissions.jsonc", "Özel · permissions.jsonc")],
       ]) {
+        if (mode === "custom" && !env.hasCustomPermissions() && config.mode !== "custom") continue;
         const choice = win.document.createXULElement("menuitem");
         choice.setAttribute("type", "radio");
         choice.setAttribute("name", "zen-mcp-general-mode");

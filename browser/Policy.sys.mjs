@@ -225,7 +225,7 @@ export function stripJsonComments(text) {
 }
 
 // The example permissions file: every operation with its built-in rules and risk.
-export function examplePermissions() {
+export function examplePermissions(base = "auto") {
   const width = Math.max(...[...OPERATIONS.keys()].map((key) => key.length)) + 4;
   const lines = [
     '// zen-browser-mcp: your own permission template. It is used when the mode is "custom"',
@@ -242,14 +242,15 @@ export function examplePermissions() {
     "// (prompt injection), can do it with your logins without you seeing a question first.",
     "// Sites the agent may not use at all are set separately: `config site …`.",
     "{",
-    '  "base": "auto",',
+    `  "base": "${base}",`,
     '  "rules": {',
   ];
   for (const [section, rows] of SECTIONS) {
     lines.push("", `    // ── ${section} ──`);
     for (const [key, ask, auto, about] of rows) {
+      const rule = base === "ask" ? ask : auto;
       lines.push(
-        `    ${`"${key}":`.padEnd(width)}"${auto}",${" ".repeat(7 - auto.length)}// (${ask} / ${auto}) ${about}`,
+        `    ${`"${key}":`.padEnd(width)}"${rule}",${" ".repeat(7 - rule.length)}// (${ask} / ${auto}) ${about}`,
       );
     }
   }

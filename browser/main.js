@@ -381,6 +381,7 @@ function logError(where, e) {
       readConfig: () => ctx.readConfig(),
       writeConfig: (changes) => ctx.writeConfig(changes),
       setMode: (mode) => ctx.island?.setMode(mode),
+      hasCustomPermissions: () => ctx.localFile(ctx.permissionsPath).exists(),
       hostOf: (browser) => ctx.hostOf(browser),
       ruleFor: (host) => ctx.ruleFor(host),
     });

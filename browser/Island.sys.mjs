@@ -723,7 +723,7 @@ export class Island {
     this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);
   }
 
-  // The agent mode: auto (acts without asking) | ask (asks before each action)
+  // The permission mode: ask (asks before each action) | auto (asks before risky ones) | custom
   setMode(mode) {
     if (mode === this.#mode) return;
     this.#mode = mode;
@@ -827,17 +827,23 @@ export class Island {
       spark.style.animation = theme.id === "claude" && !stopped ? "" : "none";
       el.setAttribute("aria-label", theme.name);
       mode.setAttribute("mode", this.#mode);
-      mode.textContent = this.#mode === "ask" ? L("ask", "onaylı") : L("auto", "otomatik");
-      mode.title =
-        this.#mode === "ask"
-          ? L(
-              `${theme.name} asks before every action. Click: auto (acts without asking)`,
-              `${theme.name} her işlemde izin istiyor. Tıkla: otomatik (sormadan işlem yapar)`,
-            )
-          : L(
-              `${theme.name} acts without asking. Click: ask (asks before every action)`,
-              `${theme.name} sormadan işlem yapıyor. Tıkla: onaylı (her işlemde izin ister)`,
-            );
+      mode.textContent = { ask: L("ask", "onaylı"), auto: L("auto", "otomatik"), custom: L("custom", "özel") }[
+        this.#mode
+      ];
+      mode.title = {
+        ask: L(
+          `${theme.name} asks before every action. Click to switch mode`,
+          `${theme.name} her işlemde izin istiyor. Mod değiştirmek için tıkla`,
+        ),
+        auto: L(
+          `${theme.name} asks only before risky actions. Click to switch mode`,
+          `${theme.name} yalnızca riskli işlemlerde izin istiyor. Mod değiştirmek için tıkla`,
+        ),
+        custom: L(
+          `${theme.name} follows your permissions.jsonc. Click to switch mode`,
+          `${theme.name} senin permissions.jsonc kurallarına uyuyor. Mod değiştirmek için tıkla`,
+        ),
+      }[this.#mode];
       const anywhere = state === "ask" && !pick && !this.#browser;
       const visible = stopped || anywhere || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);

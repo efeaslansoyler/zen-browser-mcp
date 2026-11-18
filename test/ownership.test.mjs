@@ -405,6 +405,7 @@ test("session menu pins explicit fixture tabs even when native context points el
     readConfig: () => ({ mode: "auto", sites: {} }),
     writeConfig() {},
     setMode() {},
+    hasCustomPermissions: () => false,
     hostOf: () => "fixture.test",
     ruleFor: () => "default",
     workspaces: () => null,
