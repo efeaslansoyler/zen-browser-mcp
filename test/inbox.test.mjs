@@ -62,6 +62,7 @@ test("the send list is every connected session, labelled with how it receives", 
     { id: "t3", name: "T3 thread", agent: { id: "claude" }, ack: true, push: "t3" },
     { id: "term", name: "Terminal", agent: { id: "claude" }, ack: true, push: null, hook: true },
     { id: "codex:1", name: "Codex chat", agent: { id: "codex" }, ack: true, push: "codex" },
+    { id: "oc", name: "OpenCode", agent: { id: "generic" }, ack: true, push: "opencode", hook: true },
   ];
   const targets = sendTargets(live, subs, L);
   assert.deepEqual(
@@ -71,12 +72,15 @@ test("the send list is every connected session, labelled with how it receives", 
       ["t3", "now", "T3 thread · now"],
       ["term", "prompt", "Terminal · when you write"],
       ["codex:1", "now", "Codex chat · now"],
+      ["oc", "now", "OpenCode · now"],
     ],
   );
   const by = Object.fromEntries(targets.map((t) => [t.id, t]));
   assert.equal(sentNotice("sent", by.t3, L), "Sent to T3 thread ✓");
   assert.equal(sentNotice("sent", by["codex:1"], L), "Queued for Codex chat ✓");
   assert.equal(sentNotice("waiting", by.term, L), "Terminal sees it when you write to it");
+  // OpenCode before its first message: the push is refused, the next message carries it
+  assert.equal(sentNotice("waiting", by.oc, L), "OpenCode sees it when you write to it");
   assert.equal(sentNotice("waiting", by.old, L), "Old process gets it with its next browser action");
   assert.equal(sentNotice("missing", undefined, L), "Delivery failed; copied to clipboard");
 });

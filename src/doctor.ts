@@ -4,6 +4,7 @@ import path from "node:path";
 import { L } from "./i18n.ts";
 import { skillStatus } from "./skill.ts";
 import { claudeHookInstalled, claudeSettingsFile } from "./hooks.ts";
+import { openCodePluginFile, openCodePluginInstalled } from "./opencode.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
 import { readConfig } from "./config.ts";
 import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
@@ -65,6 +66,9 @@ export async function doctor() {
       console.log(
         `  Claude Code: ${L("prompt hook not installed", "prompt hook'u kurulu değil")} → npx ${PACKAGE} hooks install`,
       );
+  if (fs.existsSync(path.dirname(path.dirname(openCodePluginFile()))))
+    if (openCodePluginInstalled()) ok(L("OpenCode: plugin installed", "OpenCode: plugin kurulu"));
+    else console.log(`  OpenCode: ${L("plugin not installed", "plugin kurulu değil")} → npx ${PACKAGE} hooks install`);
 
   // The skill is optional: report it, but never count it as a problem.
   for (const { client, status } of skillStatus()) {

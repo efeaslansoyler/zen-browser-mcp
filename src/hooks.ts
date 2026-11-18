@@ -16,6 +16,7 @@ import { PACKAGE_DIR } from "./paths.ts";
 import { call } from "./zen.ts";
 import { configureCodexHooks } from "./codex-hooks.ts";
 import { ancestorPids } from "./claude.ts";
+import { configureOpenCodePlugin, openCodePluginFile } from "./opencode.ts";
 
 export type HookClient = "claude" | "codex" | "antigravity";
 export const HOOK_CLIENTS: HookClient[] = ["claude", "codex", "antigravity"];
@@ -127,8 +128,9 @@ export function antigravityHookInstalled(file = antigravityHooksFile()) {
   }
 }
 
-// `hooks install|uninstall`: Claude Code's and Antigravity CLI's prompt hooks and Codex's
-// lifecycle hooks (which also deliver what waits), for the clients that are installed.
+// `hooks install|uninstall`: Claude Code's and Antigravity CLI's prompt hooks, Codex's
+// lifecycle hooks (which also deliver what waits) and the OpenCode plugin, for the clients
+// that are installed.
 export function hooksCommand(action: string | undefined, home = os.homedir(), env = process.env) {
   if (action !== "install" && action !== "uninstall") throw new Error("Usage: hooks install|uninstall");
   const lines: string[] = [];
@@ -159,9 +161,19 @@ export function hooksCommand(action: string | undefined, home = os.homedir(), en
       `✓ Antigravity CLI: ${action === "install" ? L("prompt hook in", "prompt hook'u") : L("prompt hook removed from", "prompt hook'u kaldırıldı:")} ${file}`,
     );
   }
+  const opencode = openCodePluginFile(env, home);
+  if (fs.existsSync(path.dirname(path.dirname(opencode)))) {
+    configureOpenCodePlugin(action, opencode);
+    lines.push(
+      `✓ OpenCode: ${action === "install" ? L("plugin in", "plugin") : L("plugin removed:", "plugin kaldırıldı:")} ${opencode}`,
+    );
+  }
   if (!lines.length)
     lines.push(
-      L("No Claude Code, Codex or Antigravity CLI found.", "Claude Code, Codex ya da Antigravity CLI bulunamadı."),
+      L(
+        "No Claude Code, Codex, Antigravity CLI or OpenCode found.",
+        "Claude Code, Codex, Antigravity CLI ya da OpenCode bulunamadı.",
+      ),
     );
   return lines.join("\n");
 }

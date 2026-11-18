@@ -36,6 +36,7 @@ export function identifyAgent(clientName = "", override = "") {
   if (/codex/i.test(name)) return { id: "codex", name: "Codex" };
   if (/claude/i.test(name)) return { id: "claude", name: "Claude" };
   if (/antigravity/i.test(name)) return { id: "generic", name: "Antigravity" };
+  if (/^opencode$/i.test(name)) return { id: "generic", name: "OpenCode" };
   return { id: "generic", name: name || "AI Agent" };
 }
 

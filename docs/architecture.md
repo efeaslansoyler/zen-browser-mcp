@@ -127,6 +127,15 @@ asks for a note and a target session) and recipes the user recorded go through
    - **T3 Code** threads (`T3CODE_THREAD_ID` and `T3CODE_CLI_PATH` in the environment) through
      `t3 thread send <thread> -`: the message arrives as the thread's next turn, marked as
      coming from zen.
+   - **OpenCode** through the plugin `hooks install` writes to
+     `~/.config/opencode/plugins/zen-browser.js` (`opencode.ts`). OpenCode gives its MCP
+     servers only `OPENCODE_PID`, but a plugin runs inside OpenCode with its API client: it
+     listens on `$XDG_RUNTIME_DIR/zen-mcp-opencode/<OpenCode PID>.sock`, the MCP process (its
+     child) pushes there, and the plugin sends the text as a new prompt to the session the user
+     last wrote to (`session.promptAsync`, with that session's agent and model). Before the
+     user's first message there is no session to send to, so the push is refused and the
+     plugin's `chat.message` hook adds what waits to that first message (asking by PID, as
+     Antigravity's hook does).
 2. **Otherwise it waits** in the bridge and goes, once, with whichever comes first: the
    session's next tool result, or the user's next message in that conversation when the prompt
    hooks are installed (`hooks install`: Claude Code's `UserPromptSubmit`, the Codex lifecycle

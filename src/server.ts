@@ -11,12 +11,15 @@ import { ensureCodexWatch } from "./codex-watch.ts";
 import { NO_PUSH, THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
 import { channelEnabled, claudeTitle } from "./claude.ts";
 import { antigravityHookInstalled, claudeHookInstalled } from "./hooks.ts";
+import { openCodePluginInstalled, pushToOpenCode } from "./opencode.ts";
 import { channelInstructions, clientInstructions } from "./instructions.ts";
 import { TOOLS, callTimeout } from "./tools.ts";
 import { identifyAgent } from "../browser/Agent.sys.mjs";
 
 const channel = channelEnabled();
 const t3 = channel ? null : t3Thread();
+// OpenCode (OPENCODE_PID is our parent) with the zen plugin: it pushes into the session
+const opencode = !channel && !t3 && process.env.OPENCODE_PID === String(process.ppid) && openCodePluginInstalled();
 
 type ConnectSession = (
   input: { threadId: string; label?: string },
@@ -119,14 +122,16 @@ function connectOwner(agent: { id: string; name: string }) {
     ack: true,
     agent,
     title,
-    push: channel ? "channel" : t3 ? "t3" : null,
+    push: channel ? "channel" : t3 ? "t3" : opencode ? "opencode" : null,
     // prompt hooks find the conversation by the client's own ID, or by the client's process
     clientPid: process.ppid,
     ...(agent.id === "claude" && process.env.CLAUDE_CODE_SESSION_ID
       ? { clientSession: process.env.CLAUDE_CODE_SESSION_ID, hook: claudeHookInstalled() }
       : agent.name === "Antigravity"
         ? { hook: antigravityHookInstalled() }
-        : {}),
+        : opencode
+          ? { hook: true }
+          : {}),
   });
 }
 async function push(event: any) {
@@ -137,7 +142,7 @@ async function push(event: any) {
       params: { content: event.content, meta: event.meta },
     });
   else if (t3) await runT3Send(t3.cli, t3.threadId, t3Message(event));
-  else throw new Error(NO_PUSH);
+  else if (!opencode || !(await pushToOpenCode(t3Message(event)))) throw new Error(NO_PUSH);
 }
 const server = createServer(call, async ({ threadId, label }) => {
   await ensureCodexRelay({ threadId, label, cwd: process.cwd() });

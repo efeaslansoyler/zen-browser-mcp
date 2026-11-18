@@ -82,7 +82,8 @@ export function sendTargets(liveSessions, subscribers, L) {
     targets.set(info.id, { id: info.id, name: info.name, agent: info.agent, how: "next" });
   for (const sub of subscribers) {
     const how = sub.ack && sub.push ? "now" : sub.hook ? "prompt" : "next";
-    targets.set(sub.id, { id: sub.id, name: sub.name, agent: sub.agent, how });
+    // hook: a push that fails still reaches it with the user's next message (OpenCode's plugin)
+    targets.set(sub.id, { id: sub.id, name: sub.name, agent: sub.agent, how, hook: sub.hook === true });
   }
   const when = {
     now: L("now", "hemen"),
@@ -100,7 +101,7 @@ export function sentNotice(status, target, L) {
       ? L(`Queued for ${name} ✓`, `${name} için kuyruğa alındı ✓`)
       : L(`Sent to ${name} ✓`, `${name} oturumuna gönderildi ✓`);
   if (status === "waiting")
-    return target?.how === "prompt"
+    return target?.how === "prompt" || target?.hook
       ? L(`${name} sees it when you write to it`, `${name} ona yazdığında görecek`)
       : L(`${name} gets it with its next browser action`, `${name} bir sonraki tarayıcı işleminde alacak`);
   return L("Delivery failed; copied to clipboard", "Gönderilemedi; panoya kopyalandı");

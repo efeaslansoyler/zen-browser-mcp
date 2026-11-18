@@ -60,17 +60,20 @@ test("installing the Claude Code hook keeps the user's other hooks and settings"
 
 test("hooks install covers the clients that are installed", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "zen-home-"));
-  assert.match(hooksCommand("install", home, {}), /No Claude Code, Codex or Antigravity CLI found/);
+  assert.match(hooksCommand("install", home, {}), /No Claude Code, Codex, Antigravity CLI or OpenCode found/);
   fs.mkdirSync(path.join(home, ".claude"));
   fs.mkdirSync(path.join(home, ".codex"));
   fs.mkdirSync(path.join(home, ".gemini", "antigravity-cli"), { recursive: true });
+  fs.mkdirSync(path.join(home, ".config", "opencode"), { recursive: true });
   const out = hooksCommand("install", home, {});
+  assert.match(out, /OpenCode: plugin in .*\.config\/opencode\/plugins\/zen-browser\.js/);
   assert.match(out, /Antigravity CLI: prompt hook in .*\.gemini\/config\/hooks\.json/);
   assert.match(out, /Claude Code: prompt hook in .*\.claude\/settings\.json/);
   assert.match(out, /Codex: hooks in .*\.codex\/hooks\.json/);
   assert.equal(claudeHookInstalled(path.join(home, ".claude", "settings.json")), true);
   hooksCommand("uninstall", home, {});
   assert.equal(claudeHookInstalled(path.join(home, ".claude", "settings.json")), false);
+  assert.equal(fs.existsSync(path.join(home, ".config", "opencode", "plugins", "zen-browser.js")), false);
   assert.throws(() => hooksCommand("maybe", home, {}), /Usage/);
 });
 
