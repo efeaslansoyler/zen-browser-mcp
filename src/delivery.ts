@@ -71,6 +71,8 @@ export const runT3Send: T3Runner = (cli, threadId, message) =>
         else resolve();
       },
     );
+    // t3 may exit without reading stdin (no such thread): the exit code reports it, not EPIPE
+    child.stdin?.on("error", () => {});
     child.stdin?.end(message);
   });
 
