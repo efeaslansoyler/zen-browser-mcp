@@ -76,6 +76,16 @@ function permissionsCommand([action, base = "auto"]: string[]) {
   );
 }
 
+function printSites(sites: Config["sites"]) {
+  console.log(
+    sites.mode === "blocklist"
+      ? L("sites: every site except the blocklist", "siteler: blocklist dışındaki her site")
+      : L("sites: only the allowlist", "siteler: yalnızca allowlist"),
+  );
+  for (const list of ["blocklist", "allowlist"] as const)
+    console.log(`  ${list}${sites.mode === list ? " *" : ""}: ${sites[list].join(", ") || "—"}`);
+}
+
 export function configCommand(args: string[]) {
   const config = readConfig();
   const [cmd, ...rest] = args;
@@ -83,7 +93,7 @@ export function configCommand(args: string[]) {
     console.log(`${CONFIG_FILE}\n`);
     const [en, tr] = MODE_TEXT[config.mode];
     console.log(L(`mode: ${config.mode}  (${en})`, `mod: ${config.mode}  (${tr})`));
-    console.log(L("site rules:", "site kuralları:"), config.sites);
+    printSites(config.sites);
     console.log(
       L(
         `workspace: ${config.workspace ?? "(the space you're in)"}`,
@@ -98,8 +108,8 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site ask|block|default <domain>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site ask|block|default <alan-adı>…\n  npx ${PACKAGE} config site list\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off`,
+        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off`,
+        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off`,
       ),
     );
     return;
@@ -146,25 +156,37 @@ export function configCommand(args: string[]) {
     );
     return;
   }
-  if (cmd === "site" || cmd === "sensitive") {
-    const [action = "list", ...domains] = rest;
-    // Keep old commands working; all writes migrate to the single sites map.
-    const rule =
-      cmd === "sensitive"
-        ? ({ add: "ask", remove: "default", list: "list" } as Record<string, string>)[action]
-        : action;
-    if (!["ask", "block", "default", "list"].includes(rule))
-      throw new Error("Use: config site ask|block|default <domain>… or config site list");
-    if (rule !== "list") {
-      if (!domains.length) throw new Error("At least one site domain is required.");
-      const items = domains.map(normalizeDomain);
-      for (const domain of items) {
-        if (rule === "default") delete config.sites[domain];
-        else config.sites[domain] = rule as "ask" | "block";
-      }
+  if (cmd === "site") {
+    // block/unblock edit the blocklist, allow/disallow the allowlist; mode picks the one that applies
+    const [action = "list", ...values] = rest;
+    const edits: Record<string, ["blocklist" | "allowlist", boolean]> = {
+      block: ["blocklist", true],
+      unblock: ["blocklist", false],
+      allow: ["allowlist", true],
+      disallow: ["allowlist", false],
+    };
+    if (action === "mode") {
+      const mode = values[0];
+      if (mode !== "blocklist" && mode !== "allowlist") throw new Error("Use: config site mode blocklist|allowlist");
+      config.sites.mode = mode;
       writeConfig(config);
-    }
-    console.log(L("site rules:", "site kuralları:"), config.sites);
+    } else if (edits[action]) {
+      if (!values.length) throw new Error("At least one site domain is required.");
+      const [list, add] = edits[action];
+      const domains = values.map(normalizeDomain);
+      const kept = config.sites[list].filter((d) => !domains.includes(d));
+      config.sites[list] = add ? [...kept, ...domains] : kept;
+      writeConfig(config);
+      if (config.sites.mode !== list)
+        console.log(
+          L(
+            `Note: the ${list} doesn't apply now; switch with: config site mode ${list}`,
+            `Not: ${list} şu an geçerli değil; geçmek için: config site mode ${list}`,
+          ),
+        );
+    } else if (action !== "list")
+      throw new Error("Use: config site [list] | mode blocklist|allowlist | block|unblock|allow|disallow <domain>…");
+    printSites(config.sites);
     return;
   }
   throw new Error(L(`Unknown config command: ${cmd}`, `Bilinmeyen config komutu: ${cmd}`));

@@ -80,7 +80,7 @@ export function tabs(ctx) {
 
   function describeTab(tab) {
     const b = tab.linkedBrowser;
-    if (ctx.ruleFor(ctx.hostOf(b)) === "block") return { tabId: b.browserId, blocked: true };
+    if (!ctx.siteAllowed(ctx.hostOf(b))) return { tabId: b.browserId, blocked: true };
     const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
     const owner = ctx.ownership.owner(b.browserId);
     if (owner) info.owner = { session: owner, name: ctx.sessions.get(owner)?.name || owner.slice(-6) };

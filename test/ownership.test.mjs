@@ -42,7 +42,7 @@ function harness() {
   });
   const context = bridgeContext({
     assertSiteAccess() {},
-    ruleFor: () => "default",
+    siteEntry: () => null,
     findTab: (id) => tabs.get(id),
     browserWindows: () => [{ gBrowser: { tabs: [...tabs.values()] } }],
     windowTabs: (win) => win.gBrowser.tabs,
@@ -62,7 +62,7 @@ function harness() {
       tab.setAttribute("data-zen-agent", theme.id);
       return theme;
     },
-    readConfig: () => ({ mode: "auto", sites: {} }),
+    readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] } }),
     cancelAsk() {},
     describeWrite: async () => undefined,
     requirePermission: async () => ({ context: {}, asked: false }),
@@ -273,7 +273,7 @@ test("request_tab requires an explicit answer and can transfer a picked foreign 
   const h = harness();
   const tabId = h.own("A");
   h.context.state.pickedTabs.add(tabId);
-  h.context.readConfig = () => ({ mode: "ask" });
+  h.context.readConfig = () => ({ mode: "ask", sites: { mode: "blocklist", blocklist: [], allowlist: [] } });
   h.context.ownership.report(tabId, "A", "finish", "Safe to transfer");
   h.context.askIsland = async () => "cancelled";
   let result = await h.request("B", "request_tab", { tabId, reason: "test transfer" });
@@ -402,12 +402,12 @@ test("session menu pins explicit fixture tabs even when native context points el
     ownerName: (tab) => c.sessions.get(c.ownership.owner(tab.linkedBrowser.browserId))?.name,
     give: (tab, session) => c.mark(tab, tab.getAttribute(c.MARK) || "user", session),
     takeBack: (tab) => c.unmark(tab),
-    readConfig: () => ({ mode: "auto", sites: {} }),
+    readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] } }),
     writeConfig() {},
     setMode() {},
     hasCustomPermissions: () => false,
     hostOf: () => "fixture.test",
-    ruleFor: () => "default",
+    siteEntry: () => null,
     workspaces: () => null,
   });
   h.context.attachMenu = (win) => tabMenu.attach(win);
@@ -418,8 +418,16 @@ test("session menu pins explicit fixture tabs even when native context points el
   const permissions = menu.find((node) => node.id === "zen-mcp-context-give-permissions");
   const choices = permissions.children[0].children;
   assert.equal(
-    choices.filter((node) => node.getAttribute("name") === "zen-mcp-site-rule" && node.attrs.has("checked")).length,
+    choices.filter((node) => node.getAttribute("name") === "zen-mcp-site-list" && node.attrs.has("checked")).length,
     1,
+  );
+  assert.equal(
+    choices.find((node) => node.getAttribute("data-zen-site-list") === "blocklist").getAttribute("checked"),
+    "true",
+  );
+  assert.equal(
+    choices.find((node) => node.getAttribute("data-zen-site") === "fixture.test").getAttribute("label"),
+    "Block fixture.test",
   );
   assert.equal(
     choices.filter((node) => node.getAttribute("name") === "zen-mcp-general-mode" && node.attrs.has("checked")).length,
@@ -474,7 +482,7 @@ test("an explicit grant inside a batch refreshes only that tab authorization", a
   const h = harness();
   const tabId = h.own("A");
   h.context.state.pickedTabs.add(tabId);
-  h.context.readConfig = () => ({ mode: "ask" });
+  h.context.readConfig = () => ({ mode: "ask", sites: { mode: "blocklist", blocklist: [], allowlist: [] } });
   h.context.ownership.report(tabId, "A", "finish", "Safe to transfer");
   h.context.askIsland = async () => "done";
   const result = await h.request("B", "browser_batch", {
@@ -574,7 +582,7 @@ test("FIFO order survives successive handoffs and request renewal does not jump 
 test("ask mode waits for approval, denial preserves owner and successful claim includes handoff", async () => {
   const h = harness(),
     tabId = h.own("A");
-  h.context.readConfig = () => ({ mode: "ask" });
+  h.context.readConfig = () => ({ mode: "ask", sites: { mode: "blocklist", blocklist: [], allowlist: [] } });
   parsed(await h.request("B", "tab_work", { action: "request", tabId, summary: "Review result" }));
   parsed(await h.request("C", "tab_work", { action: "request", tabId, summary: "Third task" }));
   parsed(await h.request("A", "tab_work", { action: "finish", tabId, summary: "Ready; no submit" }));
@@ -696,7 +704,7 @@ test("approval cannot grant a tab after user transfer or queue cancellation duri
   for (const change of ["transfer", "cancel"]) {
     const h = harness(),
       tabId = h.own("A");
-    h.context.readConfig = () => ({ mode: "ask" });
+    h.context.readConfig = () => ({ mode: "ask", sites: { mode: "blocklist", blocklist: [], allowlist: [] } });
     parsed(await h.request("B", "tab_work", { action: "request", tabId, summary: "Review" }));
     parsed(await h.request("A", "tab_work", { action: "finish", tabId, summary: "Ready" }));
     h.context.askIsland = async () => {

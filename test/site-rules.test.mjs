@@ -4,63 +4,69 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { normalizeDomain, normalizeConfig, siteRule } from "../browser/SiteRules.sys.mjs";
+import { normalizeDomain, normalizeConfig, siteAllowed, siteEntry } from "../browser/SiteRules.sys.mjs";
 
-test("legacy sensitive config migrates to one site map; explicit rules take priority", () => {
+test("sites are a blocklist or an allowlist of normalized domains", () => {
   assert.deepEqual(
-    normalizeConfig({
+    normalizeConfig({ mode: "ask", sites: { blocklist: ["Example.COM", "*.old.test", "example.com"] } }),
+    {
       mode: "ask",
-      sensitive: ["Example.COM", "*.old.test"],
-      sites: { "example.com": "block", "old.test": "default" },
-    }),
-    { mode: "ask", sites: { "example.com": "block" } },
+      sites: { mode: "blocklist", blocklist: ["example.com", "old.test"], allowlist: [] },
+    },
   );
+  assert.deepEqual(normalizeConfig({}).sites, { mode: "blocklist", blocklist: [], allowlist: [] });
   assert.equal(normalizeDomain("https://BÜCHER.de/path"), "xn--bcher-kva.de");
   for (const input of ["", "file:///tmp/a", "https://user:pass@example.com"])
     assert.throws(() => normalizeDomain(input));
-  assert.throws(() => normalizeConfig({ sites: { "example.com": "allow" } }));
+  // the old per-site rules are not a list
+  assert.throws(() => normalizeConfig({ sites: { "example.com": "block" } }), /"sites" setting is/);
+  assert.throws(() => normalizeConfig({ sites: { blocklist: "example.com" } }), /must be a list/);
 });
 
-test("rules respect domain boundaries and block cannot be weakened by child ask", () => {
-  const sites = { "example.com": "block", "sub.example.com": "ask", "mail.test": "ask" };
+test("a listed domain covers its subdomains, not look-alikes; only the mode's list applies", () => {
+  const sites = { mode: "blocklist", blocklist: ["example.com"], allowlist: ["work.test"] };
   for (const host of ["example.com", "sub.example.com", "deep.sub.example.com", "EXAMPLE.COM."])
-    assert.equal(siteRule(host, sites), "block");
-  assert.equal(siteRule("notexample.com", sites), "default");
-  assert.equal(siteRule("example.com.attacker.test", sites), "default");
-  assert.equal(siteRule("sub.mail.test", sites), "ask");
+    assert.equal(siteAllowed(host, sites), false, host);
+  assert.equal(siteAllowed("notexample.com", sites), true);
+  assert.equal(siteAllowed("example.com.attacker.test", sites), true);
+  assert.equal(siteEntry("sub.example.com", sites), "example.com");
+  // the allowlist is kept but doesn't apply in blocklist mode
+  assert.equal(siteAllowed("anything.test", sites), true);
+
+  const only = { ...sites, mode: "allowlist" };
+  assert.equal(siteAllowed("work.test", only), true);
+  assert.equal(siteAllowed("app.work.test", only), true);
+  assert.equal(siteAllowed("example.com", only), false);
+  assert.equal(siteAllowed("other.test", only), false);
+  // pages without a host (about:blank, local files) aren't sites
+  assert.equal(siteAllowed("", only), true);
 });
 
-test("CLI migrates legacy config, removes explicit rules and preserves block through mode edits", () => {
+test("CLI edits each list and switches between them without losing either", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "zen-sites-"));
   const file = path.join(directory, "zen-mcp/config.json");
-  fs.mkdirSync(path.dirname(file));
-  fs.writeFileSync(file, JSON.stringify({ mode: "auto", sensitive: ["old.test"] }));
   const run = (...args) =>
     execFileSync(process.execPath, ["dist/cli.js", "config", ...args], {
-      env: { ...process.env, XDG_CONFIG_HOME: directory },
+      env: { ...process.env, XDG_CONFIG_HOME: directory, LANG: "en_US.UTF-8" },
       stdio: "pipe",
+      encoding: "utf8",
     });
   const read = () => JSON.parse(fs.readFileSync(file));
   try {
-    run("site", "block", "https://BLOCKED.test/path");
-    assert.deepEqual(read(), { mode: "auto", sites: { "old.test": "ask", "blocked.test": "block" } });
+    run("site", "block", "https://BLOCKED.test/path", "bank.test");
+    assert.deepEqual(read().sites, { mode: "blocklist", blocklist: ["blocked.test", "bank.test"], allowlist: [] });
     run("mode", "ask");
-    assert.equal(read().sites["blocked.test"], "block");
-    run("site", "default", "old.test");
-    assert.deepEqual(read().sites, { "blocked.test": "block" });
+    assert.deepEqual(read().sites.blocklist, ["blocked.test", "bank.test"]);
+    run("site", "unblock", "blocked.test");
+    assert.deepEqual(read().sites.blocklist, ["bank.test"]);
+    assert.match(run("site", "allow", "work.test"), /allowlist doesn't apply now/);
+    run("site", "mode", "allowlist");
+    assert.deepEqual(read().sites, { mode: "allowlist", blocklist: ["bank.test"], allowlist: ["work.test"] });
     const before = fs.readFileSync(file, "utf8");
-    assert.throws(() => run("site", "ask", "valid.test", "file:///bad"));
+    assert.throws(() => run("site", "allow", "valid.test", "file:///bad"));
+    assert.throws(() => run("site", "ask", "valid.test"), /Use: config site/);
     assert.equal(fs.readFileSync(file, "utf8"), before);
-    run("sensitive", "add", "legacy.test");
-    assert.equal(read().sites["legacy.test"], "ask");
   } finally {
     fs.rmSync(directory, { recursive: true });
   }
-});
-
-test("workspace setting is kept trimmed and dropped when empty", () => {
-  assert.equal(normalizeConfig({ workspace: "  Agents " }).workspace, "Agents");
-  assert.equal("workspace" in normalizeConfig({ workspace: "   " }), false);
-  assert.equal("workspace" in normalizeConfig({ workspace: 42 }), false);
-  assert.equal(normalizeConfig({ workspace: "x".repeat(200) }).workspace.length, 80);
 });

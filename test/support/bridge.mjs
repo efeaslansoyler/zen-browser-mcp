@@ -6,7 +6,7 @@ import { agentTheme, applyTheme } from "../../browser/Agent.sys.mjs";
 import { Cancellation } from "../../browser/Cancellation.sys.mjs";
 import { Ownership } from "../../browser/Ownership.sys.mjs";
 import { ReadSnapshots, sameReadContext } from "../../browser/ReadSnapshots.sys.mjs";
-import { siteRule, normalizeConfig } from "../../browser/SiteRules.sys.mjs";
+import { siteAllowed, normalizeConfig } from "../../browser/SiteRules.sys.mjs";
 import { clipboardShortcut, systemClipboard } from "../../browser/Clipboard.sys.mjs";
 import { config } from "../../browser/Config.sys.mjs";
 import { sessionManager } from "../../browser/Sessions.sys.mjs";
@@ -37,7 +37,7 @@ export function bridgeContext(fakes = {}) {
     Stopped,
     MARK,
     keyName,
-    siteRule,
+    siteAllowedIn: siteAllowed,
     normalizeConfig,
     policy,
     sameReadContext,

@@ -2,10 +2,10 @@
 //
 // mode: the permission template, "ask", "auto" or "custom" (Policy.sys.mjs); custom's rules are
 // in permissions.jsonc next to config.json, which only the user edits.
-// sites: domain → "ask" (approve each action) or "block" (no agent access); a rule also covers
-// subdomains. The file is read again whenever it changes on disk.
+// sites: where agents may go, a blocklist or an allowlist of domains (SiteRules.sys.mjs). The
+// file is read again whenever it changes on disk.
 export function config(ctx) {
-  const DEFAULT = { mode: "auto", sites: {} };
+  const DEFAULT = ctx.normalizeConfig({});
   let current = { ...DEFAULT };
   let modified = -1;
   let error = null;
@@ -90,11 +90,15 @@ export function config(ctx) {
       return "";
     }
   };
-  const ruleFor = (host) => ctx.siteRule(host, ctx.readConfig().sites);
-  const isSensitive = (host) => ctx.ruleFor(host) === "ask";
+  const siteAllowed = (host) => ctx.siteAllowedIn(host, ctx.readConfig().sites);
 
   function assertSiteHost(host) {
-    if (ctx.ruleFor(host) === "block") throw new Error(`Site access blocked by user rule: ${host}`);
+    if (ctx.siteAllowed(host)) return;
+    throw new Error(
+      ctx.readConfig().sites.mode === "allowlist"
+        ? `Site access blocked: ${host} is not on the user's allowlist`
+        : `Site access blocked by user rule: ${host}`,
+    );
   }
 
   function assertSiteURL(url) {
@@ -124,8 +128,7 @@ export function config(ctx) {
     readPermissions,
     rule,
     hostOf,
-    ruleFor,
-    isSensitive,
+    siteAllowed,
     assertSiteHost,
     assertSiteURL,
     assertSiteAccess,

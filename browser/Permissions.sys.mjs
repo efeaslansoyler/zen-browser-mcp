@@ -171,14 +171,6 @@ export function permissions(ctx) {
     if (!key || OWN_PROMPT.has(key)) return { key, rule: "allow" };
     const { strictest } = ctx.policy;
     let rule = ctx.rule(key);
-    // a site's ask rule: every action (what the ask template asks) but navigation asks
-    if (
-      browser &&
-      key !== "navigate" &&
-      ctx.policy.ruleOf(key, "ask") === "ask" &&
-      ctx.isSensitive(ctx.hostOf(browser))
-    )
-      rule = strictest(rule, "ask");
     if (rule === "deny" || !browser) return { key, rule };
     const submit = ctx.rule("submit");
     const secret = ctx.rule("secret_field");
@@ -237,7 +229,6 @@ export function permissions(ctx) {
       if (!lines.length) return { context, asked: false };
       const host = ctx.hostOf(browser);
       const agent = ctx.activeAgent.name;
-      if (ctx.isSensitive(host)) reasons.add(L("sensitive site", "hassas site"));
       const why = reasons.size ? ` (${[...reasons].join(", ")})` : "";
       const message =
         lines.length === 1

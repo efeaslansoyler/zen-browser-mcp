@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { siteRule, normalizeConfig } from "../browser/SiteRules.sys.mjs";
+import { normalizeConfig, normalizeSites } from "../browser/SiteRules.sys.mjs";
 import { permissions } from "../browser/Permissions.sys.mjs";
 import * as policy from "../browser/Policy.sys.mjs";
 import { Ownership } from "../browser/Ownership.sys.mjs";
@@ -12,8 +12,8 @@ globalThis.Services = {
   io: { newURI: (url) => ({ host: new URL(url).hostname }) },
 };
 
-function harness({ mode = "auto", sensitive = [], sites = {}, site = "https://ordinary.test", answer } = {}) {
-  const settings = normalizeConfig({ mode, sensitive, sites });
+function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", answer } = {}) {
+  const settings = normalizeConfig({ mode, sites });
   const prompts = [],
     effects = [];
   const browser = { browserId: 1, browsingContext: {} };
@@ -89,30 +89,30 @@ function harness({ mode = "auto", sensitive = [], sites = {}, site = "https://or
   return { context, browser, prompts, effects, settings, navigate, batch, action };
 }
 
-test("auto-mode batch rechecks a sensitive destination after navigation", async () => {
-  const h = harness({ sensitive: ["sensitive.test"] });
+test("an auto-mode batch asks only the risky step, on the page it runs on", async () => {
+  const h = harness();
   const result = await h.batch([
     h.action("form_input", { value: "before" }),
-    h.action("navigate", { url: "https://sensitive.test/" }),
-    h.action("form_input", { value: "after" }),
+    h.action("navigate", { url: "https://other.test/" }),
+    h.action("javascript_tool", { text: "after" }),
   ]);
   assert(!result.isError);
   assert.deepEqual(h.effects, ["before", "after"]);
   assert.equal(h.prompts.length, 1);
-  assert.equal(h.prompts[0].host, "sensitive.test");
+  assert.equal(h.prompts[0].host, "other.test");
 });
 
-test("denying redirected destination prevents its write and all remaining steps", async () => {
-  const h = harness({ sensitive: ["sensitive.test"], answer: () => "cancelled" });
+test("denying a batch's risky steps stops the batch before it runs", async () => {
+  const h = harness({ answer: () => "cancelled" });
   const result = await h.batch([
-    h.action("redirect", { url: "https://sub.sensitive.test/" }),
-    h.action("form_input", { value: "must not run" }),
-    h.action("form_input", { value: "also blocked" }),
+    h.action("redirect", { url: "https://sub.other.test/" }),
+    h.action("javascript_tool", { text: "must not run" }),
+    h.action("javascript_tool", { text: "also blocked" }),
   ]);
   assert(result.isError);
   assert.deepEqual(h.effects, []);
   assert.equal(h.prompts.length, 1);
-  assert.match(result[0].text, /remaining 1 step/);
+  assert.match(result[0].text, /remaining 2 step/);
 });
 
 test("ask mode groups unchanged-page actions but asks again after navigation", async () => {
@@ -174,7 +174,7 @@ test("approved grants are invalidated by policy edits and do not leak across bat
   const h = harness({ mode: "ask" });
   await h.batch([
     h.action("form_input", { value: "one" }),
-    h.action("changePolicy", { settings: { sites: { "ordinary.test": "ask" } } }),
+    h.action("changePolicy", { settings: { sites: normalizeSites({ blocklist: ["elsewhere.test"] }) } }),
     h.action("form_input", { value: "two" }),
   ]);
   assert.equal(h.prompts.length, 2);
@@ -229,7 +229,7 @@ test("navigation while describing a target discards the old permission descripti
 
 test("block overrides auto and ask, denying reads and writes without a prompt", async () => {
   for (const mode of ["auto", "ask"]) {
-    const h = harness({ mode, sites: { "ordinary.test": "block" } });
+    const h = harness({ mode, sites: { blocklist: ["ordinary.test"] } });
     for (const name of ["javascript_tool", "read_page", "computer", "get_page_text"]) {
       const result = await h.batch([h.action(name, { action: "screenshot", text: "forbidden" })]);
       assert(result.isError);
@@ -241,7 +241,7 @@ test("block overrides auto and ask, denying reads and writes without a prompt", 
 });
 
 test("blocked destination stops navigation before effect or permission prompt", async () => {
-  const h = harness({ mode: "ask", sites: { "blocked.test": "block" } });
+  const h = harness({ mode: "ask", sites: { blocklist: ["blocked.test"] } });
   const result = await h.batch([
     h.action("navigate", { url: "https://sub.blocked.test/path" }),
     h.action("form_input", { value: "never" }),
@@ -255,7 +255,7 @@ test("blocking a site midway through a batch stops remaining steps", async () =>
   const h = harness();
   const result = await h.batch([
     h.action("form_input", { value: "before" }),
-    h.action("changePolicy", { settings: { sites: { "ordinary.test": "block" } } }),
+    h.action("changePolicy", { settings: { sites: normalizeSites({ blocklist: ["ordinary.test"] }) } }),
     h.action("form_input", { value: "never" }),
   ]);
   assert(result.isError);
@@ -263,7 +263,7 @@ test("blocking a site midway through a batch stops remaining steps", async () =>
 });
 
 test("blocked iframe prevents parent reads and screenshots", async () => {
-  const h = harness({ sites: { "blocked.test": "block" } });
+  const h = harness({ sites: { blocklist: ["blocked.test"] } });
   h.context.framesOf = () => [{ currentWindowGlobal: { documentURI: { spec: "https://blocked.test/embed" } } }];
   const result = await h.batch([h.action("form_input", { value: "never" })]);
   assert(result.isError);
@@ -272,7 +272,7 @@ test("blocked iframe prevents parent reads and screenshots", async () => {
 });
 
 test("extension UI writes use source-site approvals; reads are free and block denies opening", async () => {
-  const h = harness({ sites: { "ordinary.test": "ask" } });
+  const h = harness({ mode: "ask" });
   for (const input of [
     { action: "open", extensionId: "fixture" },
     { action: "read" },
@@ -282,30 +282,30 @@ test("extension UI writes use source-site approvals; reads are free and block de
     await h.batch([h.action("extensions", input)]);
   }
   assert.equal(h.prompts.length, 2, "Open and click ask; panel read/screenshot do not");
-  const denied = harness({ sites: { "ordinary.test": "block" } });
+  const denied = harness({ sites: { blocklist: ["ordinary.test"] } });
   const result = await denied.batch([denied.action("extensions", { action: "open", extensionId: "fixture" })]);
   assert(result.isError);
   assert.deepEqual(denied.effects, []);
   assert.equal(denied.prompts.length, 0);
 });
 
-test("React props and axe scans respect ask/site approval and block including batches", async () => {
+test("React props and axe scans ask in ask mode and respect the blocklist, in batches too", async () => {
   for (const tool of ["react", "accessibility"]) {
-    for (const settings of [{ mode: "ask" }, { sites: { "ordinary.test": "ask" } }]) {
-      const h = harness({ ...settings, answer: () => "denied" });
+    {
+      const h = harness({ mode: "ask", answer: () => "denied" });
       const result = await h.batch([h.action(tool, { action: "tree", include_props: true })]);
       assert.equal(result.isError, true);
       assert.equal(h.prompts.length, 1);
       assert.deepEqual(h.effects, []);
     }
-    const h = harness({ sites: { "ordinary.test": "block" } });
+    const h = harness({ sites: { blocklist: ["ordinary.test"] } });
     assert.equal((await h.batch([h.action(tool)])).isError, true);
     assert.deepEqual(h.effects, []);
   }
 });
 
 test("permission module describes actions and scopes approvals without slicing main.js", async () => {
-  const settings = normalizeConfig({ mode: "auto", sites: { "bank.test": "ask" } });
+  const settings = normalizeConfig({ mode: "ask" });
   const ownership = new Ownership();
   ownership.assign(1, "s");
   const asked = [];
@@ -319,7 +319,6 @@ test("permission module describes actions and scopes approvals without slicing m
     readConfig: () => settings,
     policy,
     rule: (key) => policy.ruleOf(key, settings.mode),
-    isSensitive: (host) => siteRule(host, settings.sites) === "ask",
     hostOf: (b) => b.currentURI.host,
     assertSiteAccess() {},
     holdsButtons: () => false,
@@ -341,8 +340,9 @@ test("permission module describes actions and scopes approvals without slicing m
   );
   assert.equal(await p.describeWrite("computer", { action: "screenshot" }, browser), null);
   assert.equal(await p.describeWrite("navigate", { url: "back" }, browser), "go back");
-  // On an "ask" site navigation is free; actions are asked
-  assert.equal((await p.callRule("navigate", { url: "back" }, browser)).rule, "allow");
+  // ask mode asks navigation and actions; reading is free
+  assert.equal((await p.callRule("navigate", { url: "back" }, browser)).rule, "ask");
+  assert.equal((await p.callRule("read_page", {}, browser)).rule, "allow");
   assert.equal((await p.callRule("computer", { action: "type", text: "x" }, browser)).rule, "ask");
   const { context, asked: prompted } = await p.requirePermission(browser, [
     { tool: "computer", args: { action: "left_click", ref: "ref_1" } },
@@ -353,4 +353,17 @@ test("permission module describes actions and scopes approvals without slicing m
   assert(p.samePermissionContext(context, p.permissionContext(browser)));
   ownership.assign(1, "other");
   assert(!p.samePermissionContext(context, p.permissionContext(browser)));
+});
+
+test("an allowlist keeps agents on the listed sites", async () => {
+  const h = harness({ sites: { mode: "allowlist", allowlist: ["ordinary.test"] } });
+  const result = await h.batch([
+    h.action("form_input", { value: "here" }),
+    h.action("navigate", { url: "https://elsewhere.test/" }),
+    h.action("form_input", { value: "there" }),
+  ]);
+  assert(result.isError);
+  assert.match(result[0].text, /elsewhere\.test is not on the user's allowlist/);
+  assert.deepEqual(h.effects, ["here"]);
+  assert.equal(h.browser.currentURI.host, "ordinary.test");
 });

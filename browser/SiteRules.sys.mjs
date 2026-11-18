@@ -1,4 +1,4 @@
-// Shared policy for the CLI and browser. Parent-domain restrictions also cover subdomains.
+// Settings and site lists, shared by the CLI and the browser. A listed domain covers its subdomains.
 export function normalizeDomain(value) {
   let input = String(value).trim().replace(/^\*\./, "");
   const url = new URL(input.includes("://") ? input : `https://${input}`);
@@ -8,17 +8,7 @@ export function normalizeDomain(value) {
 }
 
 export function normalizeConfig(raw = {}) {
-  const sites = {};
-  for (const value of Array.isArray(raw.sensitive) ? raw.sensitive : []) {
-    sites[normalizeDomain(value)] = "ask";
-  }
-  for (const [value, rule] of Object.entries(raw.sites || {})) {
-    if (!["ask", "block", "default"].includes(rule)) throw new Error(`Invalid site rule: ${rule}`);
-    const domain = normalizeDomain(value);
-    if (rule === "default") delete sites[domain];
-    else sites[domain] = rule;
-  }
-  const config = { mode: ["ask", "custom"].includes(raw.mode) ? raw.mode : "auto", sites };
+  const config = { mode: ["ask", "custom"].includes(raw.mode) ? raw.mode : "auto", sites: normalizeSites(raw.sites) };
   // Zen: the workspace (by name) for tabs agents open; otherwise the user's current one
   const workspace = typeof raw.workspace === "string" ? raw.workspace.trim().slice(0, 80) : "";
   if (workspace) config.workspace = workspace;
@@ -28,14 +18,40 @@ export function normalizeConfig(raw = {}) {
   return config;
 }
 
-export function siteRule(host, sites = {}) {
+// Which sites agents may use. "blocklist": every site but the listed ones; "allowlist": only the
+// listed ones. Both lists are kept so switching loses nothing, but only the mode's list applies.
+// Sites only say where agents may go; what they may do there is the permission mode's job.
+export function normalizeSites(raw) {
+  raw ??= {};
+  if (
+    typeof raw !== "object" ||
+    Array.isArray(raw) ||
+    Object.keys(raw).some((k) => !["mode", "blocklist", "allowlist"].includes(k))
+  )
+    throw new Error(
+      'The "sites" setting is {"mode": "blocklist" | "allowlist", "blocklist": [domains], "allowlist": [domains]}.',
+    );
+  const list = (name) => {
+    const value = raw[name] ?? [];
+    if (!Array.isArray(value)) throw new Error(`sites.${name} must be a list of domains.`);
+    return [...new Set(value.map(normalizeDomain))];
+  };
+  return {
+    mode: raw.mode === "allowlist" ? "allowlist" : "blocklist",
+    blocklist: list("blocklist"),
+    allowlist: list("allowlist"),
+  };
+}
+
+// The domain in the active list that covers this host (itself or a parent domain), if any.
+export function siteEntry(host, sites) {
   host = String(host).toLowerCase().replace(/\.$/, "");
-  let result = "default";
-  for (const [domain, rule] of Object.entries(sites)) {
-    if (host !== domain && !host.endsWith(`.${domain}`)) continue;
-    // A child rule cannot weaken a parent restriction.
-    if (rule === "block") return "block";
-    if (rule === "ask") result = "ask";
-  }
-  return result;
+  return sites[sites.mode].find((domain) => host === domain || host.endsWith(`.${domain}`)) ?? null;
+}
+
+// May agents use this host? Pages without one (about:blank, local files) aren't sites.
+export function siteAllowed(host, sites) {
+  if (!host) return true;
+  const listed = siteEntry(host, sites) !== null;
+  return sites.mode === "allowlist" ? listed : !listed;
 }

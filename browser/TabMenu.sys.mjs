@@ -1,11 +1,11 @@
 // The tab context menu: "Take back from agent", "Give/transfer to session…" and "Agent
-// settings" (global mode, this site's rule and, in Zen, the workspace for agent tabs). UI only;
+// settings" (permission mode, the sites agents can use and, in Zen, the workspace for agent tabs). UI only;
 // the work goes through env:
 //   env.L(en, tr), env.mark: the mark attribute,
 //   env.sessions(): connected sessions, env.ownerName(tab), env.menuAgent(),
 //   env.paintIcon(item, agent): the agent's icon and color,
 //   env.give(tab, sessionId), env.takeBack(tab),
-//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hasCustomPermissions(), env.hostOf(browser), env.ruleFor(host),
+//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hasCustomPermissions(), env.hostOf(browser), env.siteEntry(host),
 //   env.workspaces(win): Zen workspace names (null outside Zen),
 //   env.history(tabId): the latest agent actions in that tab (lines), env.openHistory(win): the full history page
 const MENU_ID = "zen-mcp-context-give";
@@ -134,7 +134,7 @@ export class TabMenu {
         return item;
       };
       const config = env.readConfig();
-      heading(L("General mode · all sites", "Genel mod · tüm siteler"));
+      heading(L("Permission mode", "İzin modu"));
       for (const [mode, label] of [
         ["auto", L("Automatic · asks before risky actions", "Otomatik · riskli işlemlerde sorar")],
         ["ask", L("Ask before every action", "Her işlemde sor")],
@@ -154,41 +154,51 @@ export class TabMenu {
         permissionsPopup.append(choice);
       }
       permissionsPopup.append(win.document.createXULElement("menuseparator"));
-      const host = tab && env.hostOf(tab.linkedBrowser);
-      const hasSite = tabs.length === 1 && !!host;
-      let siteLabel = hasSite
-        ? L(`This site · ${host}`, `Bu site · ${host}`)
-        : L("This site · select one web tab", "Bu site · tek bir web sekmesi seç");
-      const effectiveRule = env.ruleFor(host);
-      const ownRule = hasSite ? config.sites[host] || "default" : "default";
-      if (hasSite && ownRule !== effectiveRule) {
-        siteLabel +=
-          " · " +
-          (effectiveRule === "block"
-            ? L("blocked by parent domain", "üst alan adı engelliyor")
-            : L("parent domain requires approval", "üst alan adı onay istiyor"));
-      }
-      heading(siteLabel);
-      for (const [rule, label] of [
-        ["default", L("Use general setting", "Genel ayarı kullan")],
-        ["ask", L("Ask before every action", "Her işlemde sor")],
-        ["block", L("Block agent access", "Ajan erişimini engelle")],
+      // Sites: where agents may go. One list applies: a blocklist or an allowlist.
+      const sites = config.sites;
+      heading(L("Sites agents can use", "Ajanların kullanabileceği siteler"));
+      for (const [mode, label] of [
+        ["blocklist", L("Every site except blocked ones", "Engellenenler dışında her site")],
+        ["allowlist", L("Only allowed sites", "Yalnızca izin verilen siteler")],
       ]) {
         const choice = win.document.createXULElement("menuitem");
         choice.setAttribute("type", "radio");
-        choice.setAttribute("name", "zen-mcp-site-rule");
-        choice.setAttribute("data-zen-site-rule", rule);
-        if (!hasSite) choice.setAttribute("disabled", "true");
-        choice.setAttribute("label", label);
-        if (hasSite && ownRule === rule) choice.setAttribute("checked", "true");
-        choice.addEventListener("command", () => {
-          const sites = { ...env.readConfig().sites };
-          if (rule === "default") delete sites[host];
-          else sites[host] = rule;
-          env.writeConfig({ sites });
-        });
+        choice.setAttribute("name", "zen-mcp-site-list");
+        choice.setAttribute("data-zen-site-list", mode);
+        choice.setAttribute("label", `${label} (${sites[mode].length})`);
+        if (sites.mode === mode) choice.setAttribute("checked", "true");
+        choice.addEventListener("command", () => env.writeConfig({ sites: { ...env.readConfig().sites, mode } }));
         permissionsPopup.append(choice);
       }
+      const host = tab && env.hostOf(tab.linkedBrowser);
+      const hasSite = tabs.length === 1 && !!host;
+      const entry = hasSite ? env.siteEntry(host) : null;
+      const block = sites.mode === "blocklist";
+      const site = win.document.createXULElement("menuitem");
+      site.setAttribute("type", "checkbox");
+      site.setAttribute("data-zen-site", host || "");
+      site.setAttribute(
+        "label",
+        !hasSite
+          ? L("This site · select one web tab", "Bu site · tek bir web sekmesi seç")
+          : entry && entry !== host
+            ? block
+              ? L(`Blocked through ${entry}`, `${entry} üzerinden engelli`)
+              : L(`Allowed through ${entry}`, `${entry} üzerinden izinli`)
+            : block
+              ? L(`Block ${host}`, `${host} engellensin`)
+              : L(`Allow ${host}`, `${host} izinli olsun`),
+      );
+      // a parent domain's entry is changed there, not here
+      if (!hasSite || (entry && entry !== host)) site.setAttribute("disabled", "true");
+      if (entry) site.setAttribute("checked", "true");
+      site.addEventListener("command", () => {
+        const current = env.readConfig().sites;
+        const list = current[current.mode].filter((domain) => domain !== host);
+        if (!entry) list.push(host);
+        env.writeConfig({ sites: { ...current, [current.mode]: list } });
+      });
+      permissionsPopup.append(site);
       const spaces = env.workspaces(win);
       if (!spaces) return;
       permissionsPopup.append(win.document.createXULElement("menuseparator"));

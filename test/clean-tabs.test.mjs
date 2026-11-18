@@ -34,7 +34,7 @@ function harness(config = {}) {
   globalThis.Services = { wm: { getMostRecentWindow: () => win } };
   const ctx = bridgeContext({
     activeSession: "A",
-    readConfig: () => ({ mode: "auto", sites: {}, ...config }),
+    readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] }, ...config }),
     paintTab() {},
     SessionStore: { setCustomTabValue() {} },
     hostOf: () => "",

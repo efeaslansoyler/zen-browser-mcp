@@ -104,7 +104,7 @@ function logError(where, e) {
     const load = (name) => ChromeUtils.importESModule(`resource://zenmcp/${name}.sys.mjs?v=${version}`);
     const { agentTheme, applyTheme, agentIcon, commonAgent } = load("Agent");
     const { Ownership } = load("Ownership");
-    const { normalizeConfig, siteRule } = load("SiteRules");
+    const { normalizeConfig, siteAllowed, siteEntry } = load("SiteRules");
     const { ScreenshotCache } = load("ScreenshotCache");
     const { BrowserSettings, DEVICE_PRESETS } = load("BrowserSettings");
     const { clipboardShortcut, systemClipboard } = load("Clipboard");
@@ -178,7 +178,7 @@ function logError(where, e) {
       applyTheme,
       agentTheme,
       normalizeConfig,
-      siteRule,
+      siteAllowedIn: siteAllowed,
       clipboardShortcut,
       Cancellation,
       DialogOpen,
@@ -383,7 +383,7 @@ function logError(where, e) {
       setMode: (mode) => ctx.island?.setMode(mode),
       hasCustomPermissions: () => ctx.localFile(ctx.permissionsPath).exists(),
       hostOf: (browser) => ctx.hostOf(browser),
-      ruleFor: (host) => ctx.ruleFor(host),
+      siteEntry: (host) => siteEntry(host, ctx.readConfig().sites),
     });
 
     // Pushing events to agent sessions.
@@ -478,9 +478,15 @@ function logError(where, e) {
     // HTTP requests of agent tabs.
     ctx.network = new NetworkLog((globalThis.zenMcpNetwork ||= new Map()), {
       tracked: (browserId) => state.tabs.has(browserId),
-      blocked: (browserId, host) => {
-        if (!ctx.operation?.tabs?.has(browserId) || ctx.ruleFor(host) !== "block") return false;
-        ctx.operation.cancel(new Error(`Site access blocked by user rule: ${host}`));
+      // an allowlist only checks pages and frames: allowed sites load from other hosts (CDNs)
+      blocked: (browserId, host, document) => {
+        if (!ctx.operation?.tabs?.has(browserId) || ctx.siteAllowed(host)) return false;
+        if (!document && ctx.readConfig().sites.mode === "allowlist") return false;
+        try {
+          ctx.assertSiteHost(host); // throws the error that says which list blocks it
+        } catch (e) {
+          ctx.operation.cancel(e);
+        }
         return true;
       },
     });

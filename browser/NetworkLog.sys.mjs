@@ -28,7 +28,8 @@ for (const key in Ci.nsIContentPolicy) {
 export class NetworkLog {
   // logs: browserId → { list, byChannel, host, nextId }; passed in so it survives reloads
   // env.tracked(browserId): whether the tab is recorded
-  // env.blocked(browserId, host): true cancels the request (site rule)
+  // env.blocked(browserId, host, document): true cancels the request (site list); document: a
+  // page or frame load rather than a resource it uses
   constructor(logs, env) {
     this.logs = logs;
     this.env = env;
@@ -68,7 +69,9 @@ export class NetworkLog {
     const bc = channel.loadInfo?.browsingContext;
     const browserId = bc?.browserId;
     if (!browserId || !this.env.tracked(browserId)) return;
-    if (topic === "http-on-modify-request" && this.env.blocked(browserId, channel.URI.host)) {
+    const type = CONTENT_TYPES[channel.loadInfo?.externalContentPolicyType];
+    const document = type === "document" || type === "subdocument";
+    if (topic === "http-on-modify-request" && this.env.blocked(browserId, channel.URI.host, document)) {
       channel.cancel(Cr.NS_ERROR_ABORT);
       return;
     }

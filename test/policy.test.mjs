@@ -82,7 +82,7 @@ function harness({ mode = "auto", custom = null, risk = {} } = {}) {
     Stopped: class extends Error {},
     ownership,
     policy,
-    readConfig: () => ({ mode, sites: {} }),
+    readConfig: () => ({ mode, sites: { mode: "blocklist", blocklist: [], allowlist: [] } }),
     readPermissions: () => custom,
     rule: (key) => ruleOf(key, mode, custom),
     isSensitive: () => false,

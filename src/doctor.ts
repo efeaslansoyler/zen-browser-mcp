@@ -116,8 +116,8 @@ export async function doctor() {
     }
   ok(
     L(
-      `mode ${config.mode}, ${Object.keys(config.sites).length} site rule(s) (${CONFIG_FILE})`,
-      `mod ${config.mode}, ${Object.keys(config.sites).length} site kuralı (${CONFIG_FILE})`,
+      `mode ${config.mode}, ${config.sites.mode} of ${config.sites[config.sites.mode].length} site(s) (${CONFIG_FILE})`,
+      `mod ${config.mode}, ${config.sites[config.sites.mode].length} siteli ${config.sites.mode} (${CONFIG_FILE})`,
     ),
   );
 
