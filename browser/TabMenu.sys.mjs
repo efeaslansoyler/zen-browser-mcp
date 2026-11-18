@@ -94,6 +94,7 @@ export class TabMenu {
           ? L("Transfer to session…", "Oturuma devret…")
           : L("Give to session…", "Oturuma ver…"),
       );
+      env.paintIcon(give, env.menuAgent());
       targets.replaceChildren();
       let targetCount = 0;
       for (const target of env.sessions()) {

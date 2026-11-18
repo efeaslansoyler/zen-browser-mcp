@@ -102,7 +102,7 @@ function logError(where, e) {
 
     // ?v= makes a reload load the new module versions instead of the cached ones.
     const load = (name) => ChromeUtils.importESModule(`resource://zenmcp/${name}.sys.mjs?v=${version}`);
-    const { agentTheme, applyTheme, agentIcon } = load("Agent");
+    const { agentTheme, applyTheme, agentIcon, commonAgent } = load("Agent");
     const { Ownership } = load("Ownership");
     const { normalizeConfig, siteRule } = load("SiteRules");
     const { ScreenshotCache } = load("ScreenshotCache");
@@ -341,8 +341,13 @@ function logError(where, e) {
       },
     });
 
-    // The agent shown on menu items: the pick's target, the channel target, or the active agent.
-    const menuAgent = () => ctx.picks.current?.agent ?? ctx.channels.target()?.agent ?? ctx.activeAgent;
+    // The agent shown on menu items that choose a session: the pick's target, the agent all
+    // connected sessions share ("multi" when they differ), the channel target, or the active agent.
+    const menuAgent = () =>
+      ctx.picks.current?.agent ??
+      commonAgent(ctx.sendTargets().map((t) => t.agent)) ??
+      ctx.channels.target()?.agent ??
+      ctx.activeAgent;
 
     // Also used by the page menu's "Show to agent…" item.
     function paintMenuIcon(item, agent) {

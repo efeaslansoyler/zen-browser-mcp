@@ -127,7 +127,7 @@ function connectOwner(agent: { id: string; name: string }) {
     clientPid: process.ppid,
     ...(agent.id === "claude" && process.env.CLAUDE_CODE_SESSION_ID
       ? { clientSession: process.env.CLAUDE_CODE_SESSION_ID, hook: claudeHookInstalled() }
-      : agent.name === "Antigravity"
+      : agent.id === "antigravity"
         ? { hook: antigravityHookInstalled() }
         : opencode
           ? { hook: true }

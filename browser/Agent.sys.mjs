@@ -7,7 +7,6 @@ export const THEMES = Object.freeze({
     hover: "#e08667",
     rgb: "217, 119, 87",
     foreground: "#ffffff",
-    glyph: "✳",
   }),
   codex: Object.freeze({
     id: "codex",
@@ -16,7 +15,31 @@ export const THEMES = Object.freeze({
     hover: "#c5f2e2",
     rgb: "167, 232, 208",
     foreground: "#10251d",
-    glyph: ">_",
+  }),
+  antigravity: Object.freeze({
+    id: "antigravity",
+    name: "Antigravity",
+    accent: "#3186ff",
+    hover: "#5c9fff",
+    rgb: "49, 134, 255",
+    foreground: "#ffffff",
+  }),
+  opencode: Object.freeze({
+    id: "opencode",
+    name: "OpenCode",
+    accent: "#a8a4a0",
+    hover: "#c2bfbb",
+    rgb: "168, 164, 160",
+    foreground: "#161413",
+  }),
+  // menu items that let the user choose among sessions of different agents
+  multi: Object.freeze({
+    id: "multi",
+    name: "Agents",
+    accent: "#8f8f9d",
+    hover: "#a9a9b5",
+    rgb: "143, 143, 157",
+    foreground: "#ffffff",
   }),
   generic: Object.freeze({
     id: "generic",
@@ -25,7 +48,6 @@ export const THEMES = Object.freeze({
     hover: "#adcff8",
     rgb: "135, 184, 245",
     foreground: "#101d2d",
-    glyph: ">_",
   }),
 });
 
@@ -35,14 +57,27 @@ export function identifyAgent(clientName = "", override = "") {
     .slice(0, 80);
   if (/codex/i.test(name)) return { id: "codex", name: "Codex" };
   if (/claude/i.test(name)) return { id: "claude", name: "Claude" };
-  if (/antigravity/i.test(name)) return { id: "generic", name: "Antigravity" };
-  if (/^opencode$/i.test(name)) return { id: "generic", name: "OpenCode" };
+  if (/antigravity/i.test(name)) return { id: "antigravity", name: "Antigravity" };
+  if (/^opencode$/i.test(name)) return { id: "opencode", name: "OpenCode" };
   return { id: "generic", name: name || "AI Agent" };
 }
 
 export function agentTheme(agent) {
   const theme = Object.hasOwn(THEMES, agent?.id) ? THEMES[agent.id] : THEMES.generic;
-  return { ...theme, name: theme.id === "generic" ? String(agent?.name || theme.name).slice(0, 80) : theme.name };
+  const own = theme.id === "generic" || theme.id === "multi"; // these show the given name
+  return { ...theme, name: own ? String(agent?.name || theme.name).slice(0, 80) : theme.name };
+}
+
+// The agent of a menu item that lets the user choose a session: the one agent all sessions
+// share, "multi" (named after all of them) when they differ, or null when there are none.
+export function commonAgent(agents) {
+  const themes = new Map();
+  for (const agent of agents) {
+    const theme = agentTheme(agent);
+    themes.set(theme.id === "generic" ? `generic:${theme.name}` : theme.id, theme);
+  }
+  if (themes.size <= 1) return themes.values().next().value ?? null;
+  return agentTheme({ id: "multi", name: [...themes.values()].map((t) => t.name).join(", ") });
 }
 
 export function applyTheme(element, agent) {
@@ -58,19 +93,16 @@ export function applyTheme(element, agent) {
   return theme;
 }
 
-// SVG icons stay crisp in browser menus and the island.
+// SVG icons stay crisp in browser menus and the island (assets/ has their sources).
+const ICON_FILES = new Set(["claude", "codex", "antigravity", "opencode", "multi"]);
 export function agentIcon(agent) {
   const theme = agentTheme(agent);
-  if (theme.id === "codex")
-    return new URL("./assets/codex.svg", import.meta.url).href + new URL(import.meta.url).search;
-  const path =
-    theme.id === "claude"
-      ? '<path d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/>'
-      : '<path d="m2 4 4 4-4 4M9 12h5"/>';
+  if (ICON_FILES.has(theme.id))
+    return new URL(`./assets/${theme.id}.svg`, import.meta.url).href + new URL(import.meta.url).search;
   return (
     "data:image/svg+xml," +
     encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="${theme.accent}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="${theme.accent}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 4 4-4 4M9 12h5"/></svg>`,
     )
   );
 }

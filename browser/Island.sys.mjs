@@ -823,10 +823,7 @@ export class Island {
       const theme = applyTheme(el, pick ? pick.agent : this.#agent);
       const spark = el.querySelector(".spark");
       spark.title = theme.name;
-      spark.textContent = theme.id === "codex" ? "" : theme.glyph;
-      spark.style.background = theme.id === "codex" ? `url("${agentIcon(theme)}") center / contain no-repeat` : "none";
-      spark.style.color = theme.accent;
-      spark.style.font = theme.id === "claude" ? "bold 17px/14px system-ui" : "bold 11px/14px monospace";
+      spark.style.background = `url("${agentIcon(theme)}") center / contain no-repeat`;
       spark.style.animation = theme.id === "claude" && !stopped ? "" : "none";
       el.setAttribute("aria-label", theme.name);
       mode.setAttribute("mode", this.#mode);

@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../dist/server.js";
-import { identifyAgent, agentTheme, applyTheme } from "../browser/Agent.sys.mjs";
+import fs from "node:fs";
+import { identifyAgent, agentTheme, applyTheme, agentIcon, commonAgent } from "../browser/Agent.sys.mjs";
 
 test("client identity uses initialization metadata and provides safe theme fallbacks", () => {
   assert.deepEqual(identifyAgent("codex-mcp-client"), { id: "codex", name: "Codex" });
@@ -19,6 +20,40 @@ test("client identity uses initialization metadata and provides safe theme fallb
   assert.equal(props.get("--zen-agent-accent"), "#d97757");
   applyTheme(el, identifyAgent("unrecognized"));
   assert.equal(props.get("data-zen-agent"), "generic");
+});
+
+test("each known agent has its own icon file, others a drawn one", () => {
+  assert.deepEqual(identifyAgent("antigravity-client"), { id: "antigravity", name: "Antigravity" });
+  assert.deepEqual(identifyAgent("opencode"), { id: "opencode", name: "OpenCode" });
+  for (const id of ["claude", "codex", "antigravity", "opencode", "multi"]) {
+    const url = new URL(agentIcon({ id }));
+    assert.equal(url.protocol, "file:");
+    assert.ok(fs.existsSync(url.pathname), url.pathname);
+  }
+  assert.match(agentIcon(identifyAgent("Other Client")), /^data:image\/svg\+xml,/);
+});
+
+test("a menu that chooses a session shows the agent they share, or several agents", () => {
+  assert.equal(commonAgent([]), null);
+  assert.equal(commonAgent([{ id: "claude" }, { id: "claude" }]).id, "claude");
+  const several = commonAgent([{ id: "claude" }, { id: "codex" }, { id: "claude" }]);
+  assert.equal(several.id, "multi");
+  assert.equal(several.name, "Claude, Codex");
+  // unknown agents differ by name
+  assert.equal(
+    commonAgent([
+      { id: "generic", name: "A" },
+      { id: "generic", name: "B" },
+    ]).id,
+    "multi",
+  );
+  assert.equal(
+    commonAgent([
+      { id: "generic", name: "A" },
+      { id: "generic", name: "A" },
+    ]).name,
+    "A",
+  );
 });
 
 for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
