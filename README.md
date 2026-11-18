@@ -4,14 +4,26 @@
 [![Türkçe](https://img.shields.io/badge/dil-Türkçe-red)](README.tr.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+> [!WARNING]
+> **Vibe-coded: use at your own risk.** This project was written almost entirely by AI coding
+> agents. It has tests, but it has not been audited.
+>
+> It also works differently from most browser tools: it doesn't drive a separate browser, it
+> runs **inside your own browser** with full browser privileges (through autoconfig), and agents
+> act with **your logins and sessions**. So:
+>
+> - A bug hits your real browser, tabs and accounts, not a sandbox.
+> - A malicious page can try to talk the agent into doing things with your accounts (prompt
+>   injection).
+> - The loader goes into the browser's installation folder (sometimes with `sudo`).
+> - Any program running as your user can connect to the bridge's socket.
+>
+> Use ask mode, mark sensitive sites, watch the island, and don't use it in a browser profile
+> whose accounts you can't afford to risk. See [Security](#security).
+
 Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse and keyboard
 input, and a small island at the top of the window that shows what the agent is doing. Works with
 Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based browsers work too.
-
-> **Honest note: this is a vibe-coded project.** Almost all of the code, tests and docs were
-> written by AI coding agents, with me deciding what to build, trying it in my own browser and
-> steering the fixes. There are tests and live checks, but expect rough edges, read
-> [Security](#security) before you trust it with your browser, and please report what breaks.
 
 [![zen-browser-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/media/demo.gif)](docs/media/demo.mp4)
 

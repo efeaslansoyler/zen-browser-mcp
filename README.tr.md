@@ -4,16 +4,27 @@
 [![Türkçe](https://img.shields.io/badge/dil-Türkçe-red)](README.tr.md)
 [![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-green)](LICENSE)
 
+> [!WARNING]
+> **Vibe-coded: kullanım riski sana ait.** Bu projenin neredeyse tamamını AI kodlama ajanları
+> yazdı. Testleri var ama bir güvenlik denetiminden geçmedi.
+>
+> Ayrıca çoğu tarayıcı aracından farklı çalışır: ayrı bir tarayıcıyı yönetmez, **kendi
+> tarayıcının içinde** tam tarayıcı yetkileriyle (autoconfig üzerinden) çalışır ve ajanlar
+> **senin oturumlarınla** işlem yapar. Yani:
+>
+> - Bir hata sandbox'ı değil, gerçek tarayıcını, sekmelerini ve hesaplarını etkiler.
+> - Kötü niyetli bir sayfa ajanı hesaplarınla bir şey yapmaya ikna etmeye çalışabilir (prompt
+>   injection).
+> - Loader tarayıcının kurulum klasörüne yazılır (bazen `sudo` ile).
+> - Senin kullanıcınla çalışan her program bridge'in socket'ine bağlanabilir.
+>
+> Onaylı modu kullan, hassas siteleri işaretle, adayı takip et ve kaybetmeyi göze alamayacağın
+> hesapların olduğu bir tarayıcı profilinde kullanma. Bkz. [Güvenlik](#güvenlik).
+
 AI ajanları **kendi Zen tarayıcını** kullansın: senin sekmelerin, senin oturumların, gerçek fare
 ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren küçük bir ada.
 Claude Code, Codex ve diğer MCP istemcileriyle çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
-
-> **Açık konuşayım: bu vibe-coded bir proje.** Kodun, testlerin ve dokümanların neredeyse
-> tamamını AI kodlama ajanları yazdı; ne yapılacağına ben karar verdim, kendi tarayıcımda
-> denedim ve düzeltmeleri yönlendirdim. Testler ve canlı kontroller var ama pürüzler
-> çıkabilir. Tarayıcına güvenmeden önce [Güvenlik](#güvenlik) bölümünü oku ve bozulan bir şey
-> görürsen lütfen bildir.
 
 [![zen-browser-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/media/demo.gif)](docs/media/demo.mp4)
 
