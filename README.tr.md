@@ -9,6 +9,12 @@ ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren k
 Claude Code, Codex ve diğer MCP istemcileriyle çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
 
+> **Açık konuşayım: bu vibe-coded bir proje.** Kodun, testlerin ve dokümanların neredeyse
+> tamamını AI kodlama ajanları yazdı; ne yapılacağına ben karar verdim, kendi tarayıcımda
+> denedim ve düzeltmeleri yönlendirdim. Testler ve canlı kontroller var ama pürüzler
+> çıkabilir. Tarayıcına güvenmeden önce [Güvenlik](#güvenlik) bölümünü oku ve bozulan bir şey
+> görürsen lütfen bildir.
+
 [![zen-browser-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Neden
@@ -80,7 +86,9 @@ Diğer MCP istemcileri de aynı komutu veya derlenmiş `dist/cli.js` dosyasını
 Fare koordinatları istemci uyumluluğu için iki sayılık standart dizilerdir (`[x, y]`).
 
 MCP bağlantısındaki istemci adı görünümü otomatik seçer: **Claude turuncu**, **Codex mint**,
-diğer ajanlar kendi istemci adıyla mavi. Ada, sekme şeridi, imleç, tıklama halkası ve kullanıcıya
+**Antigravity mavi**, **OpenCode gri**, her biri kendi simgesiyle; diğer ajanlar kendi
+istemci adıyla açık mavi. Oturum seçtiren menüler, bağlı oturumların hepsi aynı ajansa onun
+simgesini, farklı ajanlar varsa ortak bir simge gösterir. Ada, sekme şeridi, imleç, tıklama halkası ve kullanıcıya
 bırakılan adımın çerçevesi işlemi yapan ajanı izler. Sekme rengi sahibi olan oturumu gösterir.
 Tarayıcı yeniden açılınca geri yüklenen sekmeler yeniden açıkça verilmelidir; kayıtlı renk
 erişim yetkisini geri getirmez. Aracı yazılım istemci adını gizliyorsa sunucunun
@@ -89,8 +97,9 @@ ortamına `ZEN_MCP_AGENT=codex` veya `ZEN_MCP_AGENT=claude` eklenebilir.
 Ajan kimliği görünüm içindir. Sekme erişimi belirli bir MCP sunucu oturumuna aittir:
 iki Codex istemcisinin sekme listeleri ayrıdır; birbirlerinin sekmelerini okuyamaz,
 değiştiremez veya kapatamazlar. İşlemler ortak kuyrukta yürür; Durdur/Devam ve
-otomatik/onaylı mod bütün ajanlar için ortaktır. Öğeyi sohbete gönderme Claude channels
-veya Codex queue ile çalışır; diğer istemcilerde pano kullanılabilir.
+otomatik/onaylı mod bütün ajanlar için ortaktır. Seçimlerin ve tariflerin sohbete
+nasıl ulaştığı istemciye göre değişir; bkz. [Ajana bir öğe göstermek](#ajana-bir-öğe-göstermek).
+Pano her istemcide kullanılabilir.
 
 Sahiplikteki MCP sunucu oturum kimliği, Codex sohbet UUID'sinden farklıdır. Ajan adı
 veya proje klasöründen ilişki tahmin edilmez. Aynı MCP sunucu sürecini paylaşan sohbetler
@@ -181,23 +190,44 @@ olmazsa temizlenir.
 isteğini yaz ve adadaki listeden hedef oturumu seç. Sayfa adresi, seçici, erişilebilir ad,
 stiller, metin, kısaltılmış HTML, öğenin görüntü yolu ve geliştirme sürümündeki bileşen zinciri gönderilir.
 
-- **Claude Code:** `claude --dangerously-load-development-channels server:zen` ile channels'ı
-  aç; oturum kendiliğinden bağlanır. Claude Code bu flag'i `-p` modunda ve onu Agent SDK ile
-  çalıştıran uygulamalarda (örneğin T3 Code) yok sayar; o oturumlara seçimler panoyla gider.
-- **Codex:** bir kez `node dist/cli.js codex-hooks install` çalıştır (kurulu pakette
-  `npx zen-browser-mcp codex-hooks install`), sonra Codex'te `/hooks` ekranından üç Zen hook'una güven.
-  SessionStart, Codex'in verdiği gerçek sohbet UUID'siyle alıcıyı başlatır;
-  UserPromptSubmit bağlantıyı yeniler; SessionEnd kapatır. Sohbet açılınca/devam ettirilince
-  ilk tarayıcı aracı çağrısından önce otomatik bağlanır. Aynı sohbet için ikinci alıcı
-  açılmaz; MCP yeniden bağlansa da alıcı sürer, Zen kapanıp açılınca yeniden bağlanır.
-  `connect_session` elle bağlantı için yedek kalır. Kaldırmak için `codex-hooks uninstall`.
-  Ada ancak queue komutu kabul edilince **kuyruğa alındı** der; bu, ajanın okuması veya
-  tamamlaması değildir. Denediğimiz aktif sohbette mesaj mevcut tur bitince geldi.
-- **Diğer istemciler / bağlantı yok:** **Pano** seçeneğiyle kopyala ve ajana yapıştır.
+Hedef listesi her oturumun nasıl alacağını yazar: **hemen**, **yazınca** ya da **sonraki
+işleminde**.
+
+- **Hemen**, istemcinin bir yolu varsa:
+  - **Claude Code**, [channels](https://code.claude.com/docs/en/channels) ile:
+    `claude --dangerously-load-development-channels server:zen`. Claude Code bu flag'i `-p`
+    modunda ve onu Agent SDK ile çalıştıran uygulamalarda (örneğin T3 Code) yok sayar.
+  - **Codex**, `codex queue` ile (ayrıntılar aşağıda).
+  - **T3 Code** thread'leri, `t3 thread send` ile. Mesaj thread'de `[zen]` işaretli bir
+    kullanıcı mesajı olarak görünür.
+  - **OpenCode**, zen plugin'i ile (`hooks install`, aşağıda): en son yazdığın oturuma, o
+    oturumun ajanı ve modeliyle yeni bir mesaj olarak gider.
+- **Yoksa bekler** ve bir kez gider: oturumun bir sonraki tarayıcı aracı sonucuyla, ya da
+  prompt hook'ları kuruluysa o oturuma yazdığın bir sonraki mesajla:
+
+  ```sh
+  npx zen-browser-mcp hooks install
+  ```
+
+  Kurulu olan istemciler için Claude Code'a bir `UserPromptSubmit` hook'u, Codex'e yaşam
+  döngüsü hook'larını, Antigravity CLI'a bir `PreInvocation` hook'u ve OpenCode'a bir plugin
+  ekler. Diğer hook'lar ve ayarlar korunur, değişen dosyaların önce yedeği alınır. Kurulu
+  olup olmadıklarını `doctor` gösterir; `hooks uninstall` ile kaldırılır. Codex yeni hook'lar
+  için bir kez `/hooks` ekranında onay ister.
+- **Pano:** adada **Pano**'yu seç ve istediğin ajana yapıştır.
+
+Codex ayrıntıları: SessionStart, Codex'in verdiği gerçek sohbet UUID'siyle alıcıyı başlatır;
+UserPromptSubmit bağlantıyı yeniler; SessionEnd kapatır. Sohbet açılınca/devam ettirilince
+ilk tarayıcı aracı çağrısından önce otomatik bağlanır. Aynı sohbet için ikinci alıcı açılmaz;
+MCP yeniden bağlansa da alıcı sürer, Zen kapanıp açılınca yeniden bağlanır.
+`connect_session` elle bağlantı için yedek kalır; `codex-hooks install|uninstall` hâlâ
+yalnızca Codex hook'larını yönetir. Ada ancak queue komutu kabul edilince **kuyruğa alındı**
+der; bu, ajanın okuması veya tamamlaması değildir. Denediğimiz aktif sohbette mesaj mevcut tur
+bitince geldi.
 
 Listede ajan, proje ve kısa oturum kimliği görünür. Yazma kutusu açılınca hedefler sabitlenir;
-başka bir oturum etkinleşse de gönderim seçtiğin hedefe gider. Hedef koparsa veya gönderim
-başarısız olursa bağlam panoya kopyalanır; başka sohbete sessizce yönlendirilmez.
+başka bir oturum etkinleşse de gönderim seçtiğin hedefe gider. Oturum gönderdiğini almadan
+kapanırsa veya gönderim başarısız olursa bağlam panoya kopyalanır; başka sohbete sessizce yönlendirilmez.
 Gönder'e iki kez basmak aynı seçimi iki kez göndermez.
 
 Öğe seçmek sekmeyi ajana vermez. Canlı erişim gerekirse ajan `request_tab` ile sorar;

@@ -37,12 +37,16 @@ that talks to the Codex service:
 
 ## Hooks (fallback)
 
-`npx zen-browser-mcp codex-hooks install` adds SessionStart, UserPromptSubmit and SessionEnd hooks to
+`npx zen-browser-mcp hooks install` (which also sets up the other clients' hooks) or
+`npx zen-browser-mcp codex-hooks install` (Codex only) adds SessionStart, UserPromptSubmit and SessionEnd hooks to
 `~/.codex/hooks.json` (other hooks are kept; the old file is backed up). Each hook first tries
 to start the watcher. Only if the Codex service can't be reached does it start the older
 per-conversation receiver (`codex-relay.ts`), which connects after the first message and stops
 on SessionEnd (or after 24 idle hours). Codex asks the user to trust new hooks once in
 `/hooks`.
+
+The UserPromptSubmit hook also adds what the user sent from the browser and couldn't be queued
+to their next message (see [architecture.md](architecture.md#sending-to-a-session-browser--agent)).
 
 `connect_session` is a manual last resort: the agent reads `CODEX_THREAD_ID` from its command
 environment and binds picks to it.

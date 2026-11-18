@@ -33,8 +33,14 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   `tab_work` publishes task notes and queues handoffs between sessions; `request_tab` asks the
   user for one of their tabs.
 - **Element picks**: pick one or more elements on any page (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>
-  or the context menu), write a note and send them to a Claude Code session (channels) or a
-  Codex conversation, with selector, styles, a screenshot and the React/Vue component chain.
+  or the context menu), write a note and send them to any connected session, with selector,
+  styles, a screenshot and the React/Vue component chain.
+- **Delivery to every client**: picks and recipes are pushed when the client has a way in
+  (Claude Code channels, `codex queue`, `t3 thread send` in T3 Code, a plugin in OpenCode).
+  Otherwise they wait and arrive once, with the session's next tool result or, with
+  `hooks install`, the user's next message (Claude Code, Codex, Antigravity CLI, OpenCode).
+  The target list says which applies to each session; what can't be delivered goes to the
+  clipboard.
 - **Show me once**: the user shows a task once (`show_me`, or right-click → "Record steps for
   an agent…") and it becomes a recipe: semantic steps with a screenshot each, reviewed on the
   island (rename, delete steps, mark values that change, play back), saved locally and offered
@@ -53,7 +59,7 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   a separate container without the user's cookies and logins.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
   snapshot, and unchanged screenshots can skip the image.
-- **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill`, `codex-hooks` and `recipes`; the browser
+- **CLI**: `install`, `uninstall`, `doctor`, `config`, `skill`, `hooks`, `codex-hooks` and `recipes`; the browser
   side updates itself when the package version changes.
 - **Agent skill** (`skills/zen-browser`) for Claude Code and Codex: which tool to use when, from
   choosing the user's open tab to handing over logins. Short server instructions point the same
@@ -64,6 +70,14 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 
 These stages were never published; they are listed so the history is readable. Details are in
 the commit log.
+
+### 2026-11-18
+
+- Delivery layer: an inbox in the bridge, push paths for T3 Code and OpenCode, prompt hooks
+  for Claude Code, Codex and Antigravity CLI (`hooks install`), and one target list for picks
+  and recipes that says how each session receives.
+- Own icons for Antigravity and OpenCode, the Claude logo, and a combined icon on menus when
+  sessions of several agents are connected.
 
 ### 2026-11-17
 

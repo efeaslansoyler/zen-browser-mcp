@@ -8,6 +8,11 @@ Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse a
 input, and a small island at the top of the window that shows what the agent is doing. Works with
 Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based browsers work too.
 
+> **Honest note: this is a vibe-coded project.** Almost all of the code, tests and docs were
+> written by AI coding agents, with me deciding what to build, trying it in my own browser and
+> steering the fixes. There are tests and live checks, but expect rough edges, read
+> [Security](#security) before you trust it with your browser, and please report what breaks.
+
 [![zen-browser-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Why
@@ -77,7 +82,9 @@ Other MCP clients can launch the same command, or the built package's `dist/cli.
 Mouse coordinates use standard fixed-length arrays (`[x, y]`) for client compatibility.
 
 The MCP initialization client name selects presentation automatically: **Claude** uses
-orange, **Codex** mint, and other agents blue with their client name. The island, tab
+orange, **Codex** mint, **Antigravity** blue, **OpenCode** gray, each with its own icon, and
+other agents light blue with their client name. Menus that let you choose a session show the
+icon of the agent all connected sessions share, or a combined icon when they differ. The island, tab
 stripe, cursor, click ring, and handoff outline follow the agent performing the action.
 Tab colors follow the owning session. After a browser restart, restored tabs require a new
 explicit handoff; saved colors do not restore access rights.
@@ -87,8 +94,8 @@ For clients that hide their identity behind a proxy, set `ZEN_MCP_AGENT=codex` o
 Agent identity is a visual label. Tab access belongs to a particular MCP server session:
 two Codex clients have separate tab lists and cannot read, modify or close each other's tabs.
 Tool calls share a queue and the global Stop/Resume and auto/ask controls.
-Element-to-chat delivery uses Claude channels or Codex queue as described below; other
-clients can use the clipboard fallback.
+How picks and recipes reach a conversation depends on the client; see
+[Showing an agent an element](#showing-an-agent-an-element). Every client can use the clipboard.
 
 Ownership uses the MCP server's session ID, distinct from a Codex conversation UUID.
 We do not infer a relationship from agent names or project folders. Multiple conversations
@@ -181,26 +188,45 @@ select an element, write your request, and choose the destination session in the
 The payload includes the page URL, selector, accessible name, styles, text, trimmed HTML,
 element screenshot path and, on development builds, the React/Vue component chain.
 
-- **Claude Code:** enable [channels](https://code.claude.com/docs/en/channels) with
-  `claude --dangerously-load-development-channels server:zen`. The channel subscribes automatically.
-  Claude Code ignores the flag in `-p` mode and in apps that run it through the Agent SDK
-  (T3 Code, for example); those sessions get picks through the clipboard.
-- **Codex:** install lifecycle hooks once with `node dist/cli.js codex-hooks install`
-  (or `npx zen-browser-mcp codex-hooks install` for an installed package), then review and trust
-  the three Zen hooks in Codex's `/hooks` screen. SessionStart starts a receiver using the
-  exact host-provided session UUID; UserPromptSubmit refreshes it; SessionEnd stops it.
-  Opening or resuming a chat connects automatically, even before its first browser tool call.
-  One receiver per thread survives MCP reconnects and retries when Zen opens or reloads.
-  `connect_session` remains a manual fallback. Remove with `codex-hooks uninstall`.
-  The island says **Queued** only after `codex queue` accepts the message, not when the
-  agent has read or completed it. In the tested active conversation, input arrived after
-  the current turn finished.
-- **Other clients / no connection:** choose **Clipboard**, then paste into your agent.
+The destination list says how each session receives it: **now**, **when you write** or
+**on its next action**.
+
+- **Now**, when the client has a way in:
+  - **Claude Code** with [channels](https://code.claude.com/docs/en/channels):
+    `claude --dangerously-load-development-channels server:zen`. Claude Code ignores the flag
+    in `-p` mode and in apps that run it through the Agent SDK (T3 Code, for example).
+  - **Codex** through `codex queue` (details below).
+  - **T3 Code** threads through `t3 thread send`. The message shows in the thread as a user
+    message marked `[zen]`.
+  - **OpenCode** with the zen plugin (`hooks install`, below): sent as a new message to the
+    session you last wrote to, with its agent and model.
+- **Otherwise it waits** and arrives once, with the session's next browser tool result, or
+  with your next message to that session when the prompt hooks are installed:
+
+  ```sh
+  npx zen-browser-mcp hooks install
+  ```
+
+  For the clients you have, this adds a `UserPromptSubmit` hook to Claude Code, the lifecycle
+  hooks to Codex, a `PreInvocation` hook to Antigravity CLI and a plugin to OpenCode. Other
+  hooks and settings are kept, and changed files are backed up first. `doctor` shows whether
+  they are installed; remove them with `hooks uninstall`. Codex asks you to trust new hooks
+  once in `/hooks`.
+- **Clipboard:** choose it in the island and paste into any agent.
+
+Codex details: SessionStart starts a receiver with the exact host-provided session UUID;
+UserPromptSubmit refreshes it; SessionEnd stops it. Opening or resuming a chat connects
+automatically, even before its first browser tool call. One receiver per thread survives MCP
+reconnects and retries when Zen opens or reloads. `connect_session` remains a manual
+fallback, and `codex-hooks install|uninstall` still manages only the Codex hooks. The island
+says **Queued** only after `codex queue` accepts the message, not when the agent has read or
+completed it. In the tested active conversation, input arrived after the current turn
+finished.
 
 The destination list shows the agent, project and a short session suffix. It is fixed when
 compose opens; Send uses the selected target even if another session becomes active.
-If that target disconnects or delivery fails, the context is copied to the clipboard,
-never silently sent to another chat. Double-clicking Send does not duplicate delivery.
+If that session ends before it receives what you sent, or delivery fails, the context is copied
+to the clipboard, never silently sent to another chat. Double-clicking Send does not duplicate delivery.
 
 Selecting an element does not grant access to its tab. The agent can ask with `request_tab`
 if it needs live access, and you approve or decline in the browser.

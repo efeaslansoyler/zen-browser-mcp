@@ -20,7 +20,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 
 | File | Role |
 |---|---|
-| `cli.ts` | `npx zen-browser-mcp`: no arguments runs the MCP server; `install`, `uninstall`, `doctor`, `config`, `codex-hooks` |
+| `cli.ts` | `npx zen-browser-mcp`: no arguments runs the MCP server; `install`, `uninstall`, `doctor`, `config`, `hooks`, `codex-hooks`; `hook <client>` is the prompt hook command |
 | `server.ts` | The MCP server: registers the tools, agent identity and per-call session, channel and lifecycle subscriptions |
 | `tools.ts`, `instructions.ts` | Tool schemas, descriptions and answer timeouts; server instructions |
 | `claude.ts` | Channel detection and the Claude conversation title |
@@ -29,7 +29,9 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | `paths.ts` | Package name and every user-visible path in one place |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
 | `codex-watch.ts` | Watches the Codex service and connects open Codex conversations (see [codex.md](codex.md)) |
-| `codex-hooks.ts`, `codex-relay.ts`, `delivery.ts` | Codex lifecycle hooks (fallback), per-thread receiver, `codex queue` delivery |
+| `codex-hooks.ts`, `codex-relay.ts`, `delivery.ts` | Codex lifecycle hooks (fallback), per-thread receiver, `codex queue` and `t3 thread send` delivery |
+| `hooks.ts` | `hooks install`: prompt hooks for Claude Code and Antigravity CLI, plus the Codex hooks and the OpenCode plugin |
+| `opencode.ts` | The OpenCode plugin (push socket and `chat.message`) and the MCP process's push to it |
 
 ### Browser side (`browser/`)
 
@@ -55,7 +57,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Config.sys.mjs`, `Activity.sys.mjs` | `config.json` and site access checks; island action text and the activity log |
 | `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
 | `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user` and `hand_to_user`, approvals, dialogs, pick note box |
-| `Agent.sys.mjs` | Agent identity and theme (Claude orange, Codex mint, others blue); shared by Node and Gecko |
+| `Agent.sys.mjs` | Agent identity, theme and icon (`assets/`: Claude, Codex, Antigravity, OpenCode, several agents; others a drawn `>_`); shared by Node and Gecko |
 | `Ownership.sys.mjs` | Per-session tab ownership, `tab_work` tasks and the handoff queue |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
