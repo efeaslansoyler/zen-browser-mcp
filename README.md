@@ -25,7 +25,7 @@ Let AI agents use **your own Zen browser**: your tabs, your logins, real mouse a
 input, and a small island at the top of the window that shows what the agent is doing. Works with
 Claude Code, Codex, and other MCP clients. Firefox and other Firefox-based browsers work too.
 
-[![zen-browser-mcp demo: Claude and Codex work in their own tabs, you point at two elements and pick who gets them, Claude inspects React, runs axe and checks mobile, asks for your tab with a note, then hands the tab to Codex](docs/media/demo.gif)](docs/media/demo.mp4)
+[![zen-browser-mcp demo: you point at a grey button and send it to Claude Code, point at the total and send it to Codex; both work in one browser, Claude asks before submitting the form; then you show Claude once how to add a coffee in the admin page, it saves that as a recipe and adds the rest](docs/media/demo.gif)](docs/media/demo.mp4)
 
 ## Why
 

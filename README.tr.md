@@ -27,7 +27,7 @@ ve klavye girdisi ve pencerenin üstünde Claude'un ne yaptığını gösteren k
 Claude Code, Codex ve diğer MCP istemcileriyle çalışır. Firefox ve diğer Firefox tabanlı
 tarayıcılarda da çalışır.
 
-[![zen-browser-mcp demosu: Claude arka plandaki sekmede alışveriş yapıyor, işlemden önce izin istiyor, ödemeyi sana bırakıyor ve gösterdiğin öğeyi alıyor](docs/media/demo.gif)](docs/media/demo.mp4)
+[![zen-browser-mcp demosu: gri bir butonu gösterip Claude Code'a, toplamı gösterip Codex'e gönderiyorsun; ikisi aynı tarayıcıda çalışıyor, Claude formu göndermeden önce izin istiyor; sonra Claude'a admin sayfasında bir kahveyi nasıl eklediğini bir kere gösteriyorsun, bunu tarif olarak kaydedip kalanları ekliyor](docs/media/demo.tr.gif)](docs/media/demo.tr.mp4)
 
 ## Neden
 
