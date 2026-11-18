@@ -159,6 +159,8 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#reader.sample(data) };
         case "describe":
           return { value: this.#reader.describeTarget(data) };
+        case "risk":
+          return { value: this.#reader.risk(data) };
         case "form_input":
           return { value: this.#formInput(data.ref, data.value) };
         case "locate":

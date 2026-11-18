@@ -58,6 +58,8 @@ export function toolRunner(ctx) {
           break;
         }
       }
+      // a call without a page of its own still has a rule (custom templates can ask or deny it)
+      if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(tool, args);
       ctx.operation?.check();
       if (browser) ownership.check(args.tabId, ctx.activeSession);
       const result = await ctx.tools[tool](args);

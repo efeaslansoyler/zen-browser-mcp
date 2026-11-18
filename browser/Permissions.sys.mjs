@@ -1,6 +1,8 @@
-// Permissions: in ask mode, or on a site with an "ask" rule, actions are approved on the island
-// first. An approval belongs to one document, origin, settings and ownership version; if any of
-// them changes, the user is asked again. Changing state (operation, activeAgent) is read from ctx.
+// Permissions: each tool call is an operation (Policy.sys.mjs) whose rule in the current mode
+// is allow, ask (approved on the island first) or deny. A click that submits a form, or typing
+// into a secret field, also takes the submit or secret_field rule, whichever is stricter. An
+// approval belongs to one document, origin, settings and ownership version; if any of them
+// changes, the user is asked again. Changing state (operation, activeAgent) is read from ctx.
 export function permissions(ctx) {
   const { L, DialogOpen, Stopped } = ctx;
 
@@ -93,10 +95,100 @@ export function permissions(ctx) {
     return null;
   }
 
-  // Does this call need permission: every action in ask mode; on an "ask" site, all but navigation.
-  function needsPermission(tool, browser) {
-    if (ctx.readConfig().mode === "ask") return true;
-    return tool !== "navigate" && ctx.isSensitive(ctx.hostOf(browser));
+  // Operations that ask in their own prompt (clipboard, tab requests…) with gate() below.
+  const OWN_PROMPT = new Set([
+    "clipboard.read",
+    "clipboard.write",
+    "clipboard.copy",
+    "clipboard.paste",
+    "browser_settings.change",
+    "extensions.switch_tab",
+    "request_tab",
+    "recipes.delete",
+    "tab_work.handoff",
+  ]);
+
+  const deniedMessage = (key) =>
+    `Your permission settings don't allow this (${key}); nothing was done. Don't try to reach the same result another way: tell the user what you need.`;
+
+  // For the operations with their own prompt: true to go on without asking, false to ask;
+  // throws when the rule denies it.
+  function gate(key) {
+    const rule = ctx.rule(key);
+    if (rule === "deny") throw new Error(deniedMessage(key));
+    return rule === "allow";
+  }
+
+  // Keys that submit a focused form control or button.
+  const keyList = (text = "") =>
+    String(text)
+      .toLowerCase()
+      .split(/[\s+]+/);
+  const pressesEnter = (text) => keyList(text).some((k) => ["enter", "return", "kp_enter"].includes(k));
+  const pressesSpace = (text) => keyList(text).includes("space") || text === " ";
+
+  // Does this call submit a form or type into a secret field (only asked when it matters).
+  async function riskOf(tool, args, browser) {
+    const ask = async (data, frame) => {
+      try {
+        return (await ctx.query(browser, "risk", data, 30000, frame)).value ?? {};
+      } catch (e) {
+        if (e instanceof DialogOpen || e instanceof Stopped) throw e;
+        return {};
+      }
+    };
+    const at = async () => {
+      if (args.ref) return ask({ ref: ctx.longRef(args.ref) }, ctx.frameOf(browser, args.ref));
+      if (!args.coordinate) return {};
+      const [x, y] = ctx.toPagePoint(browser, args.coordinate);
+      const inner = await ctx.deepest(browser, x, y);
+      return ask({ x: inner.x, y: inner.y }, inner.frame);
+    };
+    const focused = async (keys) =>
+      ask({ focused: true, ...keys }, ctx.heldFrame(browser) || (await ctx.focusedFrame(browser)));
+    // filling a field can only be secret, clicking can only submit
+    if (tool === "form_input") return args.ref ? { secret: (await at()).secret } : {};
+    if (tool !== "computer") return {};
+    switch (args.action) {
+      case "left_click":
+      case "double_click":
+      case "triple_click":
+      case "mouse_down":
+        return { submit: (await at()).submit };
+      case "type":
+        return focused({ enter: /[\r\n]/.test(args.text ?? "") });
+      case "key":
+      case "key_down":
+        return focused({ enter: pressesEnter(args.text), space: pressesSpace(args.text) });
+    }
+    return {};
+  }
+
+  // The rule of one tool call on this page, and the operation it comes from ("submit" when a
+  // click submits a form): { key, rule } with rule "allow", "ask" or "deny".
+  async function callRule(tool, args, browser) {
+    const key = ctx.policy.operationOf(tool, args);
+    if (!key || OWN_PROMPT.has(key)) return { key, rule: "allow" };
+    const { strictest } = ctx.policy;
+    let rule = ctx.rule(key);
+    // a site's ask rule: every action (what the ask template asks) but navigation asks
+    if (
+      browser &&
+      key !== "navigate" &&
+      ctx.policy.ruleOf(key, "ask") === "ask" &&
+      ctx.isSensitive(ctx.hostOf(browser))
+    )
+      rule = strictest(rule, "ask");
+    if (rule === "deny" || !browser) return { key, rule };
+    const submit = ctx.rule("submit");
+    const secret = ctx.rule("secret_field");
+    // look at the page only when a submit or secret rule would make this stricter
+    if (strictest(rule, submit, secret) === rule) return { key, rule };
+    const risk = await riskOf(tool, args, browser);
+    let because = key;
+    if (risk.submit && strictest(rule, submit) !== rule) [rule, because] = [submit, "submit"];
+    if (risk.secret && strictest(rule, secret) !== rule) [rule, because] = [secret, "secret_field"];
+    return { key: because, rule };
   }
 
   // Approval belongs to one document, origin and permission configuration.
@@ -106,7 +198,11 @@ export function permissions(ctx) {
     return {
       document: browser.browsingContext?.currentWindowGlobal,
       origin: browser.currentURI?.prePath || browser.currentURI?.spec,
-      policy: JSON.stringify([settings.mode, settings.sites]),
+      policy: JSON.stringify([
+        settings.mode,
+        settings.sites,
+        settings.mode === "custom" ? ctx.readPermissions() : null,
+      ]),
       ownerVersion: ctx.ownership.version(browser.browserId),
     };
   }
@@ -128,16 +224,21 @@ export function permissions(ctx) {
       ctx.assertSiteAccess(browser);
       const context = permissionContext(browser);
       const lines = [];
+      const reasons = new Set();
       for (const { tool, args } of steps) {
-        if (!needsPermission(tool, browser)) continue;
-        const what = await describeWrite(tool, args, browser);
-        if (what) lines.push(what);
+        const { key, rule } = await callRule(tool, args, browser);
+        if (rule === "deny") throw new Error(deniedMessage(key));
+        if (rule !== "ask") continue;
+        if (key === "submit") reasons.add(L("submits a form", "form gönderir"));
+        if (key === "secret_field") reasons.add(L("secret field", "gizli alan"));
+        lines.push((await describeWrite(tool, args, browser)) ?? ctx.describeAction(tool, args, browser, false));
       }
       if (!samePermissionContext(context, permissionContext(browser))) continue;
       if (!lines.length) return { context, asked: false };
       const host = ctx.hostOf(browser);
       const agent = ctx.activeAgent.name;
-      const why = ctx.isSensitive(host) ? L(" (sensitive site)", " (hassas site)") : "";
+      if (ctx.isSensitive(host)) reasons.add(L("sensitive site", "hassas site"));
+      const why = reasons.size ? ` (${[...reasons].join(", ")})` : "";
       const message =
         lines.length === 1
           ? L(`${agent} wants to: ${lines[0]}`, `${agent} şunu yapmak istiyor: ${lines[0]}`)
@@ -159,5 +260,36 @@ export function permissions(ctx) {
     }
   }
 
-  return { describeWrite, needsPermission, permissionContext, samePermissionContext, requirePermission };
+  // A call without a page (tabs_context_mcp, recipes, downloads…): its rule, asked on the island.
+  async function requireToolPermission(tool, args) {
+    const key = ctx.policy.operationOf(tool, args);
+    if (!key || OWN_PROMPT.has(key)) return;
+    const rule = ctx.rule(key);
+    if (rule === "deny") throw new Error(deniedMessage(key));
+    if (rule !== "ask") return;
+    const agent = ctx.activeAgent.name;
+    const what = ctx.describeAction(tool, args, null, false);
+    const result = await ctx.askIsland(
+      null,
+      L("asks for permission", "izin istiyor"),
+      L(`${agent} wants to: ${what}`, `${agent} şunu yapmak istiyor: ${what}`),
+      { ok: L("Allow", "İzin ver"), cancel: L("Deny", "Verme") },
+    );
+    if (result !== "done")
+      throw new Error(
+        result === "timeout"
+          ? "The user did not answer the permission request; nothing was done."
+          : "The user denied this action; nothing was done. Ask the user what they want.",
+      );
+  }
+
+  return {
+    describeWrite,
+    gate,
+    callRule,
+    permissionContext,
+    samePermissionContext,
+    requirePermission,
+    requireToolPermission,
+  };
 }

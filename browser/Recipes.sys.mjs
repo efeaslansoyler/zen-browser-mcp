@@ -259,6 +259,10 @@ export function recipeTools(ctx) {
       }
       if (action === "delete") {
         const recipe = await store.get(id);
+        if (ctx.gate("recipes.delete")) {
+          await store.remove(id);
+          return text(`Deleted the recipe ${quote(recipe.name)}.`);
+        }
         ctx.island?.ask(
           null,
           L("Delete recipe?", "Tarif silinsin mi?"),

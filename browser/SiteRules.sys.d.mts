@@ -1,5 +1,5 @@
 export type Config = {
-  mode: "auto" | "ask";
+  mode: "auto" | "ask" | "custom";
   sites: Record<string, "ask" | "block">;
   workspace?: string;
   container?: string;

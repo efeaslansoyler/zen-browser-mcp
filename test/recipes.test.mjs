@@ -117,6 +117,7 @@ test("the recipes tool deletes only after the user confirms on the island", asyn
     activeAgent: { name: "Claude" },
     island: { ask: (...args) => asked.push(args), askEnded() {} },
     waitIslandAnswer: async () => answer,
+    gate: (key) => (key === "recipes.delete" ? false : true),
   };
   const { recipes: tool } = recipeTools(ctx);
   const out = async (args) => (await tool(args))[0].text;

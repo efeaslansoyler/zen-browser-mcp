@@ -112,6 +112,7 @@ export function systemClipboard(ctx) {
         return context;
       },
       ask: async (input) => {
+        if (ctx.gate(ctx.policy.operationOf("clipboard", input))) return true;
         const what = {
           read: L("read text from your system clipboard", "sistem panondaki metni okumak"),
           write: L(

@@ -18,7 +18,7 @@ export function normalizeConfig(raw = {}) {
     if (rule === "default") delete sites[domain];
     else sites[domain] = rule;
   }
-  const config = { mode: raw.mode === "ask" ? "ask" : "auto", sites };
+  const config = { mode: ["ask", "custom"].includes(raw.mode) ? raw.mode : "auto", sites };
   // Zen: the workspace (by name) for tabs agents open; otherwise the user's current one
   const workspace = typeof raw.workspace === "string" ? raw.workspace.trim().slice(0, 80) : "";
   if (workspace) config.workspace = workspace;

@@ -112,6 +112,7 @@ function logError(where, e) {
     const { ReadSnapshots, sameReadContext } = load("ReadSnapshots");
     const { Cancellation } = load("Cancellation");
     const { config } = load("Config");
+    const policy = load("Policy");
     const { sessionManager } = load("Sessions");
     const { tabWork } = load("TabWork");
     const { tabs, MARK, MARK_CSS } = load("Tabs");
@@ -191,6 +192,8 @@ function logError(where, e) {
       sameReadContext,
       activityView,
       configPath: `${configHome}/${zenMcpApp}/config.json`,
+      permissionsPath: `${configHome}/${zenMcpApp}/permissions.jsonc`,
+      policy,
       activityPath: `${stateHome}/${zenMcpApp}/activity.jsonl`,
       browserStart: globalThis.zenMcpBrowserStart,
       MAX_PAGE_TEXT: 100000,
@@ -283,6 +286,7 @@ function logError(where, e) {
       },
       version: (source) => ownership.version(source.browserId),
       confirmSwitch: async (source, extension) => {
+        if (ctx.gate("extensions.switch_tab")) return true;
         const context = ctx.permissionContext(source);
         const title = source.contentTitle || ctx.hostOf(source) || source.currentURI.spec;
         const name = ctx.activeAgent.name;
@@ -314,6 +318,7 @@ function logError(where, e) {
       wait: (ms) => ctx.operationSleep(ms),
       geckoVersion: Services.appinfo.platformVersion.split(".").slice(0, 2).join("."),
       ask: async (source, args, value) => {
+        if (ctx.gate("browser_settings.change")) return true;
         const target = source.contentTitle || ctx.hostOf(source) || source.currentURI.spec;
         const details =
           args.action === "reset"

@@ -24,7 +24,6 @@ const MAX_TEXT = 200;
 const SPECIAL_KEYS = new Set(["Enter", "Escape", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
 // Editing shortcuts change a field; the field's type step already records the result.
 const EDIT_SHORTCUTS = new Set(["a", "c", "v", "x", "z", "y"]);
-const SECRET_AUTOCOMPLETE = /\b(cc-[a-z-]+|one-time-code|current-password|new-password)\b/;
 const NOT_TEXT_INPUTS = new Set(["button", "submit", "reset", "image", "checkbox", "radio", "file", "hidden"]);
 const CLICKABLE = new Set(["a", "button", "summary", "label", "input", "select", "textarea"]);
 
@@ -138,9 +137,7 @@ export class Recorder {
   }
 
   #isSecret(el) {
-    if (el.localName !== "input") return false;
-    if (el.type === "password" || el.type === "hidden") return true;
-    return SECRET_AUTOCOMPLETE.test(el.getAttribute("autocomplete") ?? "");
+    return this.env.reader.isSecretField(el);
   }
 
   #isFormField(el) {

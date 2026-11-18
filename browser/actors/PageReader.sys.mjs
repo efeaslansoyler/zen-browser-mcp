@@ -93,6 +93,30 @@ export const NAME_FROM_CONTENT = new Set([
   "radio",
 ]);
 
+// Password, card and one-time-code fields: recordings never read their values, and typing into
+// them is the secret_field permission.
+const SECRET_AUTOCOMPLETE = /\b(cc-[a-z-]+|one-time-code|current-password|new-password)\b/;
+export function isSecretField(el) {
+  if (el?.localName !== "input") return false;
+  if (el.type === "password" || el.type === "hidden") return true;
+  return SECRET_AUTOCOMPLETE.test(el.getAttribute("autocomplete") ?? "");
+}
+
+// A button that submits its form when clicked or pressed with Space (a <button> in a form
+// submits unless its type says otherwise).
+export function submitsForm(el) {
+  const control = el?.closest?.("button, input");
+  if (!control?.form) return false;
+  return control.localName === "button" ? control.type === "submit" : ["submit", "image"].includes(control.type);
+}
+
+// The focused element, inside open shadow roots too.
+function deepActiveElement(doc) {
+  let el = doc.activeElement;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+  return el;
+}
+
 export const clean = (s) => (s ?? "").replace(/\s+/g, " ").trim();
 export const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 export const normalize = (s) => clean(s).toLocaleLowerCase("tr");
@@ -372,6 +396,23 @@ export class PageReader {
   sample({ selector }) {
     const el = [...this.env.document().querySelectorAll(selector)].find((el) => isVisible(el));
     return el ? truncate(clean(el.innerText ?? el.textContent ?? ""), 500) : null;
+  }
+
+  // Whether an action submits a form or types into a secret field (permissions): the target
+  // (ref or point) of a click, or the focused element for keys and typing. enter/space: the
+  // keys pressed there.
+  risk({ ref, x, y, focused = false, enter = false, space = false }) {
+    const doc = this.env.document();
+    const el = focused ? deepActiveElement(doc) : ref ? this.env.element(ref) : doc.elementFromPoint(x, y);
+    if (!focused) return { submit: submitsForm(el), secret: isSecretField(el) };
+    const textField =
+      el?.localName === "input" &&
+      !["button", "submit", "reset", "image", "checkbox", "radio", "file"].includes(el.type);
+    return {
+      // Enter in a form's text field submits it (implicit submission); Enter or Space on a submit button too
+      submit: ((enter || space) && submitsForm(el)) || (enter && textField && !!el.form),
+      secret: isSecretField(el),
+    };
   }
 
   // A short description for permission prompts and the log: 'button "Get a quote"'

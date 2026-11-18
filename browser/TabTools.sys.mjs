@@ -226,7 +226,7 @@ export function tabTools(ctx) {
             ...status,
             note: "Queued. Do not retry browser actions. Poll tab_work status; the owner must finish before handoff.",
           });
-        if (ctx.readConfig().mode === "auto") {
+        if (ctx.gate("tab_work.handoff")) {
           ctx.transferReadyTab(tabId, activeSession);
           ctx.operation?.tabVersions?.set(tabId, ownership.version(tabId));
           return text(ctx.coordinationStatus(tabId, activeSession));
@@ -235,16 +235,20 @@ export function tabTools(ctx) {
       const browser = tab.linkedBrowser;
       const version = ownership.version(tabId);
       ctx.operation?.tabs?.add(tabId);
-      const result = await ctx.askIsland(
-        browser,
-        ctx.describeAction("request_tab", {}, browser),
-        L(
-          `${activeAgent.name} wants access to this tab: ${reason}`,
-          `${activeAgent.name} bu sekmeye erişmek istiyor: ${reason}`,
-        ),
-        { ok: L("Allow", "Ver"), cancel: L("Deny", "Verme") },
-        timeout,
-      );
+      // one of the user's own tabs: the request_tab rule (an agent's tab: tab_work.handoff above)
+      const allowed = !foreignOwner && ctx.gate("request_tab");
+      const result = allowed
+        ? "done"
+        : await ctx.askIsland(
+            browser,
+            ctx.describeAction("request_tab", {}, browser),
+            L(
+              `${activeAgent.name} wants access to this tab: ${reason}`,
+              `${activeAgent.name} bu sekmeye erişmek istiyor: ${reason}`,
+            ),
+            { ok: L("Allow", "Ver"), cancel: L("Deny", "Verme") },
+            timeout,
+          );
       if (result !== "done") {
         return text(result === "timeout" ? `The user did not answer within ${timeout} s.` : "The user declined.");
       }

@@ -59,7 +59,8 @@ export function tabWork(ctx) {
       .queue(tabId)
       .filter((item) => sessions.has(item.session) && !sessions.get(item.session).disconnected);
     ownership.queues.set(tabId, queue);
-    if (queue.length && ctx.readConfig().mode === "auto") transferReadyTab(tabId, queue[0].session);
+    // the permission template decides whether the tab passes on by itself
+    if (queue.length && ctx.rule("tab_work.handoff") === "allow") transferReadyTab(tabId, queue[0].session);
   }
 
   function coordinateTab(args, session) {

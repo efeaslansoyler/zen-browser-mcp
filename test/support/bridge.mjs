@@ -19,6 +19,7 @@ import { activity } from "../../browser/Activity.sys.mjs";
 import { toolRunner, batchTool } from "../../browser/ToolRunner.sys.mjs";
 import { tabTools } from "../../browser/TabTools.sys.mjs";
 import { permissions } from "../../browser/Permissions.sys.mjs";
+import * as policy from "../../browser/Policy.sys.mjs";
 
 export { DialogOpen, PageGone, Stopped, MARK };
 
@@ -38,6 +39,7 @@ export function bridgeContext(fakes = {}) {
     keyName,
     siteRule,
     normalizeConfig,
+    policy,
     sameReadContext,
     clipboardShortcut,
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
