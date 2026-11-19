@@ -1,3 +1,5 @@
+import { networkFilter } from "./NetworkFilters.sys.mjs";
+
 // Read tools: page text, the accessibility tree, find, waiting, network/console, JavaScript, React, axe.
 // Built last by main.js: helpers are taken from ctx once. Tools get their call as the second argument.
 export function readTools(ctx) {
@@ -182,7 +184,8 @@ export function readTools(ctx) {
       return text(Watches.summary(watches.start(session, tabId, browser, spec)));
     },
 
-    read_network_requests({ tabId, urlPattern, limit = 100, clear, id, max_chars = 20000 }, call) {
+    read_network_requests(args, call) {
+      const { tabId, limit = 100, clear, id, max_chars = 20000 } = args;
       const browser = browserFor(call, tabId);
       const log = network.get(browser.browserId);
       if (id != null) {
@@ -202,7 +205,7 @@ export function readTools(ctx) {
           return false;
         }
       });
-      if (urlPattern) list = list.filter((r) => r.url.includes(urlPattern));
+      list = list.filter(networkFilter(args));
       const lines = list.slice(-limit).map((r) => {
         const status = r.error ?? r.status ?? (r.duration == null ? "pending" : "no response");
         const extra = [r.type, r.mime, r.cached && "cached", r.duration != null && `${r.duration} ms`]

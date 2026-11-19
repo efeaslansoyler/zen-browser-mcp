@@ -593,12 +593,25 @@ tool(
   },
 );
 
+const networkFilters = {
+  urlPattern: z.string().optional().describe('Only requests whose URL contains this text, e.g. "/api/".'),
+  method: z
+    .union([z.string(), z.array(z.string()).min(1)])
+    .optional()
+    .describe("HTTP method or methods, case insensitive."),
+  status: z.union([z.number().int().min(100).max(599), z.enum(["1xx", "2xx", "3xx", "4xx", "5xx"])]).optional(),
+  resource_type: z
+    .union([z.string(), z.array(z.string()).min(1)])
+    .optional()
+    .describe("Gecko resource type, such as document, subdocument, fetch, xmlhttprequest, script or image."),
+};
+
 tool(
   "read_network_requests",
-  "List HTTP requests made by a the agent tab (documents, scripts, XHR/fetch, images...) with #id, method, status or error, type and duration, recorded since the tab was opened. Cleared when the page navigates to a different site. Pass id for one request's details: request and response headers (cookies and authorization hidden), request body, and the response body for fetch/XHR and documents.",
+  "List HTTP requests made by the agent tab (documents, scripts, XHR/fetch, images...) with #id, method, status or error, type and duration, recorded since the tab was opened. Cleared when the page navigates to a different site. Pass id for one request's details: request and response headers (cookies and authorization hidden), request body, and the response body for fetch/XHR and documents.",
   {
     tabId,
-    urlPattern: z.string().optional().describe('Only requests whose URL contains this text, e.g. "/api/".'),
+    ...networkFilters,
     limit: z.number().optional().describe("Maximum requests, most recent kept (default 100)."),
     clear: z.boolean().optional().describe("Clear the log after reading."),
     id: z.number().optional().describe("Show details of this request (#id from the list)."),

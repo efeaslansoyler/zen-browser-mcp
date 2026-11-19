@@ -23,7 +23,7 @@ rough equivalents, not API or engine parity.
 | Clipboard | Every operation and shortcut asks in the island |
 | File upload | `file_upload` |
 | Downloads | `downloads`: list / wait / cancel, path, progress, sha256, events file |
-| Console and network | Console; requests with headers and bodies |
+| Console and network | Console; filter requests by URL, method, status and type; inspect headers and bodies |
 | Network route / mock / HAR / throttling | Not available; the tools only observe |
 | React | `react` tree/inspect with optional props; no render history or Suspense tracking |
 | Accessibility audit | `accessibility`: bundled axe-core, findings and refs per frame |
