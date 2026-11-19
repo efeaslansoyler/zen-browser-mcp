@@ -23,7 +23,7 @@ rough equivalents, not API or engine parity.
 | Screenshot labels | `annotate`: refs of up to 80 visible controls in the top frame |
 | Clipboard | Every operation and shortcut asks in the island |
 | File upload | `file_upload` |
-| Downloads | `downloads`: list / wait / cancel, path, progress, sha256, events file |
+| Downloads | `downloads`: list / wait / cancel, native dialog status, file details and progress events |
 | Console and network | Console; filter requests by URL, method, status and type; inspect headers and bodies |
 | HAR export | Bounded redacted capture across allowed hosts and explicitly attached tabs |
 | Network route / mock / throttling | Not available; the tools only observe |
@@ -34,7 +34,7 @@ rough equivalents, not API or engine parity.
 | Cookie / storage / session export | Not available: the user's sessions are already there |
 | CDP / headless / launching a browser | Out of scope: the everyday browser and window |
 | Proxy / geolocation / TLS settings | Not available; global profile settings are never changed |
-| Recording / streaming / profiling | Not available |
+| Video recording / streaming / profiling | Not available. The recipe recorder captures user actions as replayable steps. |
 | Element picks, island, Stop, shared tabs | zen-browser-mcp's own focus |
 | Installed extension popups | `extensions`; tab switch asks even in auto mode |
 
@@ -46,8 +46,8 @@ rough equivalents, not API or engine parity.
   errors, navigation, leaving the tab, disconnect and bridge reload, and at the latest 30 s
   after the last `key_down`/`mouse_down` (`hold_ms` can shorten that). A held button doesn't move
   between frames; it's released with an error.
-- `browser_settings` never resizes the window or changes global prefs. Every change and reset
-  asks in the island, even in auto mode. Previous inline CSS and native overrides are restored
+- `browser_settings` changes per-tab overrides. Changes and reset ask in the
+  island in both built-in modes. Previous inline CSS and native overrides are restored
   on reset, leaving the tab, take-back, disconnect and bridge shutdown.
 - Mobile / tablet / desktop are generic Gecko presets (mobile and tablet send the Android
   Firefox user agent), not Safari or a full device fingerprint; `maxTouchPoints` isn't spoofed.
@@ -55,3 +55,6 @@ rough equivalents, not API or engine parity.
   behavior; servers that sniff the user agent may need an explicit reload.
 - `if_changed` compares encoded images exactly, with no pixel tolerance; the cache holds 8 MB
   / 32 entries. `annotate` doesn't label iframe content; labels are removed after the capture.
+
+See [browser diagnostics](browser-diagnostics-plan.md) for the current tool workflows
+and the [compatibility matrix](browser-compatibility.md) for tested builds.

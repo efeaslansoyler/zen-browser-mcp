@@ -10,8 +10,8 @@ edit/test loop.
 - `npm test` must pass. For behavior that depends on Gecko, also run the matching
   `scripts/check-*.ts` live check. Never run `check-pick-delivery.ts` casually: it messages a
   real Codex conversation.
-- Live checks share the user's `~/.config/zen-mcp/config.json`; confirm `"mode": "auto"`
-  afterwards.
+- Prefer isolated XDG directories, a disposable profile and an explicit `ZEN_MCP_SOCKET`
+  for live checks. If a check uses the user's config, confirm `"mode": "auto"` afterwards.
 - `zenctl` calls are one-off sessions unless you pass `--session <name>`. Clean up tabs you
   open.
 - Check [docs/gecko-pitfalls.md](docs/gecko-pitfalls.md) before debugging browser behavior,

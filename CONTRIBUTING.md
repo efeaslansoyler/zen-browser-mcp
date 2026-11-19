@@ -7,21 +7,23 @@ Thanks for helping. Read [docs/architecture.md](docs/architecture.md) first and
 
 ```sh
 git clone https://github.com/efeaslansoyler/zen-browser-mcp && cd zen-browser-mcp
-npm install && npm run build
-ln -s "$PWD/browser" ~/.local/share/zen-mcp   # browser side straight from the repo
-node dist/cli.js install                         # adds the loader; restart the browser once
-claude mcp add --scope user zen -- node "$PWD/src/server.ts"
+npm ci
+npm run build
+node dist/cli.js install
+claude mcp add --scope user zen -- node "$PWD/dist/cli.js"
 ```
 
-With the symlink in place, `install` and the server's self-update leave the browser files
-alone: the bridge runs your working tree.
+Restart the browser after installing the loader. Developers with a fresh
+data directory can link `browser/` to `${XDG_DATA_HOME:-$HOME/.local/share}/zen-mcp`
+before installation. The installer leaves a development symlink in place.
 
 ## The edit loop
 
-- **Browser side (`browser/`):** `node scripts/zenctl.ts reload` reloads the bridge without
+- **Browser side (`browser/`):** Update the installed copy if it is not linked to
+  the checkout, then run `node scripts/zenctl.ts reload` to reload the bridge without
   restarting the browser. It compares the bridge version before and after and exits non-zero
   if the new version failed to start; the error is in `$XDG_RUNTIME_DIR/zen-mcp.log`.
-- **Node side (`src/`):** reconnect the MCP server in your client (`/mcp` in Claude Code).
+- **Node side (`src/`):** Run `npm run build`, then reconnect the MCP server in your client.
   New tool schemas and server instructions are read at connect time; instructions are only
   shown to new sessions.
 - **Poke the bridge directly:** `node scripts/zenctl.ts eval 'h.version'` evaluates in the
@@ -68,6 +70,8 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-tab-access.ts` | Tab access between sessions: joining, turns in a shared tab, parallel tabs, share and take-back menus, leaving, shutdown, the ask-mode join prompt |
 | `check-cancellation.ts`, `check-hit-test.ts` | Stop, covered-click detection |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |
+| `check-screenshots.ts`, `check-opened-tabs.ts` | Deploy and full-page screenshots, opener tracking |
+| `check-network-diagnostics.ts`, `check-web-vitals.ts` | Network filters, HAR and local performance |
 | `check-extensions.ts`, `check-clipboard.ts` | Extension popups with a temporary extension, clipboard consent |
 | `check-inspection.ts` | React (development and production builds), axe |
 | `check-recordings.ts` | Record a trusted click, review, save, list and retrieve a disposable recipe |
@@ -82,6 +86,10 @@ on Hyprland a window on a hidden workspace is suspended. For clipboard checks, u
 `wl-clipboard` on Wayland or `xclip` on X11. Afterwards check that
 `~/.config/zen-mcp/config.json` still says `"mode": "auto"`.
 
+Use `node scripts/check-downloads.ts --native-dialog` in a disposable profile on a build that
+opens Gecko's file-handling dialog for the fixture. The check verifies the pending status and
+answers only the dialog for its own fixture file.
+
 The checks run without anyone clicking: auto mode asks before risky operations, so fixture
 setup and inspection use `pageEval` from `scripts/support/fixture.ts` (the check itself, not an
 agent) instead of `javascript_tool`, and a check that makes a risky call on purpose answers its
@@ -92,11 +100,15 @@ a real MCP process (`toolsOnly: true` plus a `push` path), or picks wait in the 
 
 To try risky changes on a copy:
 
-1. Copy the browser installation (e.g. `/opt/zen-browser-bin`) to a scratch folder and run
-   `node dist/cli.js install --browser <copy>` with a temporary `XDG_DATA_HOME`.
-2. Start it with a separate runtime folder and profile:
-   `XDG_RUNTIME_DIR=<dir> <copy>/zen-bin --headless --no-remote --profile <tmp-profile>`.
-3. Use `ZEN_MCP_SOCKET=<dir>/zen-mcp.sock` with `zenctl` and the check scripts.
+1. Copy the browser installation to a writable scratch directory. In a dedicated shell,
+   set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` and
+   `XDG_RUNTIME_DIR` to separate scratch directories. Set the runtime directory's mode to
+   `0700` and export `ZEN_MCP_SOCKET="$XDG_RUNTIME_DIR/zen-mcp.sock"`.
+2. Run `node dist/cli.js install --browser <copy>` and start the browser copy with
+   `--no-remote --profile <tmp-profile>`. Use a private display for native UI and clipboard
+   checks. For fixtures without a visible UI requirement, use `--headless`.
+3. Run `zenctl` and the check scripts from the same shell so the MCP subprocesses inherit
+   the same paths. Close the disposable browser when finished.
 4. Serve test pages with `python3 -m http.server 8765`.
 5. For console errors add `--marionette --remote-allow-system-access` and read
    `Services.console.getMessageArray()`.
@@ -104,7 +116,7 @@ To try risky changes on a copy:
 To screenshot browser UI (the island, menus), use the window's
 `browsingContext.currentWindowGlobal.drawSnapshot(rect, scale, color)`.
 
-To try the published package: `npm pack`, then `npx -y ./zen-browser-mcp-<version>.tgz`.
+To check the local package contents, run `npm pack --dry-run`.
 
 ## Codex
 

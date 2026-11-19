@@ -1,16 +1,15 @@
 # Codex integration
 
-Codex works with the standard MCP tools like any client. Three things are Codex-specific:
-which conversation a call belongs to, which conversations are open, and how element picks
-reach a conversation.
+Use the Codex registration command in the [README](../README.md#install-from-source).
+This page covers how Zen MCP associates a tool call with a conversation and sends
+element picks back to Codex.
 
 ## Conversation identity
 
-Codex keeps its MCP server processes in a background service (the app-server daemon), one
-per conversation, and they outlive the Codex window. The process says nothing about the
-conversation, but every tool call carries `_meta.threadId` (also
-`_meta["x-codex-turn-metadata"].thread_id`). `server.ts` turns it into the session
-`codex:<thread>`, so tabs belong to the conversation, the same id that receives picks.
+An MCP process can serve several conversations. When Codex provides a valid
+conversation UUID in `_meta.threadId` or `_meta["x-codex-turn-metadata"].thread_id`,
+`server.ts` uses `codex:<thread>` for tab access and pick delivery. Calls without
+usable metadata use the generic session fallback.
 
 ## Which conversations are shown
 
@@ -37,8 +36,8 @@ that talks to the Codex service:
 
 ## Hooks (fallback)
 
-`npx zen-browser-mcp hooks install` (which also sets up the other clients' hooks) or
-`npx zen-browser-mcp codex-hooks install` (Codex only) adds SessionStart, UserPromptSubmit and SessionEnd hooks to
+`node dist/cli.js hooks install` (all supported clients) or
+`node dist/cli.js codex-hooks install` (Codex only) adds SessionStart, UserPromptSubmit and SessionEnd hooks to
 `~/.codex/hooks.json` (other hooks are kept; the old file is backed up). Each hook first tries
 to start the watcher. Only if the Codex service can't be reached does it start the older
 per-conversation receiver (`codex-relay.ts`), which connects after the first message and stops

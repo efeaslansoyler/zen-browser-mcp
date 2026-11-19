@@ -1,7 +1,7 @@
 # Gecko and Zen pitfalls
 
-Every item below cost us time at least once (Gecko 157–158, Zen). Check here before debugging
-something that "should work".
+These notes cover behavior observed in Zen and other desktop Gecko builds.
+See the [compatibility matrix](browser-compatibility.md) for exact test versions.
 
 ## Loading and scopes
 
@@ -63,6 +63,9 @@ something that "should work".
   encoded. Decode with `DecompressionStream` (`br` is spelled `"brotli"`).
 - `DownloadSource.browsingContextId` may be a subframe; use its `top.browserId` (and the
   opener chain for popups).
+- Gecko's `unknownContentType.xhtml` file-handling dialog can open before the Downloads list
+  contains an entry. Use its launcher's browsing context for attribution. The dialog's
+  owner window and its selected tab can be unrelated to the download source.
 - While a download is being canceled with `finalize(true)`, Gecko briefly reports
   `canceled` with partial data, which looks like `paused`.
 
@@ -72,6 +75,9 @@ something that "should work".
   newer Gecko builds. ESR-based builds may use `resource:///modules/sessionstore/SessionStore.sys.mjs`.
   Values of lazy tabs may only be readable some time after the window opens.
 - `gBrowser.insertBrowser(tab)` (no underscore) creates the `<browser>` of a lazy tab.
+- A browser window-modal dialog such as Firefox Spotlight sets `window-modal-open` on the
+  chrome document root. While it is open, assigning `gBrowser.selectedTab` can leave the prior
+  tab selected. Keep the selected-browser and target-document identity checks after any switch.
 - Without a container Firefox sets `.tab-context-line` to `display: none`.
 - `drawSnapshot(rect, …)` wants document coordinates (viewport + scrollX/Y).
 - In Zen, `gBrowser.tabs` holds only the active workspace's tabs; tabs in other spaces are

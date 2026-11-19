@@ -1,13 +1,18 @@
 # Documentation
 
-For installing and using zen-browser-mcp, start with the [README](../README.md)
-([Türkçe](../README.tr.md)). These pages are for contributors and the curious.
+Start with the [English README](../README.md) or [Türkçe README](../README.tr.md)
+to install and connect your MCP client.
 
-| Page | What's in it |
+| Guide | What it covers |
 |---|---|
-| [architecture.md](architecture.md) | How the pieces fit: Node server, browser bridge, actors, protocol, sessions, permissions, picks, downloads |
-| [codex.md](codex.md) | Codex specifics: conversation identity, the service watcher, hooks, pick delivery, sandbox sockets |
-| [gecko-pitfalls.md](gecko-pitfalls.md) | Gecko and Zen behavior that cost us time; read before debugging |
-| [feature-comparison.md](feature-comparison.md) | Comparison with agent-browser and known limits |
+| [Browser workflows](browser-workflows.md) | Tabs, the island, sending picks, recording recipes, clipboard, extensions and downloads |
+| [Permissions and security](permissions.md) | Approval modes, custom rules, site lists and the local trust boundary |
+| [Browser diagnostics](browser-diagnostics-plan.md) | Page and screenshot diffs, inspection, network and HAR, and local Web Vitals |
+| [Browser compatibility](browser-compatibility.md) | Tested Linux builds, results and observed limits |
+| [Codex integration](codex.md) | Conversation identity, hooks, pick delivery and socket access |
+| [Architecture](architecture.md) | MCP server, browser bridge, actors, transport, sessions and permissions |
+| [Gecko pitfalls](gecko-pitfalls.md) | Browser behavior to check before debugging |
+| [Feature comparison](feature-comparison.md) | Rough equivalents with agent-browser and known limits |
 
-Development setup, tests and live checks are in [CONTRIBUTING.md](../CONTRIBUTING.md).
+See [Contributing](../CONTRIBUTING.md) for development setup, tests and live
+fixtures.

@@ -12,12 +12,12 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 
 ### Added
 
-- **Browser tools** with Claude in Chrome's names and parameters: tabs, `navigate`, `computer`
+- **Browser tools** for tabs, `navigate`, `computer`
   (mouse, keyboard, screenshots), `read_page`, `find`, `form_input`, `get_page_text`,
   `wait_for`, `javascript_tool`, console and network reads, `file_upload`, `handle_dialog`
   and `browser_batch`.
-- **Real input** from the page's own process: trusted events, `navigator.webdriver` stays
-  false, and agent tabs work in the background without taking focus. Optional human-like
+- **Real input** from the page's own process: trusted events and background tab input.
+  Optional human-like
   pointer paths and typing, held keys and buttons, and hit testing that refuses clicks on
   covered or disabled targets.
 - **Iframes**, cross-origin ones included, in reads, refs and input.
@@ -65,6 +65,10 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   a separate container without the user's cookies and logins.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
   snapshot, and unchanged screenshots can skip the image.
+- **Browser diagnostics**: screenshot baselines across deploys, full-page capture, HTTP
+  request filters, verified opener notices, redacted cross-host HAR export, and local Web Vitals.
+- **Browser compatibility**: Gecko ESR SessionStore fallback, pending native download status
+  and clearer errors when browser dialogs block emulation or extension actions.
 - **CLI**: `install`, `uninstall`, `doctor`, `config` (mode, permissions, sites), `skill`, `hooks`, `codex-hooks` and `recipes`; the browser
   side updates itself when the package version changes.
 - **Agent skill** (`skills/zen-browser`) for Claude Code and Codex: which tool to use when, from

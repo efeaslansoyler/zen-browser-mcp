@@ -1,242 +1,106 @@
-# Browser diagnostics implementation plan
+# Browser diagnostics
 
-This is the proposed implementation sequence for viewport screenshot diffs, full-page screenshots,
-network filters, HAR capture, and local Web Vitals. The HAR scope includes same-tab login and
-checkout redirects across hosts, with discovered child tabs available for explicit attachment.
-Proposed tool arguments and limits are starting points for review.
+Diagnostics run on tabs the MCP session can access. See [src/tools.ts](../src/tools.ts)
+for full schemas and [permissions](permissions.md) for policy and site rules.
 
-## 1. Add viewport screenshot diffs for interactions and deploys
+## Page reads and screenshots
 
-**User flow.** Take a baseline with `computer {action: "screenshot", diff: true, tabId}`. Return the
-normal viewport image and a baseline ID. Compare a later viewport capture with
-`diff: true, since: "<baselineId>"`. Keep the baseline until eviction so several steps can be
-compared against it. Return dimensions, changed pixel count and ratio, and an image highlighting
-changed pixels. An unchanged result needs only metadata. A missing, incompatible, or expired
-baseline returns the current screenshot and a reason. The caller can explicitly take a new
-baseline. The diff image uses the same viewport coordinates as the current capture.
+For repeated `read_page` or `get_page_text` calls, use `diff: true`. Save the
+returned snapshot ID and submit it as `since` with the same tool and options.
+Apply the returned line hunks to the earlier text without its metadata header.
+An incompatible, evicted or missing snapshot returns a full read. Re-read
+after document or tab access changes before using references.
 
-**Deploy workflow.** Create the baseline with `diff: true, baseline_scope: "deploy"` before the
-deploy. After deploying, reload the page and wait for the same application-ready condition,
-then compare with its ID. The same ID can compare production with preview in a second tab
-owned by the same session. Use matching viewport, scale, and scroll settings. The result
-identifies the baseline and current captures so the caller can verify which pages were compared.
+Use `computer` with `action: "screenshot"` for a viewport image. `if_changed`
+can skip identical images. `annotate` labels up to 80 visible controls in the
+top frame. For pixel diffs, first capture with `diff: true`, then pass the
+returned baseline ID as `since` with `diff: true` on a later capture. Default
+baselines are document-scoped. Save with `baseline_scope: "deploy"` to compare
+across a reload or another tab owned by the same session. Keep access to the
+source tab and match viewport, scale and scroll position. Baselines are
+in-memory, bounded, and expire after an hour or on bridge reload.
 
-**Implementation**
+`full_page: true` captures the rendered document in one bounded image. Tall
+pages may be downsampled. Nested scroll containers and content that has not
+loaded keep their current state. Full-page capture preserves the existing
+viewport click mapping. Use refs or a viewport image for click targets.
 
-- Add the opt-in arguments to the standalone `computer` schema in `src/tools.ts` and validate the
-  combination in `browser/InputTools.sys.mjs`. Keep the normal JPEG, annotations,
-  `if_changed`, and extension-panel screenshot paths working. Reject combining visual diff with
-  `if_changed` or annotations initially so label changes do not dominate pixel comparison.
-- In `PageInput.sys.mjs`, reuse the current overlay handling, canvas resize, and size caps. For
-  diff-enabled viewport captures, compare canvas pixels before JPEG encoding. Use a documented
-  per-pixel color tolerance and retain the existing exact comparison for `if_changed`. Test
-  image generation independently of Gecko using synthetic pixel arrays.
-- Add a bounded bridge-local cache with byte accounting for decoded pixels, eviction and a
-  documented lifetime. The default baseline is tied to the session, source tab, membership epoch,
-  document, and frame context for interaction checks. A deploy baseline survives page reloads
-  and navigation. It stays in memory until expiry, eviction, membership revocation, source tab
-  close, session end, or bridge reload. Take the baseline in an owned tab and keep it open until
-  comparison. Follow `ReadSnapshots.sys.mjs` for access cleanup.
-- Record the original capture's document and frame sites, source tab membership ticket,
-  timestamp, safe page identity, viewport geometry, effective scale, and scroll position. Pin the
-  WindowGlobal during each capture. Before returning a cross-document comparison, recheck the
-  stored baseline sites against current policy and verify that the same session still has access
-  to both tabs. Compare compatible geometry and scale. Different document or frame identities
-  are expected in deploy mode. Expired or incompatible deploy baselines return an explicit
-  reason and the current view without silently replacing the requested baseline.
-- Keep both modes independent of browser profile storage. A deployment can occur between
-  captures in an open session. Long-term baselines across bridge restarts can be a separate
-  local artifact feature if that workflow is needed.
+Viewport diff workflows were inspired by [Agent Browser diffing](https://agent-browser.dev/diffing).
 
-**Acceptance.** A fixture changes one colored rectangle and reports the correct diff region,
-then reports an unchanged result for identical captures. A second fixture serves revisions A
-and B under the same URL. Compare across a reload in one tab and across distinct preview and
-production fixture origins in two owned tabs. Exercise scroll and scale mismatches, default
-document invalidation, access revocation, a newly blocked baseline site, and expired IDs. Existing
-screenshot compatibility and scaled click tests pass.
+## Browser settings and inspection
 
-## 2. Add full-page screenshots
+`browser_settings` reads and changes per-tab viewport, DPR, touch overrides,
+user agent and color scheme. `device` uses a generic mobile, tablet or desktop
+Gecko preset. Requested and measured values can differ. Server-side user agent
+changes may need a reload. In the built-in modes, changes and reset ask in the
+island. Close a blocking browser dialog before retrying a change that needs to
+select a tab. Overrides roll back on reset or loss of access.
 
-**User flow.** `computer {action: "screenshot", full_page: true, tabId}` returns a whole-document
-image for inspection, with capture dimensions and a downsampling indicator. The caller uses refs
-or a fresh viewport capture for subsequent clicks. Treat it as a distinct capture mode from
-visual diff, `if_changed`, and viewport annotations in the initial API.
+`react` can read DOM-backed Fiber trees and ancestor chains, with optional
+bounded committed props. Private React structures and minified names can
+limit results. `accessibility` runs the bundled axe-core locally and reports
+violations and incomplete checks with element refs. Accessible frames are
+audited separately, or use `ref` for one subtree. Cross-frame relationships
+require manual review. Props and findings can contain sensitive page data.
 
-**Implementation**
+## Console, network log and new tabs
 
-- Use a top-frame query in `ZenMcpChild.sys.mjs` to read document bounds in CSS document
-  coordinates, including the viewport on short pages. In `PageInput.sys.mjs`, pass those bounds
-  to the same WindowGlobal's `drawSnapshot` and re-check the document and site after capture.
-  See `docs/gecko-pitfalls.md` for the document-coordinate and bfcache details.
-- Start with a single bounded capture. Apply the scale before allocating a full-document bitmap,
-  retain a reasonable output pixel budget, and report actual output dimensions and scaling.
-  Very tall pages may need a local artifact or tiles for legible text. Verify the native capture
-  in Zen before choosing that fallback.
-- Keep the existing scroll offset and skip updating `ctx.state.scale` for this mode. Capture
-  currently rendered document content. Nested scroll containers and virtualized or unloaded
-  content keep their existing state. Restore overlays and close bitmaps in error paths.
+Use `read_console_messages` for page console output.
+`read_network_requests` lists HTTP requests from the tab. The ordinary log
+keeps up to 500 requests and resets on cross-site navigation. Use `urlPattern`
+for a URL substring, `method` for one or more HTTP methods, `status` for a
+code or class such as `4xx`, and `resource_type` for one or more Gecko types
+such as `fetch`, `xmlhttprequest`, or `document`. Filters combine with AND.
+An `id` selects request details, including available headers and bounded body
+text. Cookies and authorization headers are hidden. Other headers, URLs and
+bodies can still contain sensitive data.
 
-**Acceptance.** A fixture with colored markers above, inside, and below the viewport shows all
-markers while preserving scroll and the prior viewport click mapping. Exercise long pages,
-device scale, a Zen workspace, and cancellation/navigation during capture. Verify that a blocked
-iframe still prevents capture.
+Input results can report `openedTabs` when Gecko provides a verifiable opener.
+Check `tabs_context_mcp` for delayed notices. Use the usual `request_tab` flow to
+gain access. Tabs with an unknown opener can still appear in the tab list.
 
-## 3. Filter the network log
+## Cross-host HAR capture
 
-Add optional method, status, and resource type filters to `read_network_requests` in
-`src/tools.ts`. Make status accept an exact code or family such as `4xx`. Keep the current
-`urlPattern` substring filter. Normalize HTTP methods, document the Gecko resource type names,
-and combine filters with AND. Use the same predicates for HAR export.
+1. Call `network_capture` with `action: "start"` on an owned tab before navigation.
+   The capture follows that tab across allowed hosts.
+2. For another tab, obtain access first, then call `action: "attach"` with
+   `childTabId`. Attachment covers requests started after it succeeds.
+3. Use `status` for counters, `stop` for a local HAR file, or `cancel` to
+   discard the recording. Only the owner can manage it. Start and attach ask
+   in the built-in modes.
 
-In `ReadTools.sys.mjs`, apply site access and filters before the existing limit. Preserve the
-meaning of `id`, output formatting, and `clear` clearing the entire ordinary tab log. Failed and
-pending requests are retained in an unfiltered list and have no HTTP status unless headers arrived.
+Apply the network filters on `stop` to narrow the export. The capture holds
+up to 2,000 entries, with a 4 MiB estimated storage budget and a
+10-minute duration. It freezes at a limit for later retrieval. Stop returns
+a local file retained for 15 minutes and reports unfinished requests and
+entries with insufficient timing. The HAR uses Gecko timing, including
+request send time in wait when it cannot separate the phases.
 
-**Acceptance.** Fixture routes exercise GET/POST, exact and family status, fetch and document
-types, combined filters, limits, empty results, and the existing details and clear behavior.
+The export masks query values and recognized sensitive path segments. It
+omits cookies, credentials, headers outside the allowlist and arbitrary
+bodies. An explicit `response_projection` at start can include selected
+boolean or enumerated fields from one exact same-origin HTTPS or localhost
+JSON endpoint. Hostnames and unmasked paths can still identify resources.
+Review a HAR before sharing it. Captures observe traffic from the attached
+tabs, including activity by the user and other sessions sharing those tabs.
 
-## 4. Discover spawned tabs and capture HAR across a flow
+## Local Web Vitals
 
-### 4a. Report tabs opened by an agent's action
+`web_vitals` reads the current top-level document without reloading it. It
+reports navigation milestones, TTFB, FCP, LCP, INP and CLS when Gecko exposes
+the required entries. LCP and INP can be provisional. Interaction coverage,
+visibility and back-forward cache restores can limit the measurements.
+Times are in milliseconds and CLS is unitless. These are local tab
+measurements. See the [compatibility matrix](browser-compatibility.md)
+for observed metric support.
 
-- Today `tabs_context_mcp` lists unassigned tabs in `userTabs`. `Tabs.sys.mjs` still requires
-  membership before page tools can reach those tabs. `DownloadLog.sys.mjs` already follows
-  `BrowsingContext.opener` for download attribution. A page action currently has no equivalent
-  result that links a new tab to its source action.
-- Prototype browser-native attribution using `TabOpen` and trusted opener context around the
-  action, including tabs opened in a new window. Validate `target=_blank`, `rel=noopener`,
-  `window.open`, and delayed opens. The browser may omit `opener` for `noopener`; verify a
-  trusted source signal before attributing these cases. Timing alone is insufficient.
-- For a positively attributed open, emit `openedTabs` metadata with source and destination tab
-  IDs in the tool result. Keep a short-lived session-local notice for delayed opens and return
-  it via `tabs_context_mcp`. Use existing tab description and site checks before exposing any
-  destination information. A missing attribution can still appear in the ordinary tab list.
-- Discovery leaves the existing `request_tab` approval and ownership checks in place. Test a
-  simultaneous unrelated user tab, another agent session, a blocked destination, and closing a
-  popup before the next call. Record which opener cases Gecko can prove on the supported build.
+## Verification
 
-### 4b. Record and export HAR
-
-**User flow.** Proposed `network_capture` actions are `start`, `attach`, `status`, `stop`, and `cancel`.
-Start on an agent-owned blank tab before navigating. The user or agent goes through a redirecting
-login in that tab. Stop freezes the recording and returns a local HAR path, the entry count, and
-counts for omissions. Stop may apply the same filters as the network log. Cancel discards the
-capture. Status exposes elapsed time, attached tabs, state, and counters to its owner.
-
-**Capture and lifecycle**
-
-- Use the existing `NetworkLog.sys.mjs` HTTP observation points and browser ID attribution.
-  Feed a separate bridge-local capture buffer before the ordinary log's host-reset and eviction.
-  The ordinary log is tab-wide and capped at 500 requests. The capture is owned by the
-  initiating session and follows that same tab through allowed origins.
-- Start records requests opened after it succeeds, including redirects and requests from frames
-  attributed to the tab. Track lifecycle events by Gecko channel ID. A capture observes the
-  tab's traffic, including actions by the user or another tab member. A caller that needs
-  isolation can use an agent-owned tab with no other members or the existing `tab_work hold`.
-- After the session acquires a discovered child tab through the normal access flow, `attach`
-  includes its subsequent traffic. Explain that requests before attachment can be missing,
-  especially the first OAuth navigation. Never backfill an unowned popup's earlier traffic.
-  Use separate root and child lifecycles: a child closing or losing access stops collection
-  there, while the root capture can continue. Recheck child access before including its records.
-- Bound elapsed time and storage. Start with one capture per tab, a 10-minute duration,
-  2,000 entries, and an overall byte ceiling. At a limit, freeze the capture for a bounded
-  retrieval window and report the stop reason. At explicit stop, take a fixed cut of the log,
-  count in-flight and unsupported records separately, and return without waiting on long-lived
-  requests. Retry a failed file write from the same frozen capture.
-- Register action-specific rules in `Policy.sys.mjs` and readable activity labels. Treat
-  starting a persistent capture as its own operation. Recommended defaults are island consent
-  for start and owner-only stop/export under the same tab and current site checks. Keep capture
-  independent of individual tool calls and of `TabWake`. Stop in the island, tab take-back or
-  close, owner departure or session end, and bridge reload end capture collection and revoke
-  unexported data. Wire these through `Control.sys.mjs`, `Tabs.sys.mjs`, `Sessions.sys.mjs`,
-  and bridge shutdown. Re-check ownership and site policy during capture and export.
-
-**Data and output**
-
-- Retain diagnostic fields when Gecko exposes them: method, redacted URL, HTTP version, status,
-  redirect target, type, MIME, cache flags, transfer sizes, and timing phases. Keep allowlisted
-  headers with validated values, such as content type, content length, and cache directives.
-  Sanitize redirect URLs with the same rules as request URLs. Strip URL userinfo and fragments,
-  mask query values by default, and mask path segments that match known sensitive forms. Hostnames
-  and remaining paths can still identify internal resources, so describe what the export retains.
-- Always omit cookies, credentials, authorization, session and CSRF values, and custom headers
-  outside the safe allowlist. For bodies, retain size and MIME when available. Include content
-  only through an explicit projection of known-safe typed fields for a scoped endpoint. Unknown
-  schemas, free text, HTML, binary data, and auth/form payloads are omitted. Generic field-name
-  redaction alone cannot identify secrets in arbitrary content. Keep sanitized data in the HAR
-  buffer and report omission/truncation counts without including values in the activity log or
-  MCP response.
-- Validate native channel timing data on the supported Gecko build before defining the mapping.
-  Reuse a real timing source such as `nsITimedChannel` where supported. HAR 1.2 requires
-  nonnegative `send`, `wait`, and `receive` values whose sum with other exported phases
-  equals the total. Keep unavailable optional sizes/timings marked unavailable as the format
-  specifies. Count entries that cannot be represented faithfully and verify redirects, cached
-  responses, and failed requests in Firefox DevTools.
-- Write the HAR atomically under a unique name in a private runtime directory and return its
-  path. Use the existing `IOUtils` and `PathUtils` conventions for file safety and bounded
-  retention. Keep export serialization separate from capture and independent of upstream code.
-
-**Acceptance.** Use local synthetic endpoints on two hostnames with login-shaped redirects,
-requests before start and after stop, and sentinel cookies, query strings, headers, and bodies.
-Verify one HAR shows the allowed host transitions, imports into Firefox DevTools, retains expected
-safe headers and timing data, and omits all secret sentinels. Cover credentials nested in a body,
-custom headers, URLs and redirects, a detached child after attachment, disallowed requests,
-parallel sessions, owner departure, Stop, timeout, capacity, in-flight requests, write retry,
-and the existing log reset. Real credentials are unnecessary.
-
-## 5. Report local Web Vitals and navigation timings
-
-**User flow.** A read-only `web_vitals {tabId}` tool reports metric values and their availability
-for the open top-level document. Start with Navigation Timing (TTFB and useful load milestones),
-FCP, LCP, and INP where Gecko exposes the data required to calculate it. The response distinguishes
-measured, provisional, insufficient-data, and unsupported metrics. Report measurement scope,
-visibility, and navigation context. Keep CLS unsupported unless the active browser exposes
-Layout Instability entries. A local tab measurement does not represent field data.
-
-**Implementation**
-
-- Use a dedicated actor query from `ReadTools.sys.mjs`, registered in `src/tools.ts` and as a
-  read operation in `Policy.sys.mjs`. Collect read-only primitives. Use the page's
-  `PerformanceObserver.supportedEntryTypes` and event interaction ID capability to establish
-  support. Reuse document identity and cancellation from `PageQuery.sys.mjs`.
-- Verify buffered entries for FCP/LCP on an already loaded page. For INP, verify interaction
-  counting, entry thresholds, buffered history, and lifecycle before returning the metric.
-  Group records by interaction and use the standard percentile definition. A partial observer
-  history needs explicit coverage metadata. If native data cannot support valid INP, return
-  insufficient data rather than substitute the slowest event.
-- Keep any necessary observer state on the top-frame actor. Install only for tracked documents
-  that need it, tear it down with the actor, and define navigation and bfcache behavior before
-  reporting metrics from a restored page. Existing tab wake behavior remains sufficient for a
-  tool call. The fixture should distinguish a visible tab from a hidden workspace. New external
-  dependencies require separate approval.
-
-**Acceptance.** Use a local document with a controlled server delay, a visible content paint,
-and a deliberately slow fixture interaction. Assert field presence and relative timing rather
-than exact milliseconds. Verify fresh and already loaded documents, no-interaction state,
-navigation, and supported-versus-unsupported reporting on the installed Zen build.
-
-## Delivery and verification
-
-- Use one local commit per feature, with separate commits for spawned-tab discovery and HAR.
-  Update tool descriptions, README, and the relevant
-  rows in `docs/feature-comparison.md` with each implementation. Credit
-  [Agent Browser](https://github.com/vercel-labs/agent-browser) for the specific ideas we adopt.
-  Implement against Zen's native APIs and the public specs.
-- Run `npm test`, `npm run lint`, and `npm run format:check` for each commit. Extend the
-  existing screenshot and policy tests, add focused deterministic coverage for the new
-  behavior, and use a dedicated Gecko fixture for screenshot, HAR, and performance workflows.
-- When changing `browser/`, copy it into the installed bridge with
-  `cp -r browser/. ~/.local/share/zen-mcp/` and run `node scripts/zenctl.ts reload`. Reconnect the
-  MCP client when `src/` changes. Open and close only fixture tabs. Confirm configuration mode
-  remains `auto`. Never run `scripts/check-pick-delivery.ts`.
-- Follow-up after this work: ref-scoped screenshots. The element picker already
-  captures element geometry, so inspect `browser/Picks.sys.mjs` as the starting point.
-  A ref-scoped capture can later become a separate visual diff scope.
-
-## References
-
-- [Firefox screenshot work](https://github.com/mozilla-firefox/firefox/blob/main/devtools/docs/user/taking_screenshots/index.md)
-- [Agent Browser diffing](https://agent-browser.dev/diffing)
-- [HAR 1.2 format](https://webperfwg.org/specs/HAR/Overview.html)
-- [Firefox DevTools HAR builder](https://searchfox.org/firefox-main/source/devtools/client/netmonitor/src/har/har-builder.js)
-- [Web Vitals browser support](https://github.com/GoogleChrome/web-vitals#browser-support)
+The live fixtures are [screenshots](../scripts/check-screenshots.ts),
+[page read diffs](../scripts/check-read-diff.ts),
+[network and HAR](../scripts/check-network-diagnostics.ts),
+[opened tabs](../scripts/check-opened-tabs.ts),
+[inspection](../scripts/check-inspection.ts),
+[input and emulation](../scripts/check-input.ts), and
+[Web Vitals](../scripts/check-web-vitals.ts). Follow the
+[contributor guide](../CONTRIBUTING.md#live-checks) for isolation and setup.

@@ -112,13 +112,14 @@ returns them.
 - `watch`: longer or ongoing (a stream going live, a price or status changing). It writes to an
   events file; if you can follow a file in the background, do that and keep working.
 - Downloads: after the click, `downloads` with `action: "wait"`; for big files `until: "start"`
-  and follow the returned events file. Don't poll the downloads folder.
+  and follow the returned events file. If it reports `waiting_for_user`, ask the user to answer
+  the browser's download dialog and wait again after they choose Save.
 
 ## Permissions and Stop
 
-- The user's permission mode decides what asks on the island: every action (ask), only risky
-  ones such as submitting forms, secret fields, JavaScript and uploads (auto), or their own
-  rules (custom). A denial, or "your permission settings don't allow this", is a decision, not
+- The permission mode decides which operations ask on the island. Auto asks for protected
+  operations such as form submissions, secret fields, JavaScript and uploads. Ask also
+  prompts for ordinary page input. Custom uses the user's own rules. A denial is a decision, not
   an error to work around. Sites the user blocked (or left off their allowlist) stay closed.
 - Clipboard access and tab switches for extension popups need island approval unless the user
   allowed them. Never get around a question or a refusal through the shell or page JavaScript.

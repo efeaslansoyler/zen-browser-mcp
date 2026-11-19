@@ -2,8 +2,7 @@
 
 zen-browser-mcp lets AI agents (Claude Code, Codex, any MCP client) use the browser you already have
 open: Zen or another Firefox-based browser, your window, your logins. Input reaches pages as
-real, trusted events without starting the remote agent or WebDriver, so `navigator.webdriver`
-stays `false`.
+trusted events through the page actor without starting the remote agent or WebDriver.
 
 ```
 MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser/main.js (browser parent process)
@@ -20,7 +19,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 
 | File | Role |
 |---|---|
-| `cli.ts` | `npx zen-browser-mcp`: no arguments runs the MCP server; `install`, `uninstall`, `doctor`, `config`, `hooks`, `codex-hooks`; `hook <client>` is the prompt hook command |
+| `cli.ts` | `node dist/cli.js`: no arguments runs the MCP server. Setup and configuration commands are listed by `--help`. |
 | `server.ts` | The MCP server: registers the tools, agent identity and per-call session, channel and lifecycle subscriptions |
 | `tools.ts`, `instructions.ts` | Tool schemas, descriptions and answer timeouts; server instructions |
 | `claude.ts` | Channel detection and the Claude conversation title |
@@ -36,14 +35,15 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 ### Browser side (`browser/`)
 
 The loader is a few lines of [autoconfig](https://support.mozilla.org/kb/customizing-firefox-using-autoconfig):
-`npx zen-browser-mcp install` adds a marked block to the browser's `.cfg` that maps
-`resource://zenmcp/` to `~/.local/share/zen-mcp` and loads `main.js` with `loadSubScript`. A
-development install makes that folder a symlink to the repo's `browser/`.
+`node dist/cli.js install` adds a marked block to the browser's `.cfg` that maps
+`resource://zenmcp/` to the data directory (usually `~/.local/share/zen-mcp`) and
+loads `main.js` with `loadSubScript`. Developers can link that directory to
+the checkout's `browser/`.
 
 Modules share state and helpers through one `ctx` object: each factory (`tabs(ctx)`,
 `pageQueries(ctx)`, …) returns functions that `main.js` adds to `ctx`, and modules call each
-other through `ctx` at call time. That makes load order irrelevant and lets tests replace any
-function with a fake (see `test/support/bridge.mjs`).
+other through `ctx`. Tool groups that destructure helpers are built last. The
+shared context lets tests replace helpers with fakes (see `test/support/bridge.mjs`).
 
 | File | Role |
 |---|---|
@@ -67,9 +67,9 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Demonstrations.sys.mjs` | "Show me once" end to end: record, review, save; `show_me`, and "Record steps for an agent…" in the page menu with sending to a session |
 | `RecordingReview.sys.mjs` | The island's review after a recording: name, delete steps, values that change every time, Play |
 | `Recipes.sys.mjs` | Saved recordings (`~/.local/state/zen-mcp/recipes/<id>/`), their text for agents, the `recipes` tool; the CLI uses it too |
-| `SiteRules.sys.mjs` | Global mode and per-site `ask`/`block` rules |
+| `SiteRules.sys.mjs` | Config normalization and domain matching for blocklists and allowlists |
 | `Cancellation.sys.mjs` | Real Stop: cancels waits, typing, drags and navigation in flight |
-| `NetworkLog.sys.mjs`, `DownloadLog.sys.mjs` | Network requests and downloads of agent tabs |
+| `NetworkLog.sys.mjs`, `HarCapture.sys.mjs`, `DownloadLog.sys.mjs` | Tab network logs, redacted HAR lifecycle and download tracking |
 | `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
 | `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe. Its one message to the parent is a recorded step |
 | `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |
@@ -88,7 +88,7 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
 
 - Every request carries a `session`. For Claude and generic clients it is the MCP process
   UUID. Codex sends the conversation id in each tool call's `_meta.threadId`, so Codex calls
-  use `codex:<thread>`: one Codex service process can serve many conversations.
+  use `codex:<thread>` when the metadata supplies a valid ID. See [Codex integration](codex.md).
 - A session sees and touches only the tabs it is a member of: the ones it opened, joined, or
   the user handed to it from the tab menu (`givenByUser`). A tab can have several members.
   `tabs_context_mcp` also lists the tabs other sessions work in (`agentTabs`) and the user's
@@ -138,7 +138,7 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
 
 - **Operations and templates** (`Policy.sys.mjs`, shared with the CLI): every tool call is an
   operation (`operationOf`: a tool, or `tool.action` for `computer`, `clipboard`,
-  `extensions`, `browser_settings`, `handle_dialog`, `recipes`), plus `submit`,
+  `extensions`, `browser_settings`, `handle_dialog`, `network_capture`, `recipes`), plus `submit`,
   `secret_field` and `request_tab.agent_tab`. A mode gives each one a rule: `allow`, `ask` or
   `deny`. The `ask` and `auto` columns of `SECTIONS` are the built-in templates; `custom`
   reads `permissions.jsonc` (a base template plus the user's rules, parsed by
@@ -207,8 +207,11 @@ context belongs to an agent tab (or a popup it opened). Each one appends JSON li
 `$XDG_RUNTIME_DIR/zen-mcp-downloads/<id>-<time>.jsonl` on start, every 10 % and at the end, with the
 sha256 when done (hashed in 4 MB chunks so the UI never blocks). Agents with a background
 monitor watch that file; others call `downloads wait`. The bridge deletes the file five
-minutes after the download ends. If the browser is set to always ask where to save, a
-download only appears once the save dialog is answered.
+minutes after the download ends. Gecko's native file-handling dialog can open before a download
+entry exists. The bridge uses the dialog launcher's browsing context to report
+`waiting_for_user` to sessions with access to the originating tab. This status has no download
+ID or events file. Cancel clears the pending status. After Save, wait again for the download
+entry and its ordinary progress and result.
 
 ## Page watches
 
