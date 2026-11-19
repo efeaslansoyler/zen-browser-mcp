@@ -4,6 +4,7 @@
 // ctx. `tools` fakes are added to (and override) the real tab and batch tools.
 import { agentTheme, applyTheme } from "../../browser/Agent.sys.mjs";
 import { Cancellation } from "../../browser/Cancellation.sys.mjs";
+import { Locks } from "../../browser/Locks.sys.mjs";
 import { Ownership } from "../../browser/Ownership.sys.mjs";
 import { ReadSnapshots, sameReadContext } from "../../browser/ReadSnapshots.sys.mjs";
 import { siteAllowed, normalizeConfig } from "../../browser/SiteRules.sys.mjs";
@@ -57,7 +58,7 @@ export function bridgeContext(fakes = {}) {
     commands: {},
     lastAgent: agentTheme({ id: "codex" }),
     calls: new Set(),
-    toolQueue: Promise.resolve(),
+    locks: new Locks(),
     stopGeneration: 0,
     activeCalls: 0,
     island: null,

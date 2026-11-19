@@ -111,6 +111,7 @@ function logError(where, e) {
     const { ExtensionPanels } = load("ExtensionPanels");
     const { ReadSnapshots, sameReadContext } = load("ReadSnapshots");
     const { Cancellation } = load("Cancellation");
+    const { Locks } = load("Locks");
     const { config } = load("Config");
     const policy = load("Policy");
     const { sessionManager } = load("Sessions");
@@ -218,9 +219,7 @@ function logError(where, e) {
       // The agent the island and menus show: the one that made the latest tool call. Never the
       // identity of a call; each call carries its own (see ToolRunner.sys.mjs).
       lastAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
-      // One island and approval UI is shared: tool requests are serialized so another client
-      // cannot change the identity while an action or confirmation is pending.
-      toolQueue: Promise.resolve(),
+      locks: new Locks(), // per-tab, exclusive and island locks (ToolRunner.sys.mjs)
       calls: new Set(), // running tool calls: Cancellation scopes with session, agent and tabs
       stopGeneration: 0,
       activeCalls: 0, // running tool calls that show the island
@@ -230,7 +229,8 @@ function logError(where, e) {
       setLastAgent(theme) {
         ctx.lastAgent = theme;
         globalThis.zenMcpActiveAgent = { id: theme.id, name: theme.name };
-        ctx.island?.setAgent(theme);
+        // a question on the island keeps the agent that asks it (Control.islandTurn)
+        if (!ctx.locks.busy("island")) ctx.island?.setAgent(theme);
       },
 
       // The tool call working in this tab or in its extension popup. Helpers that get a browser

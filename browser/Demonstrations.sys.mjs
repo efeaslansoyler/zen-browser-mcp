@@ -125,13 +125,15 @@ export function demonstrationTools(ctx) {
       const browser = ctx.browserFor(call, tabId);
       if (typeof message !== "string" || !message.trim()) throw new Error("message must say what to show.");
       timeout = Math.min(Math.max(Number(timeout) || 900, 30), MAX_SHOW_TIMEOUT);
-      const result = await demonstrate(ctx, browser, {
-        message,
-        name,
-        timeout,
-        wait: (seconds) => ctx.waitIslandAnswer(call, seconds, browser),
-        agent: call.agent,
-      });
+      const result = await ctx.islandTurn(call, () =>
+        demonstrate(ctx, browser, {
+          message,
+          name,
+          timeout,
+          wait: (seconds) => ctx.waitIslandAnswer(call, seconds, browser),
+          agent: call.agent,
+        }),
+      );
       if (result.status === "timeout") return text(`The user did not finish within ${timeout} s; nothing was saved.`);
       if (result.status === "cancelled") return text("The user cancelled; nothing was saved.");
       if (result.status === "empty") return text("The user finished without doing any steps; nothing was saved.");

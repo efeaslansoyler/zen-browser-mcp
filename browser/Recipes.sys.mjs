@@ -263,22 +263,23 @@ export function recipeTools(ctx) {
           await store.remove(id);
           return text(`Deleted the recipe ${quote(recipe.name)}.`);
         }
-        ctx.island?.ask(
-          null,
-          L("Delete recipe?", "Tarif silinsin mi?"),
-          L(
-            `${call.agent.name} wants to delete the recipe “${recipe.name}”.`,
-            `${call.agent.name}, “${recipe.name}” tarifini silmek istiyor.`,
-          ),
-          true,
-          { ok: L("Delete", "Sil"), cancel: L("Keep", "Kalsın") },
-        );
-        let answer;
-        try {
-          answer = await ctx.waitIslandAnswer(call, 120);
-        } finally {
-          ctx.island?.askEnded();
-        }
+        const answer = await ctx.islandTurn(call, async () => {
+          ctx.island?.ask(
+            null,
+            L("Delete recipe?", "Tarif silinsin mi?"),
+            L(
+              `${call.agent.name} wants to delete the recipe “${recipe.name}”.`,
+              `${call.agent.name}, “${recipe.name}” tarifini silmek istiyor.`,
+            ),
+            true,
+            { ok: L("Delete", "Sil"), cancel: L("Keep", "Kalsın") },
+          );
+          try {
+            return await ctx.waitIslandAnswer(call, 120);
+          } finally {
+            ctx.island?.askEnded();
+          }
+        });
         if ((answer?.status ?? answer) !== "done") return text("The user kept the recipe; nothing was deleted.");
         await store.remove(id);
         return text(`Deleted the recipe ${quote(recipe.name)}.`);

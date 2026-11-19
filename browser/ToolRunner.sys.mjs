@@ -1,6 +1,10 @@
-// Running tool calls: one request per socket connection, serialized through a single queue
-// because the island and its approval prompts are shared. runTool checks ownership, site
-// rules and permissions around each call, shows it on the island and logs it.
+// Running tool calls: one request per socket connection. Calls on the same tab run in order
+// (a lock per tab, taken on arrival for every tab the call names); calls on different tabs run
+// side by side, and calls without a tab don't wait. Shared browser state takes one more lock
+// (exclusive: clipboard, browser settings, extension panels), and the island shows one question
+// at a time (Control.sys.mjs). Locks are always taken in that order: tabs, exclusive, island.
+// runTool checks ownership, site rules and permissions around each call, shows it on the island
+// and logs it.
 //
 // Each call is a Cancellation scope that carries its own identity: session, agent, the tabs it
 // touched (tabs), the ownership versions it was queued with (tabVersions), the user's island
@@ -97,7 +101,7 @@ export function toolRunner(ctx) {
   }
 
   // Handles one request line and writes the reply. Coordination requests answer at once;
-  // everything else waits its turn in the tool queue.
+  // everything else waits for the tabs it names.
   async function handle(line, transport, output) {
     const { ownership, sessions, sessionVersions, state } = ctx;
     let message;
@@ -131,7 +135,9 @@ export function toolRunner(ctx) {
         const referenced =
           tool === "browser_batch" ? (args.actions || []).map((step) => step.input?.tabId) : [args.tabId];
         const ticket = ownership.ticket(referenced.filter((id) => id != null));
-        const pending = ctx.toolQueue.then(async () => {
+        const lock = ctx.locks.acquire(referenced.filter((id) => id != null).map((id) => `tab:${id}`));
+        const run = async () => {
+          await lock.ready;
           if (generation !== ctx.stopGeneration || state.paused) throw new ctx.Stopped();
           ownership.checkTicket(ticket);
           if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session))
@@ -161,10 +167,15 @@ export function toolRunner(ctx) {
           } finally {
             call.cancel();
             ctx.calls.delete(call);
+            call.exclusive?.release();
           }
-        });
-        ctx.toolQueue = pending.catch(() => {});
-        const content = await pending;
+        };
+        let content;
+        try {
+          content = await run();
+        } finally {
+          lock.release();
+        }
         message = { ok: true, content, ...(content.isError ? { isError: true } : {}) };
       } else message = { ok: true, content: await fn(args) };
     } catch (e) {
@@ -183,7 +194,14 @@ export function toolRunner(ctx) {
     }
   }
 
-  return { runTool, handle };
+  // Shared browser state (the system clipboard, the selected tab, extension popups): one call at
+  // a time, held until the call ends. Taken after the call's tab locks.
+  async function exclusive(call) {
+    call.exclusive ??= ctx.locks.acquire(["exclusive"]);
+    await ctx.guard(call.exclusive.ready, call);
+  }
+
+  return { runTool, handle, exclusive };
 }
 
 export function batchTool(ctx) {

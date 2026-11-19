@@ -48,7 +48,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | File | Role |
 |---|---|
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
-| `ToolRunner.sys.mjs` | Request handling: the tool queue, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
+| `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` status, queue and handoff |
 | `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
 | `PageQuery.sys.mjs` | `query` to a frame's actor, refs across frames, coordinate translation, load waits, page dialogs |
@@ -101,6 +101,12 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   The format is undocumented; if it changes, menus fall back to short ids.
 - `tab_work` lets agents publish task notes and queue for another session's tab; the owner
   hands over with `finish`.
+- Calls on one tab run in order; calls on different tabs run side by side, and calls without a
+  tab don't wait. A call queues on every tab it names when it arrives (a batch on all of its
+  tabs), so requests can't wait for each other. The system clipboard, browser settings and
+  extension panels take one more lock (`exclusive`), held until the call ends. The island shows
+  one agent question at a time (`islandTurn` in `Control.sys.mjs`), labelled with the agent
+  that asks it. Locks are taken in the order tabs, exclusive, island.
 
 ## Permissions
 

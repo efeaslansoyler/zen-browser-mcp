@@ -154,7 +154,9 @@ export function tabTools(ctx) {
         throw new Error("options must be 2 to 6 non-empty answers of at most 80 characters.");
       }
       if (tabId == null && (ref != null || coordinate != null)) throw new Error("ref and coordinate need a tabId.");
-      return waitForUser(call, "ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout });
+      return ctx.islandTurn(call, () =>
+        waitForUser(call, "ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout }),
+      );
     },
 
     // Frames with short labels around elements the agent points out to the user; nothing
@@ -203,7 +205,9 @@ export function tabTools(ctx) {
     // a desktop notification goes out if Zen isn't focused. Credentials never pass the agent.
     async hand_to_user({ tabId, ref, coordinate, message, wait = "done", timeout = 600 }, call) {
       if (tabId == null) throw new Error("hand_to_user needs the tabId of the tab where the user should act.");
-      return waitForUser(call, "hand_to_user", { tabId, ref, coordinate, message, wait, timeout });
+      return ctx.islandTurn(call, () =>
+        waitForUser(call, "hand_to_user", { tabId, ref, coordinate, message, wait, timeout }),
+      );
     },
 
     // Asks for a tab the session doesn't own: "Allow / Deny" on the island, plus a desktop

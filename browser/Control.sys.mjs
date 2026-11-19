@@ -46,10 +46,28 @@ export function control(ctx) {
     ctx.island?.resumed();
   }
 
+  // The island shows one agent question at a time: a call waits here for its turn, and the
+  // island shows the asking call's agent until the question ends. Taken last, after tab and
+  // exclusive locks; nothing that holds it takes another lock.
+  async function islandTurn(call, ask) {
+    const turn = ctx.locks.acquire(["island"]);
+    try {
+      await ctx.guard(turn.ready, call);
+      if (call?.agent) ctx.island?.setAgent(call.agent);
+      return await ask();
+    } finally {
+      turn.release();
+    }
+  }
+
   // A yes/no question on the island (tab request, action permission). Returns "done",
   // "timeout", or { status, message } when the user added a note; throws when the user
   // declined with a note.
-  async function askIsland(call, browser, text, message, labels, timeout = 120) {
+  function askIsland(call, browser, text, message, labels, timeout = 120) {
+    return islandTurn(call, () => showQuestion(call, browser, text, message, labels, timeout));
+  }
+
+  async function showQuestion(call, browser, text, message, labels, timeout) {
     if (ctx.tabRequests.has(browser)) throw new Error("A question is already pending in this tab.");
     const answered = new Promise((resolve) => ctx.tabRequests.set(browser, resolve));
     ctx.island?.ask(browser, text, message, true, labels);
@@ -166,6 +184,7 @@ export function control(ctx) {
     operationSleep,
     stopClaude,
     resumeClaude,
+    islandTurn,
     askIsland,
     answerIsland,
     cancelAsk,

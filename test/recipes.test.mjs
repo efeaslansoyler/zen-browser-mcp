@@ -116,6 +116,7 @@ test("the recipes tool deletes only after the user confirms on the island", asyn
     recipes,
     island: { ask: (...args) => asked.push(args), askEnded() {} },
     waitIslandAnswer: async () => answer,
+    islandTurn: (_call, ask) => ask(),
     gate: (key) => (key === "recipes.delete" ? false : true),
   };
   const { recipes: tool } = recipeTools(ctx);
@@ -162,6 +163,7 @@ function showMeContext({ answers, steps }) {
     ReviewModel,
     fileURL: (path) => `file://${path}`,
     browserFor: () => browser,
+    islandTurn: (_call, ask) => ask(),
     notifyAsk: () => false,
     closeAskAlert() {},
     island: {

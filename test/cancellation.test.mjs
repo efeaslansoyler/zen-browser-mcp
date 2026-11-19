@@ -118,7 +118,7 @@ for (const kind of ["text", "keys"]) {
   });
 }
 
-test("real parent batch and queue stay cancelled across immediate Stop/Resume", async () => {
+test("real parent batch and a call queued on its tab stay cancelled across immediate Stop/Resume", async () => {
   const replies = [];
   const effects = [];
   let started;
@@ -133,6 +133,7 @@ test("real parent batch and queue stay cancelled across immediate Stop/Resume", 
       return {};
     },
     liveTabs: () => [],
+    browserFor: (call, tabId) => call.tabs.add(tabId),
     cancelAsk() {},
     logActivity() {},
     findTab() {},
@@ -159,11 +160,16 @@ test("real parent batch and queue stay cancelled across immediate Stop/Resume", 
     JSON.stringify({
       session: "test-session",
       tool: "browser_batch",
-      args: { actions: [{ name: "wait" }, { name: "effect" }] },
+      args: {
+        actions: [
+          { name: "wait", input: { tabId: 1 } },
+          { name: "effect", input: { tabId: 1 } },
+        ],
+      },
     }),
   );
   await first;
-  const queued = context.handle(JSON.stringify({ session: "test-session", tool: "effect" }));
+  const queued = context.handle(JSON.stringify({ session: "test-session", tool: "effect", args: { tabId: 1 } }));
   context.stopClaude();
   context.resumeClaude();
   await Promise.all([batch, queued]);

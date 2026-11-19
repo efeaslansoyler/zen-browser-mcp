@@ -29,7 +29,8 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **`hand_to_user`**: steps only the user should do (logging in, 2FA, captchas, payments) are
   handed over in the island and the agent continues when the user presses **Done**, so
   credentials never pass through the agent.
-- **Several agents at once**: each MCP session (each Codex conversation) owns its own tabs.
+- **Several agents at once**: each MCP session (each Codex conversation) owns its own tabs,
+  and agents in different tabs work at the same time; calls on one tab run in order.
   `tab_work` publishes task notes and queues handoffs between sessions; `request_tab` asks the
   user for one of their tabs.
 - **Element picks**: pick one or more elements on any page (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>
@@ -74,6 +75,12 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 
 These stages were never published; they are listed so the history is readable. Details are in
 the commit log.
+
+### 2026-11-19
+
+- Each tool call carries its own session and agent instead of a global "active" one, and calls
+  on different tabs run in parallel (per-tab locks; one lock for the clipboard, browser
+  settings and extension panels; one island question at a time).
 
 ### 2026-11-18
 

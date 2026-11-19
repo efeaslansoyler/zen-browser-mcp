@@ -11,7 +11,7 @@ function harness(answer) {
     browserFor: () => browser,
     frameOf: () => browser.browsingContext,
     notifyAsk: () => false,
-    island: { ask: (...args) => asks.push(args), askEnded() {} },
+    island: { ask: (...args) => asks.push(args), askEnded() {}, setAgent() {} },
     query: async (_, name, data) => {
       queries.push({ name, data });
       return { value: answer };
@@ -64,7 +64,7 @@ test("a hand-over survives the pages the user goes through and ends on the islan
     browserFor: () => browser,
     frameOf: () => browser.browsingContext,
     notifyAsk: () => false,
-    island: { ask() {}, askEnded() {} },
+    island: { ask() {}, askEnded() {}, setAgent() {} },
     guard: (promise) => promise,
     cancelAsk: (_, result) => cancelled.push(result),
     // The outline's page goes away when the user logs in.

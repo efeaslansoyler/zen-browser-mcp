@@ -36,6 +36,7 @@ export function browserTools(ctx) {
           note: "Generic layout/DPR/touch presets, not a different browser engine or a full physical device fingerprint. Mobile/tablet presets use the matching Android Firefox user agent; desktop keeps the current one unless userAgent is supplied. Reload for server-side UA detection.",
         });
       const browser = browserFor(call, args.tabId);
+      await ctx.exclusive(call); // a change selects the tab
       if (args.action !== "get") await browserSettings.change(browser, call.session, args);
       const { value } = await query(browser, "browser_metrics");
       return text({
@@ -98,6 +99,7 @@ export function browserTools(ctx) {
 
     async clipboard(args, call) {
       const source = browserFor(call, args.tabId);
+      await ctx.exclusive(call);
       if (!args.extensionId) return text(await performClipboard(source, args));
       if (!["copy", "paste"].includes(args.action))
         throw new Error("extensionId is only needed for panel copy/paste; read/write use the system clipboard.");
@@ -127,6 +129,7 @@ export function browserTools(ctx) {
       if (args.tabId == null || !args.extensionId)
         throw new Error("tabId and extensionId are required except for list.");
       const source = browserFor(call, args.tabId);
+      await ctx.exclusive(call); // one popup and selected tab per window
       if (args.action === "close") {
         extensionPanels.close(source, call.session, args.tabId, args.extensionId);
         return text(
