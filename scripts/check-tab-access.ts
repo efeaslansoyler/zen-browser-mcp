@@ -1,7 +1,8 @@
 // Tab access between sessions, live, with real stdio MCP clients of the same agent type:
 // separate tab lists, joining another agent's tab, turns in a shared tab and parallel work in
-// different tabs, the share and take-back menus, leaving, session shutdown, and the ask-mode
-// join prompt. Only disposable fixture tabs are used. Run: node scripts/check-tab-access.ts
+// different tabs, what the other member did meanwhile, the share and take-back menus, leaving,
+// session shutdown, and the ask-mode join prompt. Only disposable fixture tabs are used.
+// Run: node scripts/check-tab-access.ts
 // Requires your existing auto mode; it switches to ask mode for the last check and restores
 // the original config file (a backup path is printed).
 import assert from "node:assert/strict";
@@ -35,8 +36,9 @@ async function tool(client: Client, name: string, args: Record<string, unknown> 
   assert.equal(Boolean(result.isError), error, text(result));
   return result;
 }
+// the tool's own answer (what other sessions did meanwhile may follow it)
 const json = async (client: Client, name: string, args: Record<string, unknown> = {}) =>
-  JSON.parse(text(await tool(client, name, args)));
+  JSON.parse((await tool(client, name, args)).content[0].text);
 async function connect() {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -158,6 +160,7 @@ try {
   const listB = await json(b, "tabs_context_mcp");
   const shared = listB.tabs.find((tab: any) => tab.tabId === tabId);
   assert.equal(shared.sharedWith[0].task.summary, `${token}: filling the field`);
+  await tool(a, "get_page_text", { tabId }); // A's view of the page, before B acts
   const started = Date.now();
   const waiting = settle(tool(a, "computer", { tabId, action: "wait", duration: 3 }));
   await sleep(300);
@@ -168,12 +171,23 @@ try {
   assert(!(await waiting).error);
   assert(parallel < 2500, `A call in another tab waited for the busy tab (${parallel} ms)`);
   assert(turn >= 2900, `A call in the busy tab didn't wait its turn (${turn} ms)`);
-  assert(text(await tool(a, "read_page", { tabId, filter: "interactive" })).includes("written by B"));
   console.log(
     `✓ Joining is immediate in auto mode; the other tab answered in ${parallel} ms while the shared tab waited its turn (${turn} ms)`,
   );
 
-  // 3. leaving: closing a shared tab only leaves it; a session's old queued calls can't run
+  // 3. what B did reaches A with A's next call (no values), and A is told to read again
+  const afterB = text(await tool(a, "computer", { tabId, action: "wait", duration: 0.1 }));
+  const report = JSON.parse(afterB.split("\n").find((line) => line.includes('"meanwhile"'))!);
+  assert.equal(report.meanwhile[0].actions, 2, afterB); // find + form_input
+  assert.match(report.pageChanged, /read the page again/);
+  assert(!afterB.includes("written by B"), "B's typed value reached A");
+  const reread = text(await tool(a, "read_page", { tabId, filter: "interactive" }));
+  assert(reread.includes("written by B") && !reread.includes("pageChanged"));
+  console.log(
+    "✓ The other member's actions come with the next call (count and time, no values), with a read-again warning",
+  );
+
+  // 4. leaving: closing a shared tab only leaves it
   const left = text(await tool(a, "tabs_close_mcp", { tabId }));
   assert.match(left, /still work in tab/);
   assert(await chrome(`!!h.findTab(${tabId})`), "Leaving closed a shared tab");
@@ -181,7 +195,7 @@ try {
   await tool(a, "get_page_text", { tabId }, true);
   console.log("✓ Closing a shared tab only leaves it; the other session keeps it");
 
-  // 4. the share menu adds a session; take-back cancels every member's work and leaves the tab open
+  // 5. the share menu adds a session; take-back cancels every member's work and leaves the tab open
   await menu(tabId, sessionA);
   assert.deepEqual(await members(tabId), [sessionB, sessionA]);
   const active = settle(tool(b, "computer", { tabId, action: "wait", duration: 30 }));
@@ -194,7 +208,7 @@ try {
   assert(await chrome(`!!h.findTab(${tabId})`), "Take-back closed the tab");
   console.log("✓ The share menu adds a session; take-back cancels active work of every member and leaves the tab open");
 
-  // 5. ask mode: joining asks; Deny keeps the session out, Allow lets it in
+  // 6. ask mode: joining asks; Deny keeps the session out, Allow lets it in
   await menu(other, sessionA);
   await tool(a, "tabs_close_mcp", { tabId: other }); // A leaves; B keeps working in it
   const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-tab-access-config-"));
@@ -213,7 +227,7 @@ try {
   }
   console.log("✓ Ask mode: joining an agent tab asks; Deny keeps the session out, Allow lets it in");
 
-  // 6. a session that shuts down leaves its tabs; the last one gives the tab back
+  // 7. a session that shuts down leaves its tabs; the last one gives the tab back
   await b.close();
   let gone = false;
   for (let i = 0; i < 100; i++) {

@@ -5,6 +5,7 @@
 import { agentTheme, applyTheme } from "../../browser/Agent.sys.mjs";
 import { Cancellation } from "../../browser/Cancellation.sys.mjs";
 import { Locks } from "../../browser/Locks.sys.mjs";
+import { TabActivity } from "../../browser/TabActivity.sys.mjs";
 import { TabAccess } from "../../browser/TabAccess.sys.mjs";
 import { ReadSnapshots, sameReadContext } from "../../browser/ReadSnapshots.sys.mjs";
 import { siteAllowed, normalizeConfig } from "../../browser/SiteRules.sys.mjs";
@@ -59,6 +60,7 @@ export function bridgeContext(fakes = {}) {
     lastAgent: agentTheme({ id: "codex" }),
     calls: new Set(),
     locks: new Locks(),
+    tabActivity: new TabActivity(),
     stopGeneration: 0,
     activeCalls: 0,
     island: null,

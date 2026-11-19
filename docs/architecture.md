@@ -59,6 +59,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user` and `hand_to_user`, approvals, dialogs, pick note box |
 | `Agent.sys.mjs` | Agent identity, theme and icon (`assets/`: Claude, Codex, Antigravity, OpenCode, several agents; others a drawn `>_`); shared by Node and Gecko |
 | `TabAccess.sys.mjs` | Which sessions may use which tabs (a tab can have several members), their `tab_work` notes, and membership tickets for queued requests |
+| `TabActivity.sys.mjs` | In shared tabs: which session acted when, and whether it could change the page (for `meanwhile` and `pageChanged`) |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
 | `Recordings.sys.mjs` | "Show me once": publishes the recorded tabs to content processes, cleans and collects their steps, screenshots each step |
@@ -105,6 +106,12 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   read each other's; it never touches a page and answers at once. Closing a tab others still
   use only leaves it. A request remembers the caller's membership when it was queued
   (`TabAccess.ticket`); if the session left the tab before it ran, it is refused.
+- In a shared tab every step is noted (`TabActivity`: session, time, and whether it could
+  change the page; reads in the policy's "Reading and looking" section, `highlight` and
+  `ask_user` can't). A call's result then says what the other members did there since the
+  caller's last call (`meanwhile`: agent, task note, number of actions, how long ago; never
+  values or page contents) and, until the caller reads the page again (`read_page`, `find`,
+  `get_page_text`, a screenshot), that another member may have changed it (`pageChanged`).
 - Calls on one tab run in order; calls on different tabs run side by side, and calls without a
   tab don't wait. A call queues on every tab it names when it arrives (a batch on all of its
   tabs), so requests can't wait for each other. The system clipboard, browser settings and

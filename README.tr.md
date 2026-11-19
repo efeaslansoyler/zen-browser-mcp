@@ -124,8 +124,11 @@ Birden fazla oturum aynı sekmeyi paylaşabilir. `tabs_context_mcp` diğer oturu
 Paylaşılan sekmede ajanlar işlem işlem sırayla çalışır; bir `browser_batch` tek sıra olarak
 yürür. Ne yaptıklarını `tab_work` ile birbirlerine söylerler (`start`, `update`, ardından
 kısa bir özetle `finish`); `list`/`status` her üyenin notunu ve sekmede işlem sürüp
-sürmediğini gösterir. Sayfa içeriği ve sohbet geçmişi paylaşılmaz. Başkalarının da
-kullandığı sekmeyi kapatan ajan yalnızca sekmeden ayrılır.
+sürmediğini gösterir. Sayfa içeriği ve sohbet geçmişi paylaşılmaz. Ajan paylaşılan sekmeye
+döndüğünde bir sonraki sonucu, o arada diğerlerinin ne yaptığını söyler (kim, görev notu, kaç
+işlem, ne kadar önce; yazdıkları asla), biri sayfayı ajanın son okumasından sonra
+değiştirmiş olabilirse eski ref'leri kullanmadan önce sayfayı yeniden okumasını ister.
+Başkalarının da kullandığı sekmeyi kapatan ajan yalnızca sekmeden ayrılır.
 
 ## Kullanım
 

@@ -210,6 +210,7 @@ export function tabs(ctx) {
     const browser = tab.linkedBrowser;
     const id = browser.browserId;
     ctx.access.clear(id);
+    ctx.tabActivity.forget(id);
     releaseTabState(browser, { cancel });
     tab.removeAttribute(MARK);
     tab.removeAttribute("data-zen-agent");

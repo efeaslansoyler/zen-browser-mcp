@@ -32,10 +32,12 @@ the exact item) and is the most common mistake. If several user tabs could match
 Tabs can be shared between agent sessions. `tabs_context_mcp` lists the tabs other sessions
 work in as `agentTabs`; if your task is in one of them, join it with `request_tab` instead of
 opening the same page again. In a shared tab (`sharedWith` in your tab list) calls run one at
-a time, so another agent may have changed the page since you last looked: read it again
-before you act. Publish `tab_work start` when you begin and `tab_work finish` with a short
-summary when the whole task is done (no secrets); `tab_work status` shows what the others
-are doing. Don't close a tab others still use; closing it only takes you out of it.
+a time, so another agent may have changed the page since you last looked. Results then
+carry `meanwhile` (what the others did since your last call) and `pageChanged`: when you see
+`pageChanged`, read the page again before you use refs you got earlier. Publish
+`tab_work start` when you begin and `tab_work finish` with a short summary when the whole
+task is done (no secrets); `tab_work status` shows what the others are doing. Don't close a
+tab others still use; closing it only takes you out of it.
 
 ## Reading pages
 

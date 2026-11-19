@@ -84,6 +84,9 @@ the commit log.
   settings and extension panels; one island question at a time).
 - Tabs are shared instead of owned: several sessions can be members of a tab (join with
   `request_tab`), and `tab_work` keeps only task notes; the request queue and handoffs are gone.
+- In a shared tab, a call's result says what the other members did since the caller's last
+  call (`meanwhile`, no values) and asks it to read the page again when another member may
+  have changed it (`pageChanged`).
 
 ### 2026-11-18
 

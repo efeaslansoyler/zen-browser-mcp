@@ -108,6 +108,9 @@ export const OPERATIONS = new Map(
   SECTIONS.flatMap(([, rows]) => rows.map(([key, ask, auto, about]) => [key, { ask, auto, about }])),
 );
 
+// Operations that only look ("Reading and looking"): they never change a page.
+export const READS = new Set(SECTIONS[0][1].map(([key]) => key));
+
 export const COMPUTER_ACTIONS = {
   screenshot: "computer.screenshot",
   scroll: "computer.scroll",

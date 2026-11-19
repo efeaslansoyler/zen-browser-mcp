@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TabAccess } from "../browser/TabAccess.sys.mjs";
+import { TabActivity } from "../browser/TabActivity.sys.mjs";
 import { agentTheme } from "../browser/Agent.sys.mjs";
 import { TabMenu } from "../browser/TabMenu.sys.mjs";
 import { Channels } from "../browser/Channels.sys.mjs";
@@ -724,4 +725,60 @@ test("tabs_context_mcp lists recipes for the sites of open tabs", async () => {
   assert.match(list.recipesNote, /recipes action get/);
   h.context.recipes = { list: async () => [] };
   assert.equal("recipes" in JSON.parse((await h.request("A", "tabs_context_mcp")).content[0].text), false);
+});
+
+test("tab activity: what the others did since a session's last call, and whether its read is stale", () => {
+  const activity = new TabActivity();
+  activity.record(1, "A", false, 1000); // A reads
+  activity.seen(1, "A", true);
+  activity.record(1, "B", false, 1000); // B only looks, in the same millisecond: A's read is still good
+  assert.deepEqual(activity.since(1, "A"), { others: new Map([["B", { actions: 1, last: 1000 }]]), changed: false });
+  activity.record(1, "B", true, 3000); // B clicks
+  const report = activity.since(1, "A");
+  assert.deepEqual(report.others.get("B"), { actions: 2, last: 3000 });
+  assert.equal(report.changed, true);
+  activity.seen(1, "A", false); // A acts without reading again
+  assert.equal(activity.since(1, "A").others.size, 0);
+  assert.equal(activity.since(1, "A").changed, true, "still stale until A reads");
+  activity.seen(1, "A", true);
+  assert.equal(activity.since(1, "A").changed, false);
+  // a session that never read has no old refs to warn about
+  assert.equal(activity.since(1, "C").changed, false);
+  assert.equal(activity.since(1, "C").others.size, 2);
+  activity.forget(1);
+  assert.equal(activity.since(1, "C").others.size, 0);
+});
+
+test("a call in a shared tab says what the others did meanwhile and when the page may have changed", async () => {
+  const h = harness();
+  const tabId = h.own("A");
+  h.register("B");
+  h.context.mark(h.tabs.get(tabId), "true", "B");
+  Object.assign(h.context.tools, {
+    get_page_text: async (args, call) => (h.context.browserFor(call, args.tabId), [{ type: "text", text: "page" }]),
+    form_input: async (args, call) => (h.context.browserFor(call, args.tabId), [{ type: "text", text: "set" }]),
+  });
+  const extra = (result) => result.content.slice(1).map((item) => JSON.parse(item.text));
+  assert.deepEqual(extra(await h.request("A", "get_page_text", { tabId })), []);
+  parsed(await h.request("B", "tab_work", { action: "start", tabId, summary: "Adding a coupon" }));
+  await h.request("B", "form_input", { tabId, ref: "ref_1", value: "x" });
+  await h.request("B", "form_input", { tabId, ref: "ref_2", value: "y" });
+  const [report] = extra(await h.request("A", "form_input", { tabId, ref: "ref_3", value: "z" }));
+  assert.equal(report.meanwhile.length, 1);
+  assert.equal(report.meanwhile[0].task, "Adding a coupon");
+  assert.equal(report.meanwhile[0].actions, 2);
+  assert.match(report.meanwhile[0].lastAction, /^\d+ s ago$/);
+  assert.match(report.pageChanged, new RegExp(`tab ${tabId} since you last read`));
+  assert(!JSON.stringify(report).includes('"x"'), "values never go to other sessions");
+  // nothing new since: no meanwhile, but the warning stays until A reads the page again
+  const [again] = extra(await h.request("A", "form_input", { tabId, ref: "ref_3", value: "z" }));
+  assert.equal(again.meanwhile, undefined);
+  assert.match(again.pageChanged, /read the page again/);
+  await h.request("B", "form_input", { tabId, ref: "ref_1", value: "x" });
+  const [afterRead] = extra(await h.request("A", "get_page_text", { tabId }));
+  assert.equal(afterRead.pageChanged, undefined);
+  assert.equal(afterRead.meanwhile[0].actions, 1);
+  // B was last here before A's calls: it hears about them once
+  const [forB] = extra(await h.request("B", "get_page_text", { tabId }));
+  assert.equal(forB.meanwhile[0].agent, h.context.sessions.get("A").name);
 });

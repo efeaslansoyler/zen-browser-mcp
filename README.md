@@ -120,7 +120,11 @@ Several sessions can share a tab. `tabs_context_mcp` lists the tabs other sessio
 agents take turns call by call, and a `browser_batch` runs as one turn. They tell each other
 what they are doing with `tab_work` (`start`, `update`, then `finish` with a short summary);
 `list`/`status` show each member's note and whether a call is running. Page contents and
-chat histories stay private. An agent that closes a tab others still use only leaves it.
+chat histories stay private. When an agent comes back to a shared tab, its next result says
+what the others did there meanwhile (who, their task note, how many actions, how long ago;
+never what they typed) and, if one of them may have changed the page since the agent last
+read it, tells it to read the page again before using old refs. An agent that closes a tab
+others still use only leaves it.
 
 ## Using it
 

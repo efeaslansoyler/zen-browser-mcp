@@ -112,6 +112,7 @@ function logError(where, e) {
     const { ReadSnapshots, sameReadContext } = load("ReadSnapshots");
     const { Cancellation } = load("Cancellation");
     const { Locks } = load("Locks");
+    const { TabActivity } = load("TabActivity");
     const { config } = load("Config");
     const policy = load("Policy");
     const { sessionManager } = load("Sessions");
@@ -225,6 +226,7 @@ function logError(where, e) {
       // identity of a call; each call carries its own (see ToolRunner.sys.mjs).
       lastAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
       locks: new Locks(), // per-tab, exclusive and island locks (ToolRunner.sys.mjs)
+      tabActivity: new TabActivity(), // what each session did in shared tabs (meanwhile)
       calls: new Set(), // running tool calls: Cancellation scopes with session, agent and tabs
       stopGeneration: 0,
       activeCalls: 0, // running tool calls that show the island
