@@ -889,3 +889,38 @@ test("a hold ends when its holder disconnects or the user takes the tab back", (
     assert.equal(h.context.holdOf(tabId), null, end);
   }
 });
+
+test("watching a hold answers at once while the holder works, and reports when it ends", async () => {
+  const h = harness();
+  const tabId = h.own("A");
+  h.register("B");
+  const lines = [];
+  const { Watches } = await import("../browser/Watches.sys.mjs");
+  const { readTools } = await import("../browser/ReadTools.sys.mjs");
+  h.context.Watches = Watches;
+  h.context.watches = new Watches({
+    events: { path: (id) => `/tmp/watch-${id}.jsonl`, append: (_file, line) => lines.push(line) },
+    held: (id, session) => {
+      const hold = h.context.holdOf(id);
+      return hold && hold.session !== session ? "held" : "free";
+    },
+    setTimeout: (fn) => setTimeout(fn, 5),
+    clearTimeout,
+  });
+  h.context.tools.watch = readTools(h.context).watch;
+  parsed(await h.request("A", "tab_work", { action: "hold", tabId, summary: "Paying" }));
+  const pending = h.request("A", "wait", { tabId });
+  await h.first;
+  const refused = await h.request("B", "write", { tabId: h.own("B") }); // own tab, same site, no noWorkaround
+  assert.equal(refused.ok, true);
+  const started = parsed(await h.request("B", "watch", { tabId, hold: true }));
+  assert.equal(started.hold.reason, "Paying");
+  assert.match(started.events, /watch-1/);
+  assert.equal((await h.request("A", "watch", { tabId, hold: true })).ok, false, "your own hold");
+  parsed(await h.request("A", "tab_work", { action: "release", tabId }));
+  for (let i = 0; i < 50 && lines.at(-1)?.event !== "released"; i++) await tick();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(lines.at(-1).event, "released");
+  for (const call of h.context.calls) call.cancel(new Error("fixture cleanup"));
+  await pending;
+});

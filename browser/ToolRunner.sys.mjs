@@ -144,8 +144,35 @@ export function toolRunner(ctx) {
     });
   }
 
-  // Handles one request line and writes the reply. tab_work answers at once (it never touches
-  // a page); everything else waits for the tabs it names.
+  function newCall(session, agent, ticket = []) {
+    return Object.assign(new ctx.Cancellation(), {
+      session,
+      agent: ctx.agentTheme(agent ?? { id: "claude" }),
+      tabs: new Set(),
+      reads: new Set(),
+      tabVersions: new Map(ticket),
+      userNotes: [],
+    });
+  }
+
+  // Calls that never touch a page answer at once, without the tab's lock: watching a hold must
+  // work while the holder is busy in the tab, and so must listing and stopping watches.
+  const immediate = (tool, args) => tool === "watch" && (args.hold || ["list", "stop"].includes(args.action));
+
+  async function runImmediate(session, agent, tool, args) {
+    const call = newCall(session, agent);
+    ctx.calls.add(call);
+    try {
+      await ctx.requireToolPermission(call, tool, args);
+      return await ctx.tools[tool](args, call);
+    } finally {
+      call.cancel();
+      ctx.calls.delete(call);
+    }
+  }
+
+  // Handles one request line and writes the reply. tab_work and the calls above answer at once
+  // (they never touch a page); everything else waits for the tabs it names.
   async function handle(line, transport, output) {
     const { access, sessions, sessionVersions, state } = ctx;
     let message;
@@ -160,6 +187,10 @@ export function toolRunner(ctx) {
         if (state.paused) throw new ctx.Stopped();
         if (tool === "tab_work") {
           ctx.reply(transport, output, { ok: true, content: ctx.coordinateTab(args, session) });
+          return;
+        }
+        if (immediate(tool, args)) {
+          ctx.reply(transport, output, { ok: true, content: await runImmediate(session, agent, tool, args) });
           return;
         }
         const generation = ctx.stopGeneration;
@@ -182,14 +213,7 @@ export function toolRunner(ctx) {
           access.checkTicket(ticket, session);
           if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session))
             throw new Error("This browser session disconnected while the request was queued.");
-          const call = Object.assign(new ctx.Cancellation(), {
-            session,
-            agent: ctx.agentTheme(agent ?? { id: "claude" }),
-            tabs: new Set(),
-            reads: new Set(),
-            tabVersions: new Map(ticket),
-            userNotes: [],
-          });
+          const call = newCall(session, agent, ticket);
           ctx.calls.add(call);
           ctx.setLastAgent(call.agent);
           try {

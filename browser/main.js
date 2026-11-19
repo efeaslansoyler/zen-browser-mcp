@@ -546,6 +546,11 @@ function logError(where, e) {
       check: async (browser, condition) => !!(await ctx.acrossFrames(browser, "check", condition, (value) => value)),
       sample: (browser, selector) => ctx.acrossFrames(browser, "sample", { selector }, (value) => value != null),
       assertSite: (browser) => ctx.assertSiteAccess(browser),
+      held: (tabId, session) => {
+        if (!access.shared(tabId) || !ctx.findTab(tabId)) return "gone";
+        const hold = ctx.holdOf(tabId);
+        return hold && hold.session !== session ? "held" : "free";
+      },
       setTimeout,
       clearTimeout,
     });

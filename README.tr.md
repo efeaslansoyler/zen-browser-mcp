@@ -130,7 +130,8 @@ işlem, ne kadar önce; yazdıkları asla), biri sayfayı ajanın son okumasınd
 değiştirmiş olabilirse eski ref'leri kullanmadan önce sayfayı yeniden okumasını ister.
 Bölünmemesi gereken birkaç adım için (ödeme, çok sayfalı form) ajan sekmeyi bir gerekçeyle
 tutabilir (`tab_work hold`, en fazla 10 dakika, uzatılabilir): ajan bırakana kadar diğerleri
-o sekmede reddedilir; `noWorkaround` ile o sitede başka sekmede de çalışamazlar, yani aynı
+o sekmede reddedilir (arka planda `watch` ve `hold: true` ile beklerler; tutma bitince haber
+gelir); `noWorkaround` ile o sitede başka sekmede de çalışamazlar, yani aynı
 sayfayı başka yerde açamazlar. Ajan 2 dakika hiç işlem yapmazsa veya bağlantısı koparsa tutma
 da biter; kendin bitirmek için sekmeye sağ tıkla → **Tutmayı kaldır**. Başkalarının da
 kullandığı sekmeyi kapatan ajan yalnızca sekmeden ayrılır.

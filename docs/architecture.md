@@ -216,6 +216,11 @@ the watch re-checks tab access and site rules itself on every tick. A watch ends
 match (unless `repeat`), on timeout, when the tab is closed or its session leaves it, when its
 session ends, and on Stop in the island.
 
+A hold watch (`hold: true`) reads no page: it checks another session's `tab_work hold` on any
+agent tab and ends with a `released` line when the hold ends. `ToolRunner` runs it, and
+`watch list`/`stop`, without the tab's lock (`immediate`), so it answers while the holder
+works; a call refused by a hold says to start one instead of retrying.
+
 ## Other files at runtime
 
 - `$XDG_RUNTIME_DIR/zen-mcp.log`: bridge errors (the browser's stderr goes nowhere).

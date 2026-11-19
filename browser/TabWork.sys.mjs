@@ -48,7 +48,7 @@ export function tabWork(ctx) {
     if (!hold) return;
     const site = hold.noWorkaround ? ` Don't work on ${hold.noWorkaround} in another tab meanwhile.` : "";
     throw new Error(
-      `${hold.tabId === tabId ? `Tab ${tabId}` : `The site of tab ${hold.tabId}`} is held by ${hold.by} (about ${hold.endsIn} left): ${JSON.stringify(hold.reason)}.${site} Do other work, check tab_work status, or wait for the hold to end.`,
+      `${hold.tabId === tabId ? `Tab ${tabId}` : `The site of tab ${hold.tabId}`} is held by ${hold.by} (about ${hold.endsIn} left): ${JSON.stringify(hold.reason)}.${site} Don't poll: watch it in the background (watch with tabId ${hold.tabId} and hold: true reports when it ends) and do other work meanwhile.`,
     );
   }
 

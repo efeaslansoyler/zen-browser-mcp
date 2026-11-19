@@ -6,7 +6,7 @@ import { Watches } from "../browser/Watches.sys.mjs";
 function harness() {
   const timers = [];
   const lines = [];
-  const page = { found: false, value: "a", owned: true, blocked: false };
+  const page = { found: false, value: "a", owned: true, blocked: false, hold: "held" };
   const browser = { currentURI: { spec: "https://shop.test/" } };
   const watches = new Watches({
     events: {
@@ -16,6 +16,7 @@ function harness() {
     owned: () => (page.owned ? browser : null),
     check: async () => page.found,
     sample: async () => page.value,
+    held: () => page.hold,
     assertSite: () => {
       if (page.blocked) throw new Error("Site access blocked by user rule: shop.test");
     },
@@ -117,4 +118,24 @@ test("invalid specs and too many watches are refused", () => {
   assert.throws(() => h.watches.start("s", 1, h.browser, { text: "one more" }), /At most 10/);
   const summary = Watches.summary(h.watches.forSession("s")[0]);
   assert.deepEqual(Object.keys(summary).sort(), ["endsAt", "events", "id", "interval", "tabId", "text"]);
+});
+
+test("a hold watch reads no page and ends with released when the hold ends", async () => {
+  const h = harness();
+  h.page.owned = false; // not a member of the held tab: fine, it reads no page
+  assert.throws(() => h.watches.start("s", 1, null, { hold: true, text: "x" }), /hold watches the tab's hold only/);
+  h.watches.start("s", 1, null, { hold: true });
+  await h.tick();
+  await h.tick();
+  assert.deepEqual(h.events(), ["started"]);
+  assert.equal(h.lines[0].hold, true);
+  assert.equal(h.lines[0].url, undefined);
+  h.page.hold = "free";
+  await h.tick();
+  assert.deepEqual(h.events(), ["started", "released"]);
+  assert.equal(h.lines.at(-1).final, true);
+  h.watches.start("s", 2, null, { hold: true });
+  h.page.hold = "gone";
+  await h.tick();
+  assert.equal(h.lines.at(-1).reason, "tab closed or no longer an agent tab");
 });

@@ -158,6 +158,18 @@ export function readTools(ctx) {
         watches.end(id, "stopped by the agent");
         return text(`Watch #${id} stopped.`);
       }
+      // a hold reads no page: any agent tab, member or not (ToolRunner runs it without the
+      // tab's lock, so it answers while the holder works)
+      if (spec.hold) {
+        if (!ctx.access.shared(tabId) || !ctx.findTab(tabId)) throw new Error(`Tab ${tabId} is not an agent tab.`);
+        const hold = ctx.holdOf(tabId);
+        if (!hold || hold.session === session) throw new Error(`Nobody else holds tab ${tabId} now; go ahead.`);
+        return text({
+          ...Watches.summary(watches.start(session, tabId, null, spec)),
+          hold: ctx.describeHold(tabId, hold, session),
+          next: "The events file gets a released line when the hold ends. Do other work meanwhile.",
+        });
+      }
       const browser = browserFor(call, tabId);
       assertSiteAccess(browser);
       if (spec.selector) {

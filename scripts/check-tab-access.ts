@@ -208,6 +208,11 @@ try {
   const refusedAt = Date.now();
   assert.match(text(await tool(b, "get_page_text", { tabId }, true)), /is held by .*paying, don't touch the cart/);
   assert(Date.now() - refusedAt < 1500, "A held tab made the other member wait");
+  // the refused member waits in the background: the watch answers while A still works
+  const watchAt = Date.now();
+  const watching = await json(b, "watch", { tabId, hold: true });
+  assert(Date.now() - watchAt < 1500, "Watching a hold waited for the busy tab");
+  assert.match(watching.hold.reason, /paying/);
   assert.match(text(await tool(b, "get_page_text", { tabId: other }, true)), /Don't work on http:\/\/127\.0\.0\.1/);
   await tool(b, "navigate", { tabId: other, url: "about:blank" });
   assert.match(text(await tool(b, "navigate", { tabId: other, url: fixture }, true)), /is held by/);
@@ -221,10 +226,16 @@ try {
     item.doCommand();
     return true;
   })()`);
+  let released = false;
+  for (let i = 0; i < 50 && !released; i++) {
+    await sleep(100);
+    released = fs.existsSync(watching.events) && fs.readFileSync(watching.events, "utf8").includes('"released"');
+  }
+  assert(released, "The hold watch didn't report the release");
   await tool(b, "navigate", { tabId: other, url: fixture });
   await tool(b, "get_page_text", { tabId });
   console.log(
-    "✓ A hold refuses the other member at once, also on the same site in its own tab (noWorkaround); the menu's Remove hold ends it",
+    "✓ A hold refuses the other member at once, also on the same site in its own tab (noWorkaround); a hold watch answers at once and reports when the menu's Remove hold ends it",
   );
 
   // 5. leaving: closing a shared tab only leaves it

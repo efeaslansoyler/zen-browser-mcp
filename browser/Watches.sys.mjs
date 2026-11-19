@@ -2,11 +2,14 @@
 // element appears or disappears) or an element's text changes. Unlike wait_for they don't block
 // the agent and can run for hours. They end when the session leaves the tab, the tab closes,
 // the time runs out or on Stop.
+// A hold watch (hold: true) reads no page: it reports when another session's hold on an agent
+// tab ends (tab_work hold), so an agent refused by a hold can wait without blocking.
 const MAX_PER_SESSION = 10;
 
 export class Watches {
   // env: { events: EventFiles, owned(tabId, session) → browser|null, check(browser, {text, selector}),
-  //        sample(browser, selector), assertSite(browser), setTimeout, clearTimeout }
+  //        sample(browser, selector), assertSite(browser), held(tabId, session) → "held" | "free" |
+  //        "gone", setTimeout, clearTimeout }
   constructor(env) {
     this.env = env;
     this.list = new Map(); // id → record
@@ -14,9 +17,11 @@ export class Watches {
   }
 
   start(session, tabId, browser, spec) {
-    const { text, selector, gone = false, change = false, repeat = false } = spec;
+    const { text, selector, gone = false, change = false, repeat = false, hold = false } = spec;
+    if (hold && (text || selector || change || gone || repeat))
+      throw new Error("hold watches the tab's hold only; leave out text, selector, gone, change and repeat.");
     if (change && !selector) throw new Error("change needs a selector whose text to watch.");
-    if (!change && !text && !selector) throw new Error("text, selector or change is required.");
+    if (!hold && !change && !text && !selector) throw new Error("text, selector, change or hold is required.");
     if ([...this.list.values()].filter((w) => w.session === session).length >= MAX_PER_SESSION) {
       throw new Error(`At most ${MAX_PER_SESSION} watches per session; stop one first.`);
     }
@@ -29,21 +34,25 @@ export class Watches {
       tabId,
       interval,
       until: Date.now() + timeout,
-      spec: { text, selector, gone, change, repeat },
+      spec: { text, selector, gone, change, repeat, hold },
       events: this.env.events.path(`${id}`),
       matched: false,
       last: undefined,
       started: Date.now(),
     };
     this.list.set(id, watch);
-    this.#write(watch, { event: "started", url: browser.currentURI?.spec, ...this.#describe(watch) });
+    this.#write(watch, {
+      event: "started",
+      ...(browser ? { url: browser.currentURI?.spec } : {}),
+      ...this.#describe(watch),
+    });
     this.#schedule(watch, 0);
     return watch;
   }
 
   #describe({ spec }) {
     const what = {};
-    for (const key of ["text", "selector", "gone", "change", "repeat"]) if (spec[key]) what[key] = spec[key];
+    for (const key of ["text", "selector", "gone", "change", "repeat", "hold"]) if (spec[key]) what[key] = spec[key];
     return what;
   }
 
@@ -57,6 +66,13 @@ export class Watches {
 
   async #tick(watch) {
     if (!this.list.has(watch.id)) return;
+    if (watch.spec.hold) {
+      const state = this.env.held(watch.tabId, watch.session);
+      if (state === "free") return this.end(watch.id, "released");
+      if (state === "gone") return this.end(watch.id, "tab closed or no longer an agent tab");
+      if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
+      return this.#schedule(watch, watch.interval);
+    }
     const browser = this.env.owned(watch.tabId, watch.session);
     if (!browser) return this.end(watch.id, "tab closed, or this session no longer works in it");
     try {
@@ -92,7 +108,7 @@ export class Watches {
     this.#schedule(watch, watch.interval);
   }
 
-  // the final line; reason "matched" means the condition held
+  // the final line; reason "matched" means the condition held, "released" that the hold ended
   end(id, reason, extra = {}) {
     const watch = this.list.get(id);
     if (!watch) return null;
@@ -100,7 +116,9 @@ export class Watches {
     this.list.delete(id);
     this.#write(
       watch,
-      reason === "matched" ? { event: "matched", ...extra, final: true } : { event: "ended", reason, ...extra },
+      reason === "matched" || reason === "released"
+        ? { event: reason, ...extra, final: true }
+        : { event: "ended", reason, ...extra },
       true,
     );
     return watch;

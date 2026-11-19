@@ -89,7 +89,8 @@ the commit log.
   have changed it (`pageChanged`).
 - `tab_work hold` keeps a tab to one agent for a few steps (with a reason, up to 10 minutes,
   renewable; `noWorkaround` also keeps the others off that site). The tab menu's **Remove
-  hold** ends it.
+  hold** ends it. A refused agent waits with `watch` and `hold: true`, which answers at once
+  and reports when the hold ends.
 
 ### 2026-11-18
 
