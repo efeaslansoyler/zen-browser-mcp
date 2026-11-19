@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const text = (r: Content[]) =>
   r
@@ -68,15 +69,14 @@ try {
       JSON.stringify(scan),
     );
     assert(scan.frames[0].violations.find((v: any) => v.id === "image-alt").nodes[0].ref);
-    const intact = await tool("javascript_tool", { tabId, action: "javascript_exec", text: "window.axe.sentinel" });
+    const intact = await pageEval(tabId, "window.axe.sentinel");
     assert.equal(intact, "true");
     const scoped = JSON.parse(await tool("accessibility", { tabId, ref, tags: ["wcag2a"] }));
     assert(!scoped.frames[0].violations.some((v: any) => v.id === "image-alt"));
-    await tool("javascript_tool", {
+    await pageEval(
       tabId,
-      action: "javascript_exec",
-      text: `(()=>{const f=document.createElement('iframe');f.title='Child';f.src='data:text/html,'+encodeURIComponent('<!doctype html><html lang="en"><title>Frame</title><main><img src="missing"></main></html>');document.body.append(f);return true;})()`,
-    });
+      `(()=>{const f=document.createElement('iframe');f.title='Child';f.src='data:text/html,'+encodeURIComponent('<!doctype html><html lang="en"><title>Frame</title><main><img src="missing"></main></html>');document.body.append(f);return true;})()`,
+    );
     let framed: any;
     for (let i = 0; i < 30; i++) {
       try {
@@ -101,11 +101,7 @@ try {
     const childScan = JSON.parse(await tool("accessibility", { tabId, ref: childRef, tags: ["wcag2a"] }));
     assert(childScan.frames[0].violations.some((v: any) => v.id === "image-alt"));
     assert.equal(childScan.frames.length, 1);
-    await tool("javascript_tool", {
-      tabId,
-      action: "javascript_exec",
-      text: "fixtureRoot.render(React.createElement(App,{label:'Updated target'}));'scheduled'",
-    });
+    await pageEval(tabId, "fixtureRoot.render(React.createElement(App,{label:'Updated target'}));'scheduled'");
     await tool("wait_for", { tabId, text: "Updated target" });
     const updatedPage = await tool("find", { tabId, query: "Updated target" });
     const updatedRef = updatedPage.match(/button "Updated target" \[([^\]]+)\]/)?.[1];

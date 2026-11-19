@@ -80,6 +80,12 @@ They require the global mode to be `auto` and refuse to run in `ask` mode. `chec
 on Hyprland a window on a hidden workspace is suspended. Afterwards check
 that `~/.config/zen-mcp/config.json` still says `"mode": "auto"`.
 
+The checks run without anyone clicking: auto mode asks before risky operations, so fixture
+setup and inspection use `pageEval` from `scripts/support/fixture.ts` (the check itself, not an
+agent) instead of `javascript_tool`, and a check that makes a risky call on purpose answers its
+own island card with `approveWhile`. Receivers that stand in for agent sessions subscribe like
+a real MCP process (`toolsOnly: true` plus a `push` path), or picks wait in the inbox.
+
 ## Testing without touching your browser
 
 To try risky changes on a copy:

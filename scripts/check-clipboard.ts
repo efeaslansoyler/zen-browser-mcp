@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const text = (r: Content[]) =>
   r
@@ -41,11 +42,14 @@ try {
     "Cannot safely inspect clipboard formats; no changes made.",
   );
 }
+// X11 text encodings are plain text; clipboard-manager protocol targets carry no content
+const TEXT_TARGETS = ["UTF8_STRING", "TEXT", "STRING", "COMPOUND_TEXT"];
+const PROTOCOL_TARGETS = ["SAVE_TARGETS", "TARGETS", "TIMESTAMP", "MULTIPLE", "DELETE"];
 flavors = [
   ...new Set(
-    flavors.map((flavor) =>
-      flavor.startsWith("text/plain") || ["UTF8_STRING", "TEXT", "STRING"].includes(flavor) ? "text/plain" : flavor,
-    ),
+    flavors
+      .filter((flavor) => !PROTOCOL_TARGETS.includes(flavor))
+      .map((flavor) => (flavor.startsWith("text/plain") || TEXT_TARGETS.includes(flavor) ? "text/plain" : flavor)),
   ),
 ];
 const backupKey = `__zenClipboardBackup${Date.now()}`;
@@ -64,7 +68,7 @@ try {
   }
   // Native values remain in the browser; clipboard content is never printed or sent to the model.
   await chrome(
-    `(()=>{const w=Services.wm.getMostRecentWindow('navigator:browser');const Cc=Components.classes,Ci=Components.interfaces;const cb=Cc['@mozilla.org/widget/clipboard;1'].getService(Ci.nsIClipboard);const saved=Cc['@mozilla.org/widget/transferable;1'].createInstance(Ci.nsITransferable);saved.init(null);for(const flavor of ${JSON.stringify(flavors)}){const t=Cc['@mozilla.org/widget/transferable;1'].createInstance(Ci.nsITransferable);t.init(null);t.addDataFlavor(flavor);cb.getData(t,cb.kGlobalClipboard);const v={};t.getTransferData(flavor,v);saved.addDataFlavor(flavor);saved.setTransferData(flavor,v.value);}w[${JSON.stringify(backupKey)}]=saved;return true;})()`,
+    `(()=>{const w=Services.wm.getMostRecentWindow('navigator:browser');const Cc=Components.classes,Ci=Components.interfaces;const cb=Cc['@mozilla.org/widget/clipboard;1'].getService(Ci.nsIClipboard);const saved=Cc['@mozilla.org/widget/transferable;1'].createInstance(Ci.nsITransferable);saved.init(null);for(const flavor of ${JSON.stringify(flavors)}){const t=Cc['@mozilla.org/widget/transferable;1'].createInstance(Ci.nsITransferable);t.init(null);t.addDataFlavor(flavor);const v={};try{cb.getData(t,cb.kGlobalClipboard);t.getTransferData(flavor,v);}catch{throw new Error('Your clipboard holds a format this check cannot back up ('+flavor+'); nothing was changed. Copy some plain text and run it again.');}saved.addDataFlavor(flavor);saved.setTransferData(flavor,v.value);}w[${JSON.stringify(backupKey)}]=saved;return true;})()`,
   );
   backup = true;
   await client.connect(transport);
@@ -115,12 +119,9 @@ try {
   await approved("clipboard", { action: "read" }, false);
   console.log("✓ Native write/read, truncation and per-call denial work through real MCP");
   await approved("clipboard", { action: "paste", ref: targetRef });
-  let result = text(
-    await tool("javascript_tool", {
-      tabId,
-      action: "javascript_exec",
-      text: 'JSON.stringify({value:document.querySelectorAll("textarea")[1].value,trusted:document.body.dataset.paste})',
-    }),
+  let result = await pageEval(
+    tabId,
+    'JSON.stringify({value:document.querySelectorAll("textarea")[1].value,trusted:document.body.dataset.paste})',
   );
   assert(result.includes(token) && result.includes("true"), result);
   await tool("computer", { tabId, action: "left_click", ref: sourceRef });

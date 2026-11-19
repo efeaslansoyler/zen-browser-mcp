@@ -29,6 +29,7 @@ const SWITCH_EVERY = 1500; // ms: the agent row follows the latest agent at most
 const RECENT = 1200; // ms an agent's icon glows after it acted
 const UNPIN_AFTER = 5000; // ms after the mouse leaves before the row follows the latest agent again
 const MAX_ICONS = 5;
+const HOLD_REFRESH = 30_000; // ms between redraws while a hold shows
 
 // spinning star: the "working" sign
 const SPARK =
@@ -415,6 +416,7 @@ export class Island {
   #hovering = false;
   #unpinTimer = null;
   #renderTimer = null;
+  #renderAt = 0;
   // questions: { id, key, browser (WeakRef | null), text, message, done, labels, options, agent }
   #cards = [];
   #nextCard = 1;
@@ -732,6 +734,11 @@ export class Island {
     return this.#workers.size ? "working" : "hidden";
   }
 
+  // Something the island shows changed elsewhere (a hold was set or removed).
+  refresh() {
+    this.#render();
+  }
+
   // The agent shown when no agent of its own applies (a dialog, stopped, a recording).
   setAgent(agent) {
     this.#agent = agentTheme(agent);
@@ -800,15 +807,16 @@ export class Island {
   }
 
   // a render after ms (an icon stops glowing, the row may follow the latest agent)
+  // (the earliest one asked for wins)
   #later(ms) {
-    if (this.#renderTimer) return;
-    this.#renderTimer = this.#setTimeout(
-      () => {
-        this.#renderTimer = null;
-        this.#render();
-      },
-      Math.max(ms, 50),
-    );
+    const at = Date.now() + Math.max(ms, 50);
+    if (this.#renderTimer && this.#renderAt <= at) return;
+    this.#clearTimeout(this.#renderTimer);
+    this.#renderAt = at;
+    this.#renderTimer = this.#setTimeout(() => {
+      this.#renderTimer = null;
+      this.#render();
+    }, at - Date.now());
   }
 
   // ---- questions ----
@@ -1131,6 +1139,8 @@ export class Island {
     const workerBrowser = worker?.browser.deref();
     const hold = worker && workerBrowser ? this.#actions.holdOf?.(workerBrowser) : null;
     const workerHolds = hold && hold.session === worker.session ? hold : null;
+    // the time left goes down, and a hold can end while its agent waits in one long call
+    if (workerHolds) this.#later(HOLD_REFRESH);
     const cardIndex = card ? this.#cards.indexOf(card) : -1;
     const workers = [...this.#workers.values()];
     const now = Date.now();

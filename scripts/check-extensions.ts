@@ -8,6 +8,7 @@ import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { approveWhile, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const text = (r: Content[]) =>
   r
@@ -76,6 +77,8 @@ try {
   tabId = JSON.parse(text(await tool("tabs_create_mcp"))).tabId;
   await tool("navigate", { tabId, url: `http://127.0.0.1:${address.port}/` });
   const ext = (action: string, args: object = {}) => tool("extensions", { action, tabId, extensionId, ...args });
+  // acting in a panel asks in auto mode (extensions.act): the check approves its own actions
+  const act = (action: string, args: object = {}) => approveWhile(ext(action, args), "wants to");
   async function answerSwitch(allow: boolean) {
     for (let i = 0; i < 100; i++) {
       const answered = await chrome(
@@ -106,32 +109,30 @@ try {
   assert(ref, tree);
   assert(ref.startsWith("panel_"), "Panel refs must be isolated from page refs");
   await assert.rejects(
-    ext("computer", { computerAction: "left_click", ref: "ref_1" }),
+    act("computer", { computerAction: "left_click", ref: "ref_1" }),
     /not from the current extension panel/,
   );
   const shot = await ext("computer", { computerAction: "screenshot", scale: 0.5 });
   assert(shot.some((c) => c.type === "image"));
-  await ext("computer", { computerAction: "left_click", ref });
+  await act("computer", { computerAction: "left_click", ref });
   await sleep(100);
-  const source = text(
-    await tool("javascript_tool", { tabId, action: "javascript_exec", text: "document.body.dataset.extensionTrusted" }),
-  );
+  const source = await pageEval(tabId, "document.body.dataset.extensionTrusted");
   assert(source.includes("true"), source);
   console.log(
     "✓ Extension discovery → native popup → isolated refs → screenshot → trusted click with activeTab access",
   );
   const markdownRef = text(await ext("read")).match(/button "Make Markdown" \[([^\]]+)\]/)?.[1];
   assert(markdownRef);
-  await ext("computer", { computerAction: "left_click", ref: markdownRef });
+  await act("computer", { computerAction: "left_click", ref: markdownRef });
   await sleep(50);
   assert(text(await ext("read")).includes("# Zen extension fixture"));
   console.log("✓ Agent can use a generic conversion UI and read its result");
   const outputRef = text(await ext("read")).match(/textbox "Output" \[([^\]]+)\]/)?.[1];
   assert(outputRef);
-  await ext("form_input", { ref: outputRef, value: "editable output" });
-  await ext("computer", { computerAction: "left_click", ref: outputRef });
-  await ext("computer", { computerAction: "key", text: "ctrl+a" });
-  await ext("computer", { computerAction: "type", text: "typed through extension UI" });
+  await act("form_input", { ref: outputRef, value: "editable output" });
+  await act("computer", { computerAction: "left_click", ref: outputRef });
+  await act("computer", { computerAction: "key", text: "ctrl+a" });
+  await act("computer", { computerAction: "type", text: "typed through extension UI" });
   assert(text(await ext("read")).includes("typed through extension UI"));
   console.log("✓ Panel form input, keyboard shortcuts and trusted typing work");
 

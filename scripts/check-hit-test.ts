@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const agent = { id: "codex", name: "Codex" };
 const text = (content: Content[]) =>
@@ -27,6 +28,7 @@ const fixture =
 <style>body{font:18px system-ui;padding:40px}button{padding:12px}#cover{position:fixed;inset:0;z-index:9999;background:#8888}iframe{display:block;width:400px;height:160px;margin-top:30px}#shadow{width:180px;padding:20px;background:#eee}</style>
 <button id="target"><span>Target action</span></button><button id="disabled" disabled>Disabled control</button>
 <div id="shadow" role="button" tabindex="0" aria-label="Shadow action"></div>
+<input id="before" aria-label="Before field"><input id="after" aria-label="After field">
 <div id="cover" hidden>Fixture modal</div>
 <iframe title="Cross origin" src="${child("Child")}"></iframe>
 <iframe id="outer" title="Nested"></iframe>
@@ -38,6 +40,7 @@ target.addEventListener('click',()=>{counts.target++;if(window.armFirstClick)cov
 target.addEventListener('mousemove',()=>{if(window.armHover)cover.hidden=false;});
 const shadow=document.getElementById('shadow');shadow.attachShadow({mode:'open'}).innerHTML='<span>Shadow icon</span>';
 shadow.addEventListener('click',()=>counts.shadow++);
+for(const k of ['before','after'])document.getElementById(k).addEventListener('change',()=>counts[k]++);
 window.addEventListener('message',event=>{if(event.data==='${token}:Child')counts.child++;if(event.data==='${token}:Nested')counts.nested++;});
 document.getElementById('outer').srcdoc=${JSON.stringify(`<iframe style="width:300px;height:120px" src="${child("Nested")}"></iframe>`)};
 </script>`);
@@ -64,7 +67,7 @@ try {
   assert(ready, "Updated hit-test bridge did not reload.");
   tabId = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   await command("navigate", { tabId, url: fixture });
-  const page = async (code: string) => text(await command("javascript_tool", { tabId, text: code }));
+  const page = (code: string) => pageEval(tabId, code);
   const counts = async () => JSON.parse(await page("JSON.stringify(window.counts)"));
   const find = async (query: string) => {
     for (let i = 0; i < 50; i++) {
@@ -78,6 +81,7 @@ try {
   const click = (ref: string, action = "left_click") => command("computer", { tabId, action, ref });
   const blocked = async (promise: Promise<unknown>) => assert.rejects(promise, /Click blocked/);
   const target = await find("Target action");
+  const [beforeField, afterField] = [await find("Before field"), await find("After field")];
   await page('document.getElementById("cover").hidden=false');
   for (const action of ["left_click", "right_click", "double_click", "triple_click"])
     await blocked(click(target, action));
@@ -86,9 +90,9 @@ try {
 
   const batch = await command("browser_batch", {
     actions: [
-      { name: "javascript_tool", input: { tabId, text: "window.counts.before++" } },
+      { name: "form_input", input: { tabId, ref: beforeField, value: "before" } },
       { name: "computer", input: { tabId, action: "left_click", ref: target } },
-      { name: "javascript_tool", input: { tabId, text: "window.counts.after++" } },
+      { name: "form_input", input: { tabId, ref: afterField, value: "after" } },
     ],
   });
   assert(batch.isError);

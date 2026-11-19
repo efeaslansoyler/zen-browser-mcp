@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { pageEval } from "./support/fixture.ts";
 import { call, subscribe, type Content } from "../src/zen.ts";
 const text = (result: Content[]) =>
   result
@@ -18,7 +19,12 @@ const token = `multi-pick-${randomUUID()}`;
 const events: { target: string; event: any }[] = [];
 const receivers: ReturnType<typeof subscribe>[] = [];
 let tabId: number | undefined;
-const ids = ["codex", "claude"].map((name) => ({ name, id: `${token}-${name}` }));
+// Receivers subscribe like real MCP processes (toolsOnly registers the session). Menus list Codex
+// conversations (codex:…), not Codex MCP processes, so the Codex receiver is one.
+const ids = [
+  { name: "codex", id: `codex:${token}` },
+  { name: "claude", id: `${token}-claude` },
+];
 async function until(check: () => Promise<boolean>, message: string) {
   for (let i = 0; i < 100; i++) {
     if (await check()) return;
@@ -52,6 +58,8 @@ try {
           agent: { id: target.name, name: target.name },
           cwd: process.cwd(),
           ack: true,
+          toolsOnly: true,
+          push: "channel", // like a Claude Code channel: picks are pushed, not left in the inbox
         },
       ),
     );
@@ -168,7 +176,7 @@ try {
   );
   assert.match(stale.error || "", /page changed/i);
   assert.equal(events.length, 2, "Stale selection was delivered.");
-  assert.equal(Number(text(await command("javascript_tool", { tabId, text: "window.pageClicks" }))), 0);
+  assert.equal(Number(await pageEval(tabId, "window.pageClicks")), 0);
   console.log("✓ Navigation blocks stale send; fixture clicks never activate the page");
   console.log("All live multi-pick checks passed. No message was sent to a real AI session.");
 } catch (error) {

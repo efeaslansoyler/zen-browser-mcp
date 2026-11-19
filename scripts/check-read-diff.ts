@@ -7,6 +7,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { pageEval } from "./support/fixture.ts";
 import { call } from "../src/zen.ts";
 const text = (result: { content: any[] }) =>
   result.content
@@ -73,7 +74,7 @@ try {
   const html = `<!doctype html><meta charset="utf-8"><title>Read diff fixture</title><h1>Read diff fixture</h1>${Array.from({ length: 200 }, (_, i) => `<p id="row${i}">Row ${i}: stable visible fixture content.</p>`).join("")}<div id="controls"></div>`;
   const url = "data:text/html;charset=utf-8," + encodeURIComponent(html);
   await tool(a, "navigate", { tabId, url });
-  const page = (code: string) => tool(a, "javascript_tool", { tabId, action: "javascript_exec", text: code });
+  const page = (code: string) => pageEval(tabId, code);
   const read = (name: string, args: object = {}) => tool(a, name, { tabId, ...args });
   const fullText = await read("get_page_text", { diff: true });
   assert.match(fullText, /mode: full/);

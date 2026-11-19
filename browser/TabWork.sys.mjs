@@ -87,6 +87,7 @@ export function tabWork(ctx) {
     if (action === "status") return text({ ...tabStatus(tabId, session), note: NOTE });
     if (action === "release") {
       if (!access.release(tabId, session)) throw new Error("You don't hold this tab.");
+      ctx.island?.refresh();
       return text({ ...tabStatus(tabId, session), note: NOTE });
     }
     if (!["start", "update", "finish", "hold"].includes(action)) throw new Error("Unknown tab_work action.");
@@ -105,6 +106,7 @@ export function tabWork(ctx) {
       if (args.noWorkaround && (!origin || origin === "null"))
         throw new Error("noWorkaround needs the tab to be on a web site.");
       access.hold(tabId, session, { reason: summary, minutes: args.minutes, noWorkaround: args.noWorkaround, origin });
+      ctx.island?.refresh();
     } else access.report(tabId, session, action, summary);
     return text({ ...tabStatus(tabId, session), note: NOTE });
   }

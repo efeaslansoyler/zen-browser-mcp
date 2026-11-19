@@ -406,7 +406,10 @@ function logError(where, e) {
         const who = ctx.sessions.get(hold.session)?.name || hold.session.slice(-6);
         return `${who}: ${hold.reason.length > 60 ? hold.reason.slice(0, 59) + "…" : hold.reason}`;
       },
-      releaseHold: (tab) => ctx.access.release(tab.linkedBrowser.browserId),
+      releaseHold: (tab) => {
+        ctx.access.release(tab.linkedBrowser.browserId);
+        ctx.island?.refresh();
+      },
       readConfig: () => ctx.readConfig(),
       writeConfig: (changes) => ctx.writeConfig(changes),
       setMode: (mode) => ctx.island?.setMode(mode),

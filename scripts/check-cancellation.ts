@@ -2,6 +2,7 @@
 // Reloads the bridge, tests actual Stop/Resume, and closes only its disposable tab.
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
+import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const agent = { id: "codex", name: "Codex" };
 const text = (result: Content[]) =>
@@ -53,14 +54,14 @@ try {
   const tree = text(await command("read_page", { tabId }));
   const field = tree.match(/textbox "Message" \[([^\]]+)\]/)?.[1];
   assert(field, `Test field missing: ${tree}`);
-  const page = async (code: string) => text(await command("javascript_tool", { tabId, text: code }));
+  const page = (code: string) => pageEval(tabId, code);
 
   // An active batch must stop, retain its partial error, and never execute step 2.
   const batch = capture(
     command("browser_batch", {
       actions: [
         { name: "computer", input: { tabId, action: "wait", duration: 30 } },
-        { name: "javascript_tool", input: { tabId, text: 'document.getElementById("result").textContent="BAD"' } },
+        { name: "form_input", input: { tabId, ref: field, value: "BAD" } },
       ],
     }),
   );
@@ -74,7 +75,7 @@ try {
   await assert.rejects(command("get_page_text", { tabId }), stopped);
   await chrome("(() => { h.resumeClaude(); return h.state.paused; })()");
   ownsPause = false;
-  assert.match(await page('document.getElementById("result").textContent'), /untouched/);
+  assert.equal(await page('document.getElementById("message").value'), "", "A cancelled batch step ran");
   console.log("✓ Stop cancels active wait and batch; new work is blocked while paused");
 
   // Stop and Resume in the same browser callback must not revive the old operation.

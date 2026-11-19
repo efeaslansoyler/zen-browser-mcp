@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const text = (r: Content[]) =>
   r
@@ -42,14 +43,14 @@ try {
     button = tree.match(/button "Target" \[([^\]]+)\]/)?.[1];
   assert(field && button, tree);
   const computer = (action: string, args: object = {}) => tool("computer", { tabId, action, ...args });
-  const evaluate = (code: string) => tool("javascript_tool", { tabId, action: "javascript_exec", text: code });
+  const evaluate = (code: string) => pageEval(tabId, code);
   await computer("left_click", { ref: field });
   await computer("type", { text: "Hello 世界", typing: "human", delay_ms: 2, seed: 42 });
-  assert(text(await evaluate('document.querySelector("textarea").value')).includes("Hello 世界"));
+  assert((await evaluate('document.querySelector("textarea").value')).includes("Hello 世界"));
   await computer("key_down", { text: "Shift" });
   await computer("key", { text: "a" });
   await computer("key_up", { text: "Shift" });
-  let events = JSON.parse(text(await evaluate("JSON.stringify(events)")));
+  let events = JSON.parse(await evaluate("JSON.stringify(events)"));
   assert(
     events.some((e: any) => e.type === "keydown" && e.key === "A" && e.shift && e.trusted),
     JSON.stringify(events.slice(-8)),
@@ -69,7 +70,7 @@ try {
     await sleep(20);
   }
   assert.match(String(await copying), /denied/);
-  events = JSON.parse(text(await evaluate("JSON.stringify(events)")));
+  events = JSON.parse(await evaluate("JSON.stringify(events)"));
   assert(events.some((e: any) => e.type === "keyup" && e.key === "Control"));
   console.log("✓ Held Control cannot bypass clipboard consent; denied actions release held keys");
 
@@ -77,7 +78,7 @@ try {
   await computer("mouse_down", { ref: button, button: "left" });
   await computer("mouse_move", { coordinate: [180, 230], movement: "smooth", duration_ms: 80, steps: 8 });
   await computer("mouse_up", { button: "left" });
-  events = JSON.parse(text(await evaluate("JSON.stringify(events)")));
+  events = JSON.parse(await evaluate("JSON.stringify(events)"));
   assert(events.filter((e: any) => e.type === "mousemove" && e.trusted).length >= 16);
   assert(
     events.some((e: any) => e.type === "mousedown" && e.trusted) &&
@@ -98,7 +99,7 @@ try {
   const annotated = await computer("screenshot", { annotate: true });
   assert(annotated.some((c) => c.type === "image"));
   assert(text(annotated).includes("Annotated refs:"));
-  assert.equal(text(await evaluate('document.querySelectorAll("zen-mcp-annotations").length')), "0");
+  assert.equal(await evaluate('document.querySelectorAll("zen-mcp-annotations").length'), "0");
   console.log("✓ Unchanged screenshots skip image output; ref annotations are removed after capture");
   async function answer(allow: boolean) {
     for (let i = 0; i < 100; i++) {
