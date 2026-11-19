@@ -5,15 +5,21 @@ network filters, HAR capture, and local Web Vitals. The HAR scope includes same-
 checkout redirects across hosts, with discovered child tabs available for explicit attachment.
 Proposed tool arguments and limits are starting points for review.
 
-## 1. Add viewport screenshot diffs
+## 1. Add viewport screenshot diffs for interactions and deploys
 
 **User flow.** Take a baseline with `computer {action: "screenshot", diff: true, tabId}`. Return the
 normal viewport image and a baseline ID. Compare a later viewport capture with
 `diff: true, since: "<baselineId>"`. Keep the baseline until eviction so several steps can be
 compared against it. Return dimensions, changed pixel count and ratio, and an image highlighting
 changed pixels. An unchanged result needs only metadata. A missing, incompatible, or expired
-baseline returns a normal screenshot with a new ID and a reason. The diff image uses the same
-viewport coordinates as the current capture.
+baseline returns the current screenshot and a reason. The caller can explicitly take a new
+baseline. The diff image uses the same viewport coordinates as the current capture.
+
+**Deploy workflow.** Create the baseline with `diff: true, baseline_scope: "deploy"` before the
+deploy. After deploying, reload the page and wait for the same application-ready condition,
+then compare with its ID. The same ID can compare production with preview in a second tab
+owned by the same session. Use matching viewport, scale, and scroll settings. The result
+identifies the baseline and current captures so the caller can verify which pages were compared.
 
 **Implementation**
 
@@ -25,22 +31,28 @@ viewport coordinates as the current capture.
   diff-enabled viewport captures, compare canvas pixels before JPEG encoding. Use a documented
   per-pixel color tolerance and retain the existing exact comparison for `if_changed`. Test
   image generation independently of Gecko using synthetic pixel arrays.
-- Add a bounded cache for explicit baselines under the bridge context in `main.js`. Use byte
-  accounting for decoded pixels and a global eviction limit. Each baseline is scoped to the
-  session, tab, membership epoch, current document/frame context, viewport geometry, scroll
-  offset, and effective capture settings. Tie document identity to the capture and verify it
-  before publishing the result. Clear cached state when a session leaves, a tab is taken back
-  or closed, or the bridge reloads. Follow `ReadSnapshots.sys.mjs` for invalidation.
-- V1 targets same-document interactions such as opening a modal, showing error text, or changing
-  a client-side tab. A reload or a link that loads a new document ends that document's baseline,
-  even if the URL stays the same. An SPA route change can keep the same document; apply the same
-  origin, frame, geometry, and scroll checks. Cross-document comparison is a separate workflow
-  for reloads, two URLs, or before/after deploy captures. Settle its scope before implementing the
-  cache.
+- Add a bounded bridge-local cache with byte accounting for decoded pixels, eviction and a
+  documented lifetime. The default baseline is tied to the session, source tab, membership epoch,
+  document, and frame context for interaction checks. A deploy baseline survives page reloads
+  and navigation. It stays in memory until expiry, eviction, membership revocation, source tab
+  close, session end, or bridge reload. Take the baseline in an owned tab and keep it open until
+  comparison. Follow `ReadSnapshots.sys.mjs` for access cleanup.
+- Record the original capture's document and frame sites, source tab membership ticket,
+  timestamp, safe page identity, viewport geometry, effective scale, and scroll position. Pin the
+  WindowGlobal during each capture. Before returning a cross-document comparison, recheck the
+  stored baseline sites against current policy and verify that the same session still has access
+  to both tabs. Compare compatible geometry and scale. Different document or frame identities
+  are expected in deploy mode. Expired or incompatible deploy baselines return an explicit
+  reason and the current view without silently replacing the requested baseline.
+- Keep both modes independent of browser profile storage. A deployment can occur between
+  captures in an open session. Long-term baselines across bridge restarts can be a separate
+  local artifact feature if that workflow is needed.
 
-**Acceptance.** A fixture changes one colored rectangle and reports a nonzero diff in the correct
-area. The same capture reports unchanged. Scroll, resize, navigation, changed frame context,
-stale IDs, and other sessions cannot accidentally compare against the old baseline. Existing
+**Acceptance.** A fixture changes one colored rectangle and reports the correct diff region,
+then reports an unchanged result for identical captures. A second fixture serves revisions A
+and B under the same URL. Compare across a reload in one tab and across distinct preview and
+production fixture origins in two owned tabs. Exercise scroll and scale mismatches, default
+document invalidation, access revocation, a newly blocked baseline site, and expired IDs. Existing
 screenshot compatibility and scaled click tests pass.
 
 ## 2. Add full-page screenshots
@@ -217,7 +229,7 @@ navigation, and supported-versus-unsupported reporting on the installed Zen buil
   `cp -r browser/. ~/.local/share/zen-mcp/` and run `node scripts/zenctl.ts reload`. Reconnect the
   MCP client when `src/` changes. Open and close only fixture tabs. Confirm configuration mode
   remains `auto`. Never run `scripts/check-pick-delivery.ts`.
-- Follow-up after these five features: ref-scoped screenshots. The element picker already
+- Follow-up after this work: ref-scoped screenshots. The element picker already
   captures element geometry, so inspect `browser/Picks.sys.mjs` as the starting point.
   A ref-scoped capture can later become a separate visual diff scope.
 
