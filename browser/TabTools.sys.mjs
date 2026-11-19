@@ -136,8 +136,10 @@ export function tabTools(ctx) {
         const hold = ctx.holdOf(info.tabId);
         return hold ? { ...info, hold: ctx.describeHold(info.tabId, hold, activeSession) } : info;
       };
+      const openedTabs = ctx.openedTabs?.(activeSession);
       return text({
         userTabs,
+        ...(openedTabs?.length ? { openedTabs } : {}),
         ...(others.length ? { agentTabs: others.map(another) } : {}),
         session,
         extensions: await ctx.extensionPanels.list(),

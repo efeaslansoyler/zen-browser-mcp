@@ -86,11 +86,19 @@ export function toolRunner(ctx) {
       if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(call, tool, args);
       call.check();
       if (browser) access.check(args.tabId, call.session);
+      const input =
+        tool === "computer" &&
+        ["left_click", "double_click", "triple_click", "mouse_up", "key", "key_up"].includes(args.action);
+      if (browser && (input || tool === "hand_to_user")) ctx.watchTabOpens?.(args.tabId, call.session);
       ran = true;
       const result = await ctx.tools[tool](args, call);
       if (browser && !cleanup) ctx.assertSiteAccess(browser);
       // Preserve completed steps and the cancellation error from a partial batch.
       if (!result?.isError) call.check();
+      if (input || tool === "hand_to_user") {
+        const openedTabs = ctx.openedTabs?.(call.session);
+        if (openedTabs?.length) result.push(...ctx.text({ openedTabs }));
+      }
       if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
       return result;
     } catch (e) {

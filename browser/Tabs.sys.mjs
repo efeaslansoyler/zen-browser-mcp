@@ -35,6 +35,59 @@ export function tabs(ctx) {
     return [...(win.gZenWorkspaces?.workspaceEnabled ? win.gZenWorkspaces.allStoredTabs : win.gBrowser.tabs)];
   }
 
+  const pendingOpens = new Map();
+  const allTabs = () => ctx.browserWindows().flatMap(ctx.windowTabs);
+
+  function watchTabOpens(tabId, session) {
+    const now = Date.now();
+    for (const [key, watches] of pendingOpens) {
+      const live = watches.filter((watch) => watch.until > now);
+      if (live.length) pendingOpens.set(key, live);
+      else pendingOpens.delete(key);
+    }
+    const watches = pendingOpens.get(session) ?? [];
+    watches.push({
+      tabId,
+      opener: ctx.findTab(tabId)?.linkedBrowser.browsingContext?.top,
+      ticket: ctx.access.ticket([tabId], session),
+      known: new Set(allTabs().map((tab) => tab.linkedBrowser?.browserId)),
+      until: now + 10_000,
+    });
+    pendingOpens.set(session, watches.slice(-8));
+  }
+
+  function openedTabs(session) {
+    const watches = pendingOpens.get(session) ?? [];
+    const candidates = watches.filter((watch) => watch.opener && watch.until > Date.now());
+    if (!candidates.length) {
+      pendingOpens.delete(session);
+      return [];
+    }
+    const result = [];
+    const tabs = allTabs();
+    for (const watch of candidates) {
+      try {
+        ctx.access.checkTicket(watch.ticket, session);
+        ctx.assertSiteAccess(ctx.findTab(watch.tabId).linkedBrowser);
+      } catch {
+        continue;
+      }
+      for (const tab of tabs) {
+        const browser = tab.linkedBrowser;
+        if (
+          !browser ||
+          watch.known.has(browser.browserId) ||
+          browser.browsingContext?.top?.opener?.top !== watch.opener
+        )
+          continue;
+        for (const candidate of candidates) candidate.known.add(browser.browserId);
+        result.push({ sourceTabId: watch.tabId, ...ctx.describeTab(tab) });
+      }
+    }
+    pendingOpens.set(session, candidates);
+    return result;
+  }
+
   function findTab(tabId) {
     for (const win of ctx.browserWindows()) {
       for (const tab of ctx.windowTabs(win)) {
@@ -285,6 +338,8 @@ export function tabs(ctx) {
     browserWindows,
     windowTabs,
     findTab,
+    watchTabOpens,
+    openedTabs,
     liveTabs,
     browserFor,
     describeTab,

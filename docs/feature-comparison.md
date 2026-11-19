@@ -10,6 +10,7 @@ rough equivalents, not API or engine parity.
 | Snapshot, refs, interactive tree | `read_page`, `find`, `form_input` |
 | Page text and text diff | `get_page_text`, `diff`/`since` on reads |
 | Navigation, tabs, iframes, dialogs | Yes, with per-session tab access; agents can share a tab and take turns in it |
+| Spawned tabs | Opener-based notices on input results and tab listing; request access before use |
 | Hover, click, drag, scroll | Real input, covered-target check before clicks |
 | Key down / up | `computer` `key_down`/`key_up` |
 | Mouse move / down / up | `computer` `mouse_move`/`mouse_down`/`mouse_up` |

@@ -132,6 +132,11 @@ they can't open the same page elsewhere. A hold also ends when its agent makes n
 minutes or disconnects; right-click the tab → **Remove hold** to end it yourself. An agent
 that closes a tab others still use only leaves it.
 
+
+When Gecko exposes an opener, an input result may include `openedTabs` with source and new
+tab IDs. Check `tabs_context_mcp` for delayed opens. Use `request_tab` for access.
+
+
 ## Using it
 
 Ask Claude to do something in the browser: *"open seaskablo.com and find the price list"*.
