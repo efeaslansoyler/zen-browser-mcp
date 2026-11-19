@@ -51,6 +51,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` notes and status |
 | `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
+| `TabWake.sys.mjs` | Foreground-speed execution in background agent tabs during tool calls and live watches |
 | `PageQuery.sys.mjs` | `query` to a frame's actor, refs across frames, coordinate translation, load waits, page dialogs |
 | `PageInput.sys.mjs` | Mouse, keys, held input and screenshots |
 | `Control.sys.mjs` | Stop/Resume and island questions (`askIsland`, tab-less `ask_user`, notifications) |
@@ -125,6 +126,10 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   agents' questions as cards: they don't wait for each other (a question without a tab gets its
   own answer key), only `show_me` waits for the recording lock. Locks are taken in the order
   tabs, exclusive, recording.
+- A page tool holds its tab active during execution and for five seconds after the last
+  hold ends. While held, `TabWake` reasserts activity every two seconds in case a tab switch
+  reset it. Taking back or closing the tab, or shutting down the bridge, clears the wake
+  state immediately. The selected tab in each window stays under the browser's control.
 
 ## Permissions
 
@@ -217,10 +222,15 @@ the watch re-checks tab access and site rules itself on every tick. A watch ends
 match (unless `repeat`), on timeout, when the tab is closed or its session leaves it, when its
 session ends, and on Stop in the island.
 
+Page watches and download monitoring use normal background throttling by default. A watch with
+`live: true` holds the tab active for its lifetime, which costs CPU. When it ends, the normal
+five-second grace period applies if there are no other holds.
+
 A hold watch (`hold: true`) reads no page: it checks another session's `tab_work hold` on any
 agent tab and ends with a `released` line when the hold ends. `ToolRunner` runs it, and
 `watch list`/`stop`, without the tab's lock (`immediate`), so it answers while the holder
-works; a call refused by a hold says to start one instead of retrying.
+works; a call refused by a hold says to start one instead of retrying. A hold watch cannot use
+`live: true`.
 
 ## Other files at runtime
 

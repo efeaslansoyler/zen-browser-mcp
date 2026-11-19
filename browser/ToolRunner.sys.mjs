@@ -51,6 +51,9 @@ export function toolRunner(ctx) {
     }
     const cleanup = tool === "tabs_close_mcp" || (tool === "extensions" && args.action === "close");
     let ran = false;
+    // Watches and downloads manage background activity without waking the page by default.
+    const releaseWake =
+      browser && !cleanup && tool !== "watch" && tool !== "downloads" ? ctx.tabWake.hold(browser) : null;
     try {
       if (browser && !cleanup) {
         ctx.assertSiteAccess(browser);
@@ -95,6 +98,7 @@ export function toolRunner(ctx) {
       entry.error = String(e?.message ?? e).slice(0, 200);
       throw e;
     } finally {
+      releaseWake?.();
       if (tool !== "browser_batch") ctx.logActivity(entry);
       if (browser && ran && !cleanup) noteActivity(call, tool, args);
     }

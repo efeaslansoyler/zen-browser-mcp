@@ -40,6 +40,10 @@ something that "should work".
 - In a background tab a click doesn't move focus (call `focus()` yourself) and the wheel
   doesn't scroll (use `scrollBy`). Zen multiplies wheel deltas by
   `mousewheel.default.delta_multiplier_*` (200), so divide before sending.
+- In an inactive tab, timers may fire only about once per second, animation frames can
+  stall, and `document.hidden` is true. Setting the tab's `browser.docShellIsActive` to
+  `true` restores foreground timer and animation frame rates without selecting the tab.
+  The tab switcher can reset the flag when the user selects the tab and then leaves it.
 - A pending `sendQuery` is not rejected when the actor is destroyed: watch for
   `currentWindowGlobal` changes.
 - With bfcache, a navigation can move the old page into the cache together with its own

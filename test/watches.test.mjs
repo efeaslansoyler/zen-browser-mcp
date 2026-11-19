@@ -6,6 +6,7 @@ import { Watches } from "../browser/Watches.sys.mjs";
 function harness() {
   const timers = [];
   const lines = [];
+  const awake = new Set();
   const page = { found: false, value: "a", owned: true, blocked: false, hold: "held" };
   const browser = { currentURI: { spec: "https://shop.test/" } };
   const watches = new Watches({
@@ -17,6 +18,10 @@ function harness() {
     check: async () => page.found,
     sample: async () => page.value,
     held: () => page.hold,
+    wake: (browser) => {
+      awake.add(browser);
+      return () => awake.delete(browser);
+    },
     assertSite: () => {
       if (page.blocked) throw new Error("Site access blocked by user rule: shop.test");
     },
@@ -33,12 +38,13 @@ function harness() {
       await new Promise((r) => setImmediate(r));
     }
   };
-  return { watches, page, browser, lines, tick, events: () => lines.map((l) => l.event) };
+  return { watches, page, browser, lines, awake, tick, events: () => lines.map((l) => l.event) };
 }
 
 test("a condition watch reports the first match and ends", async () => {
   const h = harness();
   const w = h.watches.start("s", 1, h.browser, { text: "Live" });
+  assert.equal(h.awake.size, 0);
   await h.tick();
   await h.tick();
   assert.deepEqual(h.events(), ["started"]);
@@ -49,6 +55,20 @@ test("a condition watch reports the first match and ends", async () => {
   assert.equal(h.lines.at(-1).last, true);
   assert.deepEqual(h.watches.forSession("s"), []);
   assert.equal(w.events, "/tmp/watch-1.jsonl");
+});
+
+test("a live watch keeps the page awake until it ends", async () => {
+  const h = harness();
+  const w = h.watches.start("s", 1, h.browser, { text: "Live", live: true });
+  assert.equal(Watches.summary(w).live, true);
+  assert.equal(h.lines[0].live, true);
+  assert.equal(h.awake.has(h.browser), true);
+  await h.tick();
+  assert.equal(h.awake.has(h.browser), true);
+  h.page.found = true;
+  await h.tick();
+  assert.deepEqual(h.events(), ["started", "matched"]);
+  assert.equal(h.awake.size, 0);
 });
 
 test("repeat reports each new match, not every check while it stays true", async () => {
@@ -124,6 +144,7 @@ test("a hold watch reads no page and ends with released when the hold ends", asy
   const h = harness();
   h.page.owned = false; // not a member of the held tab: fine, it reads no page
   assert.throws(() => h.watches.start("s", 1, null, { hold: true, text: "x" }), /hold watches the tab's hold only/);
+  assert.throws(() => h.watches.start("s", 1, null, { hold: true, live: true }), /leave out .*live/);
   h.watches.start("s", 1, null, { hold: true });
   await h.tick();
   await h.tick();

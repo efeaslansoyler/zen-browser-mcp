@@ -511,6 +511,12 @@ diye de sorabilirsin.
 
 Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen çalışır.
 
+Ajan sekmeleri, sayfada çalışan araç çağrıları sırasında ve sonrasında beş saniye boyunca ön
+plandaki sekmeler gibi çalışır. İzlemeler ve indirmeler varsayılan olarak arka plan
+kısıtlamalarına tabidir. Sayfanın izleme boyunca hızlı zamanlayıcılara veya animasyon
+karelerine ihtiyacı varsa `watch` ile `live: true` kullan. Bu seçenek işlemci kullanımını
+artırır ve `hold: true` ile birlikte kullanılamaz.
+
 | Tool | |
 |---|---|
 | `tab_work` | paylaşılan sekmede her ajanın ne yaptığı (görev notları) |
@@ -521,6 +527,7 @@ Adlar ve parametreler Claude in Chrome ile aynı; yazdığın komutlar aynen ça
 | `read_page`, `find`, `get_page_text` | ref'li erişilebilirlik ağacı, kelimeyle arama, okunabilir metin. iframe'ler dahil, farklı sitedekiler de |
 | `form_input`, `file_upload` | form değerleri; dosya seçme penceresi açmadan dosya yükleme |
 | `wait_for` | metin ya da öğe görünene ya da kaybolana, ağ durulana kadar bekleme |
+| `watch` | sayfa koşullarını veya metin değişikliklerini arka planda bir olay dosyasına yazma, isteğe bağlı `live: true` |
 | `browser_batch` | yukarıdakilerden birkaçı tek çağrıda |
 | `read_console_messages`, `read_network_requests` | konsol çıktısı; başlık ve gövdeleriyle istekler (çerez ve yetki bilgisi gizli) |
 | `downloads` | sekmeden indirilen dosyalar: durum, yol, boyut/ilerleme; `wait` dosya bitene kadar bekler ve sha256'sını verir; `cancel` indirmeyi durdurup yarım dosyayı siler |

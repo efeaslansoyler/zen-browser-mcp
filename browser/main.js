@@ -43,7 +43,9 @@ function logError(where, e) {
     const { classes: Cc, interfaces: Ci, utils: Cu, results: Cr } = Components;
     const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
     // A bare nsITimer without a reference may be garbage collected before it fires.
-    const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+    const { setTimeout, clearTimeout, setInterval, clearInterval } = ChromeUtils.importESModule(
+      "resource://gre/modules/Timer.sys.mjs",
+    );
 
     const dir = zenMcpDir;
     // UI language: Turkish if the browser is Turkish, English otherwise. Messages to agents
@@ -113,6 +115,7 @@ function logError(where, e) {
     const { Cancellation } = load("Cancellation");
     const { Locks } = load("Locks");
     const { TabActivity } = load("TabActivity");
+    const { TabWake } = load("TabWake");
     const { config } = load("Config");
     const policy = load("Policy");
     const { sessionManager } = load("Sessions");
@@ -228,6 +231,14 @@ function logError(where, e) {
       lastAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
       locks: new Locks(), // per-tab, exclusive and recording locks (ToolRunner.sys.mjs)
       tabActivity: new TabActivity(), // what each session did in shared tabs (meanwhile)
+      // agent tabs run like foreground tabs while agents work in them
+      tabWake: new TabWake({
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        selected: (browser) => browser.ownerDocument?.defaultView?.gBrowser?.selectedBrowser === browser,
+      }),
       calls: new Set(), // running tool calls: Cancellation scopes with session, agent and tabs
       stopGeneration: 0,
       island: null,
@@ -547,6 +558,7 @@ function logError(where, e) {
       check: async (browser, condition) => !!(await ctx.acrossFrames(browser, "check", condition, (value) => value)),
       sample: (browser, selector) => ctx.acrossFrames(browser, "sample", { selector }, (value) => value != null),
       assertSite: (browser) => ctx.assertSiteAccess(browser),
+      wake: (browser) => ctx.tabWake.hold(browser),
       held: (tabId, session) => {
         if (!access.shared(tabId) || !ctx.findTab(tabId)) return "gone";
         const hold = ctx.holdOf(tabId);
@@ -844,6 +856,7 @@ function logError(where, e) {
       ctx.releaseAllInputs();
       ctx.browserSettings.destroy();
       ctx.extensionPanels.destroy();
+      ctx.tabWake.destroy();
       clearTimeout(sessionSweep);
       for (const call of ctx.calls) call.cancel(new Stopped());
       ctx.picks.destroy();

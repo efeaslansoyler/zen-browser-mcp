@@ -9,7 +9,7 @@ const MAX_PER_SESSION = 10;
 export class Watches {
   // env: { events: EventFiles, owned(tabId, session) → browser|null, check(browser, {text, selector}),
   //        sample(browser, selector), assertSite(browser), held(tabId, session) → "held" | "free" |
-  //        "gone", setTimeout, clearTimeout }
+  //        "gone", wake(browser) → release: keeps the tab awake (live), setTimeout, clearTimeout }
   constructor(env) {
     this.env = env;
     this.list = new Map(); // id → record
@@ -17,9 +17,9 @@ export class Watches {
   }
 
   start(session, tabId, browser, spec) {
-    const { text, selector, gone = false, change = false, repeat = false, hold = false } = spec;
-    if (hold && (text || selector || change || gone || repeat))
-      throw new Error("hold watches the tab's hold only; leave out text, selector, gone, change and repeat.");
+    const { text, selector, gone = false, change = false, repeat = false, hold = false, live = false } = spec;
+    if (hold && (text || selector || change || gone || repeat || live))
+      throw new Error("hold watches the tab's hold only; leave out text, selector, gone, change, repeat and live.");
     if (change && !selector) throw new Error("change needs a selector whose text to watch.");
     if (!hold && !change && !text && !selector) throw new Error("text, selector, change or hold is required.");
     if ([...this.list.values()].filter((w) => w.session === session).length >= MAX_PER_SESSION) {
@@ -34,13 +34,16 @@ export class Watches {
       tabId,
       interval,
       until: Date.now() + timeout,
-      spec: { text, selector, gone, change, repeat, hold },
+      spec: { text, selector, gone, change, repeat, hold, live },
       events: this.env.events.path(`${id}`),
       matched: false,
       last: undefined,
       started: Date.now(),
     };
     this.list.set(id, watch);
+    // live: the tab runs like a foreground tab for as long as the watch does (a page that
+    // updates on animation frames or fast timers); otherwise it sleeps like any background tab
+    if (live && browser) watch.release = this.env.wake(browser);
     this.#write(watch, {
       event: "started",
       ...(browser ? { url: browser.currentURI?.spec } : {}),
@@ -52,7 +55,8 @@ export class Watches {
 
   #describe({ spec }) {
     const what = {};
-    for (const key of ["text", "selector", "gone", "change", "repeat", "hold"]) if (spec[key]) what[key] = spec[key];
+    for (const key of ["text", "selector", "gone", "change", "repeat", "hold", "live"])
+      if (spec[key]) what[key] = spec[key];
     return what;
   }
 
@@ -113,6 +117,7 @@ export class Watches {
     const watch = this.list.get(id);
     if (!watch) return null;
     this.env.clearTimeout(watch.timer);
+    watch.release?.();
     this.list.delete(id);
     this.#write(
       watch,

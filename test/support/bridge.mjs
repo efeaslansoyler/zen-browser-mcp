@@ -61,6 +61,7 @@ export function bridgeContext(fakes = {}) {
     calls: new Set(),
     locks: new Locks(),
     tabActivity: new TabActivity(),
+    tabWake: { hold: () => () => {}, forget() {}, destroy() {} },
     stopGeneration: 0,
     island: null,
     setLastAgent(theme) {

@@ -342,7 +342,7 @@ tool(
   "watch",
   [
     "Watch an agent tab in the background without blocking: report when text appears (anywhere, iframes included), when an element matching a CSS selector is visible (with text: one containing it), or with gone: true when it disappears; or with change: true every time the text of the first visible element matching selector changes (a price, a counter, a status).",
-    "Events are JSON lines in the returned events file: started, then matched / changed lines, and a final line (matched with final: true, or ended with a reason such as timeout, tab closed, stopped). If you have a background monitor tool, watch that file (e.g. tail -f) and keep working; otherwise check it later. Without repeat the watch ends at the first match. The page keeps working normally; the watch only reads.",
+    "Events are JSON lines in the returned events file: started, then matched / changed lines, and a final line (matched with final: true, or ended with a reason such as timeout, tab closed, stopped). If you have a background monitor tool, watch that file (e.g. tail -f) and keep working; otherwise check it later. Without repeat the watch ends at the first match.",
     "Ends when the tab is closed or taken back, on Stop in the island, on timeout, or with action stop. list shows this session's watches. The file is deleted a few minutes after the watch ends.",
     "hold: true instead watches another session's hold on an agent tab (tab_work hold): it reads no page, answers at once even while the holder works, and the final line is released when the hold ends. Use it when a call is refused because a tab is held, instead of retrying.",
   ].join(" "),
@@ -359,6 +359,12 @@ tool(
       .boolean()
       .optional()
       .describe("Report when another session's hold on this agent tab ends, instead of a page condition."),
+    live: z
+      .boolean()
+      .optional()
+      .describe(
+        "Keep the tab running like a foreground tab while the watch runs (costs CPU). Use when the page relies on animation frames or fast timers. Incompatible with hold: true.",
+      ),
     interval: z.number().optional().describe("Seconds between checks (default 2, 0.5 to 60)."),
     timeout: z.number().optional().describe("Seconds until the watch ends (default 3600, max 86400)."),
   },

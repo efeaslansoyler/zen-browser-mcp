@@ -94,6 +94,8 @@ the commit log.
   renewable; `noWorkaround` also keeps the others off that site). The tab menu's **Remove
   hold** ends it. A refused agent waits with `watch` and `hold: true`, which answers at once
   and reports when the hold ends.
+- Agent tabs run at foreground speed during page tool calls and for five seconds after.
+  `watch` can opt in with `live: true` to keep the tab active for the whole watch.
 
 ### 2026-11-18
 

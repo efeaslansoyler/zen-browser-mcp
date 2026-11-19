@@ -507,6 +507,11 @@ done). Right-click a tab → **Agent history** for the last actions agents took 
 
 Names and parameters match Claude in Chrome, so prompts carry over.
 
+Agent tabs run like foreground tabs during page tool calls and for five seconds afterward.
+Watches and downloads use normal background throttling by default. Use `watch` with
+`live: true` when the page needs fast timers or animation frames for the whole watch. This
+costs CPU and cannot be combined with `hold: true`.
+
 | Tool | |
 |---|---|
 | `tab_work` | what each agent in a shared tab is doing (task notes) |
@@ -517,6 +522,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 | `read_page`, `find`, `get_page_text` | accessibility-style tree with refs, keyword search, readable text. Iframes included, cross-origin too |
 | `form_input`, `file_upload` | set form values; put files into file inputs without a picker |
 | `wait_for` | wait until text or an element appears or disappears, or the network is idle |
+| `watch` | report page conditions or text changes to an events file in the background, with optional `live: true` |
 | `browser_batch` | several of the above in one call |
 | `read_console_messages`, `read_network_requests` | console output; requests with headers and bodies (cookies and auth hidden) |
 | `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
