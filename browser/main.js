@@ -520,7 +520,22 @@ function logError(where, e) {
     });
 
     // HTTP requests of agent tabs.
+    const { HarCapture } = load("HarCapture");
+    const harDir = `${zenMcpRuntimeDir()}/zen-mcp-har`;
+    ctx.har = new HarCapture({
+      allowed: (tabId, session, host) => !state.paused && access.has(tabId, session) && ctx.siteAllowed(host),
+      setTimeout,
+      clearTimeout,
+      dir: harDir,
+    });
     ctx.network = new NetworkLog((globalThis.zenMcpNetwork ||= new Map()), {
+      capture: (channel, browserId, type, topic) => {
+        try {
+          ctx.har.observe(channel, browserId, type, topic);
+        } catch (error) {
+          logError("HAR capture", error);
+        }
+      },
       tracked: (browserId) => state.tabs.has(browserId),
       // an allowlist only checks pages and frames: allowed sites load from other hosts (CDNs)
       blocked: (browserId, host, document) => {
@@ -873,6 +888,7 @@ function logError(where, e) {
       ctx.island = null;
       ctx.tabMenu.destroy();
       ctx.network.stop();
+      ctx.har.dropAll();
       ctx.downloads.stop();
       ctx.watches.endAll("bridge reloaded");
       try {

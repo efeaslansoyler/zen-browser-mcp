@@ -75,6 +75,7 @@ export class NetworkLog {
       channel.cancel(Cr.NS_ERROR_ABORT);
       return;
     }
+    this.env.capture?.(channel, browserId, type, topic);
     let log = this.logs.get(browserId);
     if (!log) this.logs.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
     // a log from the version before a reload: entries without IDs

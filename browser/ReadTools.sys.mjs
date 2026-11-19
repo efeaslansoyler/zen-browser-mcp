@@ -184,6 +184,29 @@ export function readTools(ctx) {
       return text(Watches.summary(watches.start(session, tabId, browser, spec)));
     },
 
+    async network_capture(args, call) {
+      const { tabId, action, childTabId } = args;
+      browserFor(call, tabId);
+      const har = ctx.har;
+      if (action === "start") return text(har.start(tabId, call.session));
+      const capture = har.owned(tabId, call.session);
+      if (action === "status") return text(har.status(capture));
+      if (action === "attach") {
+        const child = ctx.findTab(childTabId)?.linkedBrowser;
+        ctx.access.check(childTabId, call.session);
+        if (!child) throw new Error("Child tab is unavailable.");
+        ctx.assertSiteAccess(child);
+        ctx.assertNotHeld(childTabId, call.session);
+        return text(har.attach(capture, childTabId));
+      }
+      if (action === "cancel") {
+        har.drop(capture);
+        return text({ state: "cancelled" });
+      }
+      if (action === "stop") return text(await har.export(capture, args, call));
+      throw new Error("Unknown network capture action.");
+    },
+
     read_network_requests(args, call) {
       const { tabId, limit = 100, clear, id, max_chars = 20000 } = args;
       const browser = browserFor(call, tabId);

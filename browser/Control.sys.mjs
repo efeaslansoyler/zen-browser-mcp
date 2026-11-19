@@ -31,6 +31,7 @@ export function control(ctx) {
   function stopClaude() {
     ctx.releaseAllInputs();
     ctx.watches.endAll("stopped by the user");
+    ctx.har?.dropAll();
     ctx.extensionPanels.destroy();
     if (ctx.state.paused) return;
     ctx.state.paused = true;

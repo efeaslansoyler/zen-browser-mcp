@@ -541,12 +541,27 @@ costs CPU and cannot be combined with `hold: true`.
 | `watch` | report page conditions or text changes to an events file in the background, with optional `live: true` |
 | `browser_batch` | several of the above in one call |
 | `read_console_messages`, `read_network_requests` | console output; requests with headers and bodies (cookies and auth hidden), filter by URL, method, status or resource type |
+| `network_capture` | Start, attach, inspect, stop or cancel a redacted cross-host HAR capture |
 | `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
 | `highlight` | frame elements with short labels to point them out to you (several at once, iframes included) |
 | `show_me`, `recipes` | ask you to show a task once and save it as a recipe; list, read and (after you confirm) delete recipes |
 | `ask_user`, `hand_to_user`, `request_tab` | ask you a question (with answer buttons, with or without a tab); hand you a step only you should do (logging in, 2FA, a captcha, a payment) and continue when you press **Done**; ask for access to your tab |
+
+## Network captures
+
+Start `network_capture` before navigation. It follows allowed host changes in that tab.
+After obtaining access to a child tab, attach it to include new requests there. Check
+`status`, then `stop` for a local HAR path or `cancel` to discard the capture. Start and
+attach ask in the island.
+
+Exports include available timings, response sizes, redirect targets, and selected response
+and request headers. Query values and recognized sensitive path segments are masked.
+Cookies, credentials, unlisted headers, and body content are omitted. Hostnames and
+remaining paths can identify internal resources. The HAR file is kept for 15 minutes.
+The export reports unfinished requests and entries without enough timing data.
+
 
 ## Security
 

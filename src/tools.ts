@@ -620,6 +620,18 @@ tool(
 );
 
 tool(
+  "network_capture",
+  "Start a bounded HAR capture on an owned tab before navigating. Start and attach require approval. Capture follows allowed redirects. Attach adds future traffic from an owned child tab; stop saves a local redacted HAR, status lists counters, and cancel discards it. Only the starting session can manage the capture.",
+  {
+    tabId,
+    action: z.enum(["start", "attach", "status", "stop", "cancel"]),
+    childTabId: tabId.optional().describe("Owned child tab to attach."),
+    ...networkFilters,
+  },
+  () => 150000,
+);
+
+tool(
   "javascript_tool",
   "Run JavaScript in the page with full access to the page's own variables. The value of the last expression is returned (promises are awaited); do not use return.",
   {

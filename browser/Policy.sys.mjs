@@ -32,6 +32,9 @@ export const SECTIONS = [
         A,
         "Read the page's network requests (cookies and authorization headers are hidden).",
       ],
+      ["network_capture.status", A, A, "Read the status of your HAR capture."],
+      ["network_capture.stop", A, A, "Save your redacted HAR capture locally."],
+      ["network_capture.cancel", A, A, "Discard your HAR capture."],
       ["wait_for", A, A, "Wait for a page condition (text, element, URL)."],
       ["watch", A, A, "Watch a page for changes in the background."],
       ["downloads", A, A, "Follow downloads started in agent tabs."],
@@ -84,6 +87,8 @@ export const SECTIONS = [
       ],
       ["secret_field", Q, Q, "Type into a password, card or one-time-code field. Prefer hand_to_user for these."],
       ["javascript_tool", Q, Q, "Run any JavaScript in the page: it can read everything on the page and act as you."],
+      ["network_capture.start", Q, Q, "Start recording network traffic for a local HAR."],
+      ["network_capture.attach", Q, Q, "Include an owned tab in the HAR capture."],
       ["file_upload", Q, Q, "Upload files from your computer to a page."],
       ["handle_dialog.accept", Q, Q, 'Accept a page\'s confirm or prompt ("Delete this?" → OK).'],
       ["extensions.act", Q, Q, "Click or type inside an extension's panel (password managers, wallets…)."],
@@ -141,6 +146,8 @@ export function operationOf(tool, args = {}) {
 
 function operationKey(tool, args) {
   switch (tool) {
+    case "network_capture":
+      return `network_capture.${args.action}`;
     case "browser_batch":
       return null;
     case "computer":

@@ -25,7 +25,8 @@ rough equivalents, not API or engine parity.
 | File upload | `file_upload` |
 | Downloads | `downloads`: list / wait / cancel, path, progress, sha256, events file |
 | Console and network | Console; filter requests by URL, method, status and type; inspect headers and bodies |
-| Network route / mock / HAR / throttling | Not available; the tools only observe |
+| HAR export | Bounded redacted capture across allowed hosts and explicitly attached tabs |
+| Network route / mock / throttling | Not available; the tools only observe |
 | React | `react` tree/inspect with optional props; no render history or Suspense tracking |
 | Accessibility audit | `accessibility`: bundled axe-core, findings and refs per frame |
 | Full-page screenshot / PDF | Full document capture with `full_page`; PDF is unavailable |

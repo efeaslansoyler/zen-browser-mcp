@@ -69,7 +69,7 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
     await client.connect(clientTransport);
     try {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 31);
+      assert.equal(tools.length, 32);
       const computer = tools.find((t) => t.name === "computer");
       const schema = computer.inputSchema;
       for (const key of ["coordinate", "start_coordinate"]) {
@@ -138,6 +138,7 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         handle_dialog: { tabId: 1, accept: false },
         read_console_messages: { tabId: 1 },
         read_network_requests: { tabId: 1 },
+        network_capture: { tabId: 1, action: "status" },
         javascript_tool: { tabId: 1, action: "javascript_exec", text: "document.title" },
         browser_batch: { actions: [{ name: "get_page_text", input: { tabId: 1 } }] },
       };
