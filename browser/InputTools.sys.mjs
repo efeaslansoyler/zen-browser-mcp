@@ -96,8 +96,8 @@ export function inputTools(ctx) {
           let comparison = [];
           let mimeType = "image/jpeg";
           if (args.diff) {
-            const after = frames();
             const currentPosition = await geometry();
+            const after = frames();
             if (
               before.length !== after.length ||
               before.some((frame, i) => frame !== after[i]) ||

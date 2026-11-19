@@ -137,10 +137,10 @@ export class ZenMcpChild extends JSWindowActorChild {
             ],
           };
         }
-        case "capture_geometry":
-          return {
-            value: [this.contentWindow.scrollX, this.contentWindow.scrollY, this.contentWindow.devicePixelRatio],
-          };
+        case "capture_geometry": {
+          const win = this.contentWindow;
+          return { value: [win.scrollX, win.scrollY, win.devicePixelRatio, win.innerWidth, win.innerHeight] };
+        }
         case "web_vitals": {
           this.#vitals ??= new WebVitals(this.contentWindow, this.#restoredAt);
           return { value: this.#vitals.read() };
