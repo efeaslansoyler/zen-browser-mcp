@@ -107,7 +107,7 @@ function logError(where, e) {
     const { agentTheme, applyTheme, agentIcon, commonAgent } = load("Agent");
     const { TabAccess } = load("TabAccess");
     const { normalizeConfig, siteAllowed, siteEntry } = load("SiteRules");
-    const { ScreenshotCache } = load("ScreenshotCache");
+    const { ScreenshotCache, VisualBaselines } = load("ScreenshotCache");
     const { BrowserSettings, DEVICE_PRESETS } = load("BrowserSettings");
     const { clipboardShortcut, systemClipboard } = load("Clipboard");
     const { ExtensionPanels } = load("ExtensionPanels");
@@ -222,6 +222,7 @@ function logError(where, e) {
       heldInputFrames: new Map(),
       tabRequests: new Map(), // browser → resolve of the pending island question
       screenshotCache: new ScreenshotCache(),
+      visualBaselines: new VisualBaselines(),
       readSnapshots: new ReadSnapshots(), // A reload deliberately invalidates previous snapshot IDs.
       tools: {},
       commands: {},

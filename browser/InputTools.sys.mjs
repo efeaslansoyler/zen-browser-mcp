@@ -28,6 +28,9 @@ export function inputTools(ctx) {
     rememberInputs,
     screenshot,
     screenshotCache,
+    visualBaselines,
+    framesOf,
+    assertSiteURL,
     scroll,
     shortRefs,
     target,
@@ -61,10 +64,18 @@ export function inputTools(ctx) {
       };
       switch (args.action) {
         case "screenshot": {
+          if ((args.since || args.baseline_scope) && !args.diff)
+            throw new Error("Visual baseline options require diff.");
+          if (args.diff && (args.if_changed || args.annotate))
+            throw new Error("Visual diff requires an unannotated screenshot.");
+          const frames = () => [...framesOf(browser)].map((frame) => frame.currentWindowGlobal);
+          const before = args.diff ? frames() : [];
+          const geometry = async () => (await query(browser, "capture_geometry", {})).value;
+          const position = args.diff ? await geometry() : [];
           let shot, labels;
           try {
             if (args.annotate) labels = (await query(browser, "annotate", { enabled: true })).value;
-            shot = await screenshot(browser, args.scale);
+            shot = await screenshot(browser, args.scale, args.diff);
           } finally {
             if (args.annotate) await query(browser, "annotate", { enabled: false }).catch(() => {});
           }
@@ -80,10 +91,79 @@ export function inputTools(ctx) {
               return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
             }
           }
+          let comparison = [];
+          let mimeType = "image/jpeg";
+          if (args.diff) {
+            const after = frames();
+            const currentPosition = await geometry();
+            if (
+              before.length !== after.length ||
+              before.some((frame, i) => frame !== after[i]) ||
+              position.some((value, i) => value !== currentPosition[i])
+            )
+              throw new Error("Page changed during capture.");
+            call.check();
+            const tabId = args.tabId;
+            const ticket = access.ticket([tabId], call.session);
+            const sites = after.map((frame) => frame?.documentURI?.spec).filter(Boolean);
+            const capture = { tabId, origin: ctx.originOf(browser.currentURI?.spec ?? ""), time: Date.now() };
+            const dimensions = [shot.width, shot.height, shot.scale, ...position];
+            if (!args.since) {
+              const baseline = visualBaselines.save({
+                session: call.session,
+                ticket,
+                tabId,
+                sites,
+                capture,
+                dimensions,
+                pixels: shot.pixels.data,
+                frames: args.baseline_scope === "deploy" ? null : after,
+              });
+              comparison = text({ baseline, ...capture, width: shot.width, height: shot.height });
+            } else {
+              const baseline = visualBaselines.get(args.since, call.session);
+              let reason;
+              if (!baseline) reason = "Baseline unavailable or expired.";
+              else {
+                try {
+                  access.checkTicket(baseline.ticket, call.session);
+                  baseline.sites.forEach(assertSiteURL);
+                } catch {
+                  reason = "Baseline access changed.";
+                }
+                if (
+                  baseline.frames &&
+                  (tabId !== baseline.tabId ||
+                    baseline.frames.length !== after.length ||
+                    baseline.frames.some((frame, i) => frame !== after[i]))
+                )
+                  reason ??= "Baseline document changed.";
+                if (dimensions.some((value, i) => value !== baseline.dimensions[i]))
+                  reason ??= "Capture geometry changed.";
+              }
+              if (reason) comparison = text({ compared: false, reason });
+              else {
+                const changed = visualBaselines.diff(baseline.pixels, shot.pixels.data);
+                comparison = text({
+                  baseline: baseline.capture,
+                  current: capture,
+                  width: shot.width,
+                  height: shot.height,
+                  changed,
+                  ratio: changed / (shot.width * shot.height),
+                });
+                if (!changed) return comparison;
+                shot.painter.putImageData(shot.pixels, 0, 0);
+                shot.data = shot.canvas.toDataURL("image/png").split(",")[1];
+                mimeType = "image/png";
+              }
+            }
+          }
           // the dialog is drawn in the browser UI, so it isn't in the page image
           const dialog = openDialog(browser);
           return [
-            { type: "image", data: shot.data, mimeType: "image/jpeg" },
+            { type: "image", data: shot.data, mimeType },
+            ...comparison,
             {
               type: "text",
               text: `${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}`,

@@ -296,6 +296,13 @@ navigation, tab access changes, disconnection, reload and a maximum 30-second wa
 `screenshot` accepts `if_changed: true` to skip identical images and `annotate: true`
 to label up to 80 visible top-frame controls with refs.
 
+Use `computer` → `screenshot` with `diff: true` to save a viewport baseline. Compare with
+`diff: true` and `since: "<baseline>"`. Use `baseline_scope: "deploy"` when saving to compare
+across a reload or against another tab in the same session. Keep the source tab open and
+match the viewport, scale and scroll position. Baselines expire after one hour or on
+eviction, access revocation or bridge reload. Visual diffs are inspired by
+[Agent Browser](https://agent-browser.dev/diffing).
+
 `browser_settings` supports `get`, `devices`, `viewport`, `device`, `media`, `reset`.
 Every mutation/reset asks in the island, even in auto mode; the prompt mentions any
 necessary tab switch. Viewport, DPR, touch-event, custom user-agent and color overrides

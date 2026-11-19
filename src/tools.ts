@@ -273,6 +273,12 @@ tool(
       "mouse_up",
     ]),
     ...inputOptions,
+    diff: z.boolean().optional().describe("Screenshot: create or compare a visual baseline."),
+    since: z.string().optional().describe("Visual baseline ID from an earlier screenshot."),
+    baseline_scope: z
+      .enum(["document", "deploy"])
+      .optional()
+      .describe("Deploy baselines can compare across reloads and owned tabs."),
     coordinate: z.array(z.number()).length(2).optional().describe("[x, y] in screenshot pixels."),
     ref: z
       .string()

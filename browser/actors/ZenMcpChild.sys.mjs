@@ -119,6 +119,10 @@ export class ZenMcpChild extends JSWindowActorChild {
       switch (name) {
         case "annotate":
           return { value: this.#annotate(data.enabled) };
+        case "capture_geometry":
+          return {
+            value: [this.contentWindow.scrollX, this.contentWindow.scrollY, this.contentWindow.devicePixelRatio],
+          };
         case "browser_metrics":
           return { value: this.#pageMetrics() };
         case "release_inputs":

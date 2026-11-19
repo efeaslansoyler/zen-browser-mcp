@@ -181,6 +181,7 @@ export function tabs(ctx) {
     if (!ctx.access.has(id, session)) return;
     if (ctx.access.members(id).length === 1) return unmark(tab, { cancel });
     ctx.access.leave(id, session);
+    ctx.visualBaselines?.clear(id, session);
     if (ctx.heldInputFrames.get(id)?.session === session) ctx.releaseInputs(id);
     ctx.browserSettings.restoreTab(id, session);
     ctx.extensionPanels.releaseTab(id, session);
@@ -198,6 +199,7 @@ export function tabs(ctx) {
     ctx.browserSettings.restoreTab(id);
     ctx.extensionPanels.releaseTab(id);
     ctx.readSnapshots.clearTab(id);
+    ctx.visualBaselines?.clear(id);
     if (cancel) ctx.cancelTabWork(id);
     ctx.state.scale.delete(id);
     ctx.network.delete(id);

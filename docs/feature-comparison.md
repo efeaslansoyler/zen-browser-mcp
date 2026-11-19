@@ -18,6 +18,7 @@ rough equivalents, not API or engine parity.
 | Viewport / device | `browser_settings`: per-tab size, native DPR, touch events, user agent |
 | Color scheme | `browser_settings` `media`: dark / light / no-preference |
 | Fewer repeated screenshots | `if_changed`: exact image equality per session/document/options |
+| Visual screenshot diff | Opt-in viewport baselines for interactions and deploy comparisons |
 | Screenshot labels | `annotate`: refs of up to 80 visible controls in the top frame |
 | Clipboard | Every operation and shortcut asks in the island |
 | File upload | `file_upload` |

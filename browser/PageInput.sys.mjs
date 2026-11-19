@@ -209,7 +209,7 @@ export function pageInput(ctx) {
 
   // scale (0.1–1) shrinks the image further; tokens drop with ~scale². Coordinates are still
   // pixels of the returned image.
-  async function screenshot(browser, scale = 1) {
+  async function screenshot(browser, scale = 1, pixels = false) {
     ctx.assertSiteAccess(browser);
     const wg = browser.browsingContext?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
@@ -224,18 +224,33 @@ export function pageInput(ctx) {
         wg.getActor("ZenMcp").sendAsyncMessage("overlays", { hidden: false });
       } catch {}
     }
-    ctx.assertSiteAccess(browser);
+    try {
+      ctx.assertSiteAccess(browser);
+      if (browser.browsingContext?.currentWindowGlobal !== wg) throw new Error("Page changed during capture.");
+    } catch (error) {
+      bitmap.close();
+      throw error;
+    }
     const { width: w, height: h } = bitmap;
     const s =
       Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h))) * Math.min(1, Math.max(0.1, scale));
     const canvas = browser.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
     canvas.width = Math.round(w * s);
     canvas.height = Math.round(h * s);
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
+    const painter = canvas.getContext("2d");
+    try {
+      painter.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    } finally {
+      bitmap.close();
+    }
     ctx.state.scale.set(browser.browserId, s);
     const data = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-    return { data, width: canvas.width, height: canvas.height };
+    return {
+      data,
+      width: canvas.width,
+      height: canvas.height,
+      ...(pixels ? { canvas, painter, pixels: painter.getImageData(0, 0, canvas.width, canvas.height), scale: s } : {}),
+    };
   }
 
   return {
