@@ -48,7 +48,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | File | Role |
 |---|---|
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
-| `ToolRunner.sys.mjs` | Request handling: the tool queue, per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
+| `ToolRunner.sys.mjs` | Request handling: the tool queue, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` status, queue and handoff |
 | `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
 | `PageQuery.sys.mjs` | `query` to a frame's actor, refs across frames, coordinate translation, load waits, page dialogs |
@@ -188,10 +188,10 @@ download only appears once the save dialog is answered.
 appearing or disappearing, or every change of a selector's text. Results go to
 `$XDG_RUNTIME_DIR/zen-mcp-watch/<id>-<time>.jsonl` (`started`, `matched`/`changed`, and a final
 line), written by the same `EventFiles` helper as downloads. Checks use a light query path
-that doesn't join the active operation, so another session's Stop or call doesn't cancel
-them; the watch re-checks ownership and site rules itself on every tick. A watch ends at its
-first match (unless `repeat`), on timeout, when the tab is closed or changes owner, when its
-session ends, and on Stop in the island.
+that doesn't belong to a tool call, so a call ending or being cancelled doesn't cancel them;
+the watch re-checks ownership and site rules itself on every tick. A watch ends at its first
+match (unless `repeat`), on timeout, when the tab is closed or changes owner, when its session
+ends, and on Stop in the island.
 
 ## Other files at runtime
 

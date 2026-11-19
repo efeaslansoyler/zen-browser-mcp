@@ -215,30 +215,39 @@ function logError(where, e) {
       tools: {},
       commands: {},
 
-      // Old MCP processes omit identity; retain their Claude appearance until reconnect.
-      activeAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
+      // The agent the island and menus show: the one that made the latest tool call. Never the
+      // identity of a call; each call carries its own (see ToolRunner.sys.mjs).
+      lastAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
       // One island and approval UI is shared: tool requests are serialized so another client
       // cannot change the identity while an action or confirmation is pending.
       toolQueue: Promise.resolve(),
-      activeSession: null,
-      operation: null,
+      calls: new Set(), // running tool calls: Cancellation scopes with session, agent and tabs
       stopGeneration: 0,
       activeCalls: 0, // running tool calls that show the island
       island: null,
       shuttingDown: false,
 
-      setActiveAgent(theme) {
-        ctx.activeAgent = theme;
+      setLastAgent(theme) {
+        ctx.lastAgent = theme;
         globalThis.zenMcpActiveAgent = { id: theme.id, name: theme.name };
         ctx.island?.setAgent(theme);
       },
 
-      // While an extension popup is the operation's surface, its tab is the source of truth
-      // for ownership and site checks.
+      // The tool call working in this tab or in its extension popup. Helpers that get a browser
+      // find their call here instead of taking it as a parameter.
+      callOf(browser) {
+        for (const call of ctx.calls)
+          if (call.extensionSurface?.browser === browser || call.tabs.has(browser?.browserId)) return call;
+        return null;
+      },
+
+      // While an extension popup is the call's surface, its tab is the source of truth for
+      // ownership and site checks.
       controlledSource(browser) {
-        const surface = ctx.operation?.extensionSurface;
+        const call = ctx.callOf(browser);
+        const surface = call?.extensionSurface;
         if (surface?.browser !== browser) return browser;
-        ctx.extensionPanels.get(surface.source, ctx.activeSession, surface.tabId, surface.extensionId);
+        ctx.extensionPanels.get(surface.source, call.session, surface.tabId, surface.extensionId);
         return surface.source;
       },
     };
@@ -280,7 +289,7 @@ function logError(where, e) {
         ExtensionParent.WebExtensionPolicy.getByURI(popup.browser.currentURI)?.id === id,
       busy: (win) => isGloballyBlockingOpenPopup(win),
       check: (source, session) => {
-        ctx.operation?.check();
+        ctx.callOf(source)?.check();
         ownership.check(source.browserId, session);
         ctx.assertSiteAccess(source);
       },
@@ -289,33 +298,34 @@ function logError(where, e) {
         if (ctx.gate("extensions.switch_tab")) return true;
         const context = ctx.permissionContext(source);
         const title = source.contentTitle || ctx.hostOf(source) || source.currentURI.spec;
-        const name = ctx.activeAgent.name;
+        const call = ctx.callOf(source);
         const result = await ctx.askIsland(
+          call,
           source,
           L("Switch tab for extension?", "Eklenti için sekme değiştirilsin mi?"),
           L(
-            `${name} needs to select “${title}” to use ${extension.name}. This will change the tab you are viewing.`,
-            `${name}, ${extension.name} eklentisini kullanmak için “${title}” sekmesine geçmek istiyor. Baktığın sekme değişecek.`,
+            `${call.agent.name} needs to select “${title}” to use ${extension.name}. This will change the tab you are viewing.`,
+            `${call.agent.name}, ${extension.name} eklentisini kullanmak için “${title}” sekmesine geçmek istiyor. Baktığın sekme değişecek.`,
           ),
           { ok: L("Switch tab", "Sekmeye geç"), cancel: L("Stay here", "Burada kal") },
         );
-        ctx.operation?.check();
+        call.check();
         if (!ctx.samePermissionContext(context, ctx.permissionContext(source)))
           throw new Error("The target or permission settings changed during the switch request; nothing was switched.");
         return result === "done";
       },
-      wait: (ms) => ctx.operationSleep(ms),
+      wait: (ms, source) => ctx.operationSleep(ms, ctx.callOf(source)),
     });
 
     ctx.browserSettings = new BrowserSettings({
       check: (source, session) => {
-        ctx.operation?.check();
+        ctx.callOf(source)?.check();
         ownership.check(source.browserId, session);
         ctx.assertSiteAccess(source);
       },
       context: (source) =>
         JSON.stringify([source.currentURI.spec, ownership.version(source.browserId), ctx.readConfig()]),
-      wait: (ms) => ctx.operationSleep(ms),
+      wait: (ms, source) => ctx.operationSleep(ms, ctx.callOf(source)),
       geckoVersion: Services.appinfo.platformVersion.split(".").slice(0, 2).join("."),
       ask: async (source, args, value) => {
         if (ctx.gate("browser_settings.change")) return true;
@@ -331,9 +341,11 @@ function logError(where, e) {
                 );
         const switching =
           source.ownerDocument.defaultView.gBrowser.selectedBrowser !== source && args.action !== "reset";
-        const name = ctx.activeAgent.name;
+        const call = ctx.callOf(source);
+        const name = call.agent.name;
         return (
           (await ctx.askIsland(
+            call,
             source,
             L("Browser settings permission", "Tarayıcı ayarı izni"),
             L(
@@ -352,7 +364,7 @@ function logError(where, e) {
       ctx.picks.current?.agent ??
       commonAgent(ctx.sendTargets().map((t) => t.agent)) ??
       ctx.channels.target()?.agent ??
-      ctx.activeAgent;
+      ctx.lastAgent;
 
     // Also used by the page menu's "Show to agent…" item.
     function paintMenuIcon(item, agent) {
@@ -449,7 +461,7 @@ function logError(where, e) {
         Services.ppmm.sharedData.flush();
       },
       now: () => Date.now(),
-      capture: (step) => captureStep({ ...step, color: ctx.activeAgent.accent }),
+      capture: (step) => captureStep({ ...step, color: ctx.lastAgent.accent }),
     });
     ctx.recipes = new Recipes({ dir: `${stateHome}/${zenMcpApp}/recipes`, io: geckoIO });
     ctx.ReviewModel = ReviewModel;
@@ -480,12 +492,13 @@ function logError(where, e) {
       tracked: (browserId) => state.tabs.has(browserId),
       // an allowlist only checks pages and frames: allowed sites load from other hosts (CDNs)
       blocked: (browserId, host, document) => {
-        if (!ctx.operation?.tabs?.has(browserId) || ctx.siteAllowed(host)) return false;
+        const call = [...ctx.calls].find((c) => c.tabs.has(browserId));
+        if (!call || ctx.siteAllowed(host)) return false;
         if (!document && ctx.readConfig().sites.mode === "allowlist") return false;
         try {
           ctx.assertSiteHost(host); // throws the error that says which list blocks it
         } catch (e) {
-          ctx.operation.cancel(e);
+          call.cancel(e);
         }
         return true;
       },
@@ -802,7 +815,7 @@ function logError(where, e) {
       ctx.browserSettings.destroy();
       ctx.extensionPanels.destroy();
       clearTimeout(sessionSweep);
-      ctx.operation?.cancel(new Stopped());
+      for (const call of ctx.calls) call.cancel(new Stopped());
       ctx.picks.destroy();
       ctx.demonstrations.destroy();
       ctx.channels.closeAll();

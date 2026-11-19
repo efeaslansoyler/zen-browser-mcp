@@ -83,7 +83,7 @@ export function pageInput(ctx) {
     const entry = held.get(ctx.controlledSource(browser).browserId);
     if (!entry) return null;
     if (
-      entry.session !== ctx.activeSession ||
+      entry.session !== ctx.callOf(browser)?.session ||
       !entry.frame.currentWindowGlobal ||
       entry.frame.currentWindowGlobal !== entry.document
     ) {
@@ -105,7 +105,7 @@ export function pageInput(ctx) {
       frame,
       document: frame.currentWindowGlobal,
       state: result,
-      session: ctx.activeSession,
+      session: ctx.callOf(browser)?.session,
       timer: ctx.setTimeout(() => releaseInputs(id), hold_ms),
     });
   }

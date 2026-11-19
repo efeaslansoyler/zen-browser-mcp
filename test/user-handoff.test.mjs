@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bridgeContext } from "./support/bridge.mjs";
+import { bridgeContext, testCall } from "./support/bridge.mjs";
 
 // ask_user asks; hand_to_user leaves a step in a tab to the user and tells the agent to check.
 function harness(answer) {
@@ -19,7 +19,7 @@ function harness(answer) {
     waitIslandAnswer: async () => answer,
     text: (value) => [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
   });
-  const call = async (tool, args) => (await ctx.tools[tool](args))[0].text;
+  const call = async (tool, args) => (await ctx.tools[tool](args, testCall(ctx)))[0].text;
   return { call, asks, queries };
 }
 
@@ -74,7 +74,7 @@ test("a hand-over survives the pages the user goes through and ends on the islan
       }),
     text: (value) => [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
   });
-  const pending = ctx.tools.hand_to_user({ tabId: 1, message: "Log in, then press Done" });
+  const pending = ctx.tools.hand_to_user({ tabId: 1, message: "Log in, then press Done" }, testCall(ctx));
   await new Promise((resolve) => setImmediate(resolve));
   outlineEnded();
   await new Promise((resolve) => setImmediate(resolve));
@@ -102,8 +102,9 @@ test("a query notices its page going into bfcache, where its own context stays u
   };
   frame.top = frame;
   frame.isInBFCache = false;
-  const ctx = bridgeContext({ activeSession: "A", assertSiteAccess() {}, guard: (promise) => promise });
+  const ctx = bridgeContext({ assertSiteAccess() {}, guard: (promise) => promise });
   ctx.ownership.assign(1, "A");
+  testCall(ctx, { session: "A", tabs: [1] });
   const pending = ctx.query(browser, "ask_user", {}, 30000, frame);
   frame.isInBFCache = true;
   await assert.rejects(pending, (e) => e instanceof ctx.PageGone);

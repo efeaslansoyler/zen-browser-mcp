@@ -4,7 +4,7 @@
 export function sessionManager(ctx) {
   const GRACE = 5000;
 
-  function sessionInfo(id, agent = ctx.activeAgent, cwd = "", title) {
+  function sessionInfo(id, agent, cwd = "", title) {
     if (typeof id !== "string" || !id.trim())
       throw new Error("A browser session ID is required. Reconnect the MCP server.");
     let info = ctx.sessions.get(id);
@@ -48,8 +48,9 @@ export function sessionManager(ctx) {
     ctx.releaseInputs(tabId);
     ctx.browserSettings.restoreTab(tabId);
     ctx.extensionPanels.releaseTab(tabId);
-    if (ctx.operation?.tabs?.has(tabId))
-      ctx.operation.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
+    for (const call of ctx.calls)
+      if (call.tabs.has(tabId))
+        call.cancel(new Error(`The user revoked or transferred tab ${tabId}; this operation was cancelled.`));
   }
 
   function endOwnerSession(id) {
@@ -61,8 +62,8 @@ export function sessionManager(ctx) {
     ctx.sessions.delete(id);
     ctx.ownership.removeRequester(id);
     ctx.readSnapshots.clearSession(id);
-    if (ctx.operation?.session === id)
-      ctx.operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
+    for (const call of ctx.calls)
+      if (call.session === id) call.cancel(new Error("The browser session disconnected; its operation was cancelled."));
     for (const [tabId, owner] of ctx.ownership.owners) {
       if (owner !== id) continue;
       const tab = ctx.findTab(tabId);
@@ -106,8 +107,8 @@ export function sessionManager(ctx) {
     const info = ctx.sessions.get(id);
     if (info) info.disconnected = true;
     ctx.sessionVersions.set(id, (ctx.sessionVersions.get(id) || 0) + 1);
-    if (ctx.operation?.session === id)
-      ctx.operation.cancel(new Error("The browser session disconnected; its operation was cancelled."));
+    for (const call of ctx.calls)
+      if (call.session === id) call.cancel(new Error("The browser session disconnected; its operation was cancelled."));
     // Allow the same MCP process to reconnect after a bridge reload or brief outage.
     endAfterGrace(id);
   }

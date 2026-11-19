@@ -4,7 +4,7 @@ import { normalizeConfig, normalizeSites } from "../browser/SiteRules.sys.mjs";
 import { permissions } from "../browser/Permissions.sys.mjs";
 import * as policy from "../browser/Policy.sys.mjs";
 import { Ownership } from "../browser/Ownership.sys.mjs";
-import { bridgeContext } from "./support/bridge.mjs";
+import { bridgeContext, testCall } from "./support/bridge.mjs";
 
 // Gecko globals the real site checks and navigation use.
 globalThis.Services = {
@@ -28,21 +28,19 @@ function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", an
   const context = bridgeContext({
     framesOf: () => [],
     ownership,
-    activeSession: "test-session",
-    browserFor: (id) => {
+    browserFor: (_call, id) => {
       ownership.check(id, "test-session");
       return browser;
     },
     readConfig: () => settings,
     state: { paused: false, tabs: new Set([1]) },
-    activeAgent: { name: "Codex" },
     findTab: () => ({ linkedBrowser: browser }),
     paintTab() {},
     describeAction: () => "",
     logActivity() {},
     shortRefs: (x) => x,
     askIsland: async (...args) => {
-      prompts.push({ host: browser.currentURI.host, message: args[2] });
+      prompts.push({ host: browser.currentURI.host, message: args[3] });
       return answer ? answer({ prompts, browser, navigate, settings }) : "done";
     },
     text: (value) => [{ type: "text", text: value }],
@@ -85,7 +83,8 @@ function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", an
     },
   });
   const action = (name, input = {}) => ({ name, input: { tabId: 1, ...input } });
-  const batch = (actions) => context.tools.browser_batch({ actions });
+  const batch = (actions) =>
+    context.tools.browser_batch({ actions }, testCall(context, { session: "test-session", agent: { name: "Codex" } }));
   return { context, browser, prompts, effects, settings, navigate, batch, action };
 }
 
@@ -323,11 +322,9 @@ test("permission module describes actions and scopes approvals without slicing m
     assertSiteAccess() {},
     holdsButtons: () => false,
     askIsland: async (...args) => {
-      asked.push(args[2]);
+      asked.push(args[3]);
       return "done";
     },
-    operation: null,
-    activeAgent: { name: "Claude" },
   });
   const browser = {
     browserId: 1,
@@ -344,7 +341,7 @@ test("permission module describes actions and scopes approvals without slicing m
   assert.equal((await p.callRule("navigate", { url: "back" }, browser)).rule, "ask");
   assert.equal((await p.callRule("read_page", {}, browser)).rule, "allow");
   assert.equal((await p.callRule("computer", { action: "type", text: "x" }, browser)).rule, "ask");
-  const { context, asked: prompted } = await p.requirePermission(browser, [
+  const { context, asked: prompted } = await p.requirePermission({ check() {}, agent: { name: "Claude" } }, browser, [
     { tool: "computer", args: { action: "left_click", ref: "ref_1" } },
   ]);
   assert.equal(prompted, true);

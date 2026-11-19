@@ -67,9 +67,10 @@ export function systemClipboard(ctx) {
   async function performClipboard(browser, args) {
     const { L } = ctx;
     const source = ctx.controlledSource(browser);
+    const call = ctx.callOf(browser);
     const check = (context) => {
-      ctx.operation?.check();
-      ctx.ownership.check(source.browserId, ctx.activeSession);
+      call.check();
+      ctx.ownership.check(source.browserId, call.session);
       ctx.assertSiteAccess(browser);
       if (
         context &&
@@ -81,10 +82,10 @@ export function systemClipboard(ctx) {
         );
       }
     };
-    const surface = ctx.operation?.extensionSurface;
+    const surface = call.extensionSurface;
     const panel =
       surface?.browser === browser
-        ? ctx.extensionPanels.get(source, ctx.activeSession, surface.tabId, surface.extensionId).popup.panel
+        ? ctx.extensionPanels.get(source, call.session, surface.tabId, surface.extensionId).popup.panel
         : null;
     const noAutoHide = panel?.getAttribute("noautohide");
     if (panel) panel.setAttribute("noautohide", "true");
@@ -123,8 +124,9 @@ export function systemClipboard(ctx) {
           paste: L("paste your system clipboard into the target", "sistem panondakini hedefe yapıştırmak"),
           cut: L("cut the target selection to your system clipboard", "hedefteki seçimi kesip sistem panona almak"),
         }[input.action];
-        const name = ctx.activeAgent.name;
+        const name = call.agent.name;
         const result = await ctx.askIsland(
+          call,
           source,
           L("System clipboard permission", "Sistem panosu izni") +
             ` · ${ctx.hostOf(source) || source.contentTitle || source.currentURI.spec}`,

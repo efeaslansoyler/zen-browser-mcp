@@ -59,8 +59,8 @@ export function tabs(ctx) {
   }
 
   // Only agent tabs (opened by an agent or given by the user) are reachable; a user tab is
-  // never touched even if its ID is known.
-  function browserFor(tabId) {
+  // never touched even if its ID is known. The tab joins the call's tabs.
+  function browserFor(call, tabId) {
     const tab = ctx.findTab(tabId);
     if (tab) restoreMark(tab);
     if (!tab || !ctx.state.tabs.has(tabId)) {
@@ -68,11 +68,11 @@ export function tabs(ctx) {
         `Tab ${tabId} is not assigned to an agent (closed, or the user took it back). Use tabs_context_mcp for current tabs.`,
       );
     }
-    ctx.ownership.check(tabId, ctx.activeSession);
-    ctx.operation?.tabs?.add(tabId);
-    if (ctx.operation?.extensionSurface?.tabId === tabId) {
-      const surface = ctx.operation.extensionSurface;
-      ctx.extensionPanels.get(tab.linkedBrowser, ctx.activeSession, tabId, surface.extensionId);
+    ctx.ownership.check(tabId, call.session);
+    call.tabs.add(tabId);
+    if (call.extensionSurface?.tabId === tabId) {
+      const surface = call.extensionSurface;
+      ctx.extensionPanels.get(tab.linkedBrowser, call.session, tabId, surface.extensionId);
       return surface.browser;
     }
     return tab.linkedBrowser;
@@ -96,12 +96,12 @@ export function tabs(ctx) {
   // Opened in the background of the user's window, like Claude in Chrome: input comes from the
   // page process, so the tab doesn't need to be selected and the user's view doesn't change.
   // clean: in the agent container instead of with the user's cookies (default from the config).
-  async function createTab({ clean } = {}) {
+  async function createTab(session, { clean } = {}) {
     const win = Services.wm.getMostRecentWindow("navigator:browser");
     if (!win) throw new Error("No browser window is open.");
     const userContextId = (clean ?? !!ctx.readConfig().container) ? agentContainerId() : 0;
     const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true, userContextId });
-    mark(tab);
+    mark(tab, "true", session);
     await placeInWorkspace(win, tab).catch((e) => ctx.logError("workspace", e));
     return tab;
   }
@@ -154,7 +154,7 @@ export function tabs(ctx) {
   }
 
   // origin: "true" when an agent opened the tab, "user" when the user gave it from the tab menu
-  function mark(tab, origin = "true", session = ctx.activeSession, { cancel = true } = {}) {
+  function mark(tab, origin, session, { cancel = true } = {}) {
     const target = ctx.sessions.get(session);
     if (!target || target.disconnected)
       throw new Error("The selected browser session is no longer connected. Choose a session again.");

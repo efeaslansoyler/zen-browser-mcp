@@ -27,8 +27,13 @@ const hostOf = (url) => {
 
 // The shared flow. wait(timeout) resolves with the island answer for this tab; targets (the
 // user's flow) adds the session picker to the review. Returns { status, recipe?, recording?,
-// choice? }; status is saved, cancelled, timeout or empty.
-export async function demonstrate(ctx, browser, { message, name, timeout, wait, targets = null, notify = true }) {
+// choice? }; status is saved, cancelled, timeout or empty. agent: who asked, for the desktop
+// notification (notify).
+export async function demonstrate(
+  ctx,
+  browser,
+  { message, name, timeout, wait, targets = null, notify = true, agent },
+) {
   const { L } = ctx;
   if (ctx.recordings.isRecording(browser.browserId)) throw new Error("This tab is already being recorded.");
   const dir = `${ctx.runtimeDir}/${ctx.app}-recordings/${Date.now()}-${++recordingId}`;
@@ -37,7 +42,7 @@ export async function demonstrate(ctx, browser, { message, name, timeout, wait, 
       ? L("Recording · do it in the tab", "Kaydediliyor · sekmede yap")
       : L(`Recording · ${n} step${n === 1 ? "" : "s"}`, `Kaydediliyor · ${n} adım`);
   ctx.island?.recording(browser, title(0), message);
-  const notified = notify && ctx.notifyAsk(browser, message);
+  const notified = notify && ctx.notifyAsk(browser, message, agent);
   ctx.recordings.start(browser, { dir, onStep: (r) => ctx.island?.recordingProgress(title(r.steps.length)) });
   const discard = () => ctx.recipes.io.remove(dir).catch(() => {});
   let answer, recording;
@@ -116,15 +121,16 @@ export function demonstrationTools(ctx) {
     // The user does the task in the agent's tab while every step is recorded; the island shows
     // one line with a live step count and Finish / Cancel (the agent's message on hover). After
     // Finish the user reviews the steps and saves. Blocks until the user saves or cancels.
-    async show_me({ tabId, message, name, timeout = 900 }) {
-      const browser = ctx.browserFor(tabId);
+    async show_me({ tabId, message, name, timeout = 900 }, call) {
+      const browser = ctx.browserFor(call, tabId);
       if (typeof message !== "string" || !message.trim()) throw new Error("message must say what to show.");
       timeout = Math.min(Math.max(Number(timeout) || 900, 30), MAX_SHOW_TIMEOUT);
       const result = await demonstrate(ctx, browser, {
         message,
         name,
         timeout,
-        wait: (seconds) => ctx.waitIslandAnswer(seconds, browser),
+        wait: (seconds) => ctx.waitIslandAnswer(call, seconds, browser),
+        agent: call.agent,
       });
       if (result.status === "timeout") return text(`The user did not finish within ${timeout} s; nothing was saved.`);
       if (result.status === "cancelled") return text("The user cancelled; nothing was saved.");

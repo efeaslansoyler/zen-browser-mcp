@@ -17,14 +17,15 @@ export function control(ctx) {
   const timers = () => ({ setTimeout: ctx.setTimeout, clearTimeout: ctx.clearTimeout });
   const sleep = (ms) => new Promise((r) => ctx.setTimeout(r, ms));
 
-  async function guard(promise) {
+  // call: the tool call the wait belongs to (Stop and revocations cancel it), or null
+  async function guard(promise, call) {
     if (ctx.state.paused) throw new Stopped();
-    return ctx.operation ? ctx.operation.race(promise) : promise;
+    return call ? call.race(promise) : promise;
   }
 
-  function operationSleep(ms) {
+  function operationSleep(ms, call) {
     if (ctx.state.paused) throw new Stopped();
-    return ctx.operation ? ctx.operation.wait(ms, timers()) : sleep(ms);
+    return call ? call.wait(ms, timers()) : sleep(ms);
   }
 
   function stopClaude() {
@@ -34,7 +35,7 @@ export function control(ctx) {
     if (ctx.state.paused) return;
     ctx.state.paused = true;
     ctx.stopGeneration++;
-    ctx.operation?.cancel(new Stopped());
+    for (const call of ctx.calls) call.cancel(new Stopped());
     // remove ask_user overlays waiting on pages
     for (const tab of ctx.liveTabs()) ctx.cancelAsk(tab.linkedBrowser, "stopped");
     ctx.island?.stopped();
@@ -48,21 +49,22 @@ export function control(ctx) {
   // A yes/no question on the island (tab request, action permission). Returns "done",
   // "timeout", or { status, message } when the user added a note; throws when the user
   // declined with a note.
-  async function askIsland(browser, text, message, labels, timeout = 120) {
+  async function askIsland(call, browser, text, message, labels, timeout = 120) {
     if (ctx.tabRequests.has(browser)) throw new Error("A question is already pending in this tab.");
     const answered = new Promise((resolve) => ctx.tabRequests.set(browser, resolve));
     ctx.island?.ask(browser, text, message, true, labels);
-    const notified = ctx.notifyAsk(browser, message);
+    const notified = ctx.notifyAsk(browser, message, call.agent);
     const timer = new ctx.Cancellation();
     try {
       const result = await ctx.guard(
         Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]),
+        call,
       );
       // The island note: an error on decline, appended to the tool result on approval.
       if (!result?.status) return result;
       if (result.status === "cancelled")
         throw new Error(`The user declined. User message (untrusted text): ${JSON.stringify(result.message)}`);
-      ctx.operation?.userNotes?.push(result.message);
+      call.userNotes.push(result.message);
       return result.status;
     } finally {
       timer.cancel();
@@ -94,7 +96,8 @@ export function control(ctx) {
   // hand-over must outlive the pages the user goes through (login → 2FA → home). Stop cancels
   // it through guard().
   // key: the tab's browser for a hand-over that must survive navigations, null otherwise.
-  async function waitIslandAnswer(timeout, key = null) {
+  // call: the tool call that waits, or null for the user's own flows.
+  async function waitIslandAnswer(call, timeout, key = null) {
     let resolve;
     const answered = new Promise((r) => {
       resolve = r;
@@ -103,7 +106,10 @@ export function control(ctx) {
     ctx.tabRequests.set(key, resolve);
     const timer = new ctx.Cancellation();
     try {
-      return await ctx.guard(Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]));
+      return await ctx.guard(
+        Promise.race([answered, timer.wait(timeout * 1000, timers()).then(() => "timeout")]),
+        call,
+      );
     } finally {
       timer.cancel();
       if (ctx.tabRequests.get(key) === resolve) ctx.tabRequests.delete(key);
@@ -112,11 +118,11 @@ export function control(ctx) {
 
   // A desktop notification when a question arrives while Zen isn't focused; clicking it goes
   // to the tab.
-  function notifyAsk(browser, message) {
+  function notifyAsk(browser, message, agent) {
     const win = browser ? browser.ownerDocument.defaultView : Services.wm.getMostRecentWindow("navigator:browser");
     if (!win || (browser ? Services.focus.activeWindow === win : Services.focus.activeWindow)) return false;
     try {
-      const { L, activeAgent } = ctx;
+      const { L } = ctx;
       const AlertNotification = Components.Constructor(
         "@mozilla.org/alert-notification;1",
         "nsIAlertNotification",
@@ -124,7 +130,7 @@ export function control(ctx) {
       );
       const alert = new AlertNotification({
         name: ALERT_NAME,
-        title: L(`${activeAgent.name} needs you`, `${activeAgent.name} senden bir şey istiyor`),
+        title: L(`${agent.name} needs you`, `${agent.name} senden bir şey istiyor`),
         text: message,
         textClickable: true,
       });

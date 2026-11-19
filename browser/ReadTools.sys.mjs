@@ -1,5 +1,5 @@
 // Read tools: page text, the accessibility tree, find, waiting, network/console, JavaScript, React, axe.
-// Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
+// Built last by main.js: helpers are taken from ctx once. Tools get their call as the second argument.
 export function readTools(ctx) {
   const {
     DialogOpen,
@@ -27,8 +27,8 @@ export function readTools(ctx) {
   } = ctx;
   return {
     // iframe text follows the page text, with its source
-    async get_page_text({ tabId, diff = false, since }) {
-      const browser = browserFor(tabId);
+    async get_page_text({ tabId, diff = false, since }, call) {
+      const browser = browserFor(call, tabId);
       const context = readContext(browser);
       const page = await query(browser, "text");
       let out = `${page.title}\n${page.url}\n\n${page.text}`;
@@ -45,8 +45,8 @@ export function readTools(ctx) {
       return readOutput(browser, ["get_page_text"], context, out, diff, since);
     },
 
-    async read_page({ tabId, filter, depth, ref_id, max_chars = 50000, diff = false, since }) {
-      const browser = browserFor(tabId);
+    async read_page({ tabId, filter, depth, ref_id, max_chars = 50000, diff = false, since }, call) {
+      const browser = browserFor(call, tabId);
       const context = readContext(browser);
       const frame = frameOf(browser, ref_id);
       const opts = { filter, depth, max_chars };
@@ -75,8 +75,8 @@ export function readTools(ctx) {
     },
 
     // searches every frame and merges the results by score
-    async find({ tabId, query: q }) {
-      const browser = browserFor(tabId);
+    async find({ tabId, query: q }, call) {
+      const browser = browserFor(call, tabId);
       const results = [];
       for (const bc of framesOf(browser)) {
         try {
@@ -100,8 +100,8 @@ export function readTools(ctx) {
 
     // Waits until text/selector appears (gone: disappears) and/or the network is idle. Polls,
     // so it keeps going when the page changes meanwhile (e.g. a form was sent). Looks at all frames.
-    async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }) {
-      const browser = browserFor(tabId);
+    async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }, call) {
+      const browser = browserFor(call, tabId);
       if (!wanted && !selector && !network_idle) throw new Error("text, selector or network_idle is required.");
       if (selector) {
         try {
@@ -144,13 +144,13 @@ export function readTools(ctx) {
           throw new Error(
             `Not met within ${Math.min(timeout, 60)} s. For longer waits use the watch tool and monitor its events file.`,
           );
-        await operationSleep(250);
+        await operationSleep(250, call);
       }
     },
 
     // Long-running watches: write to an events file without blocking the agent (wait_for is for short waits)
-    watch({ tabId, action = "start", id, ...spec }) {
-      const session = ctx.activeSession;
+    watch({ tabId, action = "start", id, ...spec }, call) {
+      const session = call.session;
       if (action === "list") return text({ watches: watches.forSession(session).map(Watches.summary) });
       if (action === "stop") {
         const own = watches.forSession(session).find((w) => w.id === id);
@@ -158,7 +158,7 @@ export function readTools(ctx) {
         watches.end(id, "stopped by the agent");
         return text(`Watch #${id} stopped.`);
       }
-      const browser = browserFor(tabId);
+      const browser = browserFor(call, tabId);
       assertSiteAccess(browser);
       if (spec.selector) {
         try {
@@ -170,8 +170,8 @@ export function readTools(ctx) {
       return text(Watches.summary(watches.start(session, tabId, browser, spec)));
     },
 
-    read_network_requests({ tabId, urlPattern, limit = 100, clear, id, max_chars = 20000 }) {
-      const browser = browserFor(tabId);
+    read_network_requests({ tabId, urlPattern, limit = 100, clear, id, max_chars = 20000 }, call) {
+      const browser = browserFor(call, tabId);
       const log = network.get(browser.browserId);
       if (id != null) {
         const r = log?.list.find((r) => r.id === id);
@@ -207,31 +207,31 @@ export function readTools(ctx) {
       return text((hidden > 0 ? `…${hidden} earlier request(s) not shown\n` : "") + lines.join("\n"));
     },
 
-    async read_console_messages({ tabId, onlyErrors, pattern, limit, clear }) {
-      const { value } = await query(browserFor(tabId), "console", { onlyErrors, pattern, limit, clear });
+    async read_console_messages({ tabId, onlyErrors, pattern, limit, clear }, call) {
+      const { value } = await query(browserFor(call, tabId), "console", { onlyErrors, pattern, limit, clear });
       return text(value);
     },
 
-    async javascript_tool({ text: code, tabId }) {
-      const { value } = await query(browserFor(tabId), "eval", { code });
+    async javascript_tool({ text: code, tabId }, call) {
+      const { value } = await query(browserFor(call, tabId), "eval", { code });
       return text(value);
     },
 
-    async react({ tabId, ref, ...options }) {
-      const browser = browserFor(tabId);
+    async react({ tabId, ref, ...options }, call) {
+      const browser = browserFor(call, tabId);
       if (options.action === "inspect" && !ref) throw new Error("React inspect requires an element ref.");
       const context = permissionContext(browser);
       const document = readContext(browser);
       const frames = ref ? [frameOf(browser, ref)] : framesOf(browser);
       const results = [];
       for (const frame of frames) {
-        ctx.operation?.check();
+        call.check();
         assertSiteAccess(browser);
         try {
           const { value } = await query(browser, "react", { ...options, ref: longRef(ref) }, 30000, frame);
           results.push({ frame: frame.id, ...value });
         } catch (error) {
-          ctx.operation?.check();
+          call.check();
           if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext)
             throw error;
           results.push({ frame: frame.id, error: String(error.message || error), inspected: false });
@@ -245,15 +245,15 @@ export function readTools(ctx) {
       return text(shortRefs(JSON.stringify({ frames: results, untrusted: true })));
     },
 
-    async accessibility({ tabId, ref, ...options }) {
-      const browser = browserFor(tabId);
+    async accessibility({ tabId, ref, ...options }, call) {
+      const browser = browserFor(call, tabId);
       const context = permissionContext(browser);
       const document = readContext(browser);
       const deadline = Date.now() + 45000;
       const frames = ref ? [frameOf(browser, ref)] : framesOf(browser);
       const results = [];
       for (const frame of frames) {
-        ctx.operation?.check();
+        call.check();
         assertSiteAccess(browser);
         if (Date.now() >= deadline) {
           results.push({ frame: frame.id, scanned: false, error: "Total scan time budget exhausted." });
@@ -269,7 +269,7 @@ export function readTools(ctx) {
           );
           results.push({ frame: frame.id, ...value });
         } catch (error) {
-          ctx.operation?.check();
+          call.check();
           if (error instanceof DialogOpen || error instanceof Stopped || ref || frame === browser.browsingContext)
             throw error;
           results.push({ frame: frame.id, error: String(error.message || error), scanned: false });

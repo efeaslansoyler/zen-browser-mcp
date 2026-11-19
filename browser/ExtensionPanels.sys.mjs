@@ -78,7 +78,7 @@ export class ExtensionPanels {
       }
       window.gBrowser.selectedTab = window.gBrowser.getTabForBrowser(source);
       // Let native tab/focus handlers finish before opening the toolbar popup.
-      await this.env.wait(50);
+      await this.env.wait(50, source);
       this.env.check(source, session);
       if (
         window.gBrowser.selectedBrowser !== source ||
@@ -100,7 +100,7 @@ export class ExtensionPanels {
           throw new Error("Target tab changed while opening the extension.");
         popup = this.env.popup(extension, window);
         if (popup?.shown && popup.browser?.browsingContext?.currentWindowGlobal) break;
-        await this.env.wait(50);
+        await this.env.wait(50, source);
       }
       if (!popup?.shown || !popup.browser?.browsingContext?.currentWindowGlobal)
         throw new Error("Extension panel did not open.");

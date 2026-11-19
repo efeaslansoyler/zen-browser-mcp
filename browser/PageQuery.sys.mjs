@@ -170,10 +170,10 @@ export function pageQueries(ctx) {
     const { ownership } = ctx;
     const timers = { setTimeout: ctx.setTimeout, clearTimeout: ctx.clearTimeout };
     if (ctx.state.paused) throw new ctx.Stopped();
-    ctx.operation?.check();
-    ownership.check(ctx.controlledSource(browser).browserId, ctx.activeSession);
+    const scope = ctx.callOf(browser);
+    scope?.check();
+    ownership.check(ctx.controlledSource(browser).browserId, scope?.session);
     ctx.assertSiteAccess(browser);
-    const scope = ctx.operation;
     const wg = frame?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
     throwIfDialog(browser);
@@ -196,19 +196,20 @@ export function pageQueries(ctx) {
         // never changes: a navigation shows up as that context entering the cache.
         if (frame.currentWindowGlobal !== wg || frame.isDiscarded || frame.top?.isInBFCache)
           throw new PageGone("The page changed.");
-        ownership.check(ctx.controlledSource(browser).browserId, scope?.session || ctx.activeSession);
+        ownership.check(ctx.controlledSource(browser).browserId, scope?.session);
         ctx.assertSiteAccess(browser);
       }
     })();
     try {
       const result = await ctx.guard(
         Promise.race([
-          actor.sendQuery(name, { ...data, agent: ctx.activeAgent, session: ctx.activeSession, requestId }),
+          actor.sendQuery(name, { ...data, agent: scope?.agent ?? ctx.lastAgent, session: scope?.session, requestId }),
           watchDialog,
           watcher.wait(timeout, timers).then(() => {
             throw new Error(`The page did not respond within ${timeout / 1000} s.`);
           }),
         ]),
+        scope,
       );
       scope?.check();
       if (result?.error) throw new Error(ctx.shortRefs(result.error));
@@ -221,9 +222,9 @@ export function pageQueries(ctx) {
     }
   }
 
-  // A query for page watches. query() depends on the active session's ownership and the
-  // current operation (it would be cancelled when another session's work is stopped); a watch
-  // checks ownership and site rules itself on every round.
+  // A query for page watches. query() depends on the tab's running call (its session's
+  // ownership, its cancellation); a watch has none and checks ownership and site rules itself
+  // on every round.
   async function backgroundQuery(browser, name, data, frame) {
     const wg = frame?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
@@ -301,7 +302,7 @@ export function pageQueries(ctx) {
       };
       // The browser holds the listener weakly; keep it alive until it finishes.
       pendingListeners.add(listener);
-      const off = ctx.operation?.onCancel(() => {
+      const off = ctx.callOf(browser)?.onCancel(() => {
         try {
           browser.stop();
         } finally {
@@ -334,11 +335,12 @@ export function pageQueries(ctx) {
 
   function readOutput(browser, scope, context, value, diff, since) {
     ctx.assertSiteAccess(browser);
-    ctx.operation?.check();
-    ctx.ownership.check(ctx.controlledSource(browser).browserId, ctx.activeSession);
+    const call = ctx.callOf(browser);
+    call?.check();
+    ctx.ownership.check(ctx.controlledSource(browser).browserId, call?.session);
     return ctx.text(
       ctx.readSnapshots.render({
-        session: ctx.activeSession,
+        session: call?.session,
         tabId: browser.browserId,
         scope,
         context,

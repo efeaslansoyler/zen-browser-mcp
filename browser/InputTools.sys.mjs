@@ -1,5 +1,5 @@
 // Input tools: mouse/keyboard/screenshots, forms, file upload, page dialogs, navigation.
-// Built last by main.js: helpers are taken from ctx once; changing state (operation, activeSession…) is read from ctx at call time.
+// Built last by main.js: helpers are taken from ctx once. Tools get their call as the second argument.
 export function inputTools(ctx) {
   const {
     MAX_UPLOAD,
@@ -36,8 +36,8 @@ export function inputTools(ctx) {
     waitForLoad,
   } = ctx;
   return {
-    async navigate({ url, tabId }) {
-      const browser = browserFor(tabId);
+    async navigate({ url, tabId }, call) {
+      const browser = browserFor(call, tabId);
       releaseInputs(browser);
       const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
       if (url === "back") browser.goBack();
@@ -47,14 +47,14 @@ export function inputTools(ctx) {
           triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
         });
       }
-      await guard(loaded);
+      await guard(loaded, call);
       assertSiteAccess(browser);
       const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
       return text(describeTab(tab));
     },
 
-    async computer(args) {
-      const browser = browserFor(args.tabId);
+    async computer(args, call) {
+      const browser = browserFor(call, args.tabId);
       const need = (key) => {
         if (args[key] == null) throw new Error(`${args.action} needs ${key}.`);
         return args[key];
@@ -76,7 +76,7 @@ export function inputTools(ctx) {
               args.scale ?? 1,
               !!args.annotate,
             ];
-            if (screenshotCache.unchanged(`${ctx.activeSession}:${browser.browserId}`, context, shot.data)) {
+            if (screenshotCache.unchanged(`${call.session}:${browser.browserId}`, context, shot.data)) {
               return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
             }
           }
@@ -188,23 +188,23 @@ export function inputTools(ctx) {
           for (let i = 0; i < (args.repeat || 1); i++) await pressKeys(browser, need("text"));
           break;
         case "wait":
-          await operationSleep(Math.min(need("duration"), 30) * 1000);
+          await operationSleep(Math.min(need("duration"), 30) * 1000, call);
           break;
         default:
           throw new Error(`Unsupported action: ${args.action}`);
       }
       // give the page a moment to handle the events
-      await operationSleep(100);
+      await operationSleep(100, call);
       return text(`${args.action} done.`);
     },
 
-    async form_input({ tabId, ref, value }) {
-      const { value: result } = await queryRef(browserFor(tabId), "form_input", { ref: longRef(ref), value });
+    async form_input({ tabId, ref, value }, call) {
+      const { value: result } = await queryRef(browserFor(call, tabId), "form_input", { ref: longRef(ref), value });
       return text(result);
     },
 
-    async file_upload({ tabId, ref, paths }) {
-      const browser = browserFor(tabId);
+    async file_upload({ tabId, ref, paths }, call) {
+      const browser = browserFor(call, tabId);
       const mime = Cc["@mozilla.org/mime;1"].getService(Ci.nsIMIMEService);
       // the browser window's IOUtils (the autoconfig scope has none)
       const { IOUtils } = browser.ownerDocument.defaultView;
@@ -225,8 +225,8 @@ export function inputTools(ctx) {
       return text(value);
     },
 
-    async handle_dialog({ tabId, accept, text: answer }) {
-      const browser = browserFor(tabId);
+    async handle_dialog({ tabId, accept, text: answer }, call) {
+      const browser = browserFor(call, tabId);
       const win = openDialog(browser);
       if (!win) return text("No dialog is open.");
       const { promptType, text: message } = win.Dialog.args;
@@ -237,7 +237,7 @@ export function inputTools(ctx) {
       const dialog = win.document.querySelector("dialog");
       if (accept) dialog.acceptDialog();
       else dialog.cancelDialog();
-      await operationSleep(200);
+      await operationSleep(200, call);
       return text(
         `${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`,
       );

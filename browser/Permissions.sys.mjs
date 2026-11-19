@@ -2,7 +2,7 @@
 // is allow, ask (approved on the island first) or deny. A click that submits a form, or typing
 // into a secret field, also takes the submit or secret_field rule, whichever is stricter. An
 // approval belongs to one document, origin, settings and ownership version; if any of them
-// changes, the user is asked again. Changing state (operation, activeAgent) is read from ctx.
+// changes, the user is asked again. The tool call (who asks) is passed in.
 export function permissions(ctx) {
   const { L, DialogOpen, Stopped } = ctx;
 
@@ -210,9 +210,9 @@ export function permissions(ctx) {
 
   // Rebuild the request if the page changes while describing actions or awaiting
   // the user's answer. An answer for the old page must never authorize the new one.
-  async function requirePermission(browser, steps) {
+  async function requirePermission(call, browser, steps) {
     for (;;) {
-      ctx.operation?.check();
+      call.check();
       ctx.assertSiteAccess(browser);
       const context = permissionContext(browser);
       const lines = [];
@@ -228,13 +228,14 @@ export function permissions(ctx) {
       if (!samePermissionContext(context, permissionContext(browser))) continue;
       if (!lines.length) return { context, asked: false };
       const host = ctx.hostOf(browser);
-      const agent = ctx.activeAgent.name;
+      const agent = call.agent.name;
       const why = reasons.size ? ` (${[...reasons].join(", ")})` : "";
       const message =
         lines.length === 1
           ? L(`${agent} wants to: ${lines[0]}`, `${agent} şunu yapmak istiyor: ${lines[0]}`)
           : L(`${agent} wants to:`, `${agent} şunları yapmak istiyor:`) + `\n${lines.map((l) => `• ${l}`).join("\n")}`;
       const result = await ctx.askIsland(
+        call,
         browser,
         `${host ? host + " — " : ""}${L("asks for permission", "izin istiyor")}${why}`,
         message,
@@ -252,15 +253,16 @@ export function permissions(ctx) {
   }
 
   // A call without a page (tabs_context_mcp, recipes, downloads…): its rule, asked on the island.
-  async function requireToolPermission(tool, args) {
+  async function requireToolPermission(call, tool, args) {
     const key = ctx.policy.operationOf(tool, args);
     if (!key || OWN_PROMPT.has(key)) return;
     const rule = ctx.rule(key);
     if (rule === "deny") throw new Error(deniedMessage(key));
     if (rule !== "ask") return;
-    const agent = ctx.activeAgent.name;
+    const agent = call.agent.name;
     const what = ctx.describeAction(tool, args, null, false);
     const result = await ctx.askIsland(
+      call,
       null,
       L("asks for permission", "izin istiyor"),
       L(`${agent} wants to: ${what}`, `${agent} şunu yapmak istiyor: ${what}`),

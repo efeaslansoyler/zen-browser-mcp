@@ -31,11 +31,6 @@ function harness(run) {
     samePermissionContext: (a, b) => a === b,
     readContext: document,
     assertSiteAccess: () => {},
-    operation: {
-      check() {
-        if (cancelled) throw new Stopped("stopped");
-      },
-    },
     Stopped,
     DialogOpen: class extends Error {},
     query: async (browser, name, args, timeout, frame) => {
@@ -54,7 +49,15 @@ function harness(run) {
       };
     },
   });
-  return { tools: readTools(context), calls };
+  const call = {
+    check() {
+      if (cancelled) throw new Stopped("stopped");
+    },
+  };
+  const tools = Object.fromEntries(
+    Object.entries(readTools(context)).map(([name, fn]) => [name, (args) => fn(args, call)]),
+  );
+  return { tools, calls };
 }
 test("inspection tools route iframe refs only to their frame", async () => {
   const h = harness();

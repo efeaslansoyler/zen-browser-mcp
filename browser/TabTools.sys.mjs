@@ -3,13 +3,13 @@
 export function tabTools(ctx) {
   const { L, text } = ctx;
   // Shows the message on the island, outlines the element in the tab and waits for the user.
-  async function waitForUser(tool, { tabId, ref, coordinate, message, wait, options, timeout }) {
+  async function waitForUser(call, tool, { tabId, ref, coordinate, message, wait, options, timeout }) {
     const handOver = tool === "hand_to_user";
-    const browser = tabId == null ? null : ctx.browserFor(tabId);
+    const browser = tabId == null ? null : ctx.browserFor(call, tabId);
     const [x, y] = coordinate ? ctx.toPagePoint(browser, coordinate) : [];
     const labels = handOver ? { ok: L("Done", "Bitti") } : {};
     ctx.island?.ask(browser, ctx.describeAction(tool, {}, browser), message, wait !== "click", labels, options);
-    const notified = ctx.notifyAsk(browser, message);
+    const notified = ctx.notifyAsk(browser, message, call.agent);
     let result;
     try {
       if (browser && handOver && wait === "done") {
@@ -25,7 +25,7 @@ export function tabTools(ctx) {
           )
           .catch(() => {});
         try {
-          result = await ctx.waitIslandAnswer(timeout, browser);
+          result = await ctx.waitIslandAnswer(call, timeout, browser);
         } finally {
           ctx.cancelAsk(browser, "done"); // removes the outline if its page is still there
           await outline;
@@ -38,7 +38,7 @@ export function tabTools(ctx) {
           (timeout + 10) * 1000,
           ctx.frameOf(browser, ref),
         ));
-      else result = await ctx.waitIslandAnswer(timeout);
+      else result = await ctx.waitIslandAnswer(call, timeout);
     } catch (e) {
       if (!(e instanceof ctx.PageGone)) throw e;
       result = "navigated";
@@ -86,14 +86,15 @@ export function tabTools(ctx) {
   }
 
   return {
-    async tab_work(args) {
-      return ctx.coordinateTab(args, ctx.activeSession);
+    async tab_work(args, call) {
+      return ctx.coordinateTab(args, call.session);
     },
 
-    async tabs_context_mcp({ createIfEmpty }) {
-      const { ownership, activeSession } = ctx;
+    async tabs_context_mcp({ createIfEmpty }, call) {
+      const { ownership } = ctx;
+      const activeSession = call.session;
       let tabs = ctx.liveTabs().filter((tab) => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
-      if (!tabs.length && createIfEmpty) tabs = [await ctx.createTab()];
+      if (!tabs.length && createIfEmpty) tabs = [await ctx.createTab(activeSession)];
       const userTabs = ctx
         .browserWindows()
         .flatMap(ctx.windowTabs)
@@ -126,13 +127,13 @@ export function tabTools(ctx) {
       });
     },
 
-    async tabs_create_mcp({ clean } = {}) {
-      return text(ctx.describeTab(await ctx.createTab({ clean })));
+    async tabs_create_mcp({ clean } = {}, call) {
+      return text(ctx.describeTab(await ctx.createTab(call.session, { clean })));
     },
 
     // A tab the agent opened is closed; a tab the user gave is not closed but given back.
-    async tabs_close_mcp({ tabId }) {
-      const tab = ctx.browserFor(tabId) && ctx.findTab(tabId);
+    async tabs_close_mcp({ tabId }, call) {
+      const tab = ctx.browserFor(call, tabId) && ctx.findTab(tabId);
       const given = tab.getAttribute(ctx.MARK) === "user";
       ctx.unmark(tab, { cancel: false });
       if (given) return text(`Tab ${tabId} belongs to the user; not closed, given back to them.`);
@@ -142,7 +143,7 @@ export function tabTools(ctx) {
 
     // A question for the user on the island: OK/Cancel or 2-6 answer buttons. With a tab, the
     // element it is about can be outlined; without one, it shows in every window.
-    async ask_user({ tabId, ref, coordinate, message, options, timeout = 300 }) {
+    async ask_user({ tabId, ref, coordinate, message, options, timeout = 300 }, call) {
       if (
         options != null &&
         (!Array.isArray(options) ||
@@ -153,13 +154,13 @@ export function tabTools(ctx) {
         throw new Error("options must be 2 to 6 non-empty answers of at most 80 characters.");
       }
       if (tabId == null && (ref != null || coordinate != null)) throw new Error("ref and coordinate need a tabId.");
-      return waitForUser("ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout });
+      return waitForUser(call, "ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout });
     },
 
     // Frames with short labels around elements the agent points out to the user; nothing
     // waits. Elements can be in different frames; every call replaces the tab's highlights.
-    async highlight({ tabId, items, clear = false }) {
-      const browser = ctx.browserFor(tabId);
+    async highlight({ tabId, items, clear = false }, call) {
+      const browser = ctx.browserFor(call, tabId);
       if (clear) items = [];
       else if (!Array.isArray(items) || !items.length || items.length > 20)
         throw new Error("items must list 1 to 20 elements (or pass clear: true).");
@@ -200,16 +201,17 @@ export function tabTools(ctx) {
     // A step the user must do themselves (log in, 2FA, captcha, confirm a payment…). The tab
     // isn't brought forward: the island expands with the message, "Go to tab" and "Done", and
     // a desktop notification goes out if Zen isn't focused. Credentials never pass the agent.
-    async hand_to_user({ tabId, ref, coordinate, message, wait = "done", timeout = 600 }) {
+    async hand_to_user({ tabId, ref, coordinate, message, wait = "done", timeout = 600 }, call) {
       if (tabId == null) throw new Error("hand_to_user needs the tabId of the tab where the user should act.");
-      return waitForUser("hand_to_user", { tabId, ref, coordinate, message, wait, timeout });
+      return waitForUser(call, "hand_to_user", { tabId, ref, coordinate, message, wait, timeout });
     },
 
     // Asks for a tab the session doesn't own: "Allow / Deny" on the island, plus a desktop
     // notification if Zen isn't focused. On approval the tab is marked as if given from the
     // tab menu; a tab another session owns is queued and handed over when its owner finishes.
-    async request_tab({ tabId, reason, timeout = 120 }) {
-      const { ownership, activeSession, activeAgent } = ctx;
+    async request_tab({ tabId, reason, timeout = 120 }, call) {
+      const { ownership } = ctx;
+      const { session: activeSession, agent: activeAgent } = call;
       if (typeof reason !== "string" || !reason.trim() || reason.length > 2000)
         throw new Error("Provide a short reason of at most 2000 characters.");
       const tab = ctx.findTab(tabId);
@@ -228,18 +230,19 @@ export function tabTools(ctx) {
           });
         if (ctx.gate("tab_work.handoff")) {
           ctx.transferReadyTab(tabId, activeSession);
-          ctx.operation?.tabVersions?.set(tabId, ownership.version(tabId));
+          call.tabVersions.set(tabId, ownership.version(tabId));
           return text(ctx.coordinationStatus(tabId, activeSession));
         }
       }
       const browser = tab.linkedBrowser;
       const version = ownership.version(tabId);
-      ctx.operation?.tabs?.add(tabId);
+      call.tabs.add(tabId);
       // one of the user's own tabs: the request_tab rule (an agent's tab: tab_work.handoff above)
       const allowed = !foreignOwner && ctx.gate("request_tab");
       const result = allowed
         ? "done"
         : await ctx.askIsland(
+            call,
             browser,
             ctx.describeAction("request_tab", {}, browser),
             L(
@@ -260,7 +263,7 @@ export function tabTools(ctx) {
           throw new Error("The owner resumed work; wait for completion.");
         ctx.transferReadyTab(tabId, activeSession);
       } else ctx.mark(tab, tab.getAttribute(ctx.MARK) || "user", activeSession, { cancel: false });
-      ctx.operation?.tabVersions?.set(tabId, ownership.version(tabId));
+      call.tabVersions.set(tabId, ownership.version(tabId));
       return text({
         ...ctx.describeTab(tab),
         coordination: ctx.coordinationStatus(tabId, activeSession),

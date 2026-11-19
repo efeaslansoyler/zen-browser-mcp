@@ -16,7 +16,7 @@ export function tabWork(ctx) {
         disconnected: !!sessions.get(owner)?.disconnected,
       },
       task: task ? { ...task, stale: Date.now() - task.updated > 900_000 } : null,
-      executing: !!ctx.operation?.tabs?.has(tabId),
+      executing: [...ctx.calls].some((call) => call.tabs.has(tabId)),
       queue: queue.map((item, i) => ({
         ...item,
         position: i + 1,
@@ -83,7 +83,7 @@ export function tabWork(ctx) {
     if (action === "request") {
       ownership.request(tabId, session, summary);
       // The fast path must never transfer underneath an executing tool.
-      if (!ctx.operation?.tabs?.has(tabId)) advanceTabQueue(tabId);
+      if (![...ctx.calls].some((call) => call.tabs.has(tabId))) advanceTabQueue(tabId);
     } else {
       ownership.report(tabId, session, action, summary);
       if (action === "finish") advanceTabQueue(tabId);

@@ -100,12 +100,12 @@ export class BrowserSettings {
       );
     if (args.action === "reset") {
       this.restore(source);
-      await this.env.wait(100);
+      await this.env.wait(100, source);
       return;
     }
     // A background browser's layout is suspended; select it only after explicit approval.
     win.gBrowser.selectedTab = win.gBrowser.getTabForBrowser(source);
-    await this.env.wait(50);
+    await this.env.wait(50, source);
     this.env.check(source, session);
     if (win.gBrowser.selectedBrowser !== source || source.browsingContext.currentWindowGlobal !== document)
       throw new Error("Target changed after the approved switch; settings were not changed.");
@@ -150,7 +150,7 @@ export class BrowserSettings {
             .map((key) => [key, value[key]]),
         ),
       };
-      await this.env.wait(100);
+      await this.env.wait(100, source);
       this.env.check(source, session);
     } catch (error) {
       this.restore(source);

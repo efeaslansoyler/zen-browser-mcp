@@ -235,7 +235,7 @@ export class Recipes {
 export function recipeTools(ctx) {
   const { L, text } = ctx;
   return {
-    async recipes({ action = "list", id, url, images = false }) {
+    async recipes({ action = "list", id, url, images = false }, call) {
       const store = ctx.recipes;
       if (action === "list") {
         const origin = url ? originOf(url) : undefined;
@@ -267,15 +267,15 @@ export function recipeTools(ctx) {
           null,
           L("Delete recipe?", "Tarif silinsin mi?"),
           L(
-            `${ctx.activeAgent.name} wants to delete the recipe “${recipe.name}”.`,
-            `${ctx.activeAgent.name}, “${recipe.name}” tarifini silmek istiyor.`,
+            `${call.agent.name} wants to delete the recipe “${recipe.name}”.`,
+            `${call.agent.name}, “${recipe.name}” tarifini silmek istiyor.`,
           ),
           true,
           { ok: L("Delete", "Sil"), cancel: L("Keep", "Kalsın") },
         );
         let answer;
         try {
-          answer = await ctx.waitIslandAnswer(120);
+          answer = await ctx.waitIslandAnswer(call, 120);
         } finally {
           ctx.island?.askEnded();
         }

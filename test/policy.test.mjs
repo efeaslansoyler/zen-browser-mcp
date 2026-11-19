@@ -99,20 +99,19 @@ function harness({ mode = "auto", custom = null, risk = {} } = {}) {
       return { value: risk };
     },
     describeAction: (tool) => tool,
-    askIsland: async (_browser, title, message) => {
+    askIsland: async (_call, _browser, title, message) => {
       asked.push([title, message]);
       return "done";
     },
-    operation: null,
-    activeAgent: { name: "Claude" },
   });
+  const call = { check() {}, agent: { name: "Claude" } };
   const browser = {
     browserId: 1,
     browsingContext: { currentWindowGlobal: {} },
     currentURI: { host: "shop.test", prePath: "https://shop.test" },
   };
-  const run = (tool, args) => p.requirePermission(browser, [{ tool, args }]);
-  return { p, run, asked, queries, browser };
+  const run = (tool, args) => p.requirePermission(call, browser, [{ tool, args }]);
+  return { p, call, run, asked, queries, browser };
 }
 
 test("auto asks before a click that submits a form, and before typing into a secret field", async () => {
@@ -178,10 +177,10 @@ test("a call without a page follows its rule too", async () => {
     mode: "custom",
     custom: { base: "auto", rules: { tabs_context_mcp: "ask", downloads: "deny" } },
   });
-  await h.p.requireToolPermission("tabs_context_mcp", {});
+  await h.p.requireToolPermission(h.call, "tabs_context_mcp", {});
   assert.equal(h.asked.length, 1);
-  await assert.rejects(h.p.requireToolPermission("downloads", {}), /\(downloads\)/);
-  await h.p.requireToolPermission("recipes", { action: "list" });
+  await assert.rejects(h.p.requireToolPermission(h.call, "downloads", {}), /\(downloads\)/);
+  await h.p.requireToolPermission(h.call, "recipes", { action: "list" });
   assert.equal(h.asked.length, 1);
 });
 

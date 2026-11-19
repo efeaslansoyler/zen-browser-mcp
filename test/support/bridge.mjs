@@ -55,15 +55,19 @@ export function bridgeContext(fakes = {}) {
     frameNumbers: { byId: new Map(), byNumber: new Map(), next: 1 },
     tools: {},
     commands: {},
-    activeAgent: agentTheme({ id: "codex" }),
-    activeSession: null,
-    operation: null,
+    lastAgent: agentTheme({ id: "codex" }),
+    calls: new Set(),
     toolQueue: Promise.resolve(),
     stopGeneration: 0,
     activeCalls: 0,
     island: null,
-    setActiveAgent(theme) {
-      ctx.activeAgent = theme;
+    setLastAgent(theme) {
+      ctx.lastAgent = theme;
+    },
+    callOf(browser) {
+      for (const call of ctx.calls)
+        if (call.extensionSurface?.browser === browser || call.tabs.has(browser?.browserId)) return call;
+      return null;
     },
     controlledSource: (browser) => browser,
     browserSettings: { restoreTab() {}, destroy() {} },
@@ -89,4 +93,18 @@ export function bridgeContext(fakes = {}) {
   Object.assign(ctx, rest);
   Object.assign(ctx.tools, tabTools(ctx), batchTool(ctx), tools);
   return ctx;
+}
+
+// A running tool call the way ToolRunner makes one, registered in ctx.calls. tabs: tab IDs it
+// already works in (so helpers that get a browser find it).
+export function testCall(ctx, { session = "A", agent = { id: "codex" }, tabs = [] } = {}) {
+  const call = Object.assign(new Cancellation(), {
+    session,
+    agent: agentTheme(agent),
+    tabs: new Set(tabs),
+    tabVersions: new Map(),
+    userNotes: [],
+  });
+  ctx.calls.add(call);
+  return call;
 }

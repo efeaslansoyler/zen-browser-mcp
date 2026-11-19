@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bridgeContext } from "./support/bridge.mjs";
+import { bridgeContext, testCall } from "./support/bridge.mjs";
 
 function fixture() {
   const sent = [],
@@ -9,7 +9,6 @@ function fixture() {
   const frame = { currentWindowGlobal: old };
   const browser = { browserId: 1 };
   const c = bridgeContext({
-    activeSession: "A",
     setTimeout(fn) {
       timers.add(fn);
       return fn;
@@ -18,8 +17,9 @@ function fixture() {
       timers.delete(fn);
     },
   });
+  const call = testCall(c, { session: "A", tabs: [1] });
   c.rememberInputs(browser, frame, { keys: ["KEY_Shift"], buttons: [] }, 30000);
-  return { c, browser, frame, sent, timers };
+  return { c, call, browser, frame, sent, timers };
 }
 
 test("parent releases all remembered actors and clears watchdogs", () => {
@@ -36,7 +36,7 @@ test("document replacement and session changes cannot inherit held input", () =>
       h.frame.currentWindowGlobal = {};
     },
     (h) => {
-      h.c.activeSession = "B";
+      h.call.session = "B";
     },
   ]) {
     const h = fixture();

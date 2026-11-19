@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { Cancellation } from "../browser/Cancellation.sys.mjs";
-import { bridgeContext } from "./support/bridge.mjs";
+import { bridgeContext, testCall } from "./support/bridge.mjs";
 const timers = { setTimeout, clearTimeout };
 
 test("cancel clears outstanding timers and cannot be undone by starting new work", async () => {
@@ -144,9 +144,9 @@ test("real parent batch and queue stay cancelled across immediate Stop/Resume", 
     reply: (_, __, result) => replies.push(result),
     shortRefs: (x) => x,
     tools: {
-      wait: async () => {
+      wait: async (_args, call) => {
         started();
-        await context.operation.wait(30000, timers);
+        await call.wait(30000, timers);
         return [];
       },
       effect: async () => {
@@ -178,11 +178,11 @@ test("real parent batch and queue stay cancelled across immediate Stop/Resume", 
 });
 
 test("cancel navigation stops loading and removes its listener and timeout", async () => {
-  const scope = new Cancellation();
   const handles = new Set();
   let stopped = 0,
     removed = 0;
   const browser = {
+    browserId: 1,
     addProgressListener() {},
     removeProgressListener() {
       removed++;
@@ -194,13 +194,13 @@ test("cancel navigation stops loading and removes its listener and timeout", asy
   globalThis.ChromeUtils = { generateQI() {} };
   globalThis.Ci = { nsIWebProgress: { NOTIFY_STATE_WINDOW: 1 }, nsIWebProgressListener: {} };
   const context = bridgeContext({
-    operation: scope,
     setTimeout: (fn) => {
       handles.add(fn);
       return fn;
     },
     clearTimeout: (fn) => handles.delete(fn),
   });
+  const scope = testCall(context, { tabs: [1] });
   const loaded = context.waitForLoad(browser);
   scope.cancel();
   await loaded;

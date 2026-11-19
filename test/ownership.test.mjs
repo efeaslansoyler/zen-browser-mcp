@@ -84,20 +84,20 @@ function harness() {
       output.result = result;
     },
     tools: {
-      read: async (args) => {
-        context.browserFor(args.tabId);
+      read: async (args, call) => {
+        context.browserFor(call, args.tabId);
         effects.push("read");
         return [];
       },
-      write: async (args) => {
-        context.browserFor(args.tabId);
+      write: async (args, call) => {
+        context.browserFor(call, args.tabId);
         effects.push("write");
         return [];
       },
-      wait: async (args) => {
-        context.browserFor(args.tabId);
+      wait: async (args, call) => {
+        context.browserFor(call, args.tabId);
         started();
-        await context.operation.wait(30000, timers);
+        await call.wait(30000, timers);
         return [];
       },
     },
@@ -129,9 +129,9 @@ function harness() {
     tabs.set(id, tab);
     return tab;
   }
-  context.createTab = () => {
+  context.createTab = (session) => {
     const tab = addTab();
-    context.mark(tab);
+    context.mark(tab, "true", session);
     return tab;
   };
   const request = async (session, tool, args = {}, agent = "codex") => {
@@ -240,7 +240,7 @@ test("final lifecycle connection closing cancels work; reconnect grace preserves
   const pending = h.request("A", "wait", { tabId });
   await h.first;
   h.context.disconnectOwnerSession("A", one);
-  h.context.operation.check();
+  for (const call of h.context.calls) call.check();
   h.context.disconnectOwnerSession("A", two);
   assert.match((await pending).error, /disconnected/);
   assert.equal(h.context.ownership.owner(tabId), "A");
@@ -457,8 +457,8 @@ test("a future batch tab transferred away and back cannot reuse its old authoriz
   const released = new Promise((resolve) => {
     next = resolve;
   });
-  h.context.tools.hold = async ({ tabId }) => {
-    h.context.browserFor(tabId);
+  h.context.tools.hold = async ({ tabId }, call) => {
+    h.context.browserFor(call, tabId);
     await released;
     return [];
   };
@@ -530,13 +530,14 @@ test("coordination status and requests respond while another session is executin
   const status = parsed(await h.request("B", "tab_work", { action: "status", tabId }));
   assert.equal(status.executing, true);
   assert.equal(status.task.summary, "Fill form; not submitted");
-  assert.equal(h.context.activeSession, "A");
-  assert.equal(h.context.activeAgent.id, "codex");
+  const [running] = h.context.calls;
+  assert.equal(running.session, "A");
+  assert.equal(running.agent.id, "codex");
   const queued = parsed(await h.request("B", "request_tab", { tabId, reason: "Inspect form after completion" }));
   assert.equal(queued.position, 1);
   assert.equal(queued.owner.session, "A");
-  assert.equal(h.context.activeSession, "A");
-  h.context.operation.cancel(new Error("fixture cleanup"));
+  assert.deepEqual([...h.context.calls], [running]);
+  running.cancel(new Error("fixture cleanup"));
   await pending;
 });
 
@@ -759,8 +760,8 @@ test("automatic handoff invalidates actual old-owner requests queued after finis
   const held = new Promise((resolve) => {
     release = resolve;
   });
-  h.context.tools.hold = async ({ tabId }) => {
-    h.context.browserFor(tabId);
+  h.context.tools.hold = async ({ tabId }, call) => {
+    h.context.browserFor(call, tabId);
     await held;
     return [];
   };

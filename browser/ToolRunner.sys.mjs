@@ -1,17 +1,21 @@
 // Running tool calls: one request per socket connection, serialized through a single queue
 // because the island and its approval prompts are shared. runTool checks ownership, site
 // rules and permissions around each call, shows it on the island and logs it.
+//
+// Each call is a Cancellation scope that carries its own identity: session, agent, the tabs it
+// touched (tabs), the ownership versions it was queued with (tabVersions), the user's island
+// notes (userNotes) and an open extension popup (extensionSurface). Tools get it as their
+// second argument; helpers that only get a browser find it with ctx.callOf(browser).
 export function toolRunner(ctx) {
   // Refuses while stopped and shows what is being done on the island.
   // Batch grants cover only listed actions on the unchanged document/site/policy.
-  async function runTool(tool, args, { approvals, steps = [{ tool, args }] } = {}) {
+  async function runTool(call, tool, args, { approvals, steps = [{ tool, args }] } = {}) {
     const { ownership, state } = ctx;
     if (state.paused) throw new ctx.Stopped();
-    ctx.operation?.check();
+    call.check();
     if (args.tabId != null && tool !== "request_tab" && tool !== "tab_work") {
-      if (ctx.operation?.tabVersions?.has(args.tabId))
-        ownership.checkTicket([[args.tabId, ctx.operation.tabVersions.get(args.tabId)]]);
-      ctx.browserFor(args.tabId);
+      if (call.tabVersions.has(args.tabId)) ownership.checkTicket([[args.tabId, call.tabVersions.get(args.tabId)]]);
+      ctx.browserFor(call, args.tabId);
     }
     const browser =
       !["request_tab", "tab_work"].includes(tool) && state.tabs.has(args.tabId)
@@ -20,17 +24,17 @@ export function toolRunner(ctx) {
     const entry = { t: new Date().toISOString(), tool };
     if (args.action && ["computer", "clipboard"].includes(tool)) entry.action = args.action;
     if (browser) {
-      ownership.touch(args.tabId, ctx.activeSession);
-      ctx.operation?.tabs?.add(args.tabId);
-      ctx.paintTab(ctx.findTab(args.tabId), ctx.activeAgent);
-      entry.agent = ctx.activeAgent.name;
-      entry.session = ctx.activeSession;
+      ownership.touch(args.tabId, call.session);
+      call.tabs.add(args.tabId);
+      ctx.paintTab(ctx.findTab(args.tabId), call.agent);
+      entry.agent = call.agent.name;
+      entry.session = call.session;
       entry.tab = args.tabId;
       entry.host = ctx.hostOf(browser);
       // for the history view: stays readable after the session ends
-      entry.who = ctx.sessions.get(ctx.activeSession)?.name;
+      entry.who = ctx.sessions.get(call.session)?.name;
       entry.doing = ctx.describeAction(tool, args, browser, false);
-      ctx.island?.working(browser, `${ctx.describeAction(tool, args, browser)} · ${ctx.activeSession.slice(-6)}`);
+      ctx.island?.working(browser, `${ctx.describeAction(tool, args, browser)} · ${call.session.slice(-6)}`);
       ctx.activeCalls++;
     }
     const cleanup = tool === "tabs_close_mcp" || (tool === "extensions" && args.action === "close");
@@ -50,7 +54,7 @@ export function toolRunner(ctx) {
         if (what) entry.what = what;
         let grant = approvals?.get(browser);
         while (!grant?.actions.has(args) || !ctx.samePermissionContext(grant.context, ctx.permissionContext(browser))) {
-          const permission = await ctx.requirePermission(browser, steps);
+          const permission = await ctx.requirePermission(call, browser, steps);
           if (!ctx.samePermissionContext(permission.context, ctx.permissionContext(browser))) continue;
           grant = { context: permission.context, actions: new Set(steps.map((step) => step.args)) };
           // Automatic mode is not an approval: reevaluate its policy next step.
@@ -59,23 +63,23 @@ export function toolRunner(ctx) {
         }
       }
       // a call without a page of its own still has a rule (custom templates can ask or deny it)
-      if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(tool, args);
-      ctx.operation?.check();
-      if (browser) ownership.check(args.tabId, ctx.activeSession);
-      const result = await ctx.tools[tool](args);
+      if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(call, tool, args);
+      call.check();
+      if (browser) ownership.check(args.tabId, call.session);
+      const result = await ctx.tools[tool](args, call);
       if (browser && !cleanup) ctx.assertSiteAccess(browser);
       // Preserve completed steps and the cancellation error from a partial batch.
-      if (!result?.isError) ctx.operation?.check();
+      if (!result?.isError) call.check();
       if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
       if (
         browser &&
         tool !== "browser_batch" &&
-        ownership.owner(args.tabId) === ctx.activeSession &&
+        ownership.owner(args.tabId) === call.session &&
         ownership.queue(args.tabId).length
       ) {
         result.push(
           ...ctx.text({
-            coordination: ctx.coordinationStatus(args.tabId, ctx.activeSession),
+            coordination: ctx.coordinationStatus(args.tabId, call.session),
             reminder:
               "Other sessions are waiting. Continue your task safely; call tab_work finish with a handoff summary when the whole task is complete.",
           }),
@@ -132,18 +136,21 @@ export function toolRunner(ctx) {
           ownership.checkTicket(ticket);
           if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session))
             throw new Error("This browser session disconnected while the request was queued.");
-          const scope = (ctx.operation = new ctx.Cancellation());
-          scope.session = ctx.activeSession = session;
-          scope.tabs = new Set();
-          scope.tabVersions = new Map(ticket);
-          scope.userNotes = [];
-          ctx.setActiveAgent(ctx.agentTheme(agent ?? { id: "claude" }));
+          const call = Object.assign(new ctx.Cancellation(), {
+            session,
+            agent: ctx.agentTheme(agent ?? { id: "claude" }),
+            tabs: new Set(),
+            tabVersions: new Map(ticket),
+            userNotes: [],
+          });
+          ctx.calls.add(call);
+          ctx.setLastAgent(call.agent);
           try {
-            const content = await runTool(tool, args);
+            const content = await runTool(call, tool, args);
             // what the user sent this session from the browser meanwhile (picks, recipes)
             const sent = ctx.inbox?.take(session) ?? [];
             if (sent.length) content.push({ type: "text", text: ctx.inboxText(sent) });
-            for (const note of scope.userNotes)
+            for (const note of call.userNotes)
               content.push(
                 ...ctx.text({
                   userMessage: note,
@@ -152,11 +159,8 @@ export function toolRunner(ctx) {
               );
             return content;
           } finally {
-            scope.cancel();
-            if (ctx.operation === scope) {
-              ctx.operation = null;
-              ctx.activeSession = null;
-            }
+            call.cancel();
+            ctx.calls.delete(call);
           }
         });
         ctx.toolQueue = pending.catch(() => {});
@@ -186,7 +190,7 @@ export function batchTool(ctx) {
   return {
     // Several tool calls in order; stops at the first error. Text results are joined into one
     // block (not one content item each); images are interleaved in order.
-    async browser_batch({ actions }) {
+    async browser_batch({ actions }, call) {
       if (!Array.isArray(actions) || !actions.length) throw new Error("actions is empty.");
       const { tools } = ctx;
       // Grants exist only within this batch and are checked again at each step.
@@ -217,7 +221,7 @@ export function batchTool(ctx) {
             // Never ask for destination-page actions before navigating there.
             if (action.name === "navigate") break;
           }
-          for (const c of await ctx.runTool(name, input, { approvals, steps })) {
+          for (const c of await ctx.runTool(call, name, input, { approvals, steps })) {
             if (c.type === "text") lines.push(`${label}: ${c.text}`);
             else {
               lines.push(`${label}:`);

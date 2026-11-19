@@ -33,7 +33,6 @@ function harness(config = {}) {
   };
   globalThis.Services = { wm: { getMostRecentWindow: () => win } };
   const ctx = bridgeContext({
-    activeSession: "A",
     readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] }, ...config }),
     paintTab() {},
     SessionStore: { setCustomTabValue() {} },
@@ -45,8 +44,8 @@ function harness(config = {}) {
 
 test("clean tabs share one Agent container, created on first use", async () => {
   const h = harness();
-  const first = await h.ctx.createTab({ clean: true });
-  await h.ctx.createTab({ clean: true });
+  const first = await h.ctx.createTab("A", { clean: true });
+  await h.ctx.createTab("A", { clean: true });
   assert.equal(h.identities.length, 1);
   assert.equal(h.identities[0].name, "Agent");
   assert.deepEqual(
@@ -54,15 +53,15 @@ test("clean tabs share one Agent container, created on first use", async () => {
     [5, 5],
   );
   assert.equal(h.ctx.describeTab(first).container, "Agent");
-  const plain = await h.ctx.createTab();
+  const plain = await h.ctx.createTab("A");
   assert.equal(h.created.at(-1).userContextId, 0);
   assert.equal(h.ctx.describeTab(plain).container, undefined);
 });
 
 test("a configured container is the default; clean: false still uses the user's logins", async () => {
   const h = harness({ container: "Research" });
-  await h.ctx.createTab();
-  await h.ctx.createTab({ clean: false });
+  await h.ctx.createTab("A");
+  await h.ctx.createTab("A", { clean: false });
   assert.deepEqual(
     h.identities.map((i) => i.name),
     ["Research"],

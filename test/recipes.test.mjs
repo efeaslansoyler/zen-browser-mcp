@@ -114,13 +114,12 @@ test("the recipes tool deletes only after the user confirms on the island", asyn
     L: (en) => en,
     text: (value) => [{ type: "text", text: value }],
     recipes,
-    activeAgent: { name: "Claude" },
     island: { ask: (...args) => asked.push(args), askEnded() {} },
     waitIslandAnswer: async () => answer,
     gate: (key) => (key === "recipes.delete" ? false : true),
   };
   const { recipes: tool } = recipeTools(ctx);
-  const out = async (args) => (await tool(args))[0].text;
+  const out = async (args) => (await tool(args, { agent: { name: "Claude" } }))[0].text;
 
   assert.match(await out({}), /bilet-ara: "Bilet ara", 4 steps/);
   assert.match(await out({ url: "https://elsewhere.test/x" }), /No recipes for https:\/\/elsewhere\.test/);
@@ -140,6 +139,8 @@ test("recipes CLI lists, shows and removes", async () => {
   assert.match(await recipesCommand(["rm", "bilet-ara"], recipes), /removed/);
   await assert.rejects(recipesCommand(["rm"], recipes), /Usage/);
 });
+
+const call = { agent: { name: "Claude" } };
 
 function showMeContext({ answers, steps }) {
   const { root, recipes } = store();
@@ -188,7 +189,7 @@ function showMeContext({ answers, steps }) {
         return result;
       },
     },
-    async waitIslandAnswer(timeout, key) {
+    async waitIslandAnswer(_call, timeout, key) {
       calls.push(["wait", timeout, key === browser]);
       const answer = answers.shift();
       return typeof answer === "function" ? answer(model) : answer;
@@ -225,7 +226,7 @@ test("show_me records on one line, then saves what the user kept in the review",
       },
     ],
   });
-  const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me", timeout: 99999 });
+  const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me", timeout: 99999 }, call);
   assert.match(text, /^Saved the demonstration as recipe tickets\./);
   assert.match(text, /Variables \(change every time\): \{team\}/);
   assert.match(text, /1\. type \{team\} \(example: "derby"\) into searchbox "Search"/);
@@ -254,7 +255,7 @@ test("show_me overwrites a recipe with the same name when the user saves under i
     answers: ["done", (model) => ({ status: "done", choice: { ...model.result(), name: "OLD one" } })],
   });
   await recipes.save({ startUrl: "https://tickets.test/", steps: shown }, { name: "Old one" });
-  await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" });
+  await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" }, call);
   const all = await recipes.list();
   assert.deepEqual(
     all.map((r) => [r.id, r.name, r.steps]),
@@ -270,13 +271,13 @@ test("show_me saves nothing when the user cancels, times out or shows nothing", 
     [["done", "cancelled"], shown, /cancelled; nothing was saved/],
   ]) {
     const { ctx, recipes, calls } = showMeContext({ answers, steps });
-    const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" });
+    const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" }, call);
     assert.match(text, expected);
     assert.deepEqual(await recipes.list(), []);
     assert.equal(calls.at(-1), "ended");
   }
   const { ctx } = showMeContext({ answers: [], steps: [] });
-  await assert.rejects(demonstrationTools(ctx).show_me({ tabId: 1, message: " " }), /message/);
+  await assert.rejects(demonstrationTools(ctx).show_me({ tabId: 1, message: " " }, call), /message/);
 });
 
 test("the review model: names, removals, variables and play order", () => {
@@ -354,7 +355,7 @@ test("show_me tells the agent to try the recipe when the user asked for it", asy
       },
     ],
   });
-  const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" });
+  const [{ text }] = await demonstrationTools(ctx).show_me({ tabId: 1, message: "Show me" }, call);
   assert.match(text, /The user asks you to try this recipe now: open a new tab/);
 });
 
