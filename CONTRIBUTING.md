@@ -70,6 +70,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |
 | `check-extensions.ts`, `check-clipboard.ts` | Extension popups with a temporary extension, clipboard consent |
 | `check-inspection.ts` | React (development and production builds), axe |
+| `check-recordings.ts` | Record a trusted click, review, save, list and retrieve a disposable recipe |
 | `check-downloads.ts` | Click and navigation downloads, events file, progress, cancel, tab access |
 | `check-watch.ts` | Page watches: match timing, text changes, stop, tab close |
 | `check-workspace.ts` | Zen: agent tabs in a configured hidden space, input and screenshots there |
@@ -77,8 +78,9 @@ real MCP server, open and close only their own tabs, and restore anything they c
 
 They require the global mode to be `auto` and refuse to run in `ask` mode. `check-input`
 (device emulation) and `check-extensions` (toolbar popups) also need the Zen window visible:
-on Hyprland a window on a hidden workspace is suspended. Afterwards check
-that `~/.config/zen-mcp/config.json` still says `"mode": "auto"`.
+on Hyprland a window on a hidden workspace is suspended. For clipboard checks, use
+`wl-clipboard` on Wayland or `xclip` on X11. Afterwards check that
+`~/.config/zen-mcp/config.json` still says `"mode": "auto"`.
 
 The checks run without anyone clicking: auto mode asks before risky operations, so fixture
 setup and inspection use `pageEval` from `scripts/support/fixture.ts` (the check itself, not an
