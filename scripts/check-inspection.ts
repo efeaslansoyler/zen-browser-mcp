@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { pageEval } from "./support/fixture.ts";
+import { fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const text = (r: Content[]) =>
   r
@@ -13,7 +13,12 @@ const text = (r: Content[]) =>
     .join("\n");
 const chrome = async (code: string) => JSON.parse(text(await call("chrome_eval", { code })));
 const client = new Client({ name: "codex-mcp-client", version: "inspection-smoke" });
-const transport = new StdioClientTransport({ command: process.execPath, args: ["src/server.ts"], cwd: process.cwd() });
+const transport = new StdioClientTransport({
+  command: process.execPath,
+  args: ["src/server.ts"],
+  cwd: process.cwd(),
+  env: fixtureTransportEnv(),
+});
 async function tool(name: string, args: Record<string, unknown> = {}) {
   const r = await client.callTool({ name, arguments: args });
   if (r.isError) throw new Error(text(r.content as Content[]));

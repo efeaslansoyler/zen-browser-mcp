@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { pageEval } from "./support/fixture.ts";
+import { fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 const text = (r: Content[]) =>
   r
@@ -16,7 +16,12 @@ const text = (r: Content[]) =>
     .join("\n");
 const chrome = async (code: string) => JSON.parse(text(await call("chrome_eval", { code })));
 const client = new Client({ name: "codex-mcp-client", version: "clipboard-smoke" });
-const transport = new StdioClientTransport({ command: process.execPath, args: ["src/server.ts"], cwd: process.cwd() });
+const transport = new StdioClientTransport({
+  command: process.execPath,
+  args: ["src/server.ts"],
+  cwd: process.cwd(),
+  env: fixtureTransportEnv(),
+});
 async function tool(name: string, args: Record<string, unknown> = {}) {
   const result = await client.callTool({ name, arguments: args });
   const content = result.content as Content[];
@@ -30,15 +35,17 @@ let tabId: number | undefined,
 let extensionDirectory: string | undefined,
   extensionInstalled = false;
 const extensionId = `clipboard-fixture-${Date.now()}@local.invalid`;
+const x11 = process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
 let flavors: string[] = [];
 try {
-  flavors = execFileSync("wl-paste", ["--list-types"], { encoding: "utf8", stdio: "pipe" })
+  const command = x11 ? ["xclip", "-selection", "clipboard", "-o", "-target", "TARGETS"] : ["wl-paste", "--list-types"];
+  flavors = execFileSync(command[0], command.slice(1), { encoding: "utf8", stdio: "pipe" })
     .trim()
     .split("\n")
     .filter(Boolean);
 } catch (e: any) {
   assert(
-    e.status === 1 && String(e.stderr).includes("Nothing is copied"),
+    e.status === 1 && String(e.stderr).includes(x11 ? "target TARGETS not available" : "Nothing is copied"),
     "Cannot safely inspect clipboard formats; no changes made.",
   );
 }
@@ -244,6 +251,10 @@ try {
       if (flavors.length)
         await chrome(
           `(()=>{const w=Services.wm.getMostRecentWindow('navigator:browser'),c=Components.classes['@mozilla.org/widget/clipboard;1'].getService(Components.interfaces.nsIClipboard);c.setData(w[${JSON.stringify(backupKey)}],null,c.kGlobalClipboard);return true;})()`,
+        );
+      else if (x11)
+        await chrome(
+          `(()=>{const c=Components.classes['@mozilla.org/widget/clipboard;1'].getService(Components.interfaces.nsIClipboard);c.emptyClipboard(c.kGlobalClipboard);return true;})()`,
         );
       else execFileSync("wl-copy", ["--clear"]);
       console.log("Original system clipboard restored.");
