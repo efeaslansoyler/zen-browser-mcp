@@ -35,6 +35,7 @@ export const SECTIONS = [
       ["network_capture.status", A, A, "Read the status of your HAR capture."],
       ["network_capture.stop", A, A, "Save your redacted HAR capture locally."],
       ["network_capture.cancel", A, A, "Discard your HAR capture."],
+      ["web_vitals", A, A, "Read local performance metrics for the current page."],
       ["wait_for", A, A, "Wait for a page condition (text, element, URL)."],
       ["watch", A, A, "Watch a page for changes in the background."],
       ["downloads", A, A, "Follow downloads started in agent tabs."],

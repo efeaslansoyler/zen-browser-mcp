@@ -19,6 +19,7 @@ const { VirtualCursor, ripple, outlineAndWait, highlight } = load("./Overlays.sy
 const { Picker } = load("./Picker.sys.mjs");
 const { InputDriver } = load("./InputDriver.sys.mjs");
 const { Recorder } = load("./Recorder.sys.mjs");
+const { WebVitals } = load("./WebVitals.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
 // Text the user sees (cursor label, element descriptions) follows the browser language;
@@ -40,6 +41,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   #consoleSince = 0;
   #ask = null;
   #contextTarget = null;
+  #vitals;
+  #restoredAt = 0;
 
   // Shared by the helpers; document and window are read at call time.
   #env = {
@@ -84,6 +87,11 @@ export class ZenMcpChild extends JSWindowActorChild {
       } catch (e) {
         console.error("zen-mcp recorder", e);
       }
+    }
+    if (event.type === "pageshow" && event.persisted) {
+      this.#vitals?.destroy();
+      this.#vitals = null;
+      this.#restoredAt = this.contentWindow.performance.now();
     }
     if (event.type === "pagehide") {
       this.#input.release();
@@ -133,6 +141,10 @@ export class ZenMcpChild extends JSWindowActorChild {
           return {
             value: [this.contentWindow.scrollX, this.contentWindow.scrollY, this.contentWindow.devicePixelRatio],
           };
+        case "web_vitals": {
+          this.#vitals ??= new WebVitals(this.contentWindow, this.#restoredAt);
+          return { value: this.#vitals.read() };
+        }
         case "browser_metrics":
           return { value: this.#pageMetrics() };
         case "release_inputs":
@@ -236,6 +248,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   didDestroy() {
+    this.#vitals?.destroy();
     this.#highlights?.remove();
     for (const shown of this.#flashes) shown.remove();
     this.#input.release();

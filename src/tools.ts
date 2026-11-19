@@ -632,6 +632,12 @@ tool(
 );
 
 tool(
+  "web_vitals",
+  "Read local TTFB, FCP, LCP, INP, CLS and navigation timings for the current top-level document. Times use milliseconds and CLS is unitless. Reports provisional, unsupported and insufficient-data states. Does not reload the page.",
+  { tabId },
+);
+
+tool(
   "javascript_tool",
   "Run JavaScript in the page with full access to the page's own variables. The value of the last expression is returned (promises are awaited); do not use return.",
   {

@@ -542,6 +542,7 @@ costs CPU and cannot be combined with `hold: true`.
 | `browser_batch` | several of the above in one call |
 | `read_console_messages`, `read_network_requests` | console output; requests with headers and bodies (cookies and auth hidden), filter by URL, method, status or resource type |
 | `network_capture` | Start, attach, inspect, stop or cancel a redacted cross-host HAR capture |
+| `web_vitals` | Local Web Vitals and navigation timings for the current document |
 | `downloads` | files downloaded from the tab: state, path, size/progress; `wait` blocks until the file is done and returns its sha256; `cancel` stops one and deletes the partial file |
 | `javascript_tool`, `handle_dialog` | run JS in the page; answer `alert`/`confirm`/`prompt` |
 | `connect_session` | bind a Codex conversation for browser-to-chat selections |
@@ -561,6 +562,15 @@ and request headers. Query values and recognized sensitive path segments are mas
 Cookies, credentials, unlisted headers, and body content are omitted. Hostnames and
 remaining paths can identify internal resources. The HAR file is kept for 15 minutes.
 The export reports unfinished requests and entries without enough timing data.
+
+
+## Page performance
+
+Use `web_vitals` to read the current top-level document without reloading it. It reports
+TTFB, FCP, LCP, INP, CLS, and navigation milestones where the browser exposes the required
+entries. LCP and INP are provisional while the page is active. There may be insufficient
+data in a hidden tab, before the first interaction, or after a back-forward cache restore.
+These are local measurements. Times are in milliseconds and CLS is unitless.
 
 
 ## Security

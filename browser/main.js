@@ -836,6 +836,7 @@ function logError(where, e) {
           // the right-clicked element for "Show to agent…"; the others feed recordings
           events: {
             contextmenu: { capture: true, mozSystemGroup: true },
+            pageshow: { capture: true, mozSystemGroup: true },
             pagehide: { capture: true, mozSystemGroup: true },
             click: { capture: true, mozSystemGroup: true },
             change: { capture: true, mozSystemGroup: true },

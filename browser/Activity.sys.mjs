@@ -45,6 +45,7 @@ export function activity(ctx) {
         file_upload: () => L("uploading a file", "dosya yüklüyor"),
         javascript_tool: () => L("running code on the page", "sayfada kod çalıştırıyor"),
         read_console_messages: () => L("reading the console", "konsolu okuyor"),
+        web_vitals: () => L("reading page performance", "sayfa performansına bakıyor"),
         network_capture: () => L("managing a HAR capture", "HAR kaydını yönetiyor"),
         read_network_requests: () => L("checking network requests", "ağ isteklerine bakıyor"),
         handle_dialog: () => L("answering a dialog", "diyaloğu cevaplıyor"),

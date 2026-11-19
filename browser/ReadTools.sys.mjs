@@ -184,6 +184,12 @@ export function readTools(ctx) {
       return text(Watches.summary(watches.start(session, tabId, browser, spec)));
     },
 
+    async web_vitals({ tabId }, call) {
+      const browser = browserFor(call, tabId);
+      const { value } = await query(browser, "web_vitals", {});
+      return text(value);
+    },
+
     async network_capture(args, call) {
       const { tabId, action, childTabId } = args;
       browserFor(call, tabId);
