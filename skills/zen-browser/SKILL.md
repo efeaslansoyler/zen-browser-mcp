@@ -29,10 +29,13 @@ Opening a new tab for something the user already has open loses their state (log
 the exact item) and is the most common mistake. If several user tabs could match, ask with
 `ask_user` and `options` instead of guessing.
 
-A tab that another agent session owns shows an `owner`. Don't try to take it over: use
-`tab_work request`, poll `tab_work status` every few seconds and act only when `ownedByCaller`
-is true. When you work in a tab others may want, publish `tab_work start` and, when the whole
-task is done, `tab_work finish` with a short handoff summary (no secrets).
+Tabs can be shared between agent sessions. `tabs_context_mcp` lists the tabs other sessions
+work in as `agentTabs`; if your task is in one of them, join it with `request_tab` instead of
+opening the same page again. In a shared tab (`sharedWith` in your tab list) calls run one at
+a time, so another agent may have changed the page since you last looked: read it again
+before you act. Publish `tab_work start` when you begin and `tab_work finish` with a short
+summary when the whole task is done (no secrets); `tab_work status` shows what the others
+are doing. Don't close a tab others still use; closing it only takes you out of it.
 
 ## Reading pages
 

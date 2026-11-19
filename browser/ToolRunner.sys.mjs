@@ -3,22 +3,23 @@
 // side by side, and calls without a tab don't wait. Shared browser state takes one more lock
 // (exclusive: clipboard, browser settings, extension panels), and the island shows one question
 // at a time (Control.sys.mjs). Locks are always taken in that order: tabs, exclusive, island.
-// runTool checks ownership, site rules and permissions around each call, shows it on the island
+// runTool checks tab access, site rules and permissions around each call, shows it on the island
 // and logs it.
 //
 // Each call is a Cancellation scope that carries its own identity: session, agent, the tabs it
-// touched (tabs), the ownership versions it was queued with (tabVersions), the user's island
+// touched (tabs), its tab memberships when it was queued (tabVersions), the user's island
 // notes (userNotes) and an open extension popup (extensionSurface). Tools get it as their
 // second argument; helpers that only get a browser find it with ctx.callOf(browser).
 export function toolRunner(ctx) {
   // Refuses while stopped and shows what is being done on the island.
   // Batch grants cover only listed actions on the unchanged document/site/policy.
   async function runTool(call, tool, args, { approvals, steps = [{ tool, args }] } = {}) {
-    const { ownership, state } = ctx;
+    const { access, state } = ctx;
     if (state.paused) throw new ctx.Stopped();
     call.check();
     if (args.tabId != null && tool !== "request_tab" && tool !== "tab_work") {
-      if (call.tabVersions.has(args.tabId)) ownership.checkTicket([[args.tabId, call.tabVersions.get(args.tabId)]]);
+      if (call.tabVersions.has(args.tabId))
+        access.checkTicket([[args.tabId, call.tabVersions.get(args.tabId)]], call.session);
       ctx.browserFor(call, args.tabId);
     }
     const browser =
@@ -28,7 +29,6 @@ export function toolRunner(ctx) {
     const entry = { t: new Date().toISOString(), tool };
     if (args.action && ["computer", "clipboard"].includes(tool)) entry.action = args.action;
     if (browser) {
-      ownership.touch(args.tabId, call.session);
       call.tabs.add(args.tabId);
       ctx.paintTab(ctx.findTab(args.tabId), call.agent);
       entry.agent = call.agent.name;
@@ -69,26 +69,12 @@ export function toolRunner(ctx) {
       // a call without a page of its own still has a rule (custom templates can ask or deny it)
       if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(call, tool, args);
       call.check();
-      if (browser) ownership.check(args.tabId, call.session);
+      if (browser) access.check(args.tabId, call.session);
       const result = await ctx.tools[tool](args, call);
       if (browser && !cleanup) ctx.assertSiteAccess(browser);
       // Preserve completed steps and the cancellation error from a partial batch.
       if (!result?.isError) call.check();
       if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
-      if (
-        browser &&
-        tool !== "browser_batch" &&
-        ownership.owner(args.tabId) === call.session &&
-        ownership.queue(args.tabId).length
-      ) {
-        result.push(
-          ...ctx.text({
-            coordination: ctx.coordinationStatus(args.tabId, call.session),
-            reminder:
-              "Other sessions are waiting. Continue your task safely; call tab_work finish with a handoff summary when the whole task is complete.",
-          }),
-        );
-      }
       return result;
     } catch (e) {
       if (browser) ctx.releaseInputs(browser);
@@ -100,10 +86,10 @@ export function toolRunner(ctx) {
     }
   }
 
-  // Handles one request line and writes the reply. Coordination requests answer at once;
-  // everything else waits for the tabs it names.
+  // Handles one request line and writes the reply. tab_work answers at once (it never touches
+  // a page); everything else waits for the tabs it names.
   async function handle(line, transport, output) {
-    const { ownership, sessions, sessionVersions, state } = ctx;
+    const { access, sessions, sessionVersions, state } = ctx;
     let message;
     try {
       const { tool, args = {}, session, agent } = JSON.parse(line);
@@ -114,32 +100,23 @@ export function toolRunner(ctx) {
         const info = ctx.sessionInfo(session, ctx.agentTheme(agent ?? { id: "claude" }));
         info.disconnected = false;
         if (state.paused) throw new ctx.Stopped();
-        if (tool === "tab_work" && ["list", "status", "request", "cancel"].includes(args.action)) {
+        if (tool === "tab_work") {
           ctx.reply(transport, output, { ok: true, content: ctx.coordinateTab(args, session) });
-          return;
-        }
-        if (
-          tool === "request_tab" &&
-          ownership.owner(args.tabId) &&
-          ownership.owner(args.tabId) !== session &&
-          ownership.work.get(args.tabId)?.state !== "ready"
-        ) {
-          ctx.reply(transport, output, {
-            ok: true,
-            content: ctx.coordinateTab({ action: "request", tabId: args.tabId, summary: args.reason }, session),
-          });
           return;
         }
         const generation = ctx.stopGeneration;
         const sessionGeneration = sessionVersions.get(session) || 0;
         const referenced =
           tool === "browser_batch" ? (args.actions || []).map((step) => step.input?.tabId) : [args.tabId];
-        const ticket = ownership.ticket(referenced.filter((id) => id != null));
+        const ticket = access.ticket(
+          referenced.filter((id) => id != null),
+          session,
+        );
         const lock = ctx.locks.acquire(referenced.filter((id) => id != null).map((id) => `tab:${id}`));
         const run = async () => {
           await lock.ready;
           if (generation !== ctx.stopGeneration || state.paused) throw new ctx.Stopped();
-          ownership.checkTicket(ticket);
+          access.checkTicket(ticket, session);
           if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session))
             throw new Error("This browser session disconnected while the request was queued.");
           const call = Object.assign(new ctx.Cancellation(), {

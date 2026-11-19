@@ -49,7 +49,7 @@ function with a fake (see `test/support/bridge.mjs`).
 |---|---|
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
 | `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
-| `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` status, queue and handoff |
+| `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` notes and status |
 | `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
 | `PageQuery.sys.mjs` | `query` to a frame's actor, refs across frames, coordinate translation, load waits, page dialogs |
 | `PageInput.sys.mjs` | Mouse, keys, held input and screenshots |
@@ -58,7 +58,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
 | `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user` and `hand_to_user`, approvals, dialogs, pick note box |
 | `Agent.sys.mjs` | Agent identity, theme and icon (`assets/`: Claude, Codex, Antigravity, OpenCode, several agents; others a drawn `>_`); shared by Node and Gecko |
-| `Ownership.sys.mjs` | Per-session tab ownership, `tab_work` tasks and the handoff queue |
+| `TabAccess.sys.mjs` | Which sessions may use which tabs (a tab can have several members), their `tab_work` notes, and membership tickets for queued requests |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
 | `Recordings.sys.mjs` | "Show me once": publishes the recorded tabs to content processes, cleans and collects their steps, screenshots each step |
@@ -82,25 +82,29 @@ One JSON line per connection: request `{tool, args, session, agent}`, reply `{ok
 `subscribe` is the exception: the connection stays open, the bridge writes events line by
 line and, for acknowledged subscriptions, the client answers `{event: "delivery", id, ok}`.
 
-## Sessions and ownership
+## Sessions and tab access
 
 - Every request carries a `session`. For Claude and generic clients it is the MCP process
   UUID. Codex sends the conversation id in each tool call's `_meta.threadId`, so Codex calls
   use `codex:<thread>`: one Codex service process can serve many conversations.
-- A session sees and touches only its own tabs: the ones it opened and the ones the user
-  handed to it from the tab menu (`givenByUser`). `tabs_context_mcp` also lists the user's
-  other tabs (`userTabs`, metadata only); `request_tab` asks for one in the island.
+- A session sees and touches only the tabs it is a member of: the ones it opened, joined, or
+  the user handed to it from the tab menu (`givenByUser`). A tab can have several members.
+  `tabs_context_mcp` also lists the tabs other sessions work in (`agentTabs`) and the user's
+  other tabs (`userTabs`, metadata only). `request_tab` joins an agent tab (rule
+  `request_tab.agent_tab`: free in auto, asks in ask) or asks for a user tab in the island.
 - A session is *live* while it holds a lifecycle subscription: Claude's MCP process opens one
   at initialize, Codex conversations through `codex-watch`. Menus ("Give to session",
   pick targets) list live sessions only, named by conversation title. When the last
-  connection closes, ownership survives a 5 s grace period, then tabs return to the user
-  (they stay open). Connectionless sessions (one-off calls such as `zenctl`) are never listed
+  connection closes, access survives a 5 s grace period, then the session leaves its tabs; a
+  tab with no member left returns to the user (it stays open). Connectionless sessions (one-off calls such as `zenctl`) are never listed
   and are swept after ten idle minutes.
 - Claude conversation titles come from Claude Code's session files
   (`~/.claude/sessions/<pid>.json` and the transcript's latest `/rename` or generated title).
   The format is undocumented; if it changes, menus fall back to short ids.
-- `tab_work` lets agents publish task notes and queue for another session's tab; the owner
-  hands over with `finish`.
+- `tab_work` lets the members of a tab publish task notes (`start`, `update`, `finish`) and
+  read each other's; it never touches a page and answers at once. Closing a tab others still
+  use only leaves it. A request remembers the caller's membership when it was queued
+  (`TabAccess.ticket`); if the session left the tab before it ran, it is refused.
 - Calls on one tab run in order; calls on different tabs run side by side, and calls without a
   tab don't wait. A call queues on every tab it names when it arrives (a batch on all of its
   tabs), so requests can't wait for each other. The system clipboard, browser settings and
@@ -116,7 +120,7 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
 - **Operations and templates** (`Policy.sys.mjs`, shared with the CLI): every tool call is an
   operation (`operationOf`: a tool, or `tool.action` for `computer`, `clipboard`,
   `extensions`, `browser_settings`, `handle_dialog`, `recipes`), plus `submit`,
-  `secret_field` and `tab_work.handoff`. A mode gives each one a rule: `allow`, `ask` or
+  `secret_field` and `request_tab.agent_tab`. A mode gives each one a rule: `allow`, `ask` or
   `deny`. The `ask` and `auto` columns of `SECTIONS` are the built-in templates; `custom`
   reads `permissions.jsonc` (a base template plus the user's rules, parsed by
   `parsePermissions`; errors fail closed). A test checks that every MCP tool and action has an
@@ -125,7 +129,7 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   step of a batch, against the current document, origin and settings; a redirect or new
   document invalidates earlier approvals), `requireToolPermission` a call without a page, and
   `gate(key)` the operations that keep their own prompt (clipboard, `request_tab`,
-  `browser_settings` changes, extension tab switches, recipe deletes, tab handoffs).
+  `browser_settings` changes, extension tab switches, recipe deletes, joining agent tabs).
   A click, Enter or Space is also checked against `submit`, and typing against `secret_field`,
   when that could make the rule stricter: the page answers a `risk` query (`PageReader.risk`:
   a submit button of a form, Enter in a form's text field, a password, card or one-time-code
@@ -195,9 +199,9 @@ appearing or disappearing, or every change of a selector's text. Results go to
 `$XDG_RUNTIME_DIR/zen-mcp-watch/<id>-<time>.jsonl` (`started`, `matched`/`changed`, and a final
 line), written by the same `EventFiles` helper as downloads. Checks use a light query path
 that doesn't belong to a tool call, so a call ending or being cancelled doesn't cancel them;
-the watch re-checks ownership and site rules itself on every tick. A watch ends at its first
-match (unless `repeat`), on timeout, when the tab is closed or changes owner, when its session
-ends, and on Stop in the island.
+the watch re-checks tab access and site rules itself on every tick. A watch ends at its first
+match (unless `repeat`), on timeout, when the tab is closed or its session leaves it, when its
+session ends, and on Stop in the island.
 
 ## Other files at runtime
 

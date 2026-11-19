@@ -3,6 +3,7 @@
 export function inputTools(ctx) {
   const {
     MAX_UPLOAD,
+    access,
     assertSiteAccess,
     browserFor,
     click,
@@ -20,7 +21,6 @@ export function inputTools(ctx) {
     longRef,
     openDialog,
     operationSleep,
-    ownership,
     pressKeys,
     query,
     queryRef,
@@ -72,7 +72,7 @@ export function inputTools(ctx) {
             const source = controlledSource(browser);
             const context = [
               browser.browsingContext.currentWindowGlobal,
-              ownership.version(source.browserId),
+              access.version(source.browserId),
               args.scale ?? 1,
               !!args.annotate,
             ];

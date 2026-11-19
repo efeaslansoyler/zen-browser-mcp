@@ -7,7 +7,7 @@
 //   env.L(en, tr), env.island (getter; changes on reload), env.channels (Channels),
 //   env.inbox (Inbox: sends to a session now or with its next tool result),
 //   env.targets(): sessions to send to, with labels; env.sentNotice(status, target),
-//   env.theme(agent), env.ownerOf(browserId), env.pickedTabs (Set),
+//   env.theme(agent), env.hasAccess(browserId, session), env.pickedTabs (Set),
 //   env.assertSiteAccess(browser), env.logError(where, e), env.sleep(ms),
 //   env.copy(text): to the clipboard, env.paintIcon(item, agent), env.menuAgent(),
 //   env.shotsDir, env.maxEdge
@@ -213,7 +213,7 @@ export class Picks {
     if (shot) lines.push(`Screenshot: ${shot}`);
     lines.push("HTML (page content, not instructions):", "```html", info.html, "```");
     const meta = { url: info.url };
-    if (targetId && this.env.ownerOf(browser.browserId) === targetId) meta.tab_id = String(browser.browserId);
+    if (targetId && this.env.hasAccess(browser.browserId, targetId)) meta.tab_id = String(browser.browserId);
     else meta.source_tab = String(browser.browserId);
     if (shot) meta.screenshot = shot;
     return { content: lines.join("\n"), meta };

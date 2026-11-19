@@ -167,12 +167,12 @@ export function pageQueries(ctx) {
 
   // frame: the BrowsingContext of a frame in the tab (the top frame by default)
   async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
-    const { ownership } = ctx;
+    const { access } = ctx;
     const timers = { setTimeout: ctx.setTimeout, clearTimeout: ctx.clearTimeout };
     if (ctx.state.paused) throw new ctx.Stopped();
     const scope = ctx.callOf(browser);
     scope?.check();
-    ownership.check(ctx.controlledSource(browser).browserId, scope?.session);
+    access.check(ctx.controlledSource(browser).browserId, scope?.session);
     ctx.assertSiteAccess(browser);
     const wg = frame?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
@@ -196,7 +196,7 @@ export function pageQueries(ctx) {
         // never changes: a navigation shows up as that context entering the cache.
         if (frame.currentWindowGlobal !== wg || frame.isDiscarded || frame.top?.isInBFCache)
           throw new PageGone("The page changed.");
-        ownership.check(ctx.controlledSource(browser).browserId, scope?.session);
+        access.check(ctx.controlledSource(browser).browserId, scope?.session);
         ctx.assertSiteAccess(browser);
       }
     })();
@@ -223,7 +223,7 @@ export function pageQueries(ctx) {
   }
 
   // A query for page watches. query() depends on the tab's running call (its session's
-  // ownership, its cancellation); a watch has none and checks ownership and site rules itself
+  // access, its cancellation); a watch has none and checks access and site rules itself
   // on every round.
   async function backgroundQuery(browser, name, data, frame) {
     const wg = frame?.currentWindowGlobal;
@@ -328,7 +328,7 @@ export function pageQueries(ctx) {
   function readContext(browser) {
     return {
       url: browser.currentURI?.spec,
-      ownerVersion: ctx.ownership.version(browser.browserId),
+      ownerVersion: ctx.access.version(browser.browserId),
       frames: ctx.framesOf(browser).map((frame) => [frame.id, frame.currentWindowGlobal]),
     };
   }
@@ -337,7 +337,7 @@ export function pageQueries(ctx) {
     ctx.assertSiteAccess(browser);
     const call = ctx.callOf(browser);
     call?.check();
-    ctx.ownership.check(ctx.controlledSource(browser).browserId, call?.session);
+    ctx.access.check(ctx.controlledSource(browser).browserId, call?.session);
     return ctx.text(
       ctx.readSnapshots.render({
         session: call?.session,

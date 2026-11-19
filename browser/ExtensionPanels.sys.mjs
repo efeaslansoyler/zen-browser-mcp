@@ -130,8 +130,10 @@ export class ExtensionPanels {
       throw new Error("This extension panel belongs to another session or tab.");
     this.discard(entry);
   }
-  releaseTab(tabId) {
-    for (const entry of this.entries.values()) if (entry.tabId === tabId) this.discard(entry);
+  // session: only that session's panels (it left a shared tab)
+  releaseTab(tabId, session) {
+    for (const entry of this.entries.values())
+      if (entry.tabId === tabId && (!session || entry.session === session)) this.discard(entry);
   }
   releaseSession(session) {
     for (const entry of this.entries.values()) if (entry.session === session) this.discard(entry);

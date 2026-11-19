@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as policy from "../browser/Policy.sys.mjs";
 import { permissions } from "../browser/Permissions.sys.mjs";
-import { Ownership } from "../browser/Ownership.sys.mjs";
+import { TabAccess } from "../browser/TabAccess.sys.mjs";
 import { TOOLS } from "../src/tools.ts";
 
 const { OPERATIONS, operationOf, ruleOf, parsePermissions, examplePermissions, COMPUTER_ACTIONS } = policy;
@@ -74,13 +74,13 @@ test("the example file lists every operation with its built-in rules and parses 
 function harness({ mode = "auto", custom = null, risk = {} } = {}) {
   const asked = [];
   const queries = [];
-  const ownership = new Ownership();
-  ownership.assign(1, "s");
+  const access = new TabAccess();
+  access.join(1, "s");
   const p = permissions({
     L: (en) => en,
     DialogOpen: class extends Error {},
     Stopped: class extends Error {},
-    ownership,
+    access,
     policy,
     readConfig: () => ({ mode, sites: { mode: "blocklist", blocklist: [], allowlist: [] } }),
     readPermissions: () => custom,

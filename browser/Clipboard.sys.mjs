@@ -71,7 +71,7 @@ export function systemClipboard(ctx) {
     await ctx.exclusive(call); // the system clipboard is shared (key shortcuts get here too)
     const check = (context) => {
       call.check();
-      ctx.ownership.check(source.browserId, call.session);
+      ctx.access.check(source.browserId, call.session);
       ctx.assertSiteAccess(browser);
       if (
         context &&

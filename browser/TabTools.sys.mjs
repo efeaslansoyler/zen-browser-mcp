@@ -91,39 +91,42 @@ export function tabTools(ctx) {
     },
 
     async tabs_context_mcp({ createIfEmpty }, call) {
-      const { ownership } = ctx;
+      const { access } = ctx;
       const activeSession = call.session;
-      let tabs = ctx.liveTabs().filter((tab) => ownership.owner(tab.linkedBrowser.browserId) === activeSession);
+      const agentTabs = ctx.liveTabs();
+      let tabs = agentTabs.filter((tab) => access.has(tab.linkedBrowser.browserId, activeSession));
       if (!tabs.length && createIfEmpty) tabs = [await ctx.createTab(activeSession)];
+      const others = agentTabs.filter((tab) => !access.has(tab.linkedBrowser.browserId, activeSession));
       const userTabs = ctx
         .browserWindows()
         .flatMap(ctx.windowTabs)
         // Zen's hidden empty-tab placeholder in each workspace is not a user tab.
         .filter(
           (tab) =>
-            tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !ownership.owner(tab.linkedBrowser.browserId),
+            tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !access.shared(tab.linkedBrowser.browserId),
         )
         .map(ctx.describeTab);
       const session = ctx.sessions.get(activeSession);
       const recipes = await recipesFor([...tabs.map(ctx.describeTab), ...userTabs]);
-      if (!tabs.length)
-        return text({
-          userTabs,
-          session,
-          tabs: [],
-          extensions: await ctx.extensionPanels.list(),
-          ...recipes,
-          note: "No owned tabs. Request an existing userTabs tab with request_tab and wait for approval, or create a new tab.",
-        });
+      // a shared tab lists every member with its task note; a tab of one's own needs none
+      const own = (tab) => {
+        const info = ctx.describeTab(tab);
+        const members = ctx.tabStatus(info.tabId, activeSession).members;
+        delete info.members;
+        return members.length > 1 ? { ...info, sharedWith: members.filter((m) => !m.you) } : info;
+      };
       return text({
         userTabs,
+        ...(others.length ? { agentTabs: others.map(ctx.describeTab) } : {}),
         session,
         extensions: await ctx.extensionPanels.list(),
         ...recipes,
-        tabs: tabs.map((tab) => ({
-          ...ctx.describeTab(tab),
-          coordination: ctx.coordinationStatus(tab.linkedBrowser.browserId, activeSession),
-        })),
+        tabs: tabs.map(own),
+        ...(tabs.length
+          ? {}
+          : {
+              note: "No tabs yet. Request an existing userTabs tab (or join an agentTabs tab) with request_tab, or create a new tab.",
+            }),
       });
     },
 
@@ -131,10 +134,16 @@ export function tabTools(ctx) {
       return text(ctx.describeTab(await ctx.createTab(call.session, { clean })));
     },
 
-    // A tab the agent opened is closed; a tab the user gave is not closed but given back.
+    // A tab the agent opened is closed; a tab the user gave is not closed but given back. While
+    // other sessions work in the tab, the caller only leaves it.
     async tabs_close_mcp({ tabId }, call) {
       const tab = ctx.browserFor(call, tabId) && ctx.findTab(tabId);
       const given = tab.getAttribute(ctx.MARK) === "user";
+      const others = ctx.access.members(tabId).filter((session) => session !== call.session);
+      if (others.length) {
+        ctx.leaveTab(tab, call.session, { cancel: false });
+        return text(`Other sessions still work in tab ${tabId}; you left it and it stays open.`);
+      }
       ctx.unmark(tab, { cancel: false });
       if (given) return text(`Tab ${tabId} belongs to the user; not closed, given back to them.`);
       tab.ownerDocument.defaultView.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true });
@@ -210,49 +219,37 @@ export function tabTools(ctx) {
       );
     },
 
-    // Asks for a tab the session doesn't own: "Allow / Deny" on the island, plus a desktop
-    // notification if Zen isn't focused. On approval the tab is marked as if given from the
-    // tab menu; a tab another session owns is queued and handed over when its owner finishes.
+    // Asks for one of the user's tabs, or joins a tab other sessions work in: "Allow / Deny" on
+    // the island (plus a desktop notification if Zen isn't focused) unless the permission
+    // template allows it. On approval the session is a member, as if given from the tab menu.
     async request_tab({ tabId, reason, timeout = 120 }, call) {
-      const { ownership } = ctx;
-      const { session: activeSession, agent: activeAgent } = call;
+      const { access } = ctx;
+      const { session, agent } = call;
       if (typeof reason !== "string" || !reason.trim() || reason.length > 2000)
         throw new Error("Provide a short reason of at most 2000 characters.");
       const tab = ctx.findTab(tabId);
       if (!tab) throw new Error(`Tab ${tabId} is closed.`);
-      if (ownership.owner(tabId) === activeSession)
-        return text({ ...ctx.describeTab(tab), note: "The tab is already assigned to this session." });
-      const foreignOwner = ownership.owner(tabId);
-      if (foreignOwner) {
-        if (!ownership.queue(tabId).some((item) => item.session === activeSession))
-          ownership.request(tabId, activeSession, reason);
-        const status = ctx.coordinationStatus(tabId, activeSession);
-        if (status.task?.state !== "ready" || status.position !== 1)
-          return text({
-            ...status,
-            note: "Queued. Do not retry browser actions. Poll tab_work status; the owner must finish before handoff.",
-          });
-        if (ctx.gate("tab_work.handoff")) {
-          ctx.transferReadyTab(tabId, activeSession);
-          call.tabVersions.set(tabId, ownership.version(tabId));
-          return text(ctx.coordinationStatus(tabId, activeSession));
-        }
-      }
+      if (access.has(tabId, session))
+        return text({ ...ctx.describeTab(tab), note: "This session already works in the tab." });
+      const agentTab = access.shared(tabId);
       const browser = tab.linkedBrowser;
-      const version = ownership.version(tabId);
+      const version = access.version(tabId);
       call.tabs.add(tabId);
-      // one of the user's own tabs: the request_tab rule (an agent's tab: tab_work.handoff above)
-      const allowed = !foreignOwner && ctx.gate("request_tab");
-      const result = allowed
+      const result = ctx.gate(agentTab ? "request_tab.agent_tab" : "request_tab")
         ? "done"
         : await ctx.askIsland(
             call,
             browser,
             ctx.describeAction("request_tab", {}, browser),
-            L(
-              `${activeAgent.name} wants access to this tab: ${reason}`,
-              `${activeAgent.name} bu sekmeye erişmek istiyor: ${reason}`,
-            ),
+            agentTab
+              ? L(
+                  `${agent.name} wants to join the agents in this tab: ${reason}`,
+                  `${agent.name} bu sekmedeki ajanlara katılmak istiyor: ${reason}`,
+                )
+              : L(
+                  `${agent.name} wants access to this tab: ${reason}`,
+                  `${agent.name} bu sekmeye erişmek istiyor: ${reason}`,
+                ),
             { ok: L("Allow", "Ver"), cancel: L("Deny", "Verme") },
             timeout,
           );
@@ -260,18 +257,17 @@ export function tabTools(ctx) {
         return text(result === "timeout" ? `The user did not answer within ${timeout} s.` : "The user declined.");
       }
       if (!tab.isConnected) throw new Error("The tab was closed meanwhile.");
-      if (ownership.version(tabId) !== version)
-        throw new Error("Tab ownership changed while permission was pending. Request it again.");
-      if (foreignOwner) {
-        if (ownership.work.get(tabId)?.state !== "ready")
-          throw new Error("The owner resumed work; wait for completion.");
-        ctx.transferReadyTab(tabId, activeSession);
-      } else ctx.mark(tab, tab.getAttribute(ctx.MARK) || "user", activeSession, { cancel: false });
-      call.tabVersions.set(tabId, ownership.version(tabId));
+      if (access.version(tabId) !== version || access.shared(tabId) !== agentTab)
+        throw new Error("The tab's access changed while permission was pending. Request it again.");
+      ctx.mark(tab, agentTab ? "true" : "user", session);
+      call.tabVersions.set(tabId, access.ticket([tabId], session)[0][1]);
+      const status = ctx.tabStatus(tabId, session);
       return text({
         ...ctx.describeTab(tab),
-        coordination: ctx.coordinationStatus(tabId, activeSession),
-        note: "The user granted the tab to this session.",
+        members: status.members,
+        note: agentTab
+          ? "You joined this tab; its other sessions keep working in it. Calls run one at a time. Publish your task with tab_work start."
+          : "The user granted the tab to this session.",
       });
     },
   };

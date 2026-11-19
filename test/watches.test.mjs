@@ -93,7 +93,7 @@ test("a watch ends when its tab is lost, the site is blocked, on stop and per se
   h.watches.start("s", 1, h.browser, { text: "x" });
   h.page.owned = false;
   await h.tick();
-  assert.equal(h.lines.at(-1).reason, "tab closed or no longer owned by this session");
+  assert.equal(h.lines.at(-1).reason, "tab closed, or this session no longer works in it");
   const b = harness();
   b.watches.start("s", 1, b.browser, { text: "x" });
   b.page.blocked = true;

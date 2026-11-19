@@ -98,36 +98,29 @@ orange, **Codex** mint, **Antigravity** blue, **OpenCode** gray, each with its o
 other agents light blue with their client name. Menus that let you choose a session show the
 icon of the agent all connected sessions share, or a combined icon when they differ. The island, tab
 stripe, cursor, click ring, and handoff outline follow the agent performing the action.
-Tab colors follow the owning session. After a browser restart, restored tabs require a new
-explicit handoff; saved colors do not restore access rights.
+Tab colors follow the agent that acted last in the tab. After a browser restart, restored
+tabs must be handed over again; saved colors do not restore access rights.
 For clients that hide their identity behind a proxy, set `ZEN_MCP_AGENT=codex` or
 `ZEN_MCP_AGENT=claude` in the MCP server environment.
 
-Agent identity is a visual label. Tab access belongs to a particular MCP server session:
-two Codex clients have separate tab lists and cannot read, modify or close each other's tabs.
-Tool calls share a queue and the global Stop/Resume and auto/ask controls.
+Agent identity is a visual label. Tab access belongs to particular MCP server sessions:
+two Codex clients have separate tab lists and cannot read, modify or close each other's tabs
+unless one joins the other's tab. Calls on one tab run one at a time, in order; calls on
+different tabs run at the same time. Stop/Resume and the permission mode apply to all.
 How picks and recipes reach a conversation depends on the client; see
 [Showing an agent an element](#showing-an-agent-an-element). Every client can use the clipboard.
 
-Ownership uses the MCP server's session ID, distinct from a Codex conversation UUID.
+Access uses the MCP server's session ID, distinct from a Codex conversation UUID.
 We do not infer a relationship from agent names or project folders. Multiple conversations
-sharing one MCP server process remain one ownership session.
+sharing one MCP server process remain one session.
 
-Agents coordinate with `tab_work`: `list`/`status` show agent-owned tabs, published task
-summaries, execution state and a FIFO request queue; page contents and chat histories stay
-private. The owner calls `start`, `update`, then `finish` with a handoff summary. Individual
-tool calls ending never count as the task finishing. Ordinary tool replies remind owners
-when another session is waiting.
-
-A second session calls `request` to queue without interrupting the owner. In **auto** mode,
-explicit task completion transfers the tab to the first connected waiter with the handoff
-note. In **ask** mode, the first waiter calls `request_tab` once the task is ready; the island
-requires Allow/Deny. Waiters poll `status` and only act when `ownedByCaller` is true; there
-is no automatic chat wake-up. Requests expire after ten minutes and can be renewed without
-jumping the queue. After fifteen minutes without a task update the task is marked stale,
-not completed. A disconnected or stalled owner never grants implicit permission to take over;
-the user can transfer or take back the tab from the context menu. User-owned tabs still
-require a picked `source_tab` and explicit `request_tab` approval even in auto mode.
+Several sessions can share a tab. `tabs_context_mcp` lists the tabs other sessions work in
+(`agentTabs`), and `request_tab` joins one: at once in **auto** mode, after your Allow in
+**ask** mode. Your own tabs always need your approval, in every mode. In a shared tab the
+agents take turns call by call, and a `browser_batch` runs as one turn. They tell each other
+what they are doing with `tab_work` (`start`, `update`, then `finish` with a short summary);
+`list`/`status` show each member's note and whether a call is running. Page contents and
+chat histories stay private. An agent that closes a tab others still use only leaves it.
 
 ## Using it
 
@@ -154,7 +147,7 @@ and a new ID. Apply hunks to the previous returned text, excluding its metadata 
 Only the returned scope is compared, including any truncation; removed lines describe the
 old state and their refs should not be used. Snapshot metadata is not page content.
 
-Missing/old IDs, different options, navigation, frame-document changes or ownership changes
+Missing/old IDs, different options, navigation, frame-document changes or tab access changes
 produce a fresh full response. Large/expensive diffs also fall back to full text. Snapshot
 storage is bounded, isolated by MCP session and discarded on bridge reload. Default
 `diff: false` keeps the plain-text response and is available for recovery. Existing clients
@@ -183,13 +176,14 @@ are not atomic. These checks apply to computer clicks, not programmatic JavaScri
 ### Handing over a tab
 
 Right-click a tab → **Give to session…**, then select the agent/project/session suffix.
-Use **Transfer to session…** to change the owner. **Take back from agent** revokes access
-and cancels active work immediately. Old queued requests cannot resume after a transfer,
-even if the tab is given back to the same session.
+On a tab agents already work in, **Share with session…** adds another session; the ones in
+it keep working. **Take back from agent** revokes every agent's access and cancels active
+work immediately. A session's old queued requests cannot resume after it left a tab, even if
+the tab is given back to the same session.
 
 When an MCP process disconnects, active work stops immediately. A five-second reconnect
-grace preserves ownership for the same process; otherwise its tabs are returned to you and
-remain open. Reconnect the MCP server once after installing this update to enable lifecycle
+grace preserves access for the same process; otherwise it leaves its tabs, and a tab no
+agent works in any more returns to you and stays open. Reconnect the MCP server once after installing this update to enable lifecycle
 tracking. Older running servers remain usable but untracked sessions expire after 24 hours
 of inactivity.
 
@@ -280,7 +274,7 @@ options, not a guarantee against bot detection.
 `computer key_down/key_up` hold/release a single key (`text: "Shift"`, `"Control"`, `"a"`).
 `mouse_move/mouse_down/mouse_up` provide separate pointer control (`button: "left" |
 "middle" | "right"`). Holds are session/frame scoped and released on errors, Stop,
-navigation, ownership changes, disconnection, reload and a maximum 30-second watchdog
+navigation, tab access changes, disconnection, reload and a maximum 30-second watchdog
 (`hold_ms` may shorten it). Held Control/Meta cannot bypass clipboard consent.
 
 `screenshot` accepts `if_changed: true` to skip identical images and `annotate: true`
@@ -289,8 +283,9 @@ to label up to 80 visible top-frame controls with refs.
 `browser_settings` supports `get`, `devices`, `viewport`, `device`, `media`, `reset`.
 Every mutation/reset asks in the island, even in auto mode; the prompt mentions any
 necessary tab switch. Viewport, DPR, touch-event, custom user-agent and color overrides
-are per tab, and restored on reset or ownership release. No window resize/global pref
-changes are made. Generic mobile/tablet/desktop presets keep Gecko; actual metrics are
+are per tab, and restored on reset, on take-back, or when the session that made them leaves
+the tab. No window resize/global pref changes are made. Generic mobile/tablet/desktop
+presets keep Gecko; actual metrics are
 returned alongside `requested` overrides and may differ due to native scaling/privacy.
 A preset is not another browser engine or a physical device fingerprint.
 
@@ -374,14 +369,14 @@ switching tabs, even in auto mode. Denial or timeout leaves the selected tab unc
 An already selected target needs no switch approval; normal site/action rules still apply.
 The existing window is used because extensions act on the active tab. The tab must belong to the caller. Site rules and approvals apply to the
 source site; a panel cannot be used as another session's tab handle. Switching tabs,
-navigation, ownership changes or dismissal require reopening and fresh refs. Stop,
+navigation, tab access changes or dismissal require reopening and fresh refs. Stop,
 session end and bridge reload close tracked panels.
 
 The agent is instructed to track temporary setting changes and restore the original
 state through the UI when finished. There is no automatic rollback after interruption.
 This first version controls toolbar panels, not arbitrary browser settings, extension
 background code or sidebar-only interfaces. Extension-created tabs follow normal tab
-ownership rules; clipboard/download outputs still use the existing host/file workflow.
+tab access rules; clipboard/download outputs still use the existing host/file workflow.
 
 After installing this update, reconnect the MCP client to discover the new `extensions`
 tool; reloading the browser bridge alone does not refresh an existing MCP server.
@@ -498,7 +493,7 @@ Names and parameters match Claude in Chrome, so prompts carry over.
 
 | Tool | |
 |---|---|
-| `tab_work` | shared task status, FIFO handoff requests and context |
+| `tab_work` | what each agent in a shared tab is doing (task notes) |
 | `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp` | Claude's tabs |
 | `navigate` | go to a URL, back, forward |
 | `computer` | screenshot (with `scale`), clicks, hover, drag, scroll, type, keys, wait; by coordinate or element ref |

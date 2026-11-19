@@ -5,7 +5,7 @@
 import { agentTheme, applyTheme } from "../../browser/Agent.sys.mjs";
 import { Cancellation } from "../../browser/Cancellation.sys.mjs";
 import { Locks } from "../../browser/Locks.sys.mjs";
-import { Ownership } from "../../browser/Ownership.sys.mjs";
+import { TabAccess } from "../../browser/TabAccess.sys.mjs";
 import { ReadSnapshots, sameReadContext } from "../../browser/ReadSnapshots.sys.mjs";
 import { siteAllowed, normalizeConfig } from "../../browser/SiteRules.sys.mjs";
 import { clipboardShortcut, systemClipboard } from "../../browser/Clipboard.sys.mjs";
@@ -44,7 +44,7 @@ export function bridgeContext(fakes = {}) {
     sameReadContext,
     clipboardShortcut,
     state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
-    ownership: new Ownership(),
+    access: new TabAccess(),
     sessions: new Map(),
     sessionVersions: new Map(),
     ownerConnections: new Map(),

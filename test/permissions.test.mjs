@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { normalizeConfig, normalizeSites } from "../browser/SiteRules.sys.mjs";
 import { permissions } from "../browser/Permissions.sys.mjs";
 import * as policy from "../browser/Policy.sys.mjs";
-import { Ownership } from "../browser/Ownership.sys.mjs";
+import { TabAccess } from "../browser/TabAccess.sys.mjs";
 import { bridgeContext, testCall } from "./support/bridge.mjs";
 
 // Gecko globals the real site checks and navigation use.
@@ -23,13 +23,13 @@ function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", an
     browser.browsingContext.currentWindowGlobal = document;
   };
   navigate(site);
-  const ownership = new Ownership();
-  ownership.assign(1, "test-session");
+  const access = new TabAccess();
+  access.join(1, "test-session");
   const context = bridgeContext({
     framesOf: () => [],
-    ownership,
+    access,
     browserFor: (_call, id) => {
-      ownership.check(id, "test-session");
+      access.check(id, "test-session");
       return browser;
     },
     readConfig: () => settings,
@@ -305,14 +305,14 @@ test("React props and axe scans ask in ask mode and respect the blocklist, in ba
 
 test("permission module describes actions and scopes approvals without slicing main.js", async () => {
   const settings = normalizeConfig({ mode: "ask" });
-  const ownership = new Ownership();
-  ownership.assign(1, "s");
+  const access = new TabAccess();
+  access.join(1, "s");
   const asked = [];
   const p = permissions({
     L: (en) => en,
     DialogOpen: class extends Error {},
     Stopped: class extends Error {},
-    ownership,
+    access,
     queryRef: async () => ({ value: 'button "Pay"' }),
     longRef: (x) => x,
     readConfig: () => settings,
@@ -346,9 +346,9 @@ test("permission module describes actions and scopes approvals without slicing m
   ]);
   assert.equal(prompted, true);
   assert.equal(asked[0], 'Claude wants to: button "Pay": click');
-  // An approval belongs to the document and the ownership version
+  // An approval belongs to the document and the tab's access version
   assert(p.samePermissionContext(context, p.permissionContext(browser)));
-  ownership.assign(1, "other");
+  access.leave(1, "s");
   assert(!p.samePermissionContext(context, p.permissionContext(browser)));
 });
 

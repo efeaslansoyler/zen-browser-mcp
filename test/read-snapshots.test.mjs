@@ -194,7 +194,7 @@ function parentHarness() {
     assertSiteAccess() {},
     readSnapshots: snapshots,
     activeSession: "A",
-    ownership: { version: () => 1, check() {} },
+    access: { version: () => 1, check() {} },
     MAX_PAGE_TEXT: 100000,
     browserFor: () => browser,
     framesOf: () => [browser.browsingContext],
@@ -235,12 +235,12 @@ test("real read tools preserve plain output and separately cache text/tree/optio
   assert.match(await h.read("read_page", { diff: true, since: id(delta) }), /document-or-owner-changed/);
 });
 
-test("ownership is checked again before an output baseline can be saved", async () => {
+test("tab access is checked again before an output baseline can be saved", async () => {
   const h = parentHarness();
-  h.context.ownership.check = () => {
-    throw new Error("ownership changed");
+  h.context.access.check = () => {
+    throw new Error("access changed");
   };
-  await assert.rejects(h.read("read_page", { diff: true }), /ownership changed/);
+  await assert.rejects(h.read("read_page", { diff: true }), /access changed/);
   assert.equal(h.context.readSnapshots.entries.size, 0);
 });
 

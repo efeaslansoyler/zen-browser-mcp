@@ -72,8 +72,10 @@ export class BrowserSettings {
     }
     this.entries.delete(source);
   }
-  restoreTab(tabId) {
-    for (const source of this.entries.keys()) if (source.browserId === tabId) this.restore(source);
+  // session: only settings that session made (it left a shared tab)
+  restoreTab(tabId, session) {
+    for (const [source, entry] of this.entries)
+      if (source.browserId === tabId && (!session || entry.session === session)) this.restore(source);
   }
   destroy() {
     for (const source of this.entries.keys()) this.restore(source);

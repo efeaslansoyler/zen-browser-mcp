@@ -223,7 +223,7 @@ function picks(env = {}) {
   return new Picks({
     L: (en) => en,
     theme: themes.agentTheme,
-    ownerOf: () => "owner-A",
+    hasAccess: (_tabId, session) => session === "owner-A",
     pickedTabs: new Set(),
     channels,
     // the real inbox: a session's subscriber pushes; nothing waits in these tests

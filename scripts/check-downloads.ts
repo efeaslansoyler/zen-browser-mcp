@@ -154,7 +154,7 @@ try {
   assert.match(await tool(a, "downloads", { tabId, action: "cancel", id: done.id }, true), /already finished/);
   console.log("ok  live progress → cancel removes the partial file");
 
-  assert.match(await tool(b, "downloads", { tabId }, true), /belongs to another session/);
+  assert.match(await tool(b, "downloads", { tabId }, true), /used by other sessions/);
   console.log("ok  other session cannot see the tab's downloads");
 } finally {
   for (const file of files) fs.rmSync(file, { force: true });

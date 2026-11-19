@@ -144,13 +144,14 @@ try {
   await chrome(`(() => {
     const tab=h.findTab(${tabId}), win=tab.ownerDocument.defaultView;
     h.prepareTabMenu(win,[tab]);
-    const item=[...win.document.getElementById('tabContextMenu').querySelectorAll('[data-zen-session]')].find(item=>item.getAttribute('data-zen-session')===${JSON.stringify(second.owner.session)});
+    const item=[...win.document.getElementById('tabContextMenu').querySelectorAll('[data-zen-session]')].find(item=>item.getAttribute('data-zen-session')===${JSON.stringify(second.members[0].session)});
     if(!item)throw new Error('Fixture session menu missing');item.doCommand();return true;
   })()`);
-  await tool(a, "read_page", { tabId, diff: true, since: id(owned) }, true);
+  // shared now: both read it, and each keeps its own baselines
   assert.match(await tool(b, "read_page", { tabId, diff: true, since: id(owned) }), /mode: full \(no-baseline\)/);
+  assert.doesNotMatch(await tool(a, "read_page", { tabId, diff: true, since: id(owned) }), /mode: full/);
   console.log(
-    "✓ Real Codex/Claude MCP sessions cannot read foreign tabs or reuse another session’s baseline after transfer",
+    "✓ Real Codex/Claude MCP sessions cannot read foreign tabs or reuse another session’s baseline after sharing",
   );
   console.log("All live read-diff checks passed.");
 } catch (error) {

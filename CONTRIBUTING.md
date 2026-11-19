@@ -39,7 +39,7 @@ alone: the bridge runs your working tree.
 ## Tests
 
 `npm test` builds and runs the unit tests: MCP client compatibility, schemas, the wire
-protocol, the island, ownership, permissions, downloads, the Codex watcher and more. They run
+protocol, the island, tab access, permissions, downloads, the Codex watcher and more. They run
 real bridge and actor code against small in-memory DOM fixtures; no browser needed. If a
 sandbox blocks child processes, run `npm run build && node --test --test-isolation=none test/*.test.mjs`.
 
@@ -65,12 +65,12 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-compat.ts --reload` | Claude, Codex and generic identities: read, write, click, keys, screenshots, theming |
 | `check-input.ts` | Held keys and buttons, human-like input, `browser_settings` |
 | `check-permissions.ts` | Permission modes, the site blocklist, batch re-checks, redirects, iframes |
-| `check-ownership.ts`, `check-coordination.ts` | Session ownership, `tab_work` handoffs |
+| `check-tab-access.ts` | Tab access between sessions: joining, turns in a shared tab, parallel tabs, share and take-back menus, leaving, shutdown, the ask-mode join prompt |
 | `check-cancellation.ts`, `check-hit-test.ts` | Stop, covered-click detection |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |
 | `check-extensions.ts`, `check-clipboard.ts` | Extension popups with a temporary extension, clipboard consent |
 | `check-inspection.ts` | React (development and production builds), axe |
-| `check-downloads.ts` | Click and navigation downloads, events file, progress, cancel, ownership |
+| `check-downloads.ts` | Click and navigation downloads, events file, progress, cancel, tab access |
 | `check-watch.ts` | Page watches: match timing, text changes, stop, tab close |
 | `check-workspace.ts` | Zen: agent tabs in a configured hidden space, input and screenshots there |
 | `check-pick-delivery.ts` | **Sends a real message to a real Codex conversation**; needs `CODEX_THREAD_ID`. Don't run casually. |

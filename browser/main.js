@@ -103,7 +103,7 @@ function logError(where, e) {
     // ?v= makes a reload load the new module versions instead of the cached ones.
     const load = (name) => ChromeUtils.importESModule(`resource://zenmcp/${name}.sys.mjs?v=${version}`);
     const { agentTheme, applyTheme, agentIcon, commonAgent } = load("Agent");
-    const { Ownership } = load("Ownership");
+    const { TabAccess } = load("TabAccess");
     const { normalizeConfig, siteAllowed, siteEntry } = load("SiteRules");
     const { ScreenshotCache } = load("ScreenshotCache");
     const { BrowserSettings, DEVICE_PRESETS } = load("BrowserSettings");
@@ -154,12 +154,17 @@ function logError(where, e) {
     const state = (globalThis.zenMcpState ||= { tabs: new Set(), scale: new Map() });
     // Tabs where the user picked an element for an agent: agents may ask only for these.
     state.pickedTabs ||= new Set();
-    const ownership = new Ownership(
-      (state.owners ||= new Map()),
-      (state.ownerVersions ||= new Map()),
-      (state.tabWork ||= new Map()),
-      (state.tabQueues ||= new Map()),
-      (state.tabHandoffs ||= new Map()),
+    // A bridge from before shared tabs had one owner per tab: each owner becomes a member.
+    if (state.owners && !state.tabMembers) {
+      state.tabMembers = new Map();
+      for (const [tabId, session] of state.owners) state.tabMembers.set(tabId, new Map([[session, 0]]));
+    }
+    for (const old of ["owners", "ownerVersions", "tabWork", "tabQueues", "tabHandoffs"]) delete state[old];
+    const access = new TabAccess(
+      (state.tabMembers ||= new Map()),
+      (state.tabVersions ||= new Map()),
+      (state.tabTasks ||= new Map()),
+      (state.tabMemberships ||= { next: 1 }),
     );
     globalThis.zenMcpBrowserStart ||= Date.now();
 
@@ -202,7 +207,7 @@ function logError(where, e) {
 
       // shared state
       state,
-      ownership,
+      access,
       sessions: (state.sessions ||= new Map()),
       sessionVersions: (state.sessionVersions ||= new Map()),
       lastUse: (globalThis.zenMcpLastUse ||= new Map()), // session → last tool call
@@ -242,7 +247,7 @@ function logError(where, e) {
       },
 
       // While an extension popup is the call's surface, its tab is the source of truth for
-      // ownership and site checks.
+      // access and site checks.
       controlledSource(browser) {
         const call = ctx.callOf(browser);
         const surface = call?.extensionSurface;
@@ -290,10 +295,10 @@ function logError(where, e) {
       busy: (win) => isGloballyBlockingOpenPopup(win),
       check: (source, session) => {
         ctx.callOf(source)?.check();
-        ownership.check(source.browserId, session);
+        access.check(source.browserId, session);
         ctx.assertSiteAccess(source);
       },
-      version: (source) => ownership.version(source.browserId),
+      version: (source) => access.version(source.browserId),
       confirmSwitch: async (source, extension) => {
         if (ctx.gate("extensions.switch_tab")) return true;
         const context = ctx.permissionContext(source);
@@ -320,11 +325,10 @@ function logError(where, e) {
     ctx.browserSettings = new BrowserSettings({
       check: (source, session) => {
         ctx.callOf(source)?.check();
-        ownership.check(source.browserId, session);
+        access.check(source.browserId, session);
         ctx.assertSiteAccess(source);
       },
-      context: (source) =>
-        JSON.stringify([source.currentURI.spec, ownership.version(source.browserId), ctx.readConfig()]),
+      context: (source) => JSON.stringify([source.currentURI.spec, access.version(source.browserId), ctx.readConfig()]),
       wait: (ms, source) => ctx.operationSleep(ms, ctx.callOf(source)),
       geckoVersion: Services.appinfo.platformVersion.split(".").slice(0, 2).join("."),
       ask: async (source, args, value) => {
@@ -384,7 +388,12 @@ function logError(where, e) {
       menuAgent,
       paintIcon: paintMenuIcon,
       sessions: () => ctx.liveSessions(),
-      ownerName: (tab) => ctx.sessions.get(ownership.owner(tab.linkedBrowser.browserId))?.name,
+      memberNames: (tab) =>
+        access
+          .members(tab.linkedBrowser.browserId)
+          .map((session) => ctx.sessions.get(session)?.name)
+          .filter(Boolean)
+          .join(", "),
       give: (tab, session) => {
         if (!ctx.sessions.has(session) || ctx.sessions.get(session).disconnected) return;
         ctx.mark(tab, tab.getAttribute(MARK) || "user", session);
@@ -445,7 +454,7 @@ function logError(where, e) {
       },
       maxEdge: MAX_EDGE,
       shotsDir: `${zenMcpRuntimeDir()}/${zenMcpApp}-picks`,
-      ownerOf: (browserId) => ownership.owner(browserId),
+      hasAccess: (browserId, session) => access.has(browserId, session),
       assertSiteAccess: (browser) => ctx.assertSiteAccess(browser),
       logError,
       sleep: (ms) => ctx.sleep(ms),
@@ -522,7 +531,7 @@ function logError(where, e) {
       events: eventFiles("watch"),
       owned: (tabId, session) => {
         const tab = ctx.findTab(tabId);
-        return tab && state.tabs.has(tabId) && ownership.owner(tabId) === session ? tab.linkedBrowser : null;
+        return tab && state.tabs.has(tabId) && access.has(tabId, session) ? tab.linkedBrowser : null;
       },
       check: async (browser, condition) => !!(await ctx.acrossFrames(browser, "check", condition, (value) => value)),
       sample: (browser, selector) => ctx.acrossFrames(browser, "sample", { selector }, (value) => value != null),

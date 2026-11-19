@@ -2,7 +2,7 @@
 // settings" (permission mode, the sites agents can use and, in Zen, the workspace for agent tabs). UI only;
 // the work goes through env:
 //   env.L(en, tr), env.mark: the mark attribute,
-//   env.sessions(): connected sessions, env.ownerName(tab), env.menuAgent(),
+//   env.sessions(): connected sessions, env.memberNames(tab), env.menuAgent(),
 //   env.paintIcon(item, agent): the agent's icon and color,
 //   env.give(tab, sessionId), env.takeBack(tab),
 //   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hasCustomPermissions(), env.hostOf(browser), env.siteEntry(host),
@@ -91,7 +91,7 @@ export class TabMenu {
       give.setAttribute(
         "label",
         tabs.some((t) => t.hasAttribute(MARK))
-          ? L("Transfer to session…", "Oturuma devret…")
+          ? L("Share with session…", "Oturumla paylaş…")
           : L("Give to session…", "Oturuma ver…"),
       );
       env.paintIcon(give, env.menuAgent());
@@ -123,8 +123,8 @@ export class TabMenu {
           ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
           : env.menuAgent(),
       );
-      const owner = tab && env.ownerName(tab);
-      item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (owner ? ` · ${owner}` : ""));
+      const members = tab && env.memberNames(tab);
+      item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (members ? ` · ${members}` : ""));
       permissionsPopup.replaceChildren();
       const heading = (label) => {
         const item = win.document.createXULElement("menuitem");

@@ -1,6 +1,6 @@
-// Agent sessions: one per MCP server process (or per Codex conversation). A session owns tabs;
+// Agent sessions: one per MCP server process (or per Codex conversation). A session works in tabs;
 // it stays alive while a lifecycle connection is open and ends after a short grace period once
-// the last one closes, which releases its tabs.
+// the last one closes, which takes it out of its tabs.
 export function sessionManager(ctx) {
   const GRACE = 5000;
 
@@ -60,16 +60,14 @@ export function sessionManager(ctx) {
     clearTimer(id);
     ctx.sessionVersions.set(id, (ctx.sessionVersions.get(id) || 0) + 1);
     ctx.sessions.delete(id);
-    ctx.ownership.removeRequester(id);
     ctx.readSnapshots.clearSession(id);
     for (const call of ctx.calls)
       if (call.session === id) call.cancel(new Error("The browser session disconnected; its operation was cancelled."));
-    for (const [tabId, owner] of ctx.ownership.owners) {
-      if (owner !== id) continue;
+    for (const tabId of ctx.access.tabsOf(id)) {
       const tab = ctx.findTab(tabId);
-      if (tab) ctx.unmark(tab);
+      if (tab) ctx.leaveTab(tab, id);
       else {
-        ctx.ownership.release(tabId);
+        ctx.access.clear(tabId);
         ctx.state.tabs.delete(tabId);
       }
     }
@@ -127,13 +125,13 @@ export function sessionManager(ctx) {
     for (const info of ctx.sessions.values()) {
       if (ctx.ownerConnections.has(info.id)) continue;
       const idle = Date.now() - info.seen;
-      const hasTabs = [...ctx.ownership.owners.values()].includes(info.id);
+      const hasTabs = ctx.access.tabsOf(info.id).length > 0;
       if (idle > 24 * 60 * 60 * 1000 || (!info.lifecycle && !hasTabs && idle > 10 * 60 * 1000))
         endOwnerSession(info.id);
     }
   }
 
-  // On bridge shutdown: close lifecycle transports but keep sessions and ownership, so the
+  // On bridge shutdown: close lifecycle transports but keep sessions and tab access, so the
   // reloaded bridge can hand them back when the clients reconnect.
   function closeConnections() {
     for (const connections of ctx.ownerConnections.values()) {

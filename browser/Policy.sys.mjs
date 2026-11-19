@@ -47,7 +47,7 @@ export const SECTIONS = [
       ["hand_to_user", A, A, "Hand you a step only you should do (logins, 2FA, payments)."],
       ["highlight", A, A, "Point out elements on a page with labelled frames."],
       ["show_me", A, A, "Ask you to show a task once and record it."],
-      ["tab_work", A, A, "Publish task notes and queue for tabs other agents own."],
+      ["tab_work", A, A, "Tell the other agents in a shared tab what it is doing there, and read their notes."],
     ],
   ],
   [
@@ -55,7 +55,7 @@ export const SECTIONS = [
     [
       ["tabs_create_mcp", A, A, "Open a new tab for the agent."],
       ["tabs_close_mcp", A, A, "Close one of the agent's tabs."],
-      ["tab_work.handoff", Q, A, "Pass an agent tab to the next waiting agent when its owner finishes its task."],
+      ["request_tab.agent_tab", Q, A, "Join a tab another agent works in (both then take turns in it)."],
     ],
   ],
   [

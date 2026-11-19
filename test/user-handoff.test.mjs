@@ -103,7 +103,7 @@ test("a query notices its page going into bfcache, where its own context stays u
   frame.top = frame;
   frame.isInBFCache = false;
   const ctx = bridgeContext({ assertSiteAccess() {}, guard: (promise) => promise });
-  ctx.ownership.assign(1, "A");
+  ctx.access.join(1, "A");
   testCall(ctx, { session: "A", tabs: [1] });
   const pending = ctx.query(browser, "ask_user", {}, 30000, frame);
   frame.isInBFCache = true;

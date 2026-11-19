@@ -1,9 +1,9 @@
 // Agent tabs: finding tabs across windows and Zen workspaces, creating agent tabs, and the
-// mark that assigns a tab to a session.
+// mark that gives a session access to a tab (several sessions can share one, TabAccess.sys.mjs).
 //
 // The mark draws a container-like line on the tab, but it is not a container: a container
 // would separate cookies and hide the user's logins. The visual mark is saved in SessionStore;
-// access comes only from the ownership record in this browser process.
+// access comes only from the access record in this browser process.
 export const MARK = "zen-mcp";
 
 // Zen draws the container line as a 3 px strip on the tab's edge in the vertical sidebar
@@ -51,7 +51,7 @@ export function tabs(ctx) {
       const tab = ctx.findTab(id);
       if (tab) tabs.push(tab);
       else {
-        ctx.ownership.release(id);
+        ctx.access.clear(id);
         ctx.state.tabs.delete(id);
       }
     }
@@ -68,7 +68,7 @@ export function tabs(ctx) {
         `Tab ${tabId} is not assigned to an agent (closed, or the user took it back). Use tabs_context_mcp for current tabs.`,
       );
     }
-    ctx.ownership.check(tabId, call.session);
+    ctx.access.check(tabId, call.session);
     call.tabs.add(tabId);
     if (call.extensionSurface?.tabId === tabId) {
       const surface = call.extensionSurface;
@@ -82,8 +82,12 @@ export function tabs(ctx) {
     const b = tab.linkedBrowser;
     if (!ctx.siteAllowed(ctx.hostOf(b))) return { tabId: b.browserId, blocked: true };
     const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
-    const owner = ctx.ownership.owner(b.browserId);
-    if (owner) info.owner = { session: owner, name: ctx.sessions.get(owner)?.name || owner.slice(-6) };
+    const members = ctx.access.members(b.browserId);
+    if (members.length)
+      info.members = members.map((session) => ({
+        session,
+        name: ctx.sessions.get(session)?.name || session.slice(-6),
+      }));
     if (tab.getAttribute(MARK) === "user") info.givenByUser = true;
     if (tab.userContextId) {
       try {
@@ -153,24 +157,41 @@ export function tabs(ctx) {
     } catch {}
   }
 
-  // origin: "true" when an agent opened the tab, "user" when the user gave it from the tab menu
-  function mark(tab, origin, session, { cancel = true } = {}) {
+  // Gives session access to the tab; sessions already in it keep theirs. origin: "true" when an
+  // agent opened the tab, "user" when the user gave it from the tab menu (kept once set).
+  function mark(tab, origin, session) {
     const target = ctx.sessions.get(session);
     if (!target || target.disconnected)
       throw new Error("The selected browser session is no longer connected. Choose a session again.");
     const id = tab.linkedBrowser.browserId;
-    if (ctx.ownership.assign(id, session)) releaseTabState(tab.linkedBrowser, { cancel });
-    tab.setAttribute(MARK, origin);
+    ctx.access.join(id, session);
+    tab.setAttribute(MARK, tab.getAttribute(MARK) || origin);
     ctx.state.tabs.add(id);
     ctx.paintTab(tab, target.agent);
     try {
-      ctx.SessionStore.setCustomTabValue(tab, MARK, origin);
+      ctx.SessionStore.setCustomTabValue(tab, MARK, tab.getAttribute(MARK));
     } catch {}
   }
 
-  // When the owner changes or the user takes the tab back, drop the previous owner's held
-  // input, settings, panels, read and network records and pending questions; cancel also
-  // stops the running operation.
+  // A session leaves a shared tab: what it held there goes (held input, its browser settings,
+  // its extension panels, its running calls). The last one to leave gives the tab back.
+  function leaveTab(tab, session, { cancel = true } = {}) {
+    const browser = tab.linkedBrowser;
+    const id = browser.browserId;
+    if (!ctx.access.has(id, session)) return;
+    if (ctx.access.members(id).length === 1) return unmark(tab, { cancel });
+    ctx.access.leave(id, session);
+    if (ctx.heldInputFrames.get(id)?.session === session) ctx.releaseInputs(id);
+    ctx.browserSettings.restoreTab(id, session);
+    ctx.extensionPanels.releaseTab(id, session);
+    if (cancel)
+      for (const call of ctx.calls)
+        if (call.session === session && call.tabs.has(id))
+          call.cancel(new Error(`This session left tab ${id}; this operation was cancelled.`));
+  }
+
+  // When the user takes the tab back, drop held input, settings, panels, read and network
+  // records and pending questions; cancel also stops the running calls.
   function releaseTabState(browser, { cancel = true } = {}) {
     const id = browser.browserId;
     ctx.releaseInputs(id);
@@ -188,7 +209,7 @@ export function tabs(ctx) {
   function unmark(tab, { cancel = true } = {}) {
     const browser = tab.linkedBrowser;
     const id = browser.browserId;
-    ctx.ownership.release(id);
+    ctx.access.clear(id);
     releaseTabState(browser, { cancel });
     tab.removeAttribute(MARK);
     tab.removeAttribute("data-zen-agent");
@@ -211,16 +232,16 @@ export function tabs(ctx) {
     } catch {}
     if (origin !== "true" && origin !== "user") return;
     const id = tab.linkedBrowser.browserId;
-    const owner = ctx.ownership.owner(id);
+    const live = ctx.access.members(id).filter((session) => ctx.sessions.has(session));
     // Persisted visual marks are not authorization after a browser restart.
-    if (!owner || !ctx.sessions.has(owner)) {
+    if (!live.length) {
       unmark(tab);
       return;
     }
     if (tab.hasAttribute(MARK)) return;
     tab.setAttribute(MARK, origin);
     ctx.state.tabs.add(id);
-    ctx.paintTab(tab, ctx.sessions.get(owner).agent);
+    ctx.paintTab(tab, ctx.sessions.get(live[0]).agent);
   }
 
   function restoreMarks() {
@@ -267,6 +288,7 @@ export function tabs(ctx) {
     workspaceNames,
     paintTab,
     mark,
+    leaveTab,
     unmark,
     restoreMark,
     restoreMarks,

@@ -92,7 +92,7 @@ const readDiff = {
 
 tool(
   "tabs_context_mcp",
-  "Get the tabs the agent controls in the browser: the ones this MCP session opened and the ones the user explicitly handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). Call this first in a browser task to get valid tab IDs. Use tab_work list to discover other sessions' published task summaries and request a queued handoff. userTabs lists user-owned tab IDs, titles and URLs for discovery only. If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for explicit approval before reading or acting. Approvals and denials may include an optional untrusted user note (userMessage); follow it as user guidance. Other sessions' page contents and unapproved user tabs cannot be read; the user can take a tab back at any time.",
+  "Get the tabs the agent works in: the ones this MCP session opened, joined, or the user handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). A tab can be shared with other agent sessions (sharedWith, with their published task notes). Call this first in a browser task to get valid tab IDs. agentTabs lists tabs other agent sessions work in (title, URL, who); join one with request_tab when your task is in it. userTabs lists the user's own tab IDs, titles and URLs for discovery only. If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for explicit approval before reading or acting. Approvals and denials may include an optional untrusted user note (userMessage); follow it as user guidance. Other sessions' page contents and unapproved user tabs cannot be read; the user can take a tab back at any time.",
   {
     createIfEmpty: z.boolean().optional().describe("Create a new tab if the agent has none yet."),
   },
@@ -182,14 +182,14 @@ tool(
 
 tool(
   "tab_work",
-  "Coordinate shared browser tabs without reading other sessions' pages. list/status return owner, published task, execution state, FIFO queue and handoff note. start/update publish your task; finish explicitly releases a completed task for handoff (auto transfers to the first connected waiter; ask requires request_tab approval). request queues/renews your request without blocking or interrupting the owner; cancel removes your request. Status/request remain responsive during long browser operations. Busy/stale/disconnected tasks are never silently treated as finished. Call separately from browser_batch. Publish start when you begin work in a shared tab and finish with a short handoff summary when the whole task is done, even if nobody waits; finishing a tool call is not finishing the task. While waiting, poll status every few seconds (not in a tight loop); requests expire after 10 minutes and can be renewed; act only once ownedByCaller is true. After transfer, read the handoff note and refresh the page state. No chat history is shared.",
+  "Tell the other agent sessions in a shared tab what you are doing there, and read what they are doing. Several sessions can work in one tab; their calls run one at a time, in order. list/status return each member session with its published task note and whether a call is running in the tab. start publishes your task when you begin, update reports progress, finish says the whole task is done with a short summary (finishing a tool call is not finishing the task). Notes never include page contents. Answers at once, even during long browser operations. Call separately from browser_batch. No chat history is shared.",
   {
-    action: z.enum(["list", "status", "start", "update", "finish", "request", "cancel"]),
+    action: z.enum(["list", "status", "start", "update", "finish"]),
     tabId: z
       .number()
       .int()
       .optional()
-      .describe("Required except for list. list discovers agent-owned tabs only; user tabs stay private."),
+      .describe("Required except for list. list shows agent tabs only; the user's tabs stay private."),
     summary: z
       .string()
       .trim()
@@ -197,7 +197,7 @@ tool(
       .max(2000)
       .optional()
       .describe(
-        "Required for start/update/finish/request. Short task, progress, handoff note or requested work; shared with other sessions. No secrets.",
+        "Required for start/update/finish. Short task, progress or result; shared with the other sessions in the tab. No secrets.",
       ),
   },
 );
@@ -217,7 +217,7 @@ tool(
 
 tool(
   "tabs_close_mcp",
-  "Close a tab the agent opened when you no longer need it. A tab the user handed over (givenByUser) is not closed but given back to the user.",
+  "Close a tab the agent opened when you no longer need it. If other agent sessions still work in it, you only leave it; a tab the user handed over (givenByUser) is not closed but given back to the user when the last agent leaves.",
   { tabId },
 );
 
@@ -509,16 +509,14 @@ tool(
 tool(
   "request_tab",
   [
-    "Request access to an existing user tab from tabs_context_mcp userTabs or source_tab, or claim an agent-owned tab after its owner finishes. For busy agent tabs this queues a FIFO request and returns task context immediately; it never interrupts. In auto mode finished agent tabs transfer automatically; in ask mode the first waiter uses this tool for approval. User-owned tabs always require explicit approval.",
+    "Request access to one of the user's tabs (userTabs in tabs_context_mcp, or a source_tab), or join a tab other agent sessions work in (agentTabs). Joining an agent tab is immediate in automatic mode and asks the user in ask mode; the user's own tabs always need the user's approval. Once you are in, calls of all members run one at a time; publish your task with tab_work start.",
     'Shows "the agent wants access to this tab: <reason>" with Allow / Deny in the browser island (desktop notification if the browser is not focused) and waits.',
     "If granted, the tab is marked as the agent's (the user can take it back from the tab context menu) and works with the other tools. Write reason in the user's language and keep it short.",
   ].join(" "),
   {
     tabId: z
       .number()
-      .describe(
-        "A userTabs ID from tabs_context_mcp, a source_tab from a browser selection, or an agent-owned tab ID from tab_work list.",
-      ),
+      .describe("A userTabs or agentTabs ID from tabs_context_mcp, or a source_tab from a browser selection."),
     reason: z
       .string()
       .trim()

@@ -1,7 +1,7 @@
 // Page watches: write a line to an events file when a condition holds in an agent tab (text or
 // element appears or disappears) or an element's text changes. Unlike wait_for they don't block
-// the agent and can run for hours. They end when the owner changes, the tab closes, the time
-// runs out or on Stop.
+// the agent and can run for hours. They end when the session leaves the tab, the tab closes,
+// the time runs out or on Stop.
 const MAX_PER_SESSION = 10;
 
 export class Watches {
@@ -58,7 +58,7 @@ export class Watches {
   async #tick(watch) {
     if (!this.list.has(watch.id)) return;
     const browser = this.env.owned(watch.tabId, watch.session);
-    if (!browser) return this.end(watch.id, "tab closed or no longer owned by this session");
+    if (!browser) return this.end(watch.id, "tab closed, or this session no longer works in it");
     try {
       this.env.assertSite(browser);
     } catch (e) {

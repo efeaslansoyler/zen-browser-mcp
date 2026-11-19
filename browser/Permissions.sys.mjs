@@ -1,7 +1,7 @@
 // Permissions: each tool call is an operation (Policy.sys.mjs) whose rule in the current mode
 // is allow, ask (approved on the island first) or deny. A click that submits a form, or typing
 // into a secret field, also takes the submit or secret_field rule, whichever is stricter. An
-// approval belongs to one document, origin, settings and ownership version; if any of them
+// approval belongs to one document, origin, settings and tab access version; if any of them
 // changes, the user is asked again. The tool call (who asks) is passed in.
 export function permissions(ctx) {
   const { L, DialogOpen, Stopped } = ctx;
@@ -105,7 +105,7 @@ export function permissions(ctx) {
     "extensions.switch_tab",
     "request_tab",
     "recipes.delete",
-    "tab_work.handoff",
+    "request_tab.agent_tab",
   ]);
 
   const deniedMessage = (key) =>
@@ -195,7 +195,7 @@ export function permissions(ctx) {
         settings.sites,
         settings.mode === "custom" ? ctx.readPermissions() : null,
       ]),
-      ownerVersion: ctx.ownership.version(browser.browserId),
+      ownerVersion: ctx.access.version(browser.browserId),
     };
   }
 

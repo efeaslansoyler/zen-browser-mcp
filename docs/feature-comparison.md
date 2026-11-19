@@ -9,7 +9,7 @@ rough equivalents, not API or engine parity.
 |---|---|
 | Snapshot, refs, interactive tree | `read_page`, `find`, `form_input` |
 | Page text and text diff | `get_page_text`, `diff`/`since` on reads |
-| Navigation, tabs, iframes, dialogs | Yes, with per-session tab ownership |
+| Navigation, tabs, iframes, dialogs | Yes, with per-session tab access; agents can share a tab and take turns in it |
 | Hover, click, drag, scroll | Real input, covered-target check before clicks |
 | Key down / up | `computer` `key_down`/`key_up` |
 | Mouse move / down / up | `computer` `mouse_move`/`mouse_down`/`mouse_up` |
@@ -32,7 +32,7 @@ rough equivalents, not API or engine parity.
 | CDP / headless / launching a browser | Out of scope: the everyday browser and window |
 | Proxy / geolocation / TLS settings | Not available; global profile settings are never changed |
 | Recording / streaming / profiling | Not available |
-| Element picks, island, Stop, task handoff | zen-browser-mcp's own focus |
+| Element picks, island, Stop, shared tabs | zen-browser-mcp's own focus |
 | Installed extension popups | `extensions`; tab switch asks even in auto mode |
 
 ## Limits
@@ -40,12 +40,12 @@ rough equivalents, not API or engine parity.
 - Human-like input is optional. It produces real, trusted events but is no guarantee against
   bot detection.
 - Held keys and buttons belong to a session and frame. They are released on key up, Stop,
-  errors, navigation, handoff, disconnect and bridge reload, and at the latest 30 s after the
-  last `key_down`/`mouse_down` (`hold_ms` can shorten that). A held button doesn't move
+  errors, navigation, leaving the tab, disconnect and bridge reload, and at the latest 30 s
+  after the last `key_down`/`mouse_down` (`hold_ms` can shorten that). A held button doesn't move
   between frames; it's released with an error.
 - `browser_settings` never resizes the window or changes global prefs. Every change and reset
   asks in the island, even in auto mode. Previous inline CSS and native overrides are restored
-  on reset, handoff, take-back, disconnect and bridge shutdown.
+  on reset, leaving the tab, take-back, disconnect and bridge shutdown.
 - Mobile / tablet / desktop are generic Gecko presets (mobile and tablet send the Android
   Firefox user agent), not Safari or a full device fingerprint; `maxTouchPoints` isn't spoofed.
   Measured values can differ from requested ones because of native scaling and privacy

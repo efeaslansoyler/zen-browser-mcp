@@ -29,10 +29,11 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **`hand_to_user`**: steps only the user should do (logging in, 2FA, captchas, payments) are
   handed over in the island and the agent continues when the user presses **Done**, so
   credentials never pass through the agent.
-- **Several agents at once**: each MCP session (each Codex conversation) owns its own tabs,
-  and agents in different tabs work at the same time; calls on one tab run in order.
-  `tab_work` publishes task notes and queues handoffs between sessions; `request_tab` asks the
-  user for one of their tabs.
+- **Several agents at once**: each MCP session (each Codex conversation) has its own tabs,
+  and agents in different tabs work at the same time. Agents can share a tab (`request_tab`
+  joins one, free in auto mode, asked in ask mode) and take turns in it call by call;
+  `tab_work` notes tell the others what each is doing. `request_tab` also asks the user for one
+  of their own tabs.
 - **Element picks**: pick one or more elements on any page (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>
   or the context menu), write a note and send them to any connected session, with selector,
   styles, a screenshot and the React/Vue component chain.
@@ -51,9 +52,9 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   extension panels, the user's clipboard, tabs and browser settings) and **custom** (the
   user's own allow/ask/deny rules in a commented `permissions.jsonc`, `config permissions
   init`). Sites are a blocklist or an allowlist. Approvals are scoped to the document,
-  origin, settings and owner.
-- **Tab context menu**: give a tab to a session, take it back, agent settings and the agent
-  history of the tab.
+  origin, settings and tab access.
+- **Tab context menu**: give or share a tab with a session, take it back, agent settings and
+  the agent history of the tab.
 - **Inspection**: React component trees and `axe-core` accessibility audits, run locally.
 - **Per-tab emulation**: viewport, device presets, DPR, touch and color scheme.
 - **Extensions**: agents can open and use real extension toolbar panels.
@@ -81,6 +82,8 @@ the commit log.
 - Each tool call carries its own session and agent instead of a global "active" one, and calls
   on different tabs run in parallel (per-tab locks; one lock for the clipboard, browser
   settings and extension panels; one island question at a time).
+- Tabs are shared instead of owned: several sessions can be members of a tab (join with
+  `request_tab`), and `tab_work` keeps only task notes; the request queue and handoffs are gone.
 
 ### 2026-11-18
 
