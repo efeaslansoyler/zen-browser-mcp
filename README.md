@@ -182,6 +182,12 @@ are not atomic. These checks apply to computer clicks, not programmatic JavaScri
   Logins and 2FA codes are yours to type: Claude hands the step over and waits for **Done**, so
   your credentials never pass through it
 - page dialogs (`alert`, `confirm`) show up there too
+- several agents at once stay on one line: it shows one of them (the latest to act) with
+  **◀ ▶** and every agent's icon; click an icon or an arrow to keep the line on that agent. An
+  agent holding its tab shows a lock and the time left; hover for the reason and **Remove hold**
+- questions from several agents are cards: **◀ 1/2 ▶** goes through them and you answer each
+  on its own. A new question never replaces the card you're reading; a dot on **▶** tells you
+  it came
 
 ### Handing over a tab
 

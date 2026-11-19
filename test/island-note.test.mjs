@@ -9,7 +9,14 @@ test("shared island permission rejects with denial notes, records approval notes
   const context = bridgeContext({
     guard: (promise) => promise,
     notifyAsk: () => false,
-    island: { ask: () => answer(), askEnded: () => ended++, setAgent() {} },
+    island: {
+      ask: () => {
+        answer();
+        return 1; // the card's id
+      },
+      askEnded: () => ended++,
+      setAgent() {},
+    },
     cancelAsk() {},
   });
   const browser = {};

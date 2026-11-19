@@ -82,6 +82,9 @@ the commit log.
 - Each tool call carries its own session and agent instead of a global "active" one, and calls
   on different tabs run in parallel (per-tab locks; one lock for the clipboard, browser
   settings and extension panels; one island question at a time).
+- The island shows several agents on one line (◀ their icons ▶) and their questions as cards
+  that don't replace the one you're reading; a finished agent's line goes on its own, so no
+  stale status stays behind.
 - Tabs are shared instead of owned: several sessions can be members of a tab (join with
   `request_tab`), and `tab_work` keeps only task notes; the request queue and handoffs are gone.
 - In a shared tab, a call's result says what the other members did since the caller's last

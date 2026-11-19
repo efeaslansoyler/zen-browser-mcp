@@ -186,6 +186,12 @@ alanı değişikliklerine uygulanmaz.
   Giriş bilgilerini ve 2FA kodlarını sen yazarsın: Claude adımı sana bırakır ve **Bitti**'yi
   bekler, yani bilgilerin ondan hiç geçmez
 - sayfa diyalogları (`alert`, `confirm`) da orada görünür
+- aynı anda çalışan ajanlar tek satırda kalır: satır birini gösterir (en son işlem yapanı),
+  yanında **◀ ▶** ve bütün ajanların simgeleri; bir simgeye veya oka tıklayınca satır o ajanda
+  kalır. Sekmesini tutan ajanda kilit ve kalan süre görünür; üzerine gelince gerekçe ve
+  **Tutmayı kaldır**
+- birden fazla ajanın soruları kart olur: **◀ 1/2 ▶** ile aralarında gezinip her birini ayrı
+  cevaplarsın. Yeni soru okuduğun kartın yerine geçmez; **▶** üzerindeki nokta geldiğini söyler
 
 ### Sekme vermek
 

@@ -226,19 +226,17 @@ function logError(where, e) {
       // The agent the island and menus show: the one that made the latest tool call. Never the
       // identity of a call; each call carries its own (see ToolRunner.sys.mjs).
       lastAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
-      locks: new Locks(), // per-tab, exclusive and island locks (ToolRunner.sys.mjs)
+      locks: new Locks(), // per-tab, exclusive and recording locks (ToolRunner.sys.mjs)
       tabActivity: new TabActivity(), // what each session did in shared tabs (meanwhile)
       calls: new Set(), // running tool calls: Cancellation scopes with session, agent and tabs
       stopGeneration: 0,
-      activeCalls: 0, // running tool calls that show the island
       island: null,
       shuttingDown: false,
 
       setLastAgent(theme) {
         ctx.lastAgent = theme;
         globalThis.zenMcpActiveAgent = { id: theme.id, name: theme.name };
-        // a question on the island keeps the agent that asks it (Control.islandTurn)
-        if (!ctx.locks.busy("island")) ctx.island?.setAgent(theme);
+        ctx.island?.setAgent(theme); // only where no agent of its own applies (cards and rows have theirs)
       },
 
       // The tool call working in this tab or in its extension popup. Helpers that get a browser
@@ -767,6 +765,11 @@ function logError(where, e) {
           selectTarget: (target) => ctx.picks.selectTarget(target),
           cancelPick: () => ctx.picks.end(),
           toggleMode: () => ctx.toggleMode(),
+          holdOf: (browser) => {
+            const hold = ctx.holdOf(browser.browserId);
+            return hold ? { session: hold.session, ...ctx.describeHold(browser.browserId, hold, null) } : null;
+          },
+          releaseHold: (browser) => ctx.access.release(browser.browserId),
         },
         { setTimeout, clearTimeout },
       );

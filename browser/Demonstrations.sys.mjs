@@ -125,15 +125,52 @@ export function demonstrationTools(ctx) {
       const browser = ctx.browserFor(call, tabId);
       if (typeof message !== "string" || !message.trim()) throw new Error("message must say what to show.");
       timeout = Math.min(Math.max(Number(timeout) || 900, 30), MAX_SHOW_TIMEOUT);
-      const result = await ctx.islandTurn(call, () =>
-        demonstrate(ctx, browser, {
+      // One recording at a time (the user shows one thing at once): a second one waits as a card
+      // the user can cancel.
+      const busy = ctx.locks.busy("recording");
+      const turn = ctx.locks.acquire(["recording"]);
+      let result;
+      try {
+        if (busy) {
+          const { L } = ctx;
+          const key = {};
+          const card = ctx.island?.ask(
+            browser,
+            `${ctx.hostOf(browser)} — ${L("waits to record", "kayıt için bekliyor")}`,
+            L(
+              `${message}\n\nAnother recording is running; this one starts when it ends.`,
+              `${message}\n\nŞu an başka bir kayıt sürüyor; bu kayıt o bitince başlayacak.`,
+            ),
+            false,
+            {},
+            [],
+            { key, agent: call.agent },
+          );
+          const gaveUp = ctx.waitIslandAnswer(call, timeout, key);
+          let first;
+          try {
+            first = await Promise.race([turn.ready.then(() => "ready"), gaveUp]);
+          } finally {
+            if (card != null) ctx.island?.askEnded(card);
+            ctx.tabRequests.get(key)?.("replaced"); // ends the card's wait
+          }
+          if (first !== "ready")
+            return text(
+              first === "timeout"
+                ? `The user did not show it within ${timeout} s.`
+                : "The user cancelled; nothing was saved.",
+            );
+        } else await ctx.guard(turn.ready, call);
+        result = await demonstrate(ctx, browser, {
           message,
           name,
           timeout,
           wait: (seconds) => ctx.waitIslandAnswer(call, seconds, browser),
           agent: call.agent,
-        }),
-      );
+        });
+      } finally {
+        turn.release();
+      }
       if (result.status === "timeout") return text(`The user did not finish within ${timeout} s; nothing was saved.`);
       if (result.status === "cancelled") return text("The user cancelled; nothing was saved.");
       if (result.status === "empty") return text("The user finished without doing any steps; nothing was saved.");
@@ -220,8 +257,8 @@ export class Demonstrations {
       if (status === "missing") this.env.copy(content);
       notice = L(`Saved; ${ctx.sentNotice(status, target)}`, `Kaydedildi; ${ctx.sentNotice(status, target)}`);
     }
-    ctx.island?.working(browser, notice);
-    ctx.island?.idle();
+    ctx.island?.working(browser, notice, { session: "recording-notice", agent: ctx.lastAgent });
+    ctx.island?.finished("recording-notice");
   }
 
   // "Record steps for an agent…" in the page context menu (top frame of web pages)

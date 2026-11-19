@@ -62,7 +62,6 @@ export function bridgeContext(fakes = {}) {
     locks: new Locks(),
     tabActivity: new TabActivity(),
     stopGeneration: 0,
-    activeCalls: 0,
     island: null,
     setLastAgent(theme) {
       ctx.lastAgent = theme;

@@ -1,7 +1,12 @@
 // The island: a pill at the top center of Zen windows, over the page (like Dynamic Island).
-// It shows what the agent is doing and holds the Stop/Resume button; when the agent needs
-// the user (ask_user) or the page opens a dialog, it expands with the message and "Go to
-// tab". Visible in compact mode too. Hidden when idle.
+// It shows what the agents are doing and holds the Stop/Resume button; when an agent needs
+// the user (ask_user, a permission) or the page opens a dialog, it expands with the message
+// and "Go to tab". Visible in compact mode too. Hidden when idle.
+//
+// Several agents at once stay on one line: the row shows one of them (the latest to act, at
+// most every SWITCH_EVERY ms, or the one the user picked with ◀ ▶ or its icon) and the icons
+// of all of them. Questions are cards: ◀ n/m ▶ goes through them, and a new question never
+// replaces the card the user is reading (a dot on ▶ tells it came).
 //
 // View only: stopping, going to the tab, cancelling and the like are done by callbacks from
 // main.js.
@@ -20,6 +25,10 @@ const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
 const PREVIEW_WIDTH = 340; // live preview width (CSS px)
 const PREVIEW_EVERY = 400; // ms, ~2,5 kare/sn
+const SWITCH_EVERY = 1500; // ms: the agent row follows the latest agent at most this often
+const RECENT = 1200; // ms an agent's icon glows after it acted
+const UNPIN_AFTER = 5000; // ms after the mouse leaves before the row follows the latest agent again
+const MAX_ICONS = 5;
 
 // spinning star: the "working" sign
 const SPARK =
@@ -72,6 +81,97 @@ const CSS = `
       height: 34px;
       padding: 0 5px 0 11px;
     }
+    /* working: the agents' row is the island; asking: it sits under the card, smaller */
+    &[state="working"] .main { display: none; }
+    & .workers { display: none; }
+    &[state="working"] .workers { display: flex; }
+    &[state="ask"] .workers[busy] {
+      display: flex;
+      height: 30px;
+      margin: 0 6px;
+      padding-left: 5px;
+      font-size: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    & .w-icon {
+      flex: none;
+      width: 15px;
+      height: 15px;
+      background: center / contain no-repeat;
+    }
+    & .pager {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: none;
+      &[hidden] { display: none; }
+    }
+    & .pager button.arr {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      font-size: 9px;
+      &[disabled] { opacity: 0.3; cursor: default; }
+    }
+    & button.av {
+      position: relative;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.07) center / 11px no-repeat;
+      opacity: 0.55;
+      &[on] { opacity: 1; box-shadow: 0 0 0 1.5px var(--c); }
+      &[recent] { opacity: 1; box-shadow: 0 0 6px 1px var(--c); }
+      &[locked]::after { content: "🔒"; position: absolute; right: -4px; bottom: -4px; font-size: 8px; }
+    }
+    & .more, & .count {
+      flex: none;
+      font-size: 11px;
+      opacity: 0.7;
+      padding: 0 3px;
+    }
+    & .count { display: flex; align-items: center; gap: 4px; }
+    & .mini {
+      width: 11px;
+      height: 11px;
+      background: center / contain no-repeat;
+      opacity: 0.8;
+    }
+    /* a question came while the user reads another card */
+    & button.arr[unseen] { position: relative; }
+    & button.arr[unseen]::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ff6b6b;
+      box-shadow: 0 0 0 2px rgba(14, 14, 14, 0.94);
+    }
+    & .count[unseen] { animation: zen-mcp-blink 0.6s ease-in-out 3; }
+    /* tab_work hold of the agent shown: a lock and the time left; on hover why, and Remove hold */
+    & .lock {
+      flex: none;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+      &[hidden] { display: none; }
+    }
+    & .holdline {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px 9px 34px;
+      font-size: 11.5px;
+      & span { opacity: 0.8; }
+      & button { margin-left: auto; height: 22px; font-size: 11px; }
+    }
+    &[previewing][state="working"] .holdline[hold] { display: flex; }
 
     & .spark {
       flex: none;
@@ -137,7 +237,7 @@ const CSS = `
       }
     }
 
-    /* mode: "auto" / "ask"; toggles on click */
+    /* mode: "auto" / "ask"; toggles on click (on the agents' row) */
     & .mode {
       padding: 0 9px;
       background: none;
@@ -148,7 +248,6 @@ const CSS = `
       &:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
       &[mode="ask"] { opacity: 0.9; color: var(--zen-agent-accent, #e8a58e); }
     }
-    &:not([state="working"]) .mode { display: none; }
 
     /* stop: a small round ■; once stopped, a colored "Resume" */
     & .stop {
@@ -174,7 +273,7 @@ const CSS = `
       &::before { display: none; }
       &:hover { background: var(--zen-agent-hover, #e08667); }
     }
-    &:is([state="ask"], [state="dialog"], [state="picking"], [state="compose"], [state="sent"]) .stop { display: none; }
+    &:is([state="ask"], [state="dialog"], [state="picking"], [state="compose"], [state="sent"]) .main .stop { display: none; }
     &:is([state="picking"], [state="compose"], [state="sent"]) .spark { animation: none; }
 
     & .hint {
@@ -279,6 +378,10 @@ ${REVIEW_CSS}
     50% { opacity: 0.45; }
   }
 
+  @keyframes zen-mcp-blink {
+    50% { opacity: 0.25; }
+  }
+
   @keyframes zen-mcp-spin {
     to { rotate: 1turn; }
   }
@@ -295,30 +398,42 @@ const isPickKey = (event) =>
 const SENT_FOR = 2500;
 
 export class Island {
-  #agent = agentTheme({ id: "claude" });
+  #agent = agentTheme({ id: "claude" }); // shown when no agent of its own applies (stopped, recording)
   #windows = new Map(); // window → DOM parts and listeners
   #sheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(CSS));
-  #state = "hidden"; // hidden | working | ask | dialog | stopped | recording | review
+  // hidden | stopped | recording | review | dialog; "working" and "ask" follow from the agents
+  // and the cards (see #stateNow)
+  #state = "hidden";
   #text = "";
   #message = "";
-  #askDone = false; // ask_user wait: "done" → OK on the island
-  #askLabels = {}; // { ok, cancel }: button labels (request_tab: Allow / Deny)
-  #askOptions = []; // ask_user options: answer buttons that replace OK
-  #browser = null; // the tab of the latest action (WeakRef)
-  #hideTimer = null;
+  #browser = null; // the tab of a dialog, recording or review (WeakRef)
+  // agents at work: session → { session, agent, browser (WeakRef), text, at, ending (timer) }
+  #workers = new Map();
+  #shownWorker = null; // the session the agents' row shows
+  #switchedAt = 0;
+  #pinned = false; // the user picked an agent: the row stays on it
+  #hovering = false;
+  #unpinTimer = null;
+  #renderTimer = null;
+  // questions: { id, key, browser (WeakRef | null), text, message, done, labels, options, agent }
+  #cards = [];
+  #nextCard = 1;
+  #shownCard = null; // id of the card on screen
+  #unseen = false; // a card came while the user read another one
   // The user's pick goes over the agent's state; afterwards the island returns to it:
   // { mode: "picking" | "compose" | "sent", browser (WeakRef), label, target, text }
   #pick = null;
   #pickTimer = null;
   #fresh = false; // recording, no step yet: the message stays open
   #review = null; // { model, version }: the review panel after a recording
-  #mode = "auto"; // "auto" | "ask"
+  #mode = "auto"; // "auto" | "ask" | "custom"
   #actions;
   #setTimeout;
   #clearTimeout;
 
-  // actions: { stop(), resume(), goTo(browser), answer(browser, "done" | "cancelled", note, choice?),
-  //            pick(win), send(note), cancelPick(), toggleMode() }
+  // actions: { stop(), resume(), goTo(browser), answer(key, "done" | "cancelled", note, choice?),
+  //            pick(win), send(note), cancelPick(), toggleMode(), holdOf?(browser) → { session,
+  //            reason, endsIn, noWorkaround } | null, releaseHold?(browser) }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
     this.#setTimeout = setTimeout;
@@ -339,7 +454,8 @@ export class Island {
     const el = node("div");
     el.id = ID;
     el.hidden = true;
-    const row = node("div", "row");
+    // the main row: a question card's head, a dialog, a recording, the user's pick, stopped
+    const row = node("div", "row main");
     const recdot = node("span", "recdot");
     const spark = node("span", "spark");
     spark.title = "Claude";
@@ -349,13 +465,17 @@ export class Island {
     const text = node("span", "action");
     const hint = node("span", "hint");
     info.append(favicon, host, text, hint);
-    const mode = node("button", "mode");
-    mode.addEventListener("click", () => this.#actions.toggleMode());
     const stop = node("button", "stop");
     // show_me: the recording's own buttons stay in the one-line island
     const recCancel = node("button", "rec-button", L("Cancel", "Vazgeç"));
     const recFinish = node("button", "rec-button primary", L("Finish", "Bitir"));
-    row.append(recdot, spark, info, mode, recCancel, recFinish, stop);
+    // the question cards: ◀ n/m ▶
+    const cardPager = node("span", "pager");
+    const cardPrev = node("button", "arr", "◀");
+    const cardCount = node("span", "count");
+    const cardNext = node("button", "arr", "▶");
+    cardPager.append(cardPrev, cardCount, cardNext);
+    row.append(recdot, spark, info, cardPager, recCancel, recFinish, stop);
     const detail = node("div", "detail");
     const message = node("div", "message");
     const buttons = node("div", "buttons");
@@ -370,6 +490,28 @@ export class Island {
     answerNote.maxLength = 2000;
     const choices = node("div", "choices");
     detail.append(message, choices, answerNote, buttons);
+    // the agents at work: one of them, ◀ their icons ▶, the mode and Stop
+    const workers = node("div", "row workers");
+    const wIcon = node("span", "w-icon");
+    const wInfo = node("span", "info");
+    const wFavicon = node("img", "favicon");
+    const wHost = node("span", "host");
+    const wText = node("span", "action");
+    wInfo.append(wFavicon, wHost, wText);
+    const lock = node("span", "lock");
+    const pager = node("span", "pager");
+    const prev = node("button", "arr", "◀");
+    const icons = node("span", "pager");
+    const next = node("button", "arr", "▶");
+    pager.append(prev, icons, next);
+    const mode = node("button", "mode");
+    mode.addEventListener("click", () => this.#actions.toggleMode());
+    const wStop = node("button", "stop");
+    workers.append(wIcon, wInfo, lock, pager, mode, wStop);
+    const holdline = node("div", "holdline");
+    const holdText = node("span");
+    const removeHold = node("button", "", L("Remove hold", "Tutmayı kaldır"));
+    holdline.append(holdText, removeHold);
     const preview = node("div", "preview");
     preview.title = L("Go to tab", "Sekmeye git");
     const canvas = node("canvas");
@@ -393,7 +535,7 @@ export class Island {
     footer.append(target, discard, send);
     compose.append(note, footer);
     const reviewHost = node("div", "review-host");
-    el.append(row, detail, reviewHost, compose, preview);
+    el.append(row, detail, workers, holdline, reviewHost, compose, preview);
     doc.documentElement.append(el);
 
     const submit = () => {
@@ -421,32 +563,73 @@ export class Island {
       }
     });
 
-    const goToTab = () => {
-      if (this.#pick) return;
-      const browser = this.#browser?.deref();
-      if (browser) this.#actions.goTo(browser);
+    const goTo = (browser) => {
+      if (!this.#pick && browser) this.#actions.goTo(browser);
     };
-    info.addEventListener("click", goToTab);
-    goto.addEventListener("click", goToTab);
-    preview.addEventListener("click", goToTab);
-    el.addEventListener("mouseenter", () => this.#startPreview(win));
-    el.addEventListener("mouseleave", () => this.#stopPreview(win));
-    // A question without a tab answers with browser null; a tab that's gone answers nothing.
+    // the main row and Go to tab: the card's tab (or the dialog's, the recording's)
+    const mainBrowser = () => {
+      const card = this.#card();
+      return (card && this.#stateNow() === "ask" ? card.browser : this.#browser)?.deref();
+    };
+    info.addEventListener("click", () => goTo(mainBrowser()));
+    goto.addEventListener("click", () => goTo(mainBrowser()));
+    wInfo.addEventListener("click", () => goTo(this.#worker()?.browser.deref()));
+    preview.addEventListener("click", () => goTo(this.#previewBrowser()));
+    el.addEventListener("mouseenter", () => {
+      this.#hovering = true;
+      this.#clearTimeout(this.#unpinTimer);
+      this.#startPreview(win);
+    });
+    el.addEventListener("mouseleave", () => {
+      this.#hovering = false;
+      this.#stopPreview(win);
+      this.#clearTimeout(this.#unpinTimer);
+      this.#unpinTimer = this.#setTimeout(() => {
+        this.#pinned = false;
+        this.#render();
+      }, UNPIN_AFTER);
+    });
+    // ◀ ▶ and the icons pick the agent the row shows
+    prev.addEventListener("click", () => this.#stepWorker(-1));
+    next.addEventListener("click", () => this.#stepWorker(1));
+    removeHold.addEventListener("click", () => {
+      const browser = this.#worker()?.browser.deref();
+      if (browser) this.#actions.releaseHold?.(browser);
+      this.#render();
+    });
+    cardPrev.addEventListener("click", () => this.#stepCard(-1));
+    cardNext.addEventListener("click", () => this.#stepCard(1));
+    // ←/→ go through the cards while the island has focus (never while typing a note)
+    el.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key) || this.#stateNow() !== "ask") return;
+      if (["TEXTAREA", "INPUT", "SELECT"].includes(event.target?.tagName?.toUpperCase())) return;
+      event.preventDefault();
+      this.#stepCard(event.key === "ArrowLeft" ? -1 : 1);
+    });
+    // The answer goes to the card on screen; a question without a tab answers with its key.
     const answer =
       (result, ...choice) =>
       () => {
-        const browser = this.#browser ? this.#browser.deref() : null;
-        if (browser !== undefined) this.#actions.answer(browser, result, answerNote.value.trim(), ...choice);
+        const card = this.#card();
+        if (!card || this.#stateNow() !== "ask") return;
+        if (card.browser && !card.browser.deref()) return; // its tab is gone
+        this.#actions.answer(card.key, result, answerNote.value.trim(), ...choice);
       };
+    const recordingAnswer = (result) => () => {
+      const browser = this.#browser?.deref();
+      if (browser) this.#actions.answer(browser, result, "");
+    };
     cancel.addEventListener("click", answer("cancelled"));
     ok.addEventListener("click", answer("done"));
-    recCancel.addEventListener("click", answer("cancelled"));
-    recFinish.addEventListener("click", answer("done"));
-    stop.addEventListener("click", () => {
+    recCancel.addEventListener("click", recordingAnswer("cancelled"));
+    recFinish.addEventListener("click", recordingAnswer("done"));
+    const onStop = () => {
       if (this.#state === "stopped") this.#actions.resume();
       else this.#actions.stop();
-    });
-    // Ctrl+Shift+Esc: stop the agent (also while the page has focus; the browser sees keys first)
+    };
+    stop.addEventListener("click", onStop);
+    wStop.addEventListener("click", onStop);
+    // Ctrl+Shift+Esc: stop the agents (also while the page has focus; the browser sees keys first)
     // Ctrl+Shift+F: pick elements (pressing it again while picking cancels)
     const onKey = (event) => {
       if (isPickKey(event)) {
@@ -469,6 +652,7 @@ export class Island {
 
     this.#windows.set(win, {
       el,
+      spark,
       favicon,
       host,
       text,
@@ -483,18 +667,36 @@ export class Island {
       target,
       send,
       canvas,
+      cardPager,
+      cardPrev,
+      cardCount,
+      cardNext,
+      workers,
+      wIcon,
+      wFavicon,
+      wHost,
+      wText,
+      wStop,
+      lock,
+      pager,
+      prev,
+      icons,
+      next,
+      holdline,
+      holdText,
       previewing: false,
       onKey,
       onResize,
       onTabSelect,
       answerNote,
       choices,
+      choicesFor: undefined,
+      noteFor: undefined,
       answer,
       reviewHost,
       reviewView: null,
       reviewVersion: -1,
     });
-    this.#fillChoices(win);
     this.#render();
   }
 
@@ -513,66 +715,178 @@ export class Island {
   }
 
   destroy() {
-    this.#clearTimeout(this.#hideTimer);
     this.#clearTimeout(this.#pickTimer);
+    this.#clearTimeout(this.#unpinTimer);
+    this.#clearTimeout(this.#renderTimer);
+    for (const worker of this.#workers.values()) this.#clearTimeout(worker.ending);
     for (const win of [...this.#windows.keys()]) this.detach(win);
   }
 
   get state() {
-    return this.#state;
+    return this.#pick ? this.#pick.mode : this.#stateNow();
   }
 
+  #stateNow() {
+    if (["stopped", "recording", "review", "dialog"].includes(this.#state)) return this.#state;
+    if (this.#cards.length) return "ask";
+    return this.#workers.size ? "working" : "hidden";
+  }
+
+  // The agent shown when no agent of its own applies (a dialog, stopped, a recording).
   setAgent(agent) {
     this.#agent = agentTheme(agent);
     this.#render();
   }
 
-  // The agent is working in a tab; stays visible while the action runs.
-  working(browser, text) {
-    if (["stopped", "ask", "recording", "review"].includes(this.#state)) return;
-    this.#clearTimeout(this.#hideTimer);
-    this.#state = "working";
-    this.#text = text;
-    this.#browser = new WeakRef(browser);
+  // ---- agents at work ----
+
+  // An agent (session) is doing something in a tab; it stays in the row until finished().
+  working(browser, text, { session = "", agent = this.#agent } = {}) {
+    if (this.#state === "stopped") return;
+    const worker = this.#workers.get(session) ?? { session };
+    this.#clearTimeout(worker.ending);
+    Object.assign(worker, { agent: agentTheme(agent), browser: new WeakRef(browser), text, at: Date.now() });
+    worker.ending = null;
+    this.#workers.set(session, worker);
     this.#render();
   }
 
-  // No action running: hide after HIDE_AFTER (cancelled if a new action arrives).
-  idle() {
-    if (this.#state !== "working") return;
-    this.#clearTimeout(this.#hideTimer);
-    this.#hideTimer = this.#setTimeout(() => this.#hide(), HIDE_AFTER);
+  // The agent's call ended: its row goes after HIDE_AFTER unless it acts again (not while the
+  // user watches its preview).
+  finished(session = "") {
+    const worker = this.#workers.get(session);
+    if (!worker) return;
+    this.#clearTimeout(worker.ending);
+    const end = () => {
+      if (this.#hovering && this.#shownWorker === session) {
+        worker.ending = this.#setTimeout(end, HIDE_AFTER);
+        return;
+      }
+      this.#workers.delete(session);
+      this.#render();
+    };
+    worker.ending = this.#setTimeout(end, HIDE_AFTER);
   }
 
-  // The agent needs the user: expand and show the message until askEnded.
+  // The worker the row shows: the one the user picked, else the latest to act (switching at most
+  // every SWITCH_EVERY ms so several busy agents don't flicker).
+  #worker() {
+    const workers = [...this.#workers.values()];
+    if (!workers.length) return null;
+    let shown = this.#workers.get(this.#shownWorker);
+    if (shown && (this.#pinned || this.#hovering)) return shown;
+    const latest = workers.reduce((a, b) => (b.at > a.at ? b : a));
+    const wait = SWITCH_EVERY - (Date.now() - this.#switchedAt);
+    if (!shown || (latest !== shown && wait <= 0)) {
+      shown = latest;
+      this.#shownWorker = latest.session;
+      this.#switchedAt = Date.now();
+    } else if (latest !== shown) this.#later(wait);
+    return shown;
+  }
+
+  #stepWorker(step) {
+    const workers = [...this.#workers.values()];
+    if (workers.length < 2) return;
+    const i = workers.indexOf(this.#worker());
+    this.#selectWorker(workers[(i + step + workers.length) % workers.length].session);
+  }
+
+  #selectWorker(session) {
+    this.#shownWorker = session;
+    this.#pinned = true;
+    this.#switchedAt = Date.now();
+    this.#render();
+  }
+
+  // a render after ms (an icon stops glowing, the row may follow the latest agent)
+  #later(ms) {
+    if (this.#renderTimer) return;
+    this.#renderTimer = this.#setTimeout(
+      () => {
+        this.#renderTimer = null;
+        this.#render();
+      },
+      Math.max(ms, 50),
+    );
+  }
+
+  // ---- questions ----
+
+  // An agent needs the user: a card with the message until askEnded(id). Returns the card's id.
   // done: an OK button (wait: "done"); otherwise it ends when the user clicks the element.
   // labels: button labels, e.g. { ok: "Allow", cancel: "Deny" }
-  // options: answer buttons instead of OK; browser null: a question not tied to a tab,
-  // shown in every window
-  ask(browser, text, message, done, labels = {}, options = []) {
-    if (this.#state === "stopped") return;
-    this.#clearTimeout(this.#hideTimer);
-    this.#state = "ask";
-    this.#text = text;
-    this.#message = message;
-    this.#askDone = done;
-    this.#askLabels = labels;
-    this.#askOptions = options ?? [];
-    for (const parts of this.#windows.values()) parts.answerNote.value = "";
-    for (const win of this.#windows.keys()) this.#fillChoices(win);
+  // options: answer buttons instead of OK; browser null: a question not tied to a tab, shown in
+  // every window. key: what the answer is sent with (default the browser); agent: who asks.
+  ask(browser, text, message, done, labels = {}, options = [], { key = browser, agent = this.#agent } = {}) {
+    if (this.#state === "stopped") return null;
+    const card = {
+      id: this.#nextCard++,
+      key,
+      browser: browser ? new WeakRef(browser) : null,
+      text,
+      message,
+      done,
+      labels: labels ?? {},
+      options: options ?? [],
+      agent: agentTheme(agent),
+    };
+    this.#cards.push(card);
+    if (this.#card() !== card) this.#unseen = true;
     // don't wait for the "sent" notice; a running pick or note stays on top
     if (this.#pick?.mode === "sent") {
       this.#clearTimeout(this.#pickTimer);
       this.#pick = null;
     }
-    this.#browser = browser ? new WeakRef(browser) : null;
+    this.#render();
+    return card.id;
+  }
+
+  // The card on screen: the one the user reads, else one for the tab they're on, else the oldest.
+  #card() {
+    if (!this.#cards.length) return null;
+    let card = this.#cards.find((c) => c.id === this.#shownCard);
+    if (!card) {
+      const selected = (c) => {
+        const browser = c.browser?.deref();
+        return browser && browser.ownerDocument?.defaultView?.gBrowser?.selectedBrowser === browser;
+      };
+      card = this.#cards.find(selected) ?? this.#cards[0];
+      this.#shownCard = card.id;
+    }
+    return card;
+  }
+
+  #stepCard(step) {
+    if (this.#cards.length < 2) return;
+    const i = this.#cards.indexOf(this.#card());
+    const next = i + step;
+    if (next < 0 || next >= this.#cards.length) return;
+    this.#shownCard = this.#cards[next].id;
+    this.#unseen = false;
     this.#render();
   }
 
-  #fillChoices(win) {
+  // The question's card goes (answered, timed out, cancelled). Without an id: the recording or
+  // review of show_me ends.
+  askEnded(id) {
+    if (id == null) return this.#recordingEnded();
+    const before = this.#cards.length;
+    this.#cards = this.#cards.filter((card) => card.id !== id);
+    if (this.#cards.length === before) return;
+    if (this.#shownCard === id) {
+      this.#shownCard = null;
+      this.#unseen = false;
+    }
+    this.#render();
+  }
+
+  #fillChoices(win, card) {
     const parts = this.#windows.get(win);
+    if (parts.choicesFor === card?.id) return;
+    parts.choicesFor = card?.id;
     parts.choices.replaceChildren(
-      ...this.#askOptions.map((option) => {
+      ...(card?.options ?? []).map((option) => {
         const button = win.document.createElementNS(XHTML, "button");
         button.className = "choice";
         button.textContent = option;
@@ -582,23 +896,10 @@ export class Island {
     );
   }
 
-  // A running ask's title changes (show_me: "Recording · 3 steps").
-  askProgress(text) {
-    if (this.#state !== "ask") return;
-    this.#text = text;
-    this.#render();
-  }
-
-  #clearChoices() {
-    this.#askOptions = [];
-    for (const win of this.#windows.keys()) this.#fillChoices(win);
-  }
-
   // show_me: the one-line recording island; text is "Recording · 3 steps". fresh: no step
   // yet, so the agent's message stays open.
   recording(browser, text, message) {
     if (this.#state === "stopped") return;
-    this.#clearTimeout(this.#hideTimer);
     this.#state = "recording";
     this.#text = text;
     this.#message = message;
@@ -618,7 +919,6 @@ export class Island {
   // answer like ask_user's buttons: "done" with the model's result as the choice.
   review(browser, text, model) {
     if (this.#state === "stopped") return;
-    this.#clearTimeout(this.#hideTimer);
     this.#state = "review";
     this.#text = text;
     this.#review = { model, version: 0 };
@@ -664,25 +964,16 @@ export class Island {
     if (first || mode !== review.model.mode) parts.reviewView.focus?.();
   }
 
-  askEnded() {
-    if (!["ask", "recording", "review"].includes(this.#state)) return;
+  #recordingEnded() {
+    if (!["recording", "review"].includes(this.#state)) return;
     this.#review = null;
-    this.#clearChoices();
-    // a tab-less question leaves no tab to show "working" for
-    if (!this.#browser) {
-      this.#state = "hidden";
-      this.#render();
-      return;
-    }
-    this.#state = "working";
+    this.#state = "hidden";
     this.#render();
-    this.idle();
   }
 
-  // The page opened alert/confirm/prompt; stays until dialogEnded (or a new action).
+  // The page opened alert/confirm/prompt; stays until dialogEnded (not over a question).
   dialog(browser, text, message) {
-    if (["stopped", "ask", "recording", "review"].includes(this.#state)) return;
-    this.#clearTimeout(this.#hideTimer);
+    if (["stopped", "recording", "review"].includes(this.#state) || this.#cards.length) return;
     this.#state = "dialog";
     this.#text = text;
     this.#message = message;
@@ -692,35 +983,40 @@ export class Island {
 
   dialogEnded() {
     if (this.#state !== "dialog") return;
-    this.#state = "working";
+    this.#state = "hidden";
     this.#render();
-    this.idle();
   }
 
-  // The tab is no longer the agent's (the user took it back): hide if it is shown.
+  // The tab is no longer the agents' (the user took it back): what shows it goes.
   release(browser) {
-    if (this.#state === "stopped" || this.#browser?.deref() !== browser) return;
-    this.#clearTimeout(this.#hideTimer);
-    this.#state = "hidden";
-    this.#browser = null;
+    for (const [session, worker] of this.#workers) {
+      if (worker.browser.deref() !== browser) continue;
+      this.#clearTimeout(worker.ending);
+      this.#workers.delete(session);
+    }
+    if (this.#state !== "stopped" && this.#browser?.deref() === browser) {
+      this.#state = "hidden";
+      this.#browser = null;
+    }
     this.#render();
   }
 
   stopped() {
-    this.#clearTimeout(this.#hideTimer);
     this.#state = "stopped";
     this.#text = "";
     this.#review = null;
-    this.#clearChoices();
+    for (const worker of this.#workers.values()) this.#clearTimeout(worker.ending);
+    this.#workers.clear();
+    // the calls behind the cards are cancelled; their answers no longer matter
+    this.#cards = [];
+    this.#shownCard = null;
+    this.#unseen = false;
     this.#render();
   }
 
   resumed() {
-    this.#state = "working";
-    this.#text = L("resuming", "devam ediyor");
+    this.#state = "hidden";
     this.#render();
-    this.#clearTimeout(this.#hideTimer);
-    this.#hideTimer = this.#setTimeout(() => this.#hide(), 2000);
   }
 
   // The permission mode: ask (asks before each action) | auto (asks before risky ones) | custom
@@ -784,23 +1080,32 @@ export class Island {
     this.#render();
   }
 
-  #hide() {
-    if (this.#state !== "working") return;
-    // don't vanish while the user watches the preview; idle() counts again when the mouse leaves
-    if ([...this.#windows.values()].some((p) => p.previewing)) return;
-    this.#state = "hidden";
-    this.#render();
+  // The tab the main row is about: the pick's, the card's, the dialog's or the recording's.
+  #mainBrowser(state) {
+    if (this.#pick) return this.#pick.browser.deref();
+    if (state === "ask") return this.#card()?.browser?.deref() ?? null;
+    return this.#browser?.deref() ?? null;
   }
 
-  // In every window while stopped; otherwise only in the window of the agent's tab
+  #previewBrowser() {
+    return this.#stateNow() === "working" ? this.#worker()?.browser.deref() : this.#browser?.deref();
+  }
+
+  // In every window while stopped and for a question without a tab; otherwise only in the
+  // window of the tab it is about.
   #render() {
     const pick = this.#pick;
-    const browser = (pick ? pick.browser : this.#browser)?.deref();
-    const owner = browser?.ownerDocument?.defaultView;
-    const state = pick ? pick.mode : this.#state;
+    const state = pick ? pick.mode : this.#stateNow();
     const stopped = state === "stopped";
+    const card = state === "ask" ? this.#card() : null;
+    const worker = this.#worker();
+    const browser = this.#mainBrowser(state);
+    const shownBrowser = state === "working" ? worker?.browser.deref() : browser;
+    const owner = shownBrowser?.ownerDocument?.defaultView;
+    const theme = agentTheme(pick ? pick.agent : card ? card.agent : state === "working" ? worker.agent : this.#agent);
     // "example.com — clicking": the site dimmed, the action prominent; the tab's favicon first
-    let [siteName, action] = this.#text.includes(" — ") ? this.#text.split(" — ") : ["", this.#text];
+    const split = (text) => (text.includes(" — ") ? text.split(" — ") : ["", text]);
+    let [siteName, action] = split(card ? card.text : this.#text);
     let hintText = "";
     if (pick) {
       siteName = "";
@@ -814,41 +1119,37 @@ export class Island {
         action = pick.label;
       } else action = pick.text;
     }
-    let icon = null;
-    try {
-      icon = owner?.gBrowser.getIcon(owner.gBrowser.getTabForBrowser(browser));
-    } catch {}
+    const iconOf = (b) => {
+      try {
+        const win = b?.ownerDocument?.defaultView;
+        return win?.gBrowser.getIcon(win.gBrowser.getTabForBrowser(b)) ?? null;
+      } catch {
+        return null;
+      }
+    };
+    const icon = iconOf(browser);
+    const workerBrowser = worker?.browser.deref();
+    const hold = worker && workerBrowser ? this.#actions.holdOf?.(workerBrowser) : null;
+    const workerHolds = hold && hold.session === worker.session ? hold : null;
+    const cardIndex = card ? this.#cards.indexOf(card) : -1;
+    const workers = [...this.#workers.values()];
+    const now = Date.now();
+    if (workers.some((w) => now - w.at < RECENT)) this.#later(RECENT);
+
     for (const [win, parts] of this.#windows) {
-      const { el, favicon, host, text, hint, mode, stop, message, cancel, goto, ok, target } = parts;
-      const theme = applyTheme(el, pick ? pick.agent : this.#agent);
-      const spark = el.querySelector(".spark");
+      const { el, spark, favicon, host, text, hint, stop, message, cancel, goto, ok, target } = parts;
+      applyTheme(el, theme);
       spark.title = theme.name;
       spark.style.background = `url("${agentIcon(theme)}") center / contain no-repeat`;
       spark.style.animation = theme.id === "claude" && !stopped ? "" : "none";
       el.setAttribute("aria-label", theme.name);
-      mode.setAttribute("mode", this.#mode);
-      mode.textContent = { ask: L("ask", "onaylı"), auto: L("auto", "otomatik"), custom: L("custom", "özel") }[
-        this.#mode
-      ];
-      mode.title = {
-        ask: L(
-          `${theme.name} asks before every action. Click to switch mode`,
-          `${theme.name} her işlemde izin istiyor. Mod değiştirmek için tıkla`,
-        ),
-        auto: L(
-          `${theme.name} asks only before risky actions. Click to switch mode`,
-          `${theme.name} yalnızca riskli işlemlerde izin istiyor. Mod değiştirmek için tıkla`,
-        ),
-        custom: L(
-          `${theme.name} follows your permissions.jsonc. Click to switch mode`,
-          `${theme.name} senin permissions.jsonc kurallarına uyuyor. Mod değiştirmek için tıkla`,
-        ),
-      }[this.#mode];
-      const anywhere = state === "ask" && !pick && !this.#browser;
-      const visible = stopped || anywhere || (state !== "hidden" && win === owner);
+      const anywhere = (state === "ask" && !card?.browser) || stopped;
+      const visible = anywhere || (state !== "hidden" && win === owner);
       el.setAttribute("state", state);
       el.toggleAttribute("fresh", state === "recording" && this.#fresh);
       this.#renderReview(win, parts, visible);
+
+      // the main row
       host.textContent = stopped ? "" : siteName;
       text.textContent = stopped
         ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`)
@@ -868,18 +1169,123 @@ export class Island {
       else favicon.removeAttribute("src");
       stop.textContent = stopped ? L("Resume", "Devam et") : "";
       stop.title = stopped ? "" : L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
-      message.textContent = this.#message;
-      parts.answerNote.hidden = state !== "ask";
-      parts.choices.hidden = state !== "ask" || !this.#askOptions.length;
-      // on the agent's tab already, "Go to tab" is pointless; without OK it is the primary button
+
+      // the question card
+      parts.cardPager.hidden = !card || this.#cards.length < 2;
+      if (card) {
+        parts.cardPrev.disabled = cardIndex === 0;
+        parts.cardNext.disabled = cardIndex === this.#cards.length - 1;
+        parts.cardNext.toggleAttribute("unseen", this.#unseen);
+        parts.cardCount.toggleAttribute("unseen", this.#unseen);
+        const others = this.#cards
+          .filter((c) => c !== card)
+          .slice(0, 3)
+          .map((c) => {
+            const mini = win.document.createElementNS(XHTML, "span");
+            mini.className = "mini";
+            mini.title = c.agent.name;
+            mini.style.backgroundImage = `url("${agentIcon(c.agent)}")`;
+            return mini;
+          });
+        parts.cardCount.replaceChildren(`${cardIndex + 1}/${this.#cards.length}`, ...others);
+        if (parts.noteFor !== card.id) {
+          parts.answerNote.value = "";
+          parts.noteFor = card.id;
+        }
+      }
+      this.#fillChoices(win, card);
+      message.textContent = card ? card.message : this.#message;
+      parts.answerNote.hidden = !card;
+      parts.choices.hidden = !card?.options.length;
+      // on the tab already, "Go to tab" is pointless; without OK it is the primary button
       goto.hidden = !browser || win.gBrowser.selectedBrowser === browser;
-      ok.hidden = !(state === "ask" && this.#askDone && !this.#askOptions.length);
-      ok.textContent = this.#askLabels.ok ?? L("OK", "Tamam");
-      cancel.textContent = this.#askLabels.cancel ?? L("Cancel", "Vazgeç");
+      ok.hidden = !(card && card.done && !card.options.length);
+      ok.textContent = card?.labels.ok ?? L("OK", "Tamam");
+      cancel.textContent = card?.labels.cancel ?? L("Cancel", "Vazgeç");
       goto.classList.toggle("primary", ok.hidden);
+
+      // the agents' row
+      this.#renderWorkers(win, parts, worker, workerHolds, workers, now);
       if (visible) this.#place(win);
       el.hidden = !visible;
     }
+  }
+
+  #renderWorkers(win, parts, worker, hold, workers, now) {
+    const { workers: row, wIcon, wFavicon, wHost, wText, wStop, lock, pager, icons, mode, holdline, holdText } = parts;
+    row.toggleAttribute("busy", !!worker);
+    if (!worker) return;
+    const [site, action] = worker.text.includes(" — ") ? worker.text.split(" — ") : ["", worker.text];
+    wIcon.style.backgroundImage = `url("${agentIcon(worker.agent)}")`;
+    wIcon.title = worker.agent.name;
+    wHost.textContent = site;
+    wText.textContent = `${worker.agent.name} · ${action}`;
+    let favicon = null;
+    try {
+      const b = worker.browser.deref();
+      const w = b?.ownerDocument?.defaultView;
+      favicon = w?.gBrowser.getIcon(w.gBrowser.getTabForBrowser(b)) ?? null;
+    } catch {}
+    if (favicon) wFavicon.src = favicon;
+    else wFavicon.removeAttribute("src");
+    lock.hidden = !hold;
+    if (hold) {
+      lock.textContent = `🔒 ${hold.endsIn}`;
+      lock.style.color = worker.agent.accent;
+    }
+    holdline.toggleAttribute("hold", !!hold);
+    if (hold) {
+      const origin = hold.noWorkaround?.replace(/^https?:\/\//, "");
+      const site = origin ? L(` · also blocks ${origin} in other tabs`, ` · ${origin} başka sekmelerde de kapalı`) : "";
+      holdText.textContent = `“${hold.reason}”${site}`;
+    }
+    // ◀ the agents' icons ▶, the one shown ringed; only with more than one agent
+    pager.hidden = workers.length < 2;
+    if (workers.length >= 2) {
+      const shown = workers.slice(0, MAX_ICONS);
+      if (!shown.includes(worker)) shown[MAX_ICONS - 1] = worker;
+      const buttons = shown.map((w) => {
+        const button = win.document.createElementNS(XHTML, "button");
+        button.className = "av";
+        button.title = w.agent.name;
+        button.style.backgroundImage = `url("${agentIcon(w.agent)}")`;
+        button.style.setProperty("--c", w.agent.accent);
+        button.toggleAttribute("on", w === worker);
+        button.toggleAttribute("recent", w !== worker && now - w.at < RECENT);
+        const b = w.browser.deref();
+        const theirs = b ? this.#actions.holdOf?.(b) : null;
+        button.toggleAttribute("locked", theirs?.session === w.session);
+        button.addEventListener("click", () => this.#selectWorker(w.session));
+        return button;
+      });
+      const rest = workers.length - shown.length;
+      if (rest > 0) {
+        const more = win.document.createElementNS(XHTML, "span");
+        more.className = "more";
+        more.textContent = `+${rest}`;
+        buttons.push(more);
+      }
+      icons.replaceChildren(...buttons);
+    }
+    mode.setAttribute("mode", this.#mode);
+    mode.textContent = { ask: L("ask", "onaylı"), auto: L("auto", "otomatik"), custom: L("custom", "özel") }[
+      this.#mode
+    ];
+    mode.title = {
+      ask: L(
+        "Agents ask before every action. Click to switch mode",
+        "Ajanlar her işlemde izin istiyor. Mod değiştirmek için tıkla",
+      ),
+      auto: L(
+        "Agents ask only before risky actions. Click to switch mode",
+        "Ajanlar yalnızca riskli işlemlerde izin istiyor. Mod değiştirmek için tıkla",
+      ),
+      custom: L(
+        "Agents follow your permissions.jsonc. Click to switch mode",
+        "Ajanlar senin permissions.jsonc kurallarına uyuyor. Mod değiştirmek için tıkla",
+      ),
+    }[this.#mode];
+    wStop.title = L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
   }
 
   // ---- live preview ----
@@ -889,7 +1295,7 @@ export class Island {
     if (!parts || parts.previewing) return;
     parts.previewing = true;
     parts.el.setAttribute("previewing", "true");
-    this.#clearTimeout(this.#hideTimer);
+    this.#render();
     this.#previewLoop(parts);
   }
 
@@ -898,13 +1304,13 @@ export class Island {
     if (!parts) return;
     parts.previewing = false;
     parts.el.removeAttribute("previewing");
-    this.idle();
   }
 
-  // A background tab's image comes from drawSnapshot (without selecting the tab)
+  // A background tab's image comes from drawSnapshot (without selecting the tab): the tab of
+  // the agent the row shows.
   async #previewLoop(parts) {
     while (parts.previewing) {
-      const browser = this.#browser?.deref();
+      const browser = this.#previewBrowser();
       const wg = browser?.browsingContext?.currentWindowGlobal;
       if (wg && this.#state !== "stopped") {
         try {

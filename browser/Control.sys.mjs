@@ -46,31 +46,19 @@ export function control(ctx) {
     ctx.island?.resumed();
   }
 
-  // The island shows one agent question at a time: a call waits here for its turn, and the
-  // island shows the asking call's agent until the question ends. Taken last, after tab and
-  // exclusive locks; nothing that holds it takes another lock.
-  async function islandTurn(call, ask) {
-    const turn = ctx.locks.acquire(["island"]);
-    try {
-      await ctx.guard(turn.ready, call);
-      if (call?.agent) ctx.island?.setAgent(call.agent);
-      return await ask();
-    } finally {
-      turn.release();
-    }
-  }
-
   // A yes/no question on the island (tab request, action permission). Returns "done",
   // "timeout", or { status, message } when the user added a note; throws when the user
   // declined with a note.
   function askIsland(call, browser, text, message, labels, timeout = 120) {
-    return islandTurn(call, () => showQuestion(call, browser, text, message, labels, timeout));
+    return showQuestion(call, browser, text, message, labels, timeout);
   }
 
   async function showQuestion(call, browser, text, message, labels, timeout) {
-    if (ctx.tabRequests.has(browser)) throw new Error("A question is already pending in this tab.");
-    const answered = new Promise((resolve) => ctx.tabRequests.set(browser, resolve));
-    ctx.island?.ask(browser, text, message, true, labels);
+    // the answer comes back with this key: the tab, or for a question without one its own token
+    const key = browser ?? {};
+    if (ctx.tabRequests.has(key)) throw new Error("A question is already pending in this tab.");
+    const answered = new Promise((resolve) => ctx.tabRequests.set(key, resolve));
+    const card = ctx.island?.ask(browser, text, message, true, labels, [], { key, agent: call.agent });
     const notified = ctx.notifyAsk(browser, message, call.agent);
     const timer = new ctx.Cancellation();
     try {
@@ -86,14 +74,15 @@ export function control(ctx) {
       return result.status;
     } finally {
       timer.cancel();
-      ctx.tabRequests.delete(browser);
-      ctx.island?.askEnded();
+      ctx.tabRequests.delete(key);
+      if (card != null) ctx.island?.askEnded(card);
       if (notified) ctx.closeAskAlert();
     }
   }
 
-  // The island's OK/Cancel: answers a pending question or ask_user. browser is null for an
-  // ask_user question that isn't tied to a tab; choice is the option button the user pressed.
+  // The island's OK/Cancel: answers a pending question or ask_user. browser is the card's key:
+  // its tab, or a token for a question that isn't tied to a tab; choice is the option button
+  // the user pressed.
   function answerIsland(browser, result, message = "", choice) {
     const note = typeof message === "string" ? message.trim().slice(0, 2000) : "";
     if (note || choice != null)
@@ -184,7 +173,6 @@ export function control(ctx) {
     operationSleep,
     stopClaude,
     resumeClaude,
-    islandTurn,
     askIsland,
     answerIsland,
     cancelAsk,

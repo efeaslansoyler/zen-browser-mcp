@@ -1,8 +1,9 @@
 // Running tool calls: one request per socket connection. Calls on the same tab run in order
 // (a lock per tab, taken on arrival for every tab the call names); calls on different tabs run
 // side by side, and calls without a tab don't wait. Shared browser state takes one more lock
-// (exclusive: clipboard, browser settings, extension panels), and the island shows one question
-// at a time (Control.sys.mjs). Locks are always taken in that order: tabs, exclusive, island.
+// (exclusive: clipboard, browser settings, extension panels); show_me takes the recording lock.
+// Locks are always taken in that order: tabs, exclusive, recording. Questions don't wait: each
+// is a card on the island.
 // runTool checks tab access, site rules and permissions around each call, shows it on the island
 // and logs it.
 //
@@ -43,8 +44,10 @@ export function toolRunner(ctx) {
       // for the history view: stays readable after the session ends
       entry.who = ctx.sessions.get(call.session)?.name;
       entry.doing = ctx.describeAction(tool, args, browser, false);
-      ctx.island?.working(browser, `${ctx.describeAction(tool, args, browser)} · ${call.session.slice(-6)}`);
-      ctx.activeCalls++;
+      ctx.island?.working(browser, `${ctx.describeAction(tool, args, browser)} · ${call.session.slice(-6)}`, {
+        session: call.session,
+        agent: call.agent,
+      });
     }
     const cleanup = tool === "tabs_close_mcp" || (tool === "extensions" && args.action === "close");
     let ran = false;
@@ -92,7 +95,6 @@ export function toolRunner(ctx) {
       entry.error = String(e?.message ?? e).slice(0, 200);
       throw e;
     } finally {
-      if (browser && --ctx.activeCalls === 0) ctx.island?.idle();
       if (tool !== "browser_batch") ctx.logActivity(entry);
       if (browser && ran && !cleanup) noteActivity(call, tool, args);
     }
@@ -234,6 +236,8 @@ export function toolRunner(ctx) {
             call.cancel();
             ctx.calls.delete(call);
             call.exclusive?.release();
+            // its row leaves the island a little later, unless the session works on
+            if (![...ctx.calls].some((other) => other.session === session)) ctx.island?.finished(session);
           }
         };
         let content;

@@ -56,7 +56,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `Control.sys.mjs` | Stop/Resume and island questions (`askIsland`, tab-less `ask_user`, notifications) |
 | `Config.sys.mjs`, `Activity.sys.mjs` | `config.json` and site access checks; island action text and the activity log |
 | `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
-| `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user` and `hand_to_user`, approvals, dialogs, pick note box |
+| `Island.sys.mjs` | The island: the agents at work on one row (one shown, ◀ their icons ▶, hold lock), question cards (`ask` returns a card id, `askEnded(id)`; a new card never replaces the one on screen), Stop/Resume, dialogs, the recording and its review, pick note box |
 | `Agent.sys.mjs` | Agent identity, theme and icon (`assets/`: Claude, Codex, Antigravity, OpenCode, several agents; others a drawn `>_`); shared by Node and Gecko |
 | `TabAccess.sys.mjs` | Which sessions may use which tabs (a tab can have several members), their `tab_work` notes and holds, and membership tickets for queued requests |
 | `TabActivity.sys.mjs` | In shared tabs: which session acted when, and whether it could change the page (for `meanwhile` and `pageChanged`) |
@@ -122,8 +122,9 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   tab don't wait. A call queues on every tab it names when it arrives (a batch on all of its
   tabs), so requests can't wait for each other. The system clipboard, browser settings and
   extension panels take one more lock (`exclusive`), held until the call ends. The island shows
-  one agent question at a time (`islandTurn` in `Control.sys.mjs`), labelled with the agent
-  that asks it. Locks are taken in the order tabs, exclusive, island.
+  agents' questions as cards: they don't wait for each other (a question without a tab gets its
+  own answer key), only `show_me` waits for the recording lock. Locks are taken in the order
+  tabs, exclusive, recording.
 
 ## Permissions
 

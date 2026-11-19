@@ -1,4 +1,5 @@
 import test from "node:test";
+import { Locks } from "../browser/Locks.sys.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -116,7 +117,6 @@ test("the recipes tool deletes only after the user confirms on the island", asyn
     recipes,
     island: { ask: (...args) => asked.push(args), askEnded() {} },
     waitIslandAnswer: async () => answer,
-    islandTurn: (_call, ask) => ask(),
     gate: (key) => (key === "recipes.delete" ? false : true),
   };
   const { recipes: tool } = recipeTools(ctx);
@@ -163,7 +163,8 @@ function showMeContext({ answers, steps }) {
     ReviewModel,
     fileURL: (path) => `file://${path}`,
     browserFor: () => browser,
-    islandTurn: (_call, ask) => ask(),
+    locks: new Locks(),
+    guard: (promise) => promise,
     notifyAsk: () => false,
     closeAskAlert() {},
     island: {
@@ -372,7 +373,7 @@ test("a recording the user started is saved and sent to the chosen session", asy
   ctx.clearTimeout = clearTimeout;
   const island = ctx.island;
   island.working = (_b, text) => calls.push(["notice", text]);
-  island.idle = () => {};
+  island.finished = () => {};
   const delivered = [];
   const sessions = new Map([
     ["s1", { id: "s1", name: "Claude · shop", agent: { id: "claude" }, ack: true, push: "t3" }],

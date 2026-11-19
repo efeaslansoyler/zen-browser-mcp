@@ -129,36 +129,46 @@ test("a batch holds every tab it names until it ends", async () => {
   await Promise.all([batch, other]);
 });
 
-test("the island shows one question at a time, with the agent that asks it", async () => {
-  const shown = [];
-  let agent = null;
+test("questions don't wait for each other: each is a card with the agent that asks it", async () => {
+  const cards = new Map(); // id → [message, agent, key]
+  let next = 1;
   const context = bridgeContext({
     notifyAsk: () => false,
     cancelAsk() {},
     island: {
-      ask: (_browser, _title, message) => shown.push([message, agent?.name]),
-      askEnded() {},
-      setAgent: (theme) => (agent = theme),
+      ask: (_browser, _title, message, _done, _labels, _options, { key, agent }) => {
+        cards.set(next, [message, agent.name, key]);
+        return next++;
+      },
+      askEnded: (id) => cards.delete(id),
+      setAgent() {},
     },
   });
   const call = (id) => testCall(context, { session: id, agent: { id } });
-  const a = { browserId: 1 },
-    b = { browserId: 2 };
+  const a = { browserId: 1 };
   const first = context.askIsland(call("claude"), a, "", "Claude asks", {});
-  const second = context.askIsland(call("codex"), b, "", "Codex asks", {});
+  const second = context.askIsland(call("codex"), null, "", "Codex asks without a tab", {});
+  const third = context.askIsland(call("opencode"), null, "", "OpenCode asks without a tab", {});
   await tick();
-  // another call starting meanwhile doesn't relabel the question on screen
-  context.setLastAgent(context.agentTheme({ id: "codex" }));
-  assert.deepEqual(shown, [["Claude asks", "Claude"]]);
+  assert.deepEqual(
+    [...cards.values()].map(([message, agent]) => [message, agent]),
+    [
+      ["Claude asks", "Claude"],
+      ["Codex asks without a tab", "Codex"],
+      ["OpenCode asks without a tab", "OpenCode"],
+    ],
+  );
+  // tab-less questions have keys of their own, so each gets its own answer
+  const [, , keySecond] = cards.get(2);
+  const [, , keyThird] = cards.get(3);
+  assert.notEqual(keySecond, keyThird);
+  context.answerIsland(keyThird, "done");
+  assert.equal(await third, "done");
+  context.answerIsland(keySecond, "cancelled");
+  assert.equal(await second, "cancelled");
   context.answerIsland(a, "done");
   assert.equal(await first, "done");
-  await tick();
-  assert.deepEqual(shown, [
-    ["Claude asks", "Claude"],
-    ["Codex asks", "Codex"],
-  ]);
-  context.answerIsland(b, "done");
-  assert.equal(await second, "done");
+  assert.equal(cards.size, 0);
 });
 
 test("clipboard, browser settings and extensions take the exclusive lock until the call ends", async () => {

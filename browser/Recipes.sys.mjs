@@ -263,23 +263,25 @@ export function recipeTools(ctx) {
           await store.remove(id);
           return text(`Deleted the recipe ${quote(recipe.name)}.`);
         }
-        const answer = await ctx.islandTurn(call, async () => {
-          ctx.island?.ask(
-            null,
-            L("Delete recipe?", "Tarif silinsin mi?"),
-            L(
-              `${call.agent.name} wants to delete the recipe “${recipe.name}”.`,
-              `${call.agent.name}, “${recipe.name}” tarifini silmek istiyor.`,
-            ),
-            true,
-            { ok: L("Delete", "Sil"), cancel: L("Keep", "Kalsın") },
-          );
-          try {
-            return await ctx.waitIslandAnswer(call, 120);
-          } finally {
-            ctx.island?.askEnded();
-          }
-        });
+        const key = {}; // this question's own answer key: other questions can wait meanwhile
+        const card = ctx.island?.ask(
+          null,
+          L("Delete recipe?", "Tarif silinsin mi?"),
+          L(
+            `${call.agent.name} wants to delete the recipe “${recipe.name}”.`,
+            `${call.agent.name}, “${recipe.name}” tarifini silmek istiyor.`,
+          ),
+          true,
+          { ok: L("Delete", "Sil"), cancel: L("Keep", "Kalsın") },
+          [],
+          { key, agent: call.agent },
+        );
+        let answer;
+        try {
+          answer = await ctx.waitIslandAnswer(call, 120, key);
+        } finally {
+          if (card != null) ctx.island?.askEnded(card);
+        }
         if ((answer?.status ?? answer) !== "done") return text("The user kept the recipe; nothing was deleted.");
         await store.remove(id);
         return text(`Deleted the recipe ${quote(recipe.name)}.`);

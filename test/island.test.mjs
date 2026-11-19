@@ -33,6 +33,7 @@ class Element {
   remove() {}
   querySelector(selector) {
     for (const child of this.children) {
+      if (typeof child !== "object") continue; // text
       if (child.className?.split(" ").includes(selector.slice(1))) return child;
       const match = child.querySelector(selector);
       if (match) return match;
@@ -80,20 +81,21 @@ test("island switches clients, confirmation, pause and Claude selection without 
     island.working(browser, "example.test — clicking");
     expectTheme("Codex", "#a7e8d0");
     assert.match(el.querySelector(".spark").style.background, /assets\/codex\.svg/);
-    island.ask(browser, "permission", "Test confirmation", true);
+    const first = island.ask(browser, "permission", "Test confirmation", true);
     expectTheme("Codex", "#a7e8d0");
     assert.equal(el.querySelector(".message").textContent, "Test confirmation");
     el.querySelector(".answer-note").value = "  Use another tab  ";
     el.querySelector(".cancel").listeners.get("click")();
     assert.deepEqual(answers.pop(), [browser, "cancelled", "Use another tab"]);
-    island.ask(browser, "permission", "Next question", true);
+    island.askEnded(first);
+    const next = island.ask(browser, "permission", "Next question", true);
     assert.equal(el.querySelector(".answer-note").value, "");
     el.querySelector(".ok").listeners.get("click")();
     assert.deepEqual(answers.pop(), [browser, "done", ""]);
     el.querySelector(".answer-note").value = "Only read the title";
     el.querySelector(".ok").listeners.get("click")();
     assert.deepEqual(answers.pop(), [browser, "done", "Only read the title"]);
-    island.askEnded();
+    island.askEnded(next);
     island.stopped();
     expectTheme("Codex", "#a7e8d0");
     assert.equal(el.querySelector(".stop").textContent, "Resume");
@@ -167,7 +169,7 @@ test("island asks with option buttons and without a tab", async () => {
     const el = win.document.documentElement.children[0];
     const otherEl = other.document.documentElement.children[0];
 
-    island.ask(browser, "needs you", "Which color?", true, {}, ["Red", "Blue"]);
+    const color = island.ask(browser, "needs you", "Which color?", true, {}, ["Red", "Blue"]);
     const choices = el.querySelector(".choices");
     assert.equal(choices.hidden, false);
     assert.deepEqual(
@@ -179,11 +181,11 @@ test("island asks with option buttons and without a tab", async () => {
     el.querySelector(".answer-note").value = " darker ";
     choices.children[1].listeners.get("click")();
     assert.deepEqual(answers.pop(), [browser, "done", "darker", "Blue"]);
-    island.askEnded();
+    island.askEnded(color);
     assert.equal(choices.children.length, 0);
     assert.equal(el.querySelector(".ok").hidden, true);
 
-    island.ask(null, "needs you", "Which site should I use?", true, {}, ["A", "B"]);
+    const site = island.ask(null, "needs you", "Which site should I use?", true, {}, ["A", "B"]);
     assert.equal(el.hidden, false);
     assert.equal(otherEl.hidden, false, "a tab-less question shows in every window");
     assert.equal(el.querySelector(".goto").hidden, true);
@@ -191,7 +193,7 @@ test("island asks with option buttons and without a tab", async () => {
     assert.deepEqual(answers.pop(), [null, "done", "", "A"]);
     el.querySelector(".cancel").listeners.get("click")();
     assert.deepEqual(answers.pop(), [null, "cancelled", ""]);
-    island.askEnded();
+    island.askEnded(site);
     assert.equal(el.hidden, true);
     assert.equal(otherEl.hidden, true);
 
@@ -203,6 +205,91 @@ test("island asks with option buttons and without a tab", async () => {
     island.ask(null, "needs you", "Ready?", true);
     assert.equal(el.querySelector(".choices").hidden, true);
     assert.equal(el.querySelector(".ok").hidden, false);
+    island.destroy();
+  } finally {
+    globalThis.Services = originalServices;
+    globalThis.ChromeUtils = originalChromeUtils;
+  }
+});
+
+test("several agents share one row; question cards never change under the user", async () => {
+  const originalServices = globalThis.Services;
+  const originalChromeUtils = globalThis.ChromeUtils;
+  globalThis.Services = { locale: { appLocaleAsBCP47: "en" }, io: { newURI: (x) => x } };
+  globalThis.ChromeUtils = { importESModule: () => agentModule };
+  try {
+    const { Island } = await import("../browser/Island.sys.mjs");
+    const documentElement = new Element();
+    const win = {
+      document: { documentElement, createElementNS: () => new Element() },
+      windowUtils: { loadSheet() {}, removeSheet() {}, AUTHOR_SHEET: 1 },
+      gBrowser: { tabContainer: new Element() },
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    const tab = (host) => ({ ownerDocument: { defaultView: win }, currentURI: { host } });
+    const [a, b] = [tab("a.test"), tab("b.test")];
+    const answers = [];
+    const timers = [];
+    const holds = new Map();
+    const island = new Island(
+      { answer: (...args) => answers.push(args), holdOf: (browser) => holds.get(browser) ?? null },
+      { setTimeout: (fn) => timers.push(fn), clearTimeout() {} },
+    );
+    island.attach(win);
+    const el = documentElement.children[0];
+    const workers = el.querySelector(".workers");
+    const shown = () => workers.querySelector(".action").textContent;
+    const icons = () => workers.querySelector(".pager").children[1].children;
+    const claude = agentModule.identifyAgent("claude-code");
+    const codex = agentModule.identifyAgent("codex-mcp-client");
+
+    island.working(a, "a.test — clicking", { session: "A", agent: claude });
+    assert.equal(el.attrs.get("state"), "working");
+    assert.equal(workers.querySelector(".pager").hidden, true, "one agent: no icons");
+    island.working(b, "b.test — typing", { session: "B", agent: codex });
+    assert.match(shown(), /^Claude · clicking/, "the row doesn't jump to every new action");
+    assert.equal(workers.querySelector(".pager").hidden, false);
+    assert.equal(icons().length, 2);
+    assert(icons()[0].attrs.has("on"));
+    assert(icons()[1].attrs.has("recent"), "the agent that just acted glows");
+    workers.querySelector(".pager").children[2].listeners.get("click")(); // ▶
+    assert.match(shown(), /^Codex · typing/);
+    island.working(a, "a.test — reading", { session: "A", agent: claude });
+    assert.match(shown(), /^Codex/, "a picked agent stays on the row");
+    holds.set(b, { session: "B", reason: "Paying", endsIn: "5 min" });
+    island.working(b, "b.test — typing", { session: "B", agent: codex });
+    assert.equal(workers.querySelector(".lock").hidden, false);
+    assert.equal(workers.querySelector(".lock").textContent, "🔒 5 min");
+    assert(icons()[1].attrs.has("locked"));
+
+    const token = {};
+    const first = island.ask(a, "a.test — asks for permission", "Claude wants to click", true, {}, [], {
+      agent: claude,
+    });
+    assert.equal(el.attrs.get("state"), "ask");
+    assert(workers.attrs.has("busy"), "the agents' row stays under the card");
+    const second = island.ask(null, "asks", "Codex wants to know", true, {}, [], { key: token, agent: codex });
+    assert.equal(el.querySelector(".message").textContent, "Claude wants to click", "the card on screen stays");
+    const next = el.querySelector(".main").children[3].children[2];
+    assert(next.attrs.has("unseen"), "a dot tells a new card came");
+    assert.match(el.querySelector(".count").children[0], /^1\/2$/);
+    next.listeners.get("click")();
+    assert.equal(el.querySelector(".message").textContent, "Codex wants to know");
+    assert(!next.attrs.has("unseen"));
+    assert.equal(el.attrs.get("--zen-agent-accent"), "#a7e8d0", "the island takes the asking agent's color");
+    el.querySelector(".ok").listeners.get("click")();
+    assert.deepEqual(answers.pop(), [token, "done", ""]);
+    island.askEnded(second);
+    assert.equal(el.querySelector(".message").textContent, "Claude wants to click");
+    island.askEnded(first);
+    assert.equal(el.attrs.get("state"), "working");
+
+    // a finished agent's row goes a little later; the last one hides the island
+    island.finished("A");
+    island.finished("B");
+    for (const run of timers.splice(0)) run();
+    assert.equal(el.hidden, true);
     island.destroy();
   } finally {
     globalThis.Services = originalServices;
