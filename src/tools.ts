@@ -245,7 +245,7 @@ tool(
   "computer",
   [
     "Use the mouse and keyboard in a browser tab and take screenshots. Input is delivered as real (trusted) browser input.",
-    "Coordinates are pixels in the most recent screenshot of that tab, so take a screenshot before clicking.",
+    "Coordinates are pixels in the most recent viewport screenshot of that tab. Use refs or a viewport screenshot for clicks after a full-page capture.",
     "Instead of a coordinate, clicks, hover and scroll accept ref (from read_page or find): the element is scrolled into view and its center is used.",
     'Actions: screenshot, left_click, right_click, double_click, triple_click, hover, left_click_drag (start_coordinate → coordinate), scroll (coordinate or ref, scroll_direction, scroll_amount), scroll_to (ref), type (text), key (text, e.g. "Return", "ctrl+a", "Tab Tab Return"; repeat), wait (duration in seconds).',
     "Ref clicks verify the target is hit-testable, including enclosing iframes. Covered, moved or disabled targets fail before mouse-down; inspect the reported blocker or refresh screenshot/read_page. Coordinate clicks cannot infer a hidden intended target, so prefer ref for controls. Never bypass an obstruction with page JavaScript. Multi-click actions stop if an earlier click changes the target. Hover/scroll_to remain available for covered elements.",

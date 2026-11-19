@@ -36,6 +36,7 @@ const server = createServer((request, response) => {
 await new Promise<void>((resolve) => server.listen(0, resolve));
 const { port } = server.address() as { port: number };
 let tabId: number | undefined;
+let childTabId: number | undefined;
 try {
   tabId = JSON.parse(text(await call("tabs_create_mcp"))).tabId;
   const base = `http://127.0.0.1:${port}`;
@@ -99,6 +100,11 @@ try {
     "selected response fields",
   );
   await pageEval(tabId!, '(async () => (await fetch("/health")).text())()');
+  childTabId = JSON.parse(text(await call("tabs_create_mcp"))).tabId;
+  await call("navigate", { tabId: childTabId, url: base + "/before-attach" });
+  const attached = await approveWhile(call("network_capture", { tabId, action: "attach", childTabId }, 5000), "HAR");
+  assert(JSON.parse(text(attached)).tabs.includes(childTabId));
+  await call("navigate", { tabId: childTabId, url: base + "/after-attach" });
   const projected = await capture("stop");
   try {
     const raw = await readFile(projected.path, "utf8");
@@ -107,12 +113,15 @@ try {
       entry.request.url.endsWith("/health"),
     );
     assert.deepEqual(JSON.parse(entry?.response.content.text), { healthy: true, status: "ready" });
-    console.log("OK: DevTools HAR import and opt-in JSON response projection");
+    assert(raw.includes("/after-attach"));
+    assert(!raw.includes("/before-attach"));
+    console.log("OK: DevTools HAR import, opt-in JSON projection and owned-tab attachment");
   } finally {
     await unlink(projected.path);
   }
 } finally {
   try {
+    if (childTabId !== undefined) await call("tabs_close_mcp", { tabId: childTabId });
     if (tabId !== undefined) await call("tabs_close_mcp", { tabId });
   } finally {
     server.close();
