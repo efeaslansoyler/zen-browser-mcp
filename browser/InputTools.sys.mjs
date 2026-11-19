@@ -68,6 +68,8 @@ export function inputTools(ctx) {
             throw new Error("Visual baseline options require diff.");
           if (args.diff && (args.if_changed || args.annotate))
             throw new Error("Visual diff requires an unannotated screenshot.");
+          if (args.full_page && (args.diff || args.if_changed || args.annotate))
+            throw new Error("Full-page screenshots require a separate capture.");
           const frames = () => [...framesOf(browser)].map((frame) => frame.currentWindowGlobal);
           const before = args.diff ? frames() : [];
           const geometry = async () => (await query(browser, "capture_geometry", {})).value;
@@ -75,7 +77,7 @@ export function inputTools(ctx) {
           let shot, labels;
           try {
             if (args.annotate) labels = (await query(browser, "annotate", { enabled: true })).value;
-            shot = await screenshot(browser, args.scale, args.diff);
+            shot = await screenshot(browser, args.scale, args.diff, args.full_page);
           } finally {
             if (args.annotate) await query(browser, "annotate", { enabled: false }).catch(() => {});
           }
@@ -159,6 +161,16 @@ export function inputTools(ctx) {
               }
             }
           }
+          if (args.full_page)
+            comparison = text({
+              fullPage: true,
+              documentWidth: shot.bounds[0],
+              documentHeight: shot.bounds[1],
+              width: shot.width,
+              height: shot.height,
+              downsampled: shot.nativeScale < 1,
+              note: "Use refs or a viewport screenshot for coordinates.",
+            });
           // the dialog is drawn in the browser UI, so it isn't in the page image
           const dialog = openDialog(browser);
           return [

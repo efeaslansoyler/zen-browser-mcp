@@ -303,6 +303,10 @@ match the viewport, scale and scroll position. Baselines expire after one hour o
 eviction, access revocation or bridge reload. Visual diffs are inspired by
 [Agent Browser](https://agent-browser.dev/diffing).
 
+Set `full_page: true` to inspect the currently rendered document as one bounded image.
+Long pages are downsampled and unloaded content stays unloaded. Use refs or a viewport
+screenshot for clicks.
+
 `browser_settings` supports `get`, `devices`, `viewport`, `device`, `media`, `reset`.
 Every mutation/reset asks in the island, even in auto mode; the prompt mentions any
 necessary tab switch. Viewport, DPR, touch-event, custom user-agent and color overrides

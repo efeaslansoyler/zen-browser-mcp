@@ -209,16 +209,27 @@ export function pageInput(ctx) {
 
   // scale (0.1–1) shrinks the image further; tokens drop with ~scale². Coordinates are still
   // pixels of the returned image.
-  async function screenshot(browser, scale = 1, pixels = false) {
+  async function screenshot(browser, scale = 1, pixels = false, fullPage = false) {
     ctx.assertSiteAccess(browser);
     const wg = browser.browsingContext?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
     // Keep the virtual cursor and click ripple out of the image the agent sees.
     const overlays = (hidden) => ctx.query(browser, "overlays", { hidden }, 2000).catch(() => {});
+    let bounds,
+      nativeScale = 1,
+      rect = null;
+    if (fullPage) {
+      bounds = (await ctx.query(browser, "capture_bounds", {})).value;
+      const [width, height] = bounds;
+      nativeScale =
+        Math.min(1, MAX_EDGE / Math.max(width, height), Math.sqrt(MAX_PIXELS / (width * height))) *
+        Math.min(1, Math.max(0.1, scale));
+      rect = new browser.ownerDocument.defaultView.DOMRect(0, 0, width, height);
+    }
     await overlays(true);
     let bitmap;
     try {
-      bitmap = await wg.drawSnapshot(null, 1, "white");
+      bitmap = await wg.drawSnapshot(rect, nativeScale, "white");
     } finally {
       try {
         wg.getActor("ZenMcp").sendAsyncMessage("overlays", { hidden: false });
@@ -232,8 +243,9 @@ export function pageInput(ctx) {
       throw error;
     }
     const { width: w, height: h } = bitmap;
-    const s =
-      Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h))) * Math.min(1, Math.max(0.1, scale));
+    const s = fullPage
+      ? 1
+      : Math.min(1, MAX_EDGE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h))) * Math.min(1, Math.max(0.1, scale));
     const canvas = browser.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
     canvas.width = Math.round(w * s);
     canvas.height = Math.round(h * s);
@@ -243,12 +255,13 @@ export function pageInput(ctx) {
     } finally {
       bitmap.close();
     }
-    ctx.state.scale.set(browser.browserId, s);
+    if (!fullPage) ctx.state.scale.set(browser.browserId, s);
     const data = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
     return {
       data,
       width: canvas.width,
       height: canvas.height,
+      ...(bounds ? { bounds, nativeScale } : {}),
       ...(pixels ? { canvas, painter, pixels: painter.getImageData(0, 0, canvas.width, canvas.height), scale: s } : {}),
     };
   }

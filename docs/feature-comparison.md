@@ -27,7 +27,7 @@ rough equivalents, not API or engine parity.
 | Network route / mock / HAR / throttling | Not available; the tools only observe |
 | React | `react` tree/inspect with optional props; no render history or Suspense tracking |
 | Accessibility audit | `accessibility`: bundled axe-core, findings and refs per frame |
-| Full-page screenshot / PDF | Not available; screenshots cover the viewport |
+| Full-page screenshot / PDF | Full document capture with `full_page`; PDF is unavailable |
 | Web Vitals | Not available |
 | Cookie / storage / session export | Not available: the user's sessions are already there |
 | CDP / headless / launching a browser | Out of scope: the everyday browser and window |

@@ -18,6 +18,11 @@ try {
   assert(result.some((item) => item.type === "image" && item.mimeType === "image/png"));
   assert(json(result).ratio > 0.5);
   console.log("OK: unchanged and cross-document viewport comparisons");
+  const full = await screenshot({ full_page: true });
+  assert(full.some((item) => item.type === "image" && item.data.length > 100));
+  assert(json(full).documentHeight >= 2200);
+  assert.equal(json(full).fullPage, true);
+  console.log("OK: full document capture");
 } finally {
   await call("tabs_close_mcp", { tabId });
 }

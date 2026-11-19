@@ -273,6 +273,10 @@ tool(
       "mouse_up",
     ]),
     ...inputOptions,
+    full_page: z
+      .boolean()
+      .optional()
+      .describe("Capture the full document for inspection without changing click coordinates."),
     diff: z.boolean().optional().describe("Screenshot: create or compare a visual baseline."),
     since: z.string().optional().describe("Visual baseline ID from an earlier screenshot."),
     baseline_scope: z
