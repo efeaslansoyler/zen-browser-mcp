@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ExtensionPanels } from "../browser/ExtensionPanels.sys.mjs";
 
-function fixture({ noPopup = false, busy = false, wait } = {}) {
-  const win = { gBrowser: { getTabForBrowser: (browser) => ({ linkedBrowser: browser }) } };
+function fixture({ noPopup = false, busy = false, wait, modalOpen = () => false } = {}) {
+  const win = {
+    gBrowser: { getTabForBrowser: (browser) => ({ linkedBrowser: browser }) },
+    document: { documentElement: { hasAttribute: (name) => name === "window-modal-open" && modalOpen() } },
+  };
   Object.defineProperty(win.gBrowser, "selectedTab", {
     set(tab) {
       this.selectedBrowser = tab.linkedBrowser;
@@ -134,6 +137,21 @@ test("existing user UI and missing extensions do not cause side effects", async 
   assert.equal(h.clicks, 0);
   const missing = fixture();
   await assert.rejects(missing.panels.open(missing.source, "A", 1, "missing"), /not found/);
+});
+
+test("a browser modal prevents invoking a toolbar action, including after switch approval", async () => {
+  for (const alreadyOpen of [true, false]) {
+    let modalOpen = alreadyOpen;
+    const h = fixture({ modalOpen: () => modalOpen });
+    h.env.confirmSwitch = async () => {
+      assert(!alreadyOpen, "An open dialog should be reported before asking to switch");
+      modalOpen = true;
+      return true;
+    };
+    await assert.rejects(h.open(), /close.*dialog/i);
+    assert.equal(h.clicks, 0);
+    assert.equal(h.win.gBrowser.selectedBrowser, undefined);
+  }
 });
 
 test("toolbar-only extension executes once and reports that no popup exists", async () => {

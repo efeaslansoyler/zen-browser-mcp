@@ -87,6 +87,15 @@ export class BrowserSettings {
     this.env.check(source, session);
     const win = source.ownerDocument.defaultView,
       selected = win.gBrowser.selectedBrowser;
+    const checkModal = () => {
+      if (
+        args.action !== "reset" &&
+        selected !== source &&
+        win.document.documentElement.hasAttribute("window-modal-open")
+      )
+        throw new Error("Close the browser dialog before switching tabs for browser settings.");
+    };
+    checkModal();
     const context = this.env.context(source);
     const document = source.browsingContext.currentWindowGlobal;
     if (!(await this.env.ask(source, args, value)))
@@ -105,6 +114,7 @@ export class BrowserSettings {
       await this.env.wait(100, source);
       return;
     }
+    checkModal();
     // A background browser's layout is suspended; select it only after explicit approval.
     win.gBrowser.selectedTab = win.gBrowser.getTabForBrowser(source);
     await this.env.wait(50, source);

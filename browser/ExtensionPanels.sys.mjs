@@ -56,6 +56,11 @@ export class ExtensionPanels {
     if (!extension) throw new Error("Extension not found or disabled; call extensions list for current IDs.");
     const action = this.env.action(extension);
     if (!action) throw new Error("This extension has no toolbar action; there is no panel/button to use.");
+    const checkModal = () => {
+      if (window.document.documentElement.hasAttribute("window-modal-open"))
+        throw new Error("Close the browser dialog before opening an extension.");
+    };
+    checkModal();
     if (this.env.busy(window))
       throw new Error("A browser menu or panel is already open. Close it before opening an extension.");
     // Extensions use the selected tab for tabs.query({active:true}) and activeTab grants.
@@ -66,6 +71,7 @@ export class ExtensionPanels {
       if (!(await this.env.confirmSwitch(source, extension)))
         throw new Error("The user denied switching tabs; the extension was not invoked.");
       this.env.check(source, session);
+      checkModal();
       if (
         window.gBrowser.selectedBrowser !== selected ||
         source.browsingContext.currentWindowGlobal !== document ||
@@ -88,6 +94,7 @@ export class ExtensionPanels {
         throw new Error("Target changed after the approved switch; the extension was not invoked.");
     }
     this.env.check(source, session);
+    checkModal();
     const document = source.browsingContext.currentWindowGlobal;
     const popupURL = action.action.getPopupUrl(window.gBrowser.selectedTab);
     action.triggerAction(window);

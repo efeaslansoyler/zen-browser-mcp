@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BrowserSettings } from "../browser/BrowserSettings.sys.mjs";
-function fixture(answer = true) {
+function fixture(answer = true, modalOpen = () => false) {
   const properties = new Map(),
     priority = new Map();
   const source = {
@@ -27,7 +27,10 @@ function fixture(answer = true) {
       prefersColorSchemeOverride: "none",
     },
   };
-  const win = { gBrowser: { selectedBrowser: {}, getTabForBrowser: (b) => ({ linkedBrowser: b }) } };
+  const win = {
+    gBrowser: { selectedBrowser: {}, getTabForBrowser: (b) => ({ linkedBrowser: b }) },
+    document: { documentElement: { hasAttribute: (name) => name === "window-modal-open" && modalOpen() } },
+  };
   Object.defineProperty(win.gBrowser, "selectedTab", {
     set(t) {
       this.selectedBrowser = t.linkedBrowser;
@@ -44,6 +47,25 @@ function fixture(answer = true) {
   };
   return { settings: new BrowserSettings(env), source, win, env, properties, change: () => version++ };
 }
+test("a browser modal blocks settings that need a tab switch, including after approval", async () => {
+  for (const alreadyOpen of [true, false]) {
+    let modalOpen = alreadyOpen;
+    let prompts = 0;
+    const h = fixture(
+      () => {
+        prompts++;
+        modalOpen = true;
+        return true;
+      },
+      () => modalOpen,
+    );
+    const selected = h.win.gBrowser.selectedBrowser;
+    await assert.rejects(h.settings.change(h.source, "A", { action: "device", device: "mobile" }), /close.*dialog/i);
+    assert.equal(prompts, alreadyOpen ? 0 : 1);
+    assert.equal(h.win.gBrowser.selectedBrowser, selected);
+    assert.equal(h.properties.size, 0);
+  }
+});
 test("settings mutations always ask and denial preserves selected tab and overrides", async () => {
   const h = fixture(false),
     selected = h.win.gBrowser.selectedBrowser;
