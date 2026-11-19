@@ -128,7 +128,12 @@ sürmediğini gösterir. Sayfa içeriği ve sohbet geçmişi paylaşılmaz. Ajan
 döndüğünde bir sonraki sonucu, o arada diğerlerinin ne yaptığını söyler (kim, görev notu, kaç
 işlem, ne kadar önce; yazdıkları asla), biri sayfayı ajanın son okumasından sonra
 değiştirmiş olabilirse eski ref'leri kullanmadan önce sayfayı yeniden okumasını ister.
-Başkalarının da kullandığı sekmeyi kapatan ajan yalnızca sekmeden ayrılır.
+Bölünmemesi gereken birkaç adım için (ödeme, çok sayfalı form) ajan sekmeyi bir gerekçeyle
+tutabilir (`tab_work hold`, en fazla 10 dakika, uzatılabilir): ajan bırakana kadar diğerleri
+o sekmede reddedilir; `noWorkaround` ile o sitede başka sekmede de çalışamazlar, yani aynı
+sayfayı başka yerde açamazlar. Ajan 2 dakika hiç işlem yapmazsa veya bağlantısı koparsa tutma
+da biter; kendin bitirmek için sekmeye sağ tıkla → **Tutmayı kaldır**. Başkalarının da
+kullandığı sekmeyi kapatan ajan yalnızca sekmeden ayrılır.
 
 ## Kullanım
 

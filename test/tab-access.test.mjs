@@ -501,6 +501,8 @@ test("session menu pins explicit fixture tabs even when native context points el
         .join(", "),
     give: (tab, session) => c.mark(tab, tab.getAttribute(c.MARK) || "user", session),
     takeBack: (tab) => c.unmark(tab),
+    holdLabel: (tab) => c.holdOf(tab.linkedBrowser.browserId)?.reason ?? null,
+    releaseHold: (tab) => c.access.release(tab.linkedBrowser.browserId),
     readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] } }),
     writeConfig() {},
     setMode() {},
@@ -540,6 +542,15 @@ test("session menu pins explicit fixture tabs even when native context points el
   const b = menu.find((node) => node.getAttribute("data-zen-session") === "B");
   assert(a && b);
   assert.notEqual(a.getAttribute("label"), b.getAttribute("label"));
+  const release = menu.find((node) => node.id === "zen-mcp-context-give-release");
+  assert.equal(release.hidden, true);
+  h.context.lastUse.set("A", Date.now()); // the holder isn't quiet
+  h.context.access.hold(tabId, "A", { reason: "Paying" });
+  h.context.prepareTabMenu(win, [h.tabs.get(tabId)]);
+  assert.equal(release.hidden, false);
+  assert.equal(release.getAttribute("label"), "Remove hold · Paying");
+  release.listeners.get("command")();
+  assert.equal(h.context.holdOf(tabId), null);
   b.listeners.get("command")();
   assert.deepEqual(h.context.access.members(tabId), ["A", "B"], "Giving adds the session; A keeps working");
   menu.find((node) => node.id === "zen-mcp-context-give").listeners.get("command")();
@@ -781,4 +792,100 @@ test("a call in a shared tab says what the others did meanwhile and when the pag
   // B was last here before A's calls: it hears about them once
   const [forB] = extra(await h.request("B", "get_page_text", { tabId }));
   assert.equal(forB.meanwhile[0].agent, h.context.sessions.get("A").name);
+});
+
+test("a hold ends when it expires, when its holder goes quiet for 2 minutes, or when it leaves", () => {
+  const access = new TabAccess();
+  access.join(1, "A");
+  access.join(1, "B");
+  assert.throws(() => access.hold(1, "C", { reason: "x" }), /used by other sessions/);
+  const hold = access.hold(1, "A", { reason: "Checkout", minutes: 99, origin: "https://shop.test" }, 0);
+  assert.equal(hold.expires, 10 * 60_000, "at most 10 minutes");
+  assert.throws(() => access.hold(1, "B", { reason: "Mine" }, 1), /Another session holds/);
+  assert.equal(access.holdOf(1, () => 0, 9 * 60_000).session, "A");
+  assert.equal(
+    access.holdOf(1, () => 0, 10 * 60_000),
+    null,
+    "expired",
+  );
+  access.hold(1, "A", { reason: "Checkout", minutes: 2 }, 0);
+  assert.equal(
+    access.holdOf(1, () => 2 * 60_000, 60_000),
+    null,
+    "holder quiet for 2 minutes",
+  );
+  access.hold(1, "A", { reason: "Checkout" }, 0);
+  access.leave(1, "A");
+  assert.equal(
+    access.holdOf(1, () => 0, 1),
+    null,
+    "holder left",
+  );
+  access.hold(1, "B", { reason: "Mine" }, 0);
+  assert.equal(access.release(1, "A"), false);
+  assert.equal(access.release(1), true, "the user can end anyone's hold");
+});
+
+test("a hold refuses the other members at once, keeps working for the holder and ends on release", async () => {
+  const h = harness();
+  const tabId = h.own("A");
+  h.register("B");
+  h.context.mark(h.tabs.get(tabId), "true", "B");
+  const held = parsed(
+    await h.request("A", "tab_work", { action: "hold", tabId, summary: "Paying; don't touch the cart", minutes: 5 }),
+  );
+  assert.equal(held.hold.by, "you");
+  assert.equal(held.hold.endsIn, "5 min");
+  // B is refused without waiting, even while A's call runs in the tab
+  const pending = h.request("A", "wait", { tabId });
+  await h.first;
+  const refused = await h.request("B", "write", { tabId });
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /held by .*about 5 min left.*"Paying; don't touch the cart"/);
+  assert.match(text(await h.request("B", "tab_work", { action: "status", tabId })), /Paying/);
+  assert.equal((await h.request("B", "tab_work", { action: "hold", tabId, summary: "Mine" })).ok, false);
+  assert.equal((await h.request("B", "tab_work", { action: "release", tabId })).ok, false);
+  for (const call of h.context.calls) call.cancel(new Error("fixture cleanup"));
+  await pending;
+  assert.equal((await h.request("A", "write", { tabId })).ok, true);
+  const forB = parsed(await h.request("B", "tabs_context_mcp"));
+  assert.match(forB.tabs[0].hold.reason, /Paying/);
+  parsed(await h.request("A", "tab_work", { action: "release", tabId }));
+  assert.equal((await h.request("B", "write", { tabId })).ok, true);
+  assert.deepEqual(h.effects, ["write", "write"]);
+});
+
+test("noWorkaround keeps the others off the held tab's site in their own tabs", async () => {
+  const h = harness();
+  const tabId = h.own("A");
+  const theirs = h.own("B"); // also on https://fixture.test/
+  h.tabs.get(tabId).linkedBrowser.currentURI = { spec: "https://fixture.test/cart" };
+  parsed(await h.request("A", "tab_work", { action: "hold", tabId, summary: "One order only", noWorkaround: true }));
+  const refused = await h.request("B", "write", { tabId: theirs });
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, new RegExp(`site of tab ${tabId} is held .*Don't work on https://fixture.test`));
+  const list = parsed(await h.request("B", "tabs_context_mcp"));
+  assert.equal(list.agentTabs[0].hold.noWorkaround, "https://fixture.test");
+  h.tabs.get(theirs).linkedBrowser.currentURI = { spec: "https://elsewhere.test/" };
+  assert.equal((await h.request("B", "write", { tabId: theirs })).ok, true, "other sites are free");
+  h.tabs.get(tabId).linkedBrowser.currentURI = { spec: "about:blank" };
+  assert.equal(
+    (await h.request("A", "tab_work", { action: "hold", tabId, summary: "x", noWorkaround: true })).ok,
+    false,
+  );
+});
+
+test("a hold ends when its holder disconnects or the user takes the tab back", () => {
+  for (const end of ["disconnect", "take back"]) {
+    const h = harness();
+    const tabId = h.own("A");
+    const transport = {};
+    h.context.connectOwnerSession("A", transport, agentTheme({ id: "codex" }), "/project");
+    h.context.lastUse.set("A", Date.now());
+    h.context.access.hold(tabId, "A", { reason: "Busy" });
+    assert.equal(h.context.holdOf(tabId).reason, "Busy");
+    if (end === "disconnect") h.context.disconnectOwnerSession("A", transport);
+    else h.context.unmark(h.tabs.get(tabId));
+    assert.equal(h.context.holdOf(tabId), null, end);
+  }
 });

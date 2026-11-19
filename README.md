@@ -123,8 +123,13 @@ what they are doing with `tab_work` (`start`, `update`, then `finish` with a sho
 chat histories stay private. When an agent comes back to a shared tab, its next result says
 what the others did there meanwhile (who, their task note, how many actions, how long ago;
 never what they typed) and, if one of them may have changed the page since the agent last
-read it, tells it to read the page again before using old refs. An agent that closes a tab
-others still use only leaves it.
+read it, tells it to read the page again before using old refs. For a few steps that must
+not be interrupted (a checkout, a multi-page form) an agent can hold the tab with a reason
+(`tab_work hold`, up to 10 minutes, renewable): the others are refused in that tab until it
+releases it, and with `noWorkaround` they can't work on that site in another tab either, so
+they can't open the same page elsewhere. A hold also ends when its agent makes no call for 2
+minutes or disconnects; right-click the tab → **Remove hold** to end it yourself. An agent
+that closes a tab others still use only leaves it.
 
 ## Using it
 

@@ -87,6 +87,9 @@ the commit log.
 - In a shared tab, a call's result says what the other members did since the caller's last
   call (`meanwhile`, no values) and asks it to read the page again when another member may
   have changed it (`pageChanged`).
+- `tab_work hold` keeps a tab to one agent for a few steps (with a reason, up to 10 minutes,
+  renewable; `noWorkaround` also keeps the others off that site). The tab menu's **Remove
+  hold** ends it.
 
 ### 2026-11-18
 

@@ -166,6 +166,7 @@ function logError(where, e) {
       (state.tabVersions ||= new Map()),
       (state.tabTasks ||= new Map()),
       (state.tabMemberships ||= { next: 1 }),
+      (state.tabHolds ||= new Map()),
     );
     globalThis.zenMcpBrowserStart ||= Date.now();
 
@@ -401,6 +402,13 @@ function logError(where, e) {
         ctx.mark(tab, tab.getAttribute(MARK) || "user", session);
       },
       takeBack: (tab) => ctx.unmark(tab),
+      holdLabel: (tab) => {
+        const hold = ctx.holdOf(tab.linkedBrowser.browserId);
+        if (!hold) return null;
+        const who = ctx.sessions.get(hold.session)?.name || hold.session.slice(-6);
+        return `${who}: ${hold.reason.length > 60 ? hold.reason.slice(0, 59) + "…" : hold.reason}`;
+      },
+      releaseHold: (tab) => ctx.access.release(tab.linkedBrowser.browserId),
       readConfig: () => ctx.readConfig(),
       writeConfig: (changes) => ctx.writeConfig(changes),
       setMode: (mode) => ctx.island?.setMode(mode),

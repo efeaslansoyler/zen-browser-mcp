@@ -1,7 +1,7 @@
 // Tab access between sessions, live, with real stdio MCP clients of the same agent type:
 // separate tab lists, joining another agent's tab, turns in a shared tab and parallel work in
-// different tabs, what the other member did meanwhile, the share and take-back menus, leaving,
-// session shutdown, and the ask-mode join prompt. Only disposable fixture tabs are used.
+// different tabs, what the other member did meanwhile, holds, the share and take-back menus,
+// leaving, session shutdown, and the ask-mode join prompt. Only disposable fixture tabs are used.
 // Run: node scripts/check-tab-access.ts
 // Requires your existing auto mode; it switches to ask mode for the last check and restores
 // the original config file (a backup path is printed).
@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -85,6 +86,12 @@ async function answer(tabId: number, accept: boolean) {
   throw new Error("Expected join prompt did not appear.");
 }
 const members = (tabId: number) => chrome(`h.access.members(${tabId})`);
+const server = http.createServer((_, response) => {
+  response.setHeader("Content-Type", "text/html; charset=utf-8");
+  response.end(
+    '<!doctype html><title>Zen tab access test</title><h1>Disposable tab access test</h1><input aria-label="Fixture field" value="untouched">',
+  );
+});
 
 try {
   original = fs.existsSync(configFile) ? fs.readFileSync(configFile) : undefined;
@@ -104,11 +111,9 @@ try {
     } catch {}
   }
   assert(ready, "Updated bridge did not become ready; check $XDG_RUNTIME_DIR/zen-mcp.log.");
-  const fixture =
-    "data:text/html;charset=utf-8," +
-    encodeURIComponent(
-      '<!doctype html><title>Zen tab access test</title><h1>Disposable tab access test</h1><input aria-label="Fixture field" value="untouched">',
-    );
+  // a real origin (data: pages have none), for noWorkaround
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const fixture = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
   const a = await connect(),
     b = await connect();
   const createdA = await json(a, "tabs_create_mcp"),
@@ -187,7 +192,42 @@ try {
     "✓ The other member's actions come with the next call (count and time, no values), with a read-again warning",
   );
 
-  // 4. leaving: closing a shared tab only leaves it
+  // 4. a hold: the other member is refused at once, even while the holder works; with
+  // noWorkaround also on the same site in its own tab and when navigating there; the user's
+  // "Remove hold" menu item ends it
+  const held = await json(a, "tab_work", {
+    action: "hold",
+    tabId,
+    summary: `${token}: paying, don't touch the cart`,
+    minutes: 3,
+    noWorkaround: true,
+  });
+  assert.equal(held.hold.by, "you");
+  const busy = settle(tool(a, "computer", { tabId, action: "wait", duration: 3 }));
+  await sleep(300);
+  const refusedAt = Date.now();
+  assert.match(text(await tool(b, "get_page_text", { tabId }, true)), /is held by .*paying, don't touch the cart/);
+  assert(Date.now() - refusedAt < 1500, "A held tab made the other member wait");
+  assert.match(text(await tool(b, "get_page_text", { tabId: other }, true)), /Don't work on http:\/\/127\.0\.0\.1/);
+  await tool(b, "navigate", { tabId: other, url: "about:blank" });
+  assert.match(text(await tool(b, "navigate", { tabId: other, url: fixture }, true)), /is held by/);
+  assert(!(await busy).error);
+  assert.match(text(await tool(a, "get_page_text", { tabId })), /Disposable tab access test/);
+  await chrome(`(() => {
+    const tab=h.findTab(${tabId}), win=tab.ownerDocument.defaultView;
+    h.prepareTabMenu(win,[tab]);
+    const item=win.document.getElementById('zen-mcp-context-give-release');
+    if(item.hidden||!item.getAttribute('label').includes(${JSON.stringify(token)})) throw new Error('Remove hold item missing');
+    item.doCommand();
+    return true;
+  })()`);
+  await tool(b, "navigate", { tabId: other, url: fixture });
+  await tool(b, "get_page_text", { tabId });
+  console.log(
+    "✓ A hold refuses the other member at once, also on the same site in its own tab (noWorkaround); the menu's Remove hold ends it",
+  );
+
+  // 5. leaving: closing a shared tab only leaves it
   const left = text(await tool(a, "tabs_close_mcp", { tabId }));
   assert.match(left, /still work in tab/);
   assert(await chrome(`!!h.findTab(${tabId})`), "Leaving closed a shared tab");
@@ -195,7 +235,7 @@ try {
   await tool(a, "get_page_text", { tabId }, true);
   console.log("✓ Closing a shared tab only leaves it; the other session keeps it");
 
-  // 5. the share menu adds a session; take-back cancels every member's work and leaves the tab open
+  // 6. the share menu adds a session; take-back cancels every member's work and leaves the tab open
   await menu(tabId, sessionA);
   assert.deepEqual(await members(tabId), [sessionB, sessionA]);
   const active = settle(tool(b, "computer", { tabId, action: "wait", duration: 30 }));
@@ -208,7 +248,7 @@ try {
   assert(await chrome(`!!h.findTab(${tabId})`), "Take-back closed the tab");
   console.log("✓ The share menu adds a session; take-back cancels active work of every member and leaves the tab open");
 
-  // 6. ask mode: joining asks; Deny keeps the session out, Allow lets it in
+  // 7. ask mode: joining asks; Deny keeps the session out, Allow lets it in
   await menu(other, sessionA);
   await tool(a, "tabs_close_mcp", { tabId: other }); // A leaves; B keeps working in it
   const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-tab-access-config-"));
@@ -227,7 +267,7 @@ try {
   }
   console.log("✓ Ask mode: joining an agent tab asks; Deny keeps the session out, Allow lets it in");
 
-  // 7. a session that shuts down leaves its tabs; the last one gives the tab back
+  // 8. a session that shuts down leaves its tabs; the last one gives the tab back
   await b.close();
   let gone = false;
   for (let i = 0; i < 100; i++) {
@@ -251,6 +291,7 @@ try {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 } finally {
+  server.close();
   // Closing only the fixture clients cancels any fixture operation before cleanup.
   await Promise.allSettled(clients.map((client) => client.close()));
   await Promise.allSettled(running);

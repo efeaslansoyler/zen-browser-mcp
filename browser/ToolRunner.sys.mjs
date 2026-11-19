@@ -51,12 +51,16 @@ export function toolRunner(ctx) {
     try {
       if (browser && !cleanup) {
         ctx.assertSiteAccess(browser);
+        // a navigation is checked against where it goes: leaving a held site is fine
+        if (tool !== "navigate" || ["back", "forward"].includes(args.url)) ctx.assertNotHeld(args.tabId, call.session);
+        else ctx.assertNotHeld(args.tabId, call.session, null, { site: false });
         if (tool === "navigate" && !["back", "forward"].includes(args.url)) {
           const destination = Services.uriFixup.getFixupURIInfo(
             args.url,
             Services.uriFixup.FIXUP_FLAG_FIX_SCHEME_TYPOS,
           ).preferredURI;
           ctx.assertSiteURL(destination.spec);
+          ctx.assertNotHeld(args.tabId, call.session, destination.spec);
         }
       }
       if (browser && !["browser_batch", "clipboard", "browser_settings"].includes(tool) && !cleanup) {
@@ -162,6 +166,11 @@ export function toolRunner(ctx) {
         const sessionGeneration = sessionVersions.get(session) || 0;
         const referenced =
           tool === "browser_batch" ? (args.actions || []).map((step) => step.input?.tabId) : [args.tabId];
+        // a held tab answers at once instead of waiting behind its holder (joining and leaving
+        // stay possible)
+        if (!["request_tab", "tabs_close_mcp"].includes(tool))
+          for (const id of referenced)
+            if (id != null && ctx.access.has(id, session)) ctx.assertNotHeld(id, session, null, { site: false });
         const ticket = access.ticket(
           referenced.filter((id) => id != null),
           session,

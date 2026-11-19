@@ -39,6 +39,12 @@ carry `meanwhile` (what the others did since your last call) and `pageChanged`: 
 task is done (no secrets); `tab_work status` shows what the others are doing. Don't close a
 tab others still use; closing it only takes you out of it.
 
+For a few steps nobody may interrupt (a checkout, a multi-page form), `tab_work hold` the tab
+with a reason that says what the others must not do, add `noWorkaround: true` if they must not
+do it on the same site in another tab either, and `release` it right after. A tab someone
+else holds refuses your calls with the holder and the reason: do other work and come back
+later; don't open the same site elsewhere to get around it.
+
 ## Reading pages
 
 - `read_page` (`filter: "interactive"` for controls only) and `find` give refs such as `ref_12`

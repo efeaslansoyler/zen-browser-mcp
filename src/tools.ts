@@ -182,9 +182,9 @@ tool(
 
 tool(
   "tab_work",
-  "Tell the other agent sessions in a shared tab what you are doing there, and read what they are doing. Several sessions can work in one tab; their calls run one at a time, in order. list/status return each member session with its published task note and whether a call is running in the tab. start publishes your task when you begin, update reports progress, finish says the whole task is done with a short summary (finishing a tool call is not finishing the task). Notes never include page contents. Answers at once, even during long browser operations. Call separately from browser_batch. No chat history is shared.",
+  "Tell the other agent sessions in a shared tab what you are doing there, and read what they are doing. Several sessions can work in one tab; their calls run one at a time, in order. list/status return each member session with its published task note and whether a call is running in the tab. start publishes your task when you begin, update reports progress, finish says the whole task is done with a short summary (finishing a tool call is not finishing the task). hold keeps the tab to yourself for a few steps that must not be interrupted (a checkout, a multi-page form): the other sessions' calls in it are refused until you release it, the minutes pass (renew by holding again), or you make no call for 2 minutes; summary says why and what the others should not do. With noWorkaround the others can't work on the tab's site in any tab either, so they can't open the same page elsewhere. Release as soon as you're done. Notes never include page contents. Answers at once, even during long browser operations. Call separately from browser_batch. No chat history is shared.",
   {
-    action: z.enum(["list", "status", "start", "update", "finish"]),
+    action: z.enum(["list", "status", "start", "update", "finish", "hold", "release"]),
     tabId: z
       .number()
       .int()
@@ -197,8 +197,19 @@ tool(
       .max(2000)
       .optional()
       .describe(
-        "Required for start/update/finish. Short task, progress or result; shared with the other sessions in the tab. No secrets.",
+        "Required for start/update/finish/hold. Short task, progress, result or the reason for a hold; shared with the other sessions in the tab. No secrets.",
       ),
+    minutes: z
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .optional()
+      .describe("hold: how long, 1 to 10 minutes (default 10). Hold again to renew."),
+    noWorkaround: z
+      .boolean()
+      .optional()
+      .describe("hold: also keep the other sessions off this tab's site (origin) in every tab."),
   },
 );
 

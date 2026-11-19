@@ -111,13 +111,22 @@ export function tabTools(ctx) {
       // a shared tab lists every member with its task note; a tab of one's own needs none
       const own = (tab) => {
         const info = ctx.describeTab(tab);
-        const members = ctx.tabStatus(info.tabId, activeSession).members;
+        const { members, hold } = ctx.tabStatus(info.tabId, activeSession);
         delete info.members;
-        return members.length > 1 ? { ...info, sharedWith: members.filter((m) => !m.you) } : info;
+        return {
+          ...info,
+          ...(members.length > 1 ? { sharedWith: members.filter((m) => !m.you) } : {}),
+          ...(hold ? { hold } : {}),
+        };
+      };
+      const another = (tab) => {
+        const info = ctx.describeTab(tab);
+        const hold = ctx.holdOf(info.tabId);
+        return hold ? { ...info, hold: ctx.describeHold(info.tabId, hold, activeSession) } : info;
       };
       return text({
         userTabs,
-        ...(others.length ? { agentTabs: others.map(ctx.describeTab) } : {}),
+        ...(others.length ? { agentTabs: others.map(another) } : {}),
         session,
         extensions: await ctx.extensionPanels.list(),
         ...recipes,

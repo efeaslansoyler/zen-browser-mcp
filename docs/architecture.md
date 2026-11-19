@@ -58,7 +58,7 @@ function with a fake (see `test/support/bridge.mjs`).
 | `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
 | `Island.sys.mjs` | The island: live status, Stop/Resume, `ask_user` and `hand_to_user`, approvals, dialogs, pick note box |
 | `Agent.sys.mjs` | Agent identity, theme and icon (`assets/`: Claude, Codex, Antigravity, OpenCode, several agents; others a drawn `>_`); shared by Node and Gecko |
-| `TabAccess.sys.mjs` | Which sessions may use which tabs (a tab can have several members), their `tab_work` notes, and membership tickets for queued requests |
+| `TabAccess.sys.mjs` | Which sessions may use which tabs (a tab can have several members), their `tab_work` notes and holds, and membership tickets for queued requests |
 | `TabActivity.sys.mjs` | In shared tabs: which session acted when, and whether it could change the page (for `meanwhile` and `pageChanged`) |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
@@ -112,6 +112,12 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   caller's last call (`meanwhile`: agent, task note, number of actions, how long ago; never
   values or page contents) and, until the caller reads the page again (`read_page`, `find`,
   `get_page_text`, a screenshot), that another member may have changed it (`pageChanged`).
+- `tab_work hold` keeps a tab to one member for 1–10 minutes (renewable) with a reason. The
+  other sessions' calls in it are refused at once, before they wait for the tab's lock; with
+  `noWorkaround` also their calls in any tab on the held tab's origin and navigations there
+  (leaving that site is fine). A hold ends on `release`, when it expires, when its holder has
+  made no call for 2 minutes (`TabAccess.holdOf` checks lazily), when the holder leaves the
+  tab or disconnects, on take-back, and from the tab menu's "Remove hold".
 - Calls on one tab run in order; calls on different tabs run side by side, and calls without a
   tab don't wait. A call queues on every tab it names when it arrives (a batch on all of its
   tabs), so requests can't wait for each other. The system clipboard, browser settings and

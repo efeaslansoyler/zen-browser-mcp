@@ -105,6 +105,7 @@ export function sessionManager(ctx) {
     const info = ctx.sessions.get(id);
     if (info) info.disconnected = true;
     ctx.sessionVersions.set(id, (ctx.sessionVersions.get(id) || 0) + 1);
+    for (const tabId of ctx.access.holdsOf(id)) ctx.access.release(tabId, id);
     for (const call of ctx.calls)
       if (call.session === id) call.cancel(new Error("The browser session disconnected; its operation was cancelled."));
     // Allow the same MCP process to reconnect after a bridge reload or brief outage.

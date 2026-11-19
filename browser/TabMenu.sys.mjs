@@ -1,10 +1,11 @@
-// The tab context menu: "Take back from agent", "Give/transfer to session…" and "Agent
-// settings" (permission mode, the sites agents can use and, in Zen, the workspace for agent tabs). UI only;
-// the work goes through env:
+// The tab context menu: "Take back from agent", "Remove hold", "Give to / Share with session…"
+// and "Agent settings" (permission mode, the sites agents can use and, in Zen, the workspace for
+// agent tabs). UI only; the work goes through env:
 //   env.L(en, tr), env.mark: the mark attribute,
 //   env.sessions(): connected sessions, env.memberNames(tab), env.menuAgent(),
 //   env.paintIcon(item, agent): the agent's icon and color,
-//   env.give(tab, sessionId), env.takeBack(tab),
+//   env.give(tab, sessionId), env.takeBack(tab), env.holdLabel(tab): who holds the tab and why
+//   (null if nobody), env.releaseHold(tab),
 //   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hasCustomPermissions(), env.hostOf(browser), env.siteEntry(host),
 //   env.workspaces(win): Zen workspace names (null outside Zen),
 //   env.history(tabId): the latest agent actions in that tab (lines), env.openHistory(win): the full history page
@@ -47,12 +48,16 @@ export class TabMenu {
     // at the end of Firefox's AI section, otherwise at the end of the menu
     const anchor = win.document.getElementById("context_aiSeparator");
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
+    // an agent's hold on the tab (tab_work hold): the user can end it
+    const release = win.document.createXULElement("menuitem");
+    release.id = MENU_ID + "-release";
+    menu.insertBefore(release, item.nextSibling);
     const permissionsMenu = win.document.createXULElement("menu");
     permissionsMenu.id = MENU_ID + "-permissions";
     permissionsMenu.setAttribute("label", L("Agent settings", "Ajan ayarları"));
     const permissionsPopup = win.document.createXULElement("menupopup");
     permissionsMenu.append(permissionsPopup);
-    menu.insertBefore(permissionsMenu, item.nextSibling);
+    menu.insertBefore(permissionsMenu, release.nextSibling);
     const give = win.document.createXULElement("menu");
     give.className = "menu-iconic";
     const targets = win.document.createXULElement("menupopup");
@@ -123,6 +128,9 @@ export class TabMenu {
           ? { id: tab.getAttribute("data-zen-agent"), name: tab.getAttribute("zen-mcp-agent-name") }
           : env.menuAgent(),
       );
+      const hold = tabs.length === 1 && tab.hasAttribute(MARK) ? env.holdLabel(tab) : null;
+      release.hidden = !hold;
+      if (hold) release.setAttribute("label", L("Remove hold", "Tutmayı kaldır") + ` · ${hold}`);
       const members = tab && env.memberNames(tab);
       item.setAttribute("label", L("Take back from agent", "Ajandan geri al") + (members ? ` · ${members}` : ""));
       permissionsPopup.replaceChildren();
@@ -233,12 +241,17 @@ export class TabMenu {
     const onCommand = () => {
       for (const tab of shownTabs) if (tab.isConnected && tab.hasAttribute(MARK)) env.takeBack(tab);
     };
+    const onRelease = () => {
+      for (const tab of shownTabs) if (tab.isConnected) env.releaseHold(tab);
+    };
     menu.addEventListener("popupshowing", onShowing);
     item.addEventListener("command", onCommand);
+    release.addEventListener("command", onRelease);
     this.cleanups.add(() => {
       this.builders.delete(win);
       menu.removeEventListener("popupshowing", onShowing);
       item.remove();
+      release.remove();
       give.remove();
       permissionsMenu.remove();
       historyMenu.remove();
