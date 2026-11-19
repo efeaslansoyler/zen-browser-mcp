@@ -4,6 +4,8 @@ const DURATION = 10 * 60_000;
 const RETENTION = 15 * 60_000;
 const MAX_ENTRIES = 2000;
 const MAX_BYTES = 4 * 1024 * 1024;
+const SENSITIVE =
+  /auth|login|logout|session|token|passw|secret|credential|cookie|csrf|xsrf|otp|pin(?:$|[-_])|reset|verify|invite|(?:^|[-_])code(?:$|[-_])/i;
 const safeHeaders = {
   "content-type": /^[\w.+-]+\/[\w.+-]+(?:;\s*charset=[\w-]+)?$/i,
   "content-length": /^\d{1,16}$/,
@@ -88,9 +90,43 @@ function channelInfo(channel) {
   try {
     const http = channel.QueryInterface(Ci.nsIHttpChannel);
     result.responseSize = Number.isSafeInteger(http.encodedBodySize) ? http.encodedBodySize : -1;
+    result.decodedSize = Number.isSafeInteger(http.decodedBodySize) ? http.decodedBodySize : -1;
     result.transferSize = Number.isSafeInteger(http.transferSize) ? http.transferSize : -1;
   } catch {}
   return result;
+}
+
+export function validateHarProjection(input, origin) {
+  const url = new URL(input.url);
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (
+    url.origin !== origin ||
+    (url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    SENSITIVE.test(decodeURIComponent(url.pathname))
+  )
+    throw new Error("Choose a same-origin HTTPS or localhost JSON endpoint without credentials, query, or fragment.");
+  if (
+    !Array.isArray(input.fields) ||
+    !input.fields.length ||
+    input.fields.length > 12 ||
+    input.fields.some(
+      ({ name, values }) =>
+        !/^[a-z][a-z0-9_]{0,39}$/i.test(name) ||
+        SENSITIVE.test(name) ||
+        ["constructor", "prototype"].includes(name) ||
+        (values !== undefined &&
+          (!Array.isArray(values) ||
+            !values.length ||
+            values.length > 12 ||
+            values.some((value) => !/^[a-z][a-z_-]{0,31}$/i.test(value) || SENSITIVE.test(value)))),
+    )
+  )
+    throw new Error("Choose up to 12 known-safe boolean or enumerated fields.");
+  return { url: url.href, fields: input.fields };
 }
 
 export class HarCapture {
@@ -100,12 +136,13 @@ export class HarCapture {
     this.tabs = new Map();
   }
 
-  start(tabId, session) {
+  start(tabId, session, projection) {
     if (this.tabs.has(tabId) || this.roots.has(tabId)) throw new Error("This tab already has a HAR capture.");
     if (this.roots.size >= 8) throw new Error("Too many HAR captures.");
     const capture = {
       tabId,
       session,
+      projection,
       start: Date.now(),
       tabs: new Set([tabId]),
       rows: new Map(),
@@ -181,6 +218,46 @@ export class HarCapture {
     for (const capture of this.roots.values()) this.drop(capture);
   }
 
+  projectionFor(tabId, channel) {
+    const capture = this.tabs.get(tabId);
+    const projection = capture?.projection;
+    return projection &&
+      channel.requestMethod === "GET" &&
+      channel.URI.spec === projection.url &&
+      this.env.allowed(tabId, capture.session, channel.URI.host)
+      ? { capture, projection }
+      : null;
+  }
+
+  projectBody(tabId, channel, entry) {
+    const match = this.projectionFor(tabId, channel);
+    if (
+      !match ||
+      entry.body?.length !== entry.bodySize ||
+      entry.bodySize > 65536 ||
+      !/^application\/(?:[\w.+-]+\+)?json(?:;|$)/i.test(entry.mime ?? "") ||
+      entry.responseHeaders?.some(([name, value]) => name === "content-encoding" && value !== "identity")
+    )
+      return;
+    const row = match.capture.rows.get(`${tabId}:${channel.channelId}`);
+    if (!row) return;
+    try {
+      const payload = JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(
+          Uint8Array.from(entry.body, (character) => character.charCodeAt(0)),
+        ),
+      );
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+      const safe = {};
+      for (const { name, values } of match.projection.fields) {
+        if (!Object.hasOwn(payload, name)) continue;
+        const value = payload[name];
+        if (values ? values.includes(value) : typeof value === "boolean") safe[name] = value;
+      }
+      if (Object.keys(safe).length) row.projected = JSON.stringify(safe);
+    } catch {}
+  }
+
   observe(channel, tabId, type, topic) {
     const capture = this.tabs.get(tabId);
     if (!capture) return;
@@ -230,6 +307,7 @@ export class HarCapture {
     const name = Services.uuid.generateUUID().toString().slice(1, -1);
     const path = PathUtils.join(this.env.dir, `capture-${name}.har`);
     await IOUtils.writeUTF8(path, JSON.stringify(data), { tmpPath: path + ".tmp", mode: "create" });
+    await IOUtils.setPermissions(path, 0o600);
     this.env.setTimeout(() => IOUtils.remove(path).catch(() => {}), RETENTION);
     return path;
   }
@@ -271,7 +349,11 @@ export class HarCapture {
           httpVersion: row.responseVersion ?? "",
           cookies: [],
           headers: row.responseHeaders ?? [],
-          content: { size: -1, mimeType: row.mime ?? "" },
+          content: {
+            size: row.decodedSize ?? -1,
+            mimeType: row.mime ?? "",
+            ...(row.projected ? { text: row.projected, comment: "Selected response fields only" } : {}),
+          },
           redirectURL:
             row.redirect && this.env.allowed(row.tabId, capture.session, new URL(row.redirect).hostname)
               ? row.redirect
@@ -289,7 +371,7 @@ export class HarCapture {
       });
     }
     const file = await this.write({
-      log: { version: "1.2", creator: { name: "zen-browser-mcp", version: "1" }, entries },
+      log: { version: "1.2", creator: { name: "zen-browser-mcp", version: "1" }, pages: [], entries },
     });
     try {
       call.check();

@@ -139,7 +139,8 @@ export class NetworkLog {
       // headers added while sending (such as cookies) are complete here
       entry.requestHeaders = headersOf(channel, "visitRequestHeaders");
     } catch {}
-    if (BODY_TYPES.has(entry.type) && entry.body === undefined) captureBody(channel, entry, log);
+    if (BODY_TYPES.has(entry.type) && entry.body === undefined)
+      captureBody(channel, entry, log, () => this.env.projectBody?.(channel, browserId, entry));
   }
 
   // read_network_requests with id: one request's details
@@ -208,7 +209,7 @@ function uploadText(channel) {
 
 // Sits in front of the channel's listener and copies the incoming data (with the content
 // encoding decoded); the page receives the data unchanged.
-function captureBody(channel, entry, log) {
+function captureBody(channel, entry, log, projectBody) {
   let traceable;
   try {
     traceable = channel.QueryInterface(Ci.nsITraceableChannel);
@@ -236,6 +237,7 @@ function captureBody(channel, entry, log) {
     },
     onStopRequest(request, status) {
       try {
+        projectBody();
         trimBodies(log);
       } catch {}
       original.onStopRequest(request, status);

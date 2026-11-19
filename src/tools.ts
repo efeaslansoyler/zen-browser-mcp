@@ -626,6 +626,26 @@ tool(
     tabId,
     action: z.enum(["start", "attach", "status", "stop", "cancel"]),
     childTabId: tabId.optional().describe("Owned child tab to attach."),
+    response_projection: z
+      .object({
+        url: z.string().max(2048).describe("Exact same-origin HTTPS or localhost JSON endpoint, with no query."),
+        fields: z
+          .array(
+            z.object({
+              name: z.string().max(40),
+              values: z
+                .array(z.string().max(32))
+                .min(1)
+                .max(12)
+                .optional()
+                .describe("Exact safe tokens for a string field. Omit for a boolean field."),
+            }),
+          )
+          .min(1)
+          .max(12),
+      })
+      .optional()
+      .describe("Start only: opt in to exporting selected known-safe response fields."),
     ...networkFilters,
   },
   () => 150000,

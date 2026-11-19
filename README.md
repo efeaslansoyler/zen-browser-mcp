@@ -559,7 +559,10 @@ attach ask in the island.
 
 Exports include available timings, response sizes, redirect targets, and selected response
 and request headers. Query values and recognized sensitive path segments are masked.
-Cookies, credentials, unlisted headers, and body content are omitted. Hostnames and
+Cookies, credentials, and unlisted headers are omitted. Body content is omitted by default.
+To include selected response fields, pass `response_projection` at start with one exact
+same-origin JSON endpoint and its known-safe boolean or enumerated fields. The island
+identifies the opt-in. Hostnames and
 remaining paths can identify internal resources. The HAR file is kept for 15 minutes.
 The export reports unfinished requests and entries without enough timing data.
 

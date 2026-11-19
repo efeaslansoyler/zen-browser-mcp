@@ -192,9 +192,14 @@ export function readTools(ctx) {
 
     async network_capture(args, call) {
       const { tabId, action, childTabId } = args;
-      browserFor(call, tabId);
+      const browser = browserFor(call, tabId);
       const har = ctx.har;
-      if (action === "start") return text(har.start(tabId, call.session));
+      if (action === "start") {
+        const projection =
+          args.response_projection &&
+          ctx.validateHarProjection(args.response_projection, ctx.originOf(browser.currentURI.spec));
+        return text(har.start(tabId, call.session, projection));
+      }
       const capture = har.owned(tabId, call.session);
       if (action === "status") return text(har.status(capture));
       if (action === "attach") {

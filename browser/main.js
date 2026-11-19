@@ -520,7 +520,8 @@ function logError(where, e) {
     });
 
     // HTTP requests of agent tabs.
-    const { HarCapture } = load("HarCapture");
+    const { HarCapture, validateHarProjection } = load("HarCapture");
+    ctx.validateHarProjection = validateHarProjection;
     const harDir = `${zenMcpRuntimeDir()}/zen-mcp-har`;
     ctx.har = new HarCapture({
       allowed: (tabId, session, host) => !state.paused && access.has(tabId, session) && ctx.siteAllowed(host),
@@ -529,6 +530,7 @@ function logError(where, e) {
       dir: harDir,
     });
     ctx.network = new NetworkLog((globalThis.zenMcpNetwork ||= new Map()), {
+      projectBody: (channel, tabId, entry) => ctx.har.projectBody(tabId, channel, entry),
       capture: (channel, browserId, type, topic) => {
         try {
           ctx.har.observe(channel, browserId, type, topic);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile, unlink } from "node:fs/promises";
-import { approveWhile } from "./support/fixture.ts";
+import { approveWhile, pageEval } from "./support/fixture.ts";
 import { createServer } from "node:http";
 import { call, type Content } from "../src/zen.ts";
 
@@ -10,7 +10,16 @@ const text = (content: Content[]) =>
     .map((item) => item.text)
     .join("\n");
 const server = createServer((request, response) => {
-  if (request.url?.startsWith("/redirect")) {
+  if (request.url === "/health") {
+    response.writeHead(200, { "Content-Type": "application/json" }).end(
+      JSON.stringify({
+        healthy: true,
+        status: "ready",
+        nested: { secret: "fixture-secret" },
+        email: "fixture-secret",
+      }),
+    );
+  } else if (request.url?.startsWith("/redirect")) {
     response
       .writeHead(302, {
         Location: `http://localhost:${(server.address() as { port: number }).port}/target?code=fixture-secret`,
@@ -43,8 +52,19 @@ try {
   const saved = await capture("stop");
   try {
     const raw = await readFile(saved.path, "utf8");
+    const imported = await call("chrome_eval", {
+      code: `(() => {
+      const { require } = ChromeUtils.importESModule("resource://devtools/shared/loader/Loader.sys.mjs");
+      const { HarImporter } = require("resource://devtools/client/netmonitor/src/har/har-importer.js");
+      let count = 0;
+      new HarImporter({ clearRequests() {}, addRequest() {}, updateRequest() { count++; }, addTimingMarker() {} })
+        .import(${JSON.stringify(raw)});
+      return count;
+    })()`,
+    });
     assert(!raw.includes("fixture-secret"));
     const entries = JSON.parse(raw).log.entries;
+    assert.equal(JSON.parse(text(imported)), entries.length);
     assert(
       entries.some((entry: { response: { status: number } }) => entry.response.status === 302),
       raw,
@@ -61,6 +81,35 @@ try {
     console.log("OK: cross-host HAR, safe headers and secret redaction");
   } finally {
     await unlink(saved.path);
+  }
+  await call("navigate", { tabId, url: base });
+  await approveWhile(
+    call(
+      "network_capture",
+      {
+        tabId,
+        action: "start",
+        response_projection: {
+          url: base + "/health",
+          fields: [{ name: "healthy" }, { name: "status", values: ["ready"] }],
+        },
+      },
+      5000,
+    ),
+    "selected response fields",
+  );
+  await pageEval(tabId!, '(async () => (await fetch("/health")).text())()');
+  const projected = await capture("stop");
+  try {
+    const raw = await readFile(projected.path, "utf8");
+    assert(!raw.includes("fixture-secret"));
+    const entry = JSON.parse(raw).log.entries.find((entry: { request: { url: string } }) =>
+      entry.request.url.endsWith("/health"),
+    );
+    assert.deepEqual(JSON.parse(entry?.response.content.text), { healthy: true, status: "ready" });
+    console.log("OK: DevTools HAR import and opt-in JSON response projection");
+  } finally {
+    await unlink(projected.path);
   }
 } finally {
   try {

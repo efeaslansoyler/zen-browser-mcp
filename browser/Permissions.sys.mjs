@@ -61,6 +61,10 @@ export function permissions(ctx) {
         if (args.action === "form_input")
           return L(`fill extension field ${args.ref}`, `eklenti alanını doldurmak: ${args.ref}`);
         return null;
+      case "network_capture":
+        if (args.action === "start" && args.response_projection)
+          return "start a HAR capture with selected response fields from one endpoint";
+        return null;
       case "computer": {
         if (args.action === "hover" && ctx.holdsButtons(browser))
           return L("move a held mouse button", "basılı fare düğmesiyle hareket etmek");
