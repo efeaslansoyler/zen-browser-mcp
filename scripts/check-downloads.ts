@@ -7,6 +7,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { call } from "../src/zen.ts";
@@ -20,6 +21,7 @@ const chrome = async (code: string) => text({ content: await call("chrome_eval",
 const clients: Client[] = [],
   files: string[] = [];
 let tabId: number | undefined;
+const nativeDialog = process.argv.includes("--native-dialog");
 async function tool(client: Client, name: string, args: object = {}, error = false) {
   const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
   assert.equal(Boolean(result.isError), error, text(result));
@@ -70,6 +72,41 @@ const server = http.createServer((req, res) => {
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = (server.address() as { port: number }).port;
 
+// Exercise only the native dialog for this fixture's unique URL and filename.
+async function dialog(file: string, action: "find" | "save" | "cancel") {
+  for (let i = 0; i < 40; i++) {
+    const found = await chrome(`(() => {
+      for (const win of Services.wm.getEnumerator(null)) {
+        if (win.document.documentURI !== "chrome://mozapps/content/downloads/unknownContentType.xhtml") continue;
+        const launcher = win.dialog?.mLauncher;
+        if (launcher?.source.spec !== ${JSON.stringify(`http://127.0.0.1:${port}/${file}`)} ||
+            launcher.suggestedFileName !== ${JSON.stringify(file === "slow" ? `slow-${name}` : name)}) continue;
+        const action = ${JSON.stringify(action)};
+        if (action === "find") return true;
+        const dialog = win.document.querySelector("dialog");
+        if (action === "cancel") {
+          dialog.cancelDialog();
+          return true;
+        }
+        const button = dialog.getButton("accept");
+        if (button.disabled) return false;
+        win.document.getElementById("save").click();
+        button.click();
+        return true;
+      }
+      return false;
+    })()`);
+    if (found === "true") return;
+    await sleep(100);
+  }
+  assert.fail(`Could not ${action} the fixture download dialog for /${file}`);
+}
+
+const waiting = {
+  state: "waiting_for_user",
+  message: "Choose Save or Cancel in the browser download dialog. After saving, call downloads wait again.",
+};
+
 try {
   const configFile = path.join(
     process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"),
@@ -83,7 +120,31 @@ try {
   assert.match(await tool(a, "downloads", { tabId }), /No downloads from this tab yet/);
 
   const ref = /\b(ref_\d+)\b/.exec(await tool(a, "find", { tabId, query: "Get file" }))![1];
-  await tool(a, "computer", { tabId, action: "left_click", ref });
+  const click = () => tool(a, "computer", { tabId, action: "left_click", ref });
+  await click();
+  if (nativeDialog) {
+    try {
+      await dialog("file", "find");
+      assert.deepEqual(JSON.parse(await tool(a, "downloads", { tabId, action: "wait", timeout: 2 })), waiting);
+      assert.deepEqual(JSON.parse(await tool(a, "downloads", { tabId })), {
+        downloads: [],
+        pending: waiting,
+      });
+      const otherTab = JSON.parse(await tool(a, "tabs_create_mcp")).tabId;
+      try {
+        assert.match(await tool(a, "downloads", { tabId: otherTab }), /No downloads from this tab yet/);
+        assert.match(await tool(b, "downloads", { tabId }, true), /used by other sessions/);
+      } finally {
+        await tool(a, "tabs_close_mcp", { tabId: otherTab });
+      }
+    } finally {
+      await dialog("file", "cancel");
+    }
+    assert.match(await tool(a, "downloads", { tabId }), /No downloads from this tab yet/);
+    console.log("ok  native dialog → scoped pending status → cancel clears it");
+    await click();
+    await dialog("file", "save");
+  }
   const done = JSON.parse(await tool(a, "downloads", { tabId, action: "wait", timeout: 30 }));
   files.push(done.path);
   assert.equal(done.state, "done", JSON.stringify(done));
@@ -121,6 +182,7 @@ try {
 
   // navigation-started download (no click) is tracked too
   await tool(a, "navigate", { tabId, url: `http://127.0.0.1:${port}/file` }).catch(() => {});
+  if (nativeDialog) await dialog("file", "save");
   const second = JSON.parse(await tool(a, "downloads", { tabId, action: "wait", timeout: 30 }));
   files.push(second.path);
   assert.equal(second.state, "done");
@@ -129,6 +191,7 @@ try {
   console.log("ok  navigate → wait: second download");
 
   await tool(a, "navigate", { tabId, url: `http://127.0.0.1:${port}/slow` }).catch(() => {});
+  if (nativeDialog) await dialog("slow", "save");
   const running = JSON.parse(await tool(a, "downloads", { tabId, action: "wait", until: "start", timeout: 10 }));
   assert.equal(running.state, "downloading");
   assert(running.events && fs.existsSync(running.events), "no events file");

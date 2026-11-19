@@ -27,6 +27,10 @@ export function browserTools(ctx) {
     if (!record.closed) info.events = record.events;
     return info;
   };
+  const pendingDownload = {
+    state: "waiting_for_user",
+    message: "Choose Save or Cancel in the browser download dialog. After saving, call downloads wait again.",
+  };
   return {
     async browser_settings(args, call) {
       if (args.action === "devices")
@@ -56,9 +60,10 @@ export function browserTools(ctx) {
       if (action === "list") {
         const list = downloads.forTab(browserId);
         for (const r of list) if (DownloadLog.finished(r)) r.reported = true;
+        const pending = downloads.hasPendingDialog(browserId) ? pendingDownload : undefined;
         return text(
-          list.length
-            ? { downloads: list.map(describeDownload) }
+          list.length || pending
+            ? { downloads: list.map(describeDownload), pending }
             : "No downloads from this tab yet. If a click should have started one, the site may still be preparing it: use action wait.",
         );
       }
@@ -86,6 +91,7 @@ export function browserTools(ctx) {
           if (record.download.succeeded) await DownloadLog.sha256(record);
           return text(describeDownload(record));
         }
+        if (!record && downloads.hasPendingDialog(browserId)) return text(pendingDownload);
         if (Date.now() - start >= limit) {
           throw new Error(
             record

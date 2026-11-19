@@ -34,7 +34,7 @@ export class DownloadLog {
 
   #added(download) {
     if (this.records.list.some((r) => r.download === download)) return;
-    const browserId = this.#sourceTab(download);
+    const browserId = this.#sourceTab(download.source.browsingContextId);
     if (browserId == null) return;
     const record = { id: this.records.nextId++, browserId, download, reported: false };
     record.events = this.env.events.path(record.id);
@@ -88,8 +88,8 @@ export class DownloadLog {
   }
 
   // The tab of the frame that started the download; for a popup, the tab that opened it.
-  #sourceTab(download) {
-    const bc = download.source.browsingContextId && BrowsingContext.get(download.source.browsingContextId);
+  #sourceTab(contextId) {
+    const bc = contextId && BrowsingContext.get(contextId);
     if (!bc) return null;
     for (let top = bc.top; top; top = top.opener?.top) {
       if (this.env.tracked(top.browserId)) return top.browserId;
@@ -99,6 +99,17 @@ export class DownloadLog {
 
   forTab(browserId) {
     return this.records.list.filter((r) => r.browserId === browserId);
+  }
+
+  hasPendingDialog(browserId) {
+    // Gecko opens this window before creating a Downloads entry. Attribute it using
+    // the launcher, never the focused tab or the browser window that owns the dialog.
+    for (const win of Services.wm.getEnumerator(null)) {
+      if (win.closed || win.document.documentURI !== "chrome://mozapps/content/downloads/unknownContentType.xhtml")
+        continue;
+      if (this.#sourceTab(win.dialog?.mLauncher?.browsingContextId) === browserId) return true;
+    }
+    return false;
   }
 
   // a paused download (cancelled with partial data) doesn't count as finished

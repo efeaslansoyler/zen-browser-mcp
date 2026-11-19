@@ -386,6 +386,7 @@ tool(
     "Track files downloaded from an agent tab (or a popup it opened): state (downloading, done, failed, canceled, paused), source url, filename, absolute path, size or progress, sha256 when done.",
     "A running download also has an events file: JSON lines written when it starts, every 10% and when it ends (the last line has state done/failed/canceled, plus sha256 when done). For long downloads, if you have a background monitor tool, call wait with until: start right after the click, watch the returned events file (e.g. tail -f) and keep working; otherwise use wait. The file is deleted automatically a few minutes after the download ends.",
     "action wait: call right after the click/navigation that starts a download; blocks until the oldest download not yet reported (or the next one to start) finishes, so call it once per expected file. Pass id to wait for a specific one. list shows all downloads from the tab. cancel stops download id and deletes its partial file.",
+    "If Gecko is waiting for a Save or Cancel choice in its file handling dialog, wait can return waiting_for_user without a download id, and list can show it under pending. Ask the user to answer the dialog, then wait again after Save.",
   ].join(" "),
   {
     tabId,
