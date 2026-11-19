@@ -89,7 +89,10 @@ export function toolRunner(ctx) {
       const input =
         tool === "computer" &&
         ["left_click", "double_click", "triple_click", "mouse_up", "key", "key_up"].includes(args.action);
-      if (browser && (input || tool === "hand_to_user")) ctx.watchTabOpens?.(args.tabId, call.session);
+      if (browser && (input || tool === "hand_to_user")) {
+        const waitMs = tool === "hand_to_user" ? Math.min(3600, args.timeout ?? 600) * 1000 : 0;
+        ctx.watchTabOpens?.(args.tabId, call.session, waitMs);
+      }
       ran = true;
       const result = await ctx.tools[tool](args, call);
       if (browser && !cleanup) ctx.assertSiteAccess(browser);

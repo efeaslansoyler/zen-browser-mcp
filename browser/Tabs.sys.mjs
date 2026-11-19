@@ -38,7 +38,7 @@ export function tabs(ctx) {
   const pendingOpens = new Map();
   const allTabs = () => ctx.browserWindows().flatMap(ctx.windowTabs);
 
-  function watchTabOpens(tabId, session) {
+  function watchTabOpens(tabId, session, waitMs = 0) {
     const now = Date.now();
     for (const [key, watches] of pendingOpens) {
       const live = watches.filter((watch) => watch.until > now);
@@ -51,7 +51,7 @@ export function tabs(ctx) {
       opener: ctx.findTab(tabId)?.linkedBrowser.browsingContext?.top,
       ticket: ctx.access.ticket([tabId], session),
       known: new Set(allTabs().map((tab) => tab.linkedBrowser?.browserId)),
-      until: now + 10_000,
+      until: now + waitMs + 10_000,
     });
     pendingOpens.set(session, watches.slice(-8));
   }
@@ -81,7 +81,11 @@ export function tabs(ctx) {
         )
           continue;
         for (const candidate of candidates) candidate.known.add(browser.browserId);
-        result.push({ sourceTabId: watch.tabId, ...ctx.describeTab(tab) });
+        result.push({
+          sourceTabId: watch.tabId,
+          tabId: browser.browserId,
+          ...(!ctx.siteAllowed(ctx.hostOf(browser)) ? { blocked: true } : {}),
+        });
       }
     }
     pendingOpens.set(session, candidates);
