@@ -71,16 +71,30 @@ for (const name of fs.readdirSync(dir)) {
   if (name.endsWith(".sys.mjs")) modules.set(name, await import(new URL(name, dir)));
 }
 
-test("main.js sets up and starts without errors", () => {
-  const context = vm.createContext({ ...gecko, zenMcpDir: "/zen-mcp", zenMcpName: "zen-mcp", console });
-  vm.runInContext(fs.readFileSync(new URL("main.js", dir), "utf8"), context, { filename: "main.js" });
-  // errors caused by the stubs (e.g. the config file) don't count; only setup and start
-  assert.equal(context.zenMcpStartError, undefined);
-  // without windows, start waits for final-ui-startup; simulate that moment
-  const startup = observers.get("final-ui-startup");
-  assert.ok(startup, "start was not scheduled");
-  startup();
-  assert.equal(context.zenMcpStartError, undefined);
-  assert.equal(context.zenMcpRunning, context.zenMcpVersion);
-  context.zenMcpStop();
-});
+for (const legacySessionStore of [false, true]) {
+  test(`main.js starts with the ${legacySessionStore ? "legacy" : "current"} SessionStore path`, () => {
+    let importedLegacy = false;
+    const ChromeUtils = Object.create(gecko.ChromeUtils, {
+      importESModule: {
+        value(url) {
+          if (legacySessionStore && url === "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs")
+            throw new Error("SessionStore is packaged under resource:///modules/sessionstore/ on this build");
+          if (url === "resource:///modules/sessionstore/SessionStore.sys.mjs") importedLegacy = true;
+          return gecko.ChromeUtils.importESModule(url);
+        },
+      },
+    });
+    const context = vm.createContext({ ...gecko, ChromeUtils, zenMcpDir: "/zen-mcp", zenMcpName: "zen-mcp", console });
+    vm.runInContext(fs.readFileSync(new URL("main.js", dir), "utf8"), context, { filename: "main.js" });
+    // errors caused by the stubs (e.g. the config file) don't count; only setup and start
+    assert.equal(context.zenMcpStartError, undefined);
+    // without windows, start waits for final-ui-startup; simulate that moment
+    const startup = observers.get("final-ui-startup");
+    assert.ok(startup, "start was not scheduled");
+    startup();
+    assert.equal(context.zenMcpStartError, undefined);
+    assert.equal(context.zenMcpRunning, context.zenMcpVersion);
+    context.zenMcpStop();
+    assert.equal(importedLegacy, legacySessionStore);
+  });
+}

@@ -68,7 +68,8 @@ something that "should work".
 
 ## Browser UI and session store
 
-- SessionStore lives at `moz-src:///browser/components/sessionstore/SessionStore.sys.mjs`.
+- SessionStore lives at `moz-src:///browser/components/sessionstore/SessionStore.sys.mjs` on
+  newer Gecko builds. ESR-based builds may use `resource:///modules/sessionstore/SessionStore.sys.mjs`.
   Values of lazy tabs may only be readable some time after the window opens.
 - `gBrowser.insertBrowser(tab)` (no underscore) creates the `<browser>` of a lazy tab.
 - Without a container Firefox sets `.tab-context-line` to `display: none`.

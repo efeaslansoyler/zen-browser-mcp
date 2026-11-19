@@ -149,9 +149,14 @@ function logError(where, e) {
     const { ViewPopup, isGloballyBlockingOpenPopup } = ChromeUtils.importESModule(
       "resource:///modules/ExtensionPopups.sys.mjs",
     );
-    const { SessionStore } = ChromeUtils.importESModule(
-      "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
-    );
+    let SessionStore;
+    try {
+      ({ SessionStore } = ChromeUtils.importESModule(
+        "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+      ));
+    } catch {
+      ({ SessionStore } = ChromeUtils.importESModule("resource:///modules/sessionstore/SessionStore.sys.mjs"));
+    }
 
     // ---- state that survives reloads (kept on this scope's global) ----
 
