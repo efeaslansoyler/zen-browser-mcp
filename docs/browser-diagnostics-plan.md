@@ -2,7 +2,8 @@
 
 This is the proposed implementation sequence for viewport screenshot diffs, full-page screenshots,
 network filters, HAR capture, and local Web Vitals. The HAR scope includes same-tab login and
-checkout redirects across hosts. Proposed tool arguments and limits are starting points for review.
+checkout redirects across hosts, with discovered child tabs available for explicit attachment.
+Proposed tool arguments and limits are starting points for review.
 
 ## 1. Add viewport screenshot diffs
 
@@ -30,8 +31,12 @@ viewport coordinates as the current capture.
   offset, and effective capture settings. Tie document identity to the capture and verify it
   before publishing the result. Clear cached state when a session leaves, a tab is taken back
   or closed, or the bridge reloads. Follow `ReadSnapshots.sys.mjs` for invalidation.
-- V1 targets same-document interaction checks. Cross-navigation comparisons need a separate
-  baseline lifetime and scope contract. Settle that scope before implementing the cache.
+- V1 targets same-document interactions such as opening a modal, showing error text, or changing
+  a client-side tab. A reload or a link that loads a new document ends that document's baseline,
+  even if the URL stays the same. An SPA route change can keep the same document; apply the same
+  origin, frame, geometry, and scroll checks. Cross-document comparison is a separate workflow
+  for reloads, two URLs, or before/after deploy captures. Settle its scope before implementing the
+  cache.
 
 **Acceptance.** A fixture changes one colored rectangle and reports a nonzero diff in the correct
 area. The same capture reports unchanged. Scroll, resize, navigation, changed frame context,
@@ -78,13 +83,33 @@ pending requests are retained in an unfiltered list and have no HTTP status unle
 **Acceptance.** Fixture routes exercise GET/POST, exact and family status, fetch and document
 types, combined filters, limits, empty results, and the existing details and clear behavior.
 
-## 4. Add bounded cross-host HAR capture
+## 4. Discover spawned tabs and capture HAR across a flow
 
-**User flow.** Proposed `network_capture` actions are `start`, `status`, `stop`, and `cancel`.
+### 4a. Report tabs opened by an agent's action
+
+- Today `tabs_context_mcp` lists unassigned tabs in `userTabs`. `Tabs.sys.mjs` still requires
+  membership before page tools can reach those tabs. `DownloadLog.sys.mjs` already follows
+  `BrowsingContext.opener` for download attribution. A page action currently has no equivalent
+  result that links a new tab to its source action.
+- Prototype browser-native attribution using `TabOpen` and trusted opener context around the
+  action, including tabs opened in a new window. Validate `target=_blank`, `rel=noopener`,
+  `window.open`, and delayed opens. The browser may omit `opener` for `noopener`; verify a
+  trusted source signal before attributing these cases. Timing alone is insufficient.
+- For a positively attributed open, emit `openedTabs` metadata with source and destination tab
+  IDs in the tool result. Keep a short-lived session-local notice for delayed opens and return
+  it via `tabs_context_mcp`. Use existing tab description and site checks before exposing any
+  destination information. A missing attribution can still appear in the ordinary tab list.
+- Discovery leaves the existing `request_tab` approval and ownership checks in place. Test a
+  simultaneous unrelated user tab, another agent session, a blocked destination, and closing a
+  popup before the next call. Record which opener cases Gecko can prove on the supported build.
+
+### 4b. Record and export HAR
+
+**User flow.** Proposed `network_capture` actions are `start`, `attach`, `status`, `stop`, and `cancel`.
 Start on an agent-owned blank tab before navigating. The user or agent goes through a redirecting
 login in that tab. Stop freezes the recording and returns a local HAR path, the entry count, and
 counts for omissions. Stop may apply the same filters as the network log. Cancel discards the
-capture. Status exposes elapsed time, state, and counters to its owner.
+capture. Status exposes elapsed time, attached tabs, state, and counters to its owner.
 
 **Capture and lifecycle**
 
@@ -96,7 +121,11 @@ capture. Status exposes elapsed time, state, and counters to its owner.
   attributed to the tab. Track lifecycle events by Gecko channel ID. A capture observes the
   tab's traffic, including actions by the user or another tab member. A caller that needs
   isolation can use an agent-owned tab with no other members or the existing `tab_work hold`.
-  Detached OAuth popups are a separate scope decision.
+- After the session acquires a discovered child tab through the normal access flow, `attach`
+  includes its subsequent traffic. Explain that requests before attachment can be missing,
+  especially the first OAuth navigation. Never backfill an unowned popup's earlier traffic.
+  Use separate root and child lifecycles: a child closing or losing access stops collection
+  there, while the root capture can continue. Recheck child access before including its records.
 - Bound elapsed time and storage. Start with one capture per tab, a 10-minute duration,
   2,000 entries, and an overall byte ceiling. At a limit, freeze the capture for a bounded
   retrieval window and report the stop reason. At explicit stop, take a fixed cut of the log,
@@ -112,11 +141,19 @@ capture. Status exposes elapsed time, state, and counters to its owner.
 
 **Data and output**
 
-- Project requests to metadata early. V1 includes method, redacted URL, status, resource type,
-  MIME, cache and timing information. Exclude headers, cookies, request and response bodies, and
-  URL userinfo, query, and fragment. URL paths can contain identifiers, so keep the artifact
-  local and describe remaining identifying data. Do not store raw HAR payloads in the activity
-  log or MCP response.
+- Retain diagnostic fields when Gecko exposes them: method, redacted URL, HTTP version, status,
+  redirect target, type, MIME, cache flags, transfer sizes, and timing phases. Keep allowlisted
+  headers with validated values, such as content type, content length, and cache directives.
+  Sanitize redirect URLs with the same rules as request URLs. Strip URL userinfo and fragments,
+  mask query values by default, and mask path segments that match known sensitive forms. Hostnames
+  and remaining paths can still identify internal resources, so describe what the export retains.
+- Always omit cookies, credentials, authorization, session and CSRF values, and custom headers
+  outside the safe allowlist. For bodies, retain size and MIME when available. Include content
+  only through an explicit projection of known-safe typed fields for a scoped endpoint. Unknown
+  schemas, free text, HTML, binary data, and auth/form payloads are omitted. Generic field-name
+  redaction alone cannot identify secrets in arbitrary content. Keep sanitized data in the HAR
+  buffer and report omission/truncation counts without including values in the activity log or
+  MCP response.
 - Validate native channel timing data on the supported Gecko build before defining the mapping.
   Reuse a real timing source such as `nsITimedChannel` where supported. HAR 1.2 requires
   nonnegative `send`, `wait`, and `receive` values whose sum with other exported phases
@@ -129,9 +166,11 @@ capture. Status exposes elapsed time, state, and counters to its owner.
 
 **Acceptance.** Use local synthetic endpoints on two hostnames with login-shaped redirects,
 requests before start and after stop, and sentinel cookies, query strings, headers, and bodies.
-Verify one HAR shows the allowed host transitions, imports into Firefox DevTools, and omits all
-sentinels. Test disallowed requests, parallel sessions, owner departure, Stop, timeout, capacity,
-in-flight requests, write retry, and the existing log reset. Real credentials are unnecessary.
+Verify one HAR shows the allowed host transitions, imports into Firefox DevTools, retains expected
+safe headers and timing data, and omits all secret sentinels. Cover credentials nested in a body,
+custom headers, URLs and redirects, a detached child after attachment, disallowed requests,
+parallel sessions, owner departure, Stop, timeout, capacity, in-flight requests, write retry,
+and the existing log reset. Real credentials are unnecessary.
 
 ## 5. Report local Web Vitals and navigation timings
 
@@ -166,7 +205,8 @@ navigation, and supported-versus-unsupported reporting on the installed Zen buil
 
 ## Delivery and verification
 
-- Use one local commit per numbered feature. Update tool descriptions, README, and the relevant
+- Use one local commit per feature, with separate commits for spawned-tab discovery and HAR.
+  Update tool descriptions, README, and the relevant
   rows in `docs/feature-comparison.md` with each implementation. Credit
   [Agent Browser](https://github.com/vercel-labs/agent-browser) for the specific ideas we adopt.
   Implement against Zen's native APIs and the public specs.
