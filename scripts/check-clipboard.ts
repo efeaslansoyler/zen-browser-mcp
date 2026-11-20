@@ -9,6 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const text = (r: Content[]) =>
   r
     .filter((c) => c.type === "text")
@@ -66,7 +67,7 @@ const originalTab = await chrome(
 try {
   const state = await chrome("({paused:h.state.paused,version:h.version})");
   assert(!state.paused);
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   for (let i = 0; i < 50; i++) {
     await sleep(50);
     try {
@@ -127,7 +128,7 @@ try {
   console.log("✓ Native write/read, truncation and per-call denial work through real MCP");
   await approved("clipboard", { action: "paste", ref: targetRef });
   let result = await pageEval(
-    tabId,
+    tabId!,
     'JSON.stringify({value:document.querySelectorAll("textarea")[1].value,trusted:document.body.dataset.paste})',
   );
   assert(result.includes(token) && result.includes("true"), result);

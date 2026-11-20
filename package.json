@@ -23,6 +23,7 @@
     "prepublishOnly": "npm run build",
     "test": "npm run build && node --test test/*.test.mjs",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.scripts.json",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

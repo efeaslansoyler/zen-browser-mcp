@@ -5,6 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const text = (r: Content[]) =>
   r
     .filter((c) => c.type === "text")
@@ -31,7 +32,7 @@ const original = await chrome(
 try {
   const state = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!state.paused);
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   for (let i = 0; i < 50; i++) {
     await sleep(30);
     try {
@@ -48,7 +49,7 @@ try {
     button = tree.match(/button "Target" \[([^\]]+)\]/)?.[1];
   assert(field && button, tree);
   const computer = (action: string, args: object = {}) => tool("computer", { tabId, action, ...args });
-  const evaluate = (code: string) => pageEval(tabId, code);
+  const evaluate = (code: string) => pageEval(tabId!, code);
   await computer("left_click", { ref: field });
   await computer("type", { text: "Hello 世界", typing: "human", delay_ms: 2, seed: 42 });
   assert((await evaluate('document.querySelector("textarea").value')).includes("Hello 世界"));

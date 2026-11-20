@@ -7,6 +7,7 @@ import { writeFileSync } from "node:fs";
 import { callTimeout } from "../src/tools.ts";
 import { call } from "../src/zen.ts";
 import { LOG_FILE } from "../src/paths.ts";
+import { reloadBridge } from "./support/bridge.ts";
 
 // each call is its own session; with --session, consecutive calls use the same tabs
 const argv = process.argv.slice(2);
@@ -24,7 +25,7 @@ const ping = async (): Promise<Ping> => JSON.parse(((await call("ping", {}, 1000
 // the reload reply comes from the old version; confirm with ping that the new one started
 async function reload() {
   const before = await ping();
-  await call("reload");
+  await reloadBridge();
   for (let i = 0; i < 50; i++) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     let now: Ping;

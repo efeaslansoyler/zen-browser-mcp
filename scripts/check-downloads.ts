@@ -12,8 +12,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { call } from "../src/zen.ts";
 
-const text = (result: { content: any[] }) =>
-  result.content
+const text = (result: Record<string, unknown>) =>
+  (result.content as { type: string; text?: string }[])
     .filter((c) => c.type === "text")
     .map((c) => c.text)
     .join("\n");
@@ -22,7 +22,7 @@ const clients: Client[] = [],
   files: string[] = [];
 let tabId: number | undefined;
 const nativeDialog = process.argv.includes("--native-dialog");
-async function tool(client: Client, name: string, args: object = {}, error = false) {
+async function tool(client: Client, name: string, args: Record<string, unknown> = {}, error = false) {
   const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
   assert.equal(Boolean(result.isError), error, text(result));
   return text(result);
@@ -212,7 +212,7 @@ try {
   assert(!fs.existsSync(running.path) && !fs.existsSync(`${running.path}.part`), "partial file left behind");
   for (let i = 0; i < 20 && !fs.readFileSync(running.events, "utf8").includes('"canceled"'); i++)
     await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal(JSON.parse(fs.readFileSync(running.events, "utf8").trim().split("\n").at(-1)).state, "canceled");
+  assert.equal(JSON.parse(fs.readFileSync(running.events, "utf8").trim().split("\n").at(-1)!).state, "canceled");
   assert(!fs.readFileSync(running.events, "utf8").includes('"paused"'), "cancel showed a transient paused state");
   assert.match(await tool(a, "downloads", { tabId, action: "cancel", id: done.id }, true), /already finished/);
   console.log("ok  live progress → cancel removes the partial file");

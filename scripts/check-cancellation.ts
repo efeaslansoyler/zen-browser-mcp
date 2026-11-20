@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const agent = { id: "codex", name: "Codex" };
 const text = (result: Content[]) =>
   result
@@ -24,7 +25,7 @@ try {
   // Check access and user state before changing anything.
   const before = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!before.paused, "Automation is already stopped by the user; resume it before running this test.");
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   let ready = false;
   let lastState: unknown;
   for (let i = 0; i < 50; i++) {
@@ -54,7 +55,7 @@ try {
   const tree = text(await command("read_page", { tabId }));
   const field = tree.match(/textbox "Message" \[([^\]]+)\]/)?.[1];
   assert(field, `Test field missing: ${tree}`);
-  const page = (code: string) => pageEval(tabId, code);
+  const page = (code: string) => pageEval(tabId!, code);
 
   // An active batch must stop, retain its partial error, and never execute step 2.
   const batch = capture(

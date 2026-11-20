@@ -7,6 +7,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const agent = { id: "codex", name: "Codex" };
 const text = (content: Content[]) =>
   content
@@ -53,7 +54,7 @@ try {
   assert(settings.mode !== "ask", "This test requires your existing auto mode; settings have not been changed.");
   const before = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!before.paused, "Resume browser automation before running the test.");
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   let ready = false;
   for (let i = 0; i < 50; i++) {
     await sleep(100);
@@ -67,7 +68,7 @@ try {
   assert(ready, "Updated hit-test bridge did not reload.");
   tabId = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   await command("navigate", { tabId, url: fixture });
-  const page = (code: string) => pageEval(tabId, code);
+  const page = (code: string) => pageEval(tabId!, code);
   const counts = async () => JSON.parse(await page("JSON.stringify(window.counts)"));
   const find = async (query: string) => {
     for (let i = 0; i < 50; i++) {

@@ -8,6 +8,7 @@ import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
 import { normalizeConfig } from "../browser/SiteRules.sys.mjs";
+import { reloadBridge } from "./support/bridge.ts";
 const text = (result: Content[]) =>
   result
     .filter((c) => c.type === "text")
@@ -72,7 +73,7 @@ try {
       !settings.sites.blocklist.some((host: string) => ["localhost", "127.0.0.1"].includes(host)),
     "This test needs a blocklist without the local fixture hosts; no settings have been changed.",
   );
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   let ready = false;
   for (let i = 0; i < 50; i++) {
     await sleep(100);

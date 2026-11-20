@@ -21,7 +21,7 @@ const configFile = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir
 const original = fs.existsSync(configFile) ? fs.readFileSync(configFile, "utf8") : null;
 let client: Client | undefined;
 let tabId: number | undefined;
-async function tool(name: string, args: object = {}) {
+async function tool(name: string, args: Record<string, unknown> = {}) {
   const result = await client!.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
   assert(!result.isError, text(result));
   return text(result);

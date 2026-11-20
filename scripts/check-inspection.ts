@@ -6,6 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const text = (r: Content[]) =>
   r
     .filter((c) => c.type === "text")
@@ -32,7 +33,7 @@ try {
   assert(!state.paused);
   // The bridge's own reading of the settings; a missing config file means the default auto mode.
   assert.equal(state.mode, "auto", "Smoke test requires existing auto mode; does not change settings.");
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   for (let i = 0; i < 50; i++) {
     await sleep(40);
     try {

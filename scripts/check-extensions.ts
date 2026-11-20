@@ -10,6 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { approveWhile, fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const text = (r: Content[]) =>
   r
     .filter((c) => c.type === "text")
@@ -62,7 +63,7 @@ const originalSelected = await chrome(
 try {
   const state = await chrome("({paused:h.state.paused,version:h.version})");
   assert(!state.paused, "Resume automation before running this test.");
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   for (let i = 0; i < 50; i++) {
     await sleep(50);
     try {
@@ -121,7 +122,7 @@ try {
   assert(shot.some((c) => c.type === "image"));
   await act("computer", { computerAction: "left_click", ref });
   await sleep(100);
-  const source = await pageEval(tabId, "document.body.dataset.extensionTrusted");
+  const source = await pageEval(tabId!, "document.body.dataset.extensionTrusted");
   assert(source.includes("true"), source);
   console.log(
     "✓ Extension discovery → native popup → isolated refs → screenshot → trusted click with activeTab access",

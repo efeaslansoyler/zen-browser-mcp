@@ -14,9 +14,10 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { call } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 
-const text = (result: { content: any[] }) =>
-  result.content
+const text = (result: Record<string, unknown>) =>
+  (result.content as { type: string; text?: string }[])
     .filter((c) => c.type === "text")
     .map((c) => c.text)
     .join("\n");
@@ -39,7 +40,7 @@ async function tool(client: Client, name: string, args: Record<string, unknown> 
 }
 // the tool's own answer (what other sessions did meanwhile may follow it)
 const json = async (client: Client, name: string, args: Record<string, unknown> = {}) =>
-  JSON.parse((await tool(client, name, args)).content[0].text);
+  JSON.parse(((await tool(client, name, args)).content as { text: string }[])[0].text);
 async function connect() {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -99,7 +100,7 @@ try {
   assert(settings.mode !== "ask", "This test requires your existing auto mode; settings were not changed.");
   const before = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!before.paused, "Resume browser automation before running this test.");
-  console.log(text({ content: await call("reload") }));
+  console.log(text({ content: await reloadBridge() }));
   let ready = false;
   for (let i = 0; i < 50; i++) {
     await sleep(100);

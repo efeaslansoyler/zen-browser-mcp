@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type AgentIdentity, type Content } from "../src/zen.ts";
 import { identifyAgent } from "../browser/Agent.sys.mjs";
+import { reloadBridge } from "./support/bridge.ts";
 
 const text = (content: Content[]) =>
   content
@@ -20,7 +21,7 @@ const fixture =
 <button onclick="document.getElementById('result').textContent='Result: '+document.getElementById('message').value">Run test</button><p id="result">Waiting</p>`);
 
 if (process.argv.includes("--reload")) {
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   let ready = false;
   for (let i = 0; i < 30; i++) {
     await sleep(100);

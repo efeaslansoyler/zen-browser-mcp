@@ -713,6 +713,7 @@ function logError(where, e) {
       ping() {
         return ctx.text({
           app: zenMcpApp,
+          dir,
           version: loadedVersion,
           bridge: version,
           startError: globalThis.zenMcpStartError,

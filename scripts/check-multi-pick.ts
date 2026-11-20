@@ -9,6 +9,7 @@ import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
 import { call, subscribe, type Content } from "../src/zen.ts";
+import { reloadBridge } from "./support/bridge.ts";
 const text = (result: Content[]) =>
   result
     .filter((c) => c.type === "text")
@@ -93,7 +94,7 @@ try {
   assert(config.mode !== "ask", "Requires your existing auto mode; settings were not changed.");
   const before = await chrome("({version:h.version,paused:h.state.paused,picking:!!h.pick})");
   assert(!before.paused && !before.picking, "Resume automation and finish/cancel any current selection first.");
-  console.log(text(await call("reload")));
+  console.log(text(await reloadBridge()));
   await until(async () => {
     try {
       return await chrome(`h.version>${before.version}`);
@@ -245,7 +246,7 @@ try {
   );
   assert.match(stale.error || "", /page changed/i);
   assert.equal(events.length, 2, "Stale selection was delivered.");
-  assert.equal(Number(await pageEval(tabId, "window.pageClicks")), 0);
+  assert.equal(Number(await pageEval(tabId!, "window.pageClicks")), 0);
   console.log("✓ Navigation blocks stale send; fixture clicks never activate the page");
 
   await command("navigate", { tabId, url: await serveSourceFixture() });

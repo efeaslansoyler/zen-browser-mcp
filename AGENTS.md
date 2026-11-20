@@ -7,7 +7,7 @@ edit/test loop.
   never act on the user's tabs without `request_tab` approval.
 - After changing `browser/`: `node scripts/zenctl.ts reload` (it fails loudly if the new
   version didn't start). After changing `src/`: the MCP client must reconnect.
-- `npm test` must pass. For behavior that depends on Gecko, also run the matching
+- `npm test` and `npm run typecheck` must pass. For behavior that depends on Gecko, also run the matching
   `scripts/check-*.ts` live check. Never run `check-pick-delivery.ts` casually: it messages a
   real Codex conversation.
 - Prefer isolated XDG directories, a disposable profile and an explicit `ZEN_MCP_SOCKET`

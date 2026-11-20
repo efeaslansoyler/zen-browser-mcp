@@ -17,7 +17,7 @@ const text = (result: any) =>
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let tabId: number | undefined;
 let client: Client | undefined;
-async function tool(name: string, args: object = {}, error = false) {
+async function tool(name: string, args: Record<string, unknown> = {}, error = false) {
   const result = await client!.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
   assert.equal(Boolean(result.isError), error, text(result));
   return text(result);

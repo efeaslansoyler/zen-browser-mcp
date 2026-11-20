@@ -9,8 +9,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { pageEval } from "./support/fixture.ts";
 import { call } from "../src/zen.ts";
-const text = (result: { content: any[] }) =>
-  result.content
+import { reloadBridge } from "./support/bridge.ts";
+const text = (result: Record<string, unknown>) =>
+  (result.content as { type: string; text?: string }[])
     .filter((c) => c.type === "text")
     .map((c) => c.text)
     .join("\n");
@@ -22,7 +23,7 @@ const id = (value: string) => {
 };
 const clients: Client[] = [],
   tabs = new Set<number>();
-async function tool(client: Client, name: string, args: object = {}, error = false) {
+async function tool(client: Client, name: string, args: Record<string, unknown> = {}, error = false) {
   const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 40_000 });
   assert.equal(Boolean(result.isError), error, text(result));
   return text(result);
@@ -52,7 +53,7 @@ try {
   assert(config.mode !== "ask", "Requires your existing auto mode; no settings changed.");
   const before = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!before.paused, "Resume browser automation before testing.");
-  console.log(text({ content: await call("reload") }));
+  console.log(text({ content: await reloadBridge() }));
   let ready = false;
   for (let i = 0; i < 50; i++) {
     await sleep(100);
