@@ -223,7 +223,8 @@ export function toolRunner(ctx) {
         const lock = ctx.locks.acquire(referenced.filter((id) => id != null).map((id) => `tab:${id}`));
         const run = async () => {
           await lock.ready;
-          if (generation !== ctx.stopGeneration || state.paused) throw new ctx.Stopped();
+          if (state.paused) throw new ctx.Stopped();
+          if (generation !== ctx.stopGeneration) throw new ctx.Stopped(ctx.cancelMessage);
           access.checkTicket(ticket, session);
           if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session))
             throw new Error("This browser session disconnected while the request was queued.");

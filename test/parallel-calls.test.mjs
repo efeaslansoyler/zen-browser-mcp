@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Locks } from "../browser/Locks.sys.mjs";
 import { browserTools } from "../browser/BrowserTools.sys.mjs";
+import { BRIDGE_STOPPED } from "../browser/Control.sys.mjs";
 import { bridgeContext, testCall } from "./support/bridge.mjs";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -213,9 +214,12 @@ test("a call queued behind a cancelled one does not run after the bridge stops",
   const h = harness();
   const calls = [h.request("claude", { tabId: 1, name: "running" }), h.request("codex", { tabId: 1, name: "queued" })];
   await tick();
-  h.context.cancelCalls();
+  h.context.cancelCalls(BRIDGE_STOPPED);
   await h.finish("running");
   assert.deepEqual(h.started, ["running"]);
   await Promise.all(calls);
-  assert(h.replies.every((reply) => !reply.ok || reply.isError));
+  assert.deepEqual(
+    h.replies.map((reply) => reply.error ?? reply.content?.[0]?.text),
+    [BRIDGE_STOPPED, BRIDGE_STOPPED],
+  );
 });

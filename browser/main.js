@@ -127,7 +127,7 @@ function logError(where, e) {
     const { tabs, MARK, MARK_CSS } = load("Tabs");
     const { pageQueries, DialogOpen, PageGone } = load("PageQuery");
     const { pageInput, keyName, MAX_EDGE } = load("PageInput");
-    const { control, Stopped } = load("Control");
+    const { control, Stopped, BRIDGE_STOPPED } = load("Control");
     const { activity } = load("Activity");
     const activityView = load("ActivityView");
     const { toolRunner, batchTool } = load("ToolRunner");
@@ -950,7 +950,7 @@ function logError(where, e) {
       ctx.extensionPanels.destroy();
       ctx.tabWake.destroy();
       clearTimeout(sessionSweep);
-      ctx.cancelCalls();
+      ctx.cancelCalls(BRIDGE_STOPPED);
       ctx.picks.destroy();
       ctx.demonstrations.destroy();
       ctx.channels.closeAll();

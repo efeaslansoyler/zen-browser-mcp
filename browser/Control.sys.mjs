@@ -1,11 +1,14 @@
 // why: Pausing survives reload so reloading the bridge cannot implicitly resume agents.
 export class Stopped extends Error {
-  constructor() {
-    super(
-      'The user stopped browser automation from the browser\'s island. Nothing can be done in the browser until they press "Resume" there; ask the user what they want.',
-    );
+  constructor(
+    message = 'The user stopped browser automation from the browser\'s island. Nothing can be done in the browser until they press "Resume" there; ask the user what they want.',
+  ) {
+    super(message);
   }
 }
+
+export const BRIDGE_STOPPED =
+  "The browser bridge stopped (a reload or the browser quitting) while this call was running or queued. Check the tab before you retry: a running step may have partly completed.";
 
 const ALERT_NAME = "zen-mcp-ask";
 
@@ -24,9 +27,10 @@ export function control(ctx) {
   }
 
   // why: Advancing the generation also refuses calls still queued behind a cancelled one.
-  function cancelCalls() {
+  function cancelCalls(message) {
     ctx.stopGeneration++;
-    for (const call of ctx.calls) call.cancel(new Stopped());
+    ctx.cancelMessage = message;
+    for (const call of ctx.calls) call.cancel(new Stopped(message));
   }
 
   function stopClaude() {
