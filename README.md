@@ -72,7 +72,7 @@ See [browser startup and permissions](docs/permissions.md#on-demand-browser-star
 | `autonomous` | Temporary profile for this MCP process | Headless |
 | `autonomous-agent` | The same persistent profile as `agent` | Headless |
 
-Set the default with `npx zen-browser-mcp config browser-mode agent`. For one client,
+Set the default with `node dist/cli.js config browser-mode agent`. For one client,
 pass `--browser-mode <mode>` in its MCP server arguments or set `ZEN_MCP_BROWSER_MODE`
 in its server environment. Reconnect the client to apply a change. The browser
 selector applies to every mode. The profile selector applies to `together`.
@@ -83,9 +83,9 @@ current mode. Use `agent` to sign in, then close that browser before starting
 would ask on the island, deny system clipboard access and retain custom denials and
 site rules. See [autonomous permissions](docs/permissions.md#autonomous-browser-modes).
 
-`npx zen-browser-mcp doctor` shows the agent profile location. To erase its logins and
+`node dist/cli.js doctor` shows the agent profile location. To erase its logins and
 site data, close the agent browser and run
-`npx zen-browser-mcp reset-agent-profile --browser <name|dir>`.
+`node dist/cli.js reset-agent-profile --browser <name|dir>`.
 
 ## Use it
 

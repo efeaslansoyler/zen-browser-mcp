@@ -169,8 +169,9 @@ when the selected instance has no queued picks.
   at initialize, Codex conversations through `codex-watch` or lifecycle hooks. Menus ("Give to session",
   pick targets) list live sessions only, named by conversation title. When the last
   connection closes, access survives a 5 s grace period, then the session leaves its tabs; a
-  tab with no member left returns to the user (it stays open). Connectionless sessions (one-off calls such as `zenctl`) are never listed
-  and are swept after ten idle minutes.
+  tab with no member left returns to the user (it stays open). Connectionless sessions (one-off calls such as `zenctl`) are never listed.
+  They are swept after ten idle minutes without tabs, or after 24 idle hours while they
+  still belong to a tab.
 - Claude conversation titles come from Claude Code's session files
   (`~/.claude/sessions/<pid>.json` and the transcript's latest `/rename` or generated title).
   The format is undocumented; if it changes, menus fall back to short ids.

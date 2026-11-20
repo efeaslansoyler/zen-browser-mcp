@@ -78,7 +78,7 @@ node dist/cli.js doctor
 | `autonomous` | Bu MCP process'ine ait geçici profile | Headless |
 | `autonomous-agent` | `agent` ile aynı kalıcı profile | Headless |
 
-Default mode'u `npx zen-browser-mcp config browser-mode agent` ile ayarla. Tek bir
+Default mode'u `node dist/cli.js config browser-mode agent` ile ayarla. Tek bir
 client için MCP server argümanlarına `--browser-mode <mode>` ekle veya server
 environment'ında `ZEN_MCP_BROWSER_MODE` kullan. Değişiklikten sonra client'ı yeniden
 bağla. Browser seçimi her mode'da, profile seçimi `together` mode'unda geçerli.
@@ -89,9 +89,9 @@ edebilirsin. Autonomous mode'lar island'da onay gerektiren işlemlere izin verir
 sistem clipboard erişimini reddeder ve custom `deny` kurallarıyla site kurallarını
 uygular. [Autonomous mode permissions](docs/permissions.md#autonomous-browser-modes)
 
-`npx zen-browser-mcp doctor` agent profile'ın konumunu gösterir. Login ve site
+`node dist/cli.js doctor` agent profile'ın konumunu gösterir. Login ve site
 verilerini silmek için agent browser'ını kapatıp
-`npx zen-browser-mcp reset-agent-profile --browser <name|dir>` çalıştır.
+`node dist/cli.js reset-agent-profile --browser <name|dir>` çalıştır.
 
 ## Kullanım
 
