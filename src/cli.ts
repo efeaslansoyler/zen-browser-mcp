@@ -12,7 +12,14 @@ import { recipesCommand } from "./recipes.ts";
 import { hooksCommand, promptHook } from "./hooks.ts";
 import { skillCommand } from "./skill.ts";
 
-const [cmd, ...args] = process.argv.slice(2);
+import { browserResolver, parseBrowserFlags } from "./instances.ts";
+
+const argv = process.argv.slice(2);
+const [cmd, ...args] = ["--browser", "--profile"].includes(argv[0]) ? ["serve", ...argv] : argv;
+
+function applyBrowserFlags() {
+  browserResolver.flags = parseBrowserFlags(args);
+}
 
 // Usage lines: [command, description], the descriptions aligned in one column.
 const usage = (rows: [string, string][]) => rows.map(([cmd, what]) => `  ${cmd.padEnd(30)}  ${what}`).join("\n");
@@ -22,6 +29,7 @@ const help = L(
 Usage:
 ${usage([
   [`npx ${PACKAGE}`, "run the MCP server (your MCP client starts it this way)"],
+  ["    --browser <name|dir> --profile <name>", "choose a running browser or profile for this MCP client"],
   [`npx ${PACKAGE} install`, "install the browser part (asks for sudo if needed)"],
   ["    --browser <dir>", "a specific installation (the folder with application.ini)"],
   ["    --all", "every browser found"],
@@ -37,6 +45,7 @@ ${usage([
 Kullanım:
 ${usage([
   [`npx ${PACKAGE}`, "MCP sunucusunu çalıştırır (MCP istemcin böyle başlatır)"],
+  ["    --browser <name|dir> --profile <name>", "choose a running browser or profile for this MCP client"],
   [`npx ${PACKAGE} install`, "tarayıcı tarafını kurar (gerekirse sudo ister)"],
   ["    --browser <klasör>", "belirli bir kurulum (application.ini'nin olduğu klasör)"],
   ["    --all", "bulunan bütün tarayıcılar"],
@@ -56,6 +65,7 @@ try {
   switch (cmd) {
     case undefined:
     case "serve":
+      applyBrowserFlags();
       await serve();
       break;
     case "codex-hook": {
@@ -110,6 +120,7 @@ try {
       await uninstall(args);
       break;
     case "doctor":
+      applyBrowserFlags();
       await doctor();
       break;
     case "config":

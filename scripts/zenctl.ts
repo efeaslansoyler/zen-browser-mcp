@@ -6,6 +6,7 @@
 import { writeFileSync } from "node:fs";
 import { callTimeout } from "../src/tools.ts";
 import { call } from "../src/zen.ts";
+import { LOG_FILE } from "../src/paths.ts";
 
 // each call is its own session; with --session, consecutive calls use the same tabs
 const argv = process.argv.slice(2);
@@ -43,7 +44,7 @@ async function reload() {
   }
   const now = await ping().catch(() => ({}) as Ping);
   throw new Error(
-    `reload failed, bridge is on v${now.bridge ?? "?"}: ${now.startError ?? "new version did not answer"}\nlog: ${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/zen-mcp.log`,
+    `reload failed, bridge is on v${now.bridge ?? "?"}: ${now.startError ?? "new version did not answer"}\nlog: ${LOG_FILE}`,
   );
 }
 

@@ -59,20 +59,20 @@ Codex accepted the queued message, not that the agent read it.
 ## Socket permissions in Codex's sandbox
 
 In Codex's default sandbox, shell commands may get `EPERM` when connecting to the bridge
-socket (`/run/user/<uid>/zen-mcp.sock`) or binding any Unix socket: Linux sandboxing with
+socket (`/run/user/<uid>/zen-mcp/<id>.sock`) or binding any Unix socket: Linux sandboxing with
 seccomp and `NoNewPrivs`. The MCP tools still work, because Codex runs MCP servers outside
 the command sandbox; only shell scripts (`zenctl`, live checks, relay tests) are affected.
 
-Run those scripts from a full-access session or your own terminal, or allow the single socket
-in the active Codex [permission profile](https://learn.chatgpt.com/docs/permissions):
+Run those scripts from a full-access session or your own terminal. For a disposable
+browser with an explicit `ZEN_MCP_SOCKET`, you can allow its exact socket path in
+the active Codex [permission profile](https://learn.chatgpt.com/docs/permissions):
 
 ```toml
 [permissions.<profile>.network.unix_sockets]
-"/run/user/1000/zen-mcp.sock" = "allow"
+"/run/user/1000/zen-demo.sock" = "allow"
 ```
 
-Don't loosen the socket's mode or move it, and don't expose development commands through MCP
-to get around the sandbox.
+Keep the socket's private permissions. Development commands stay on the local socket.
 
 Codex MCP processes may not inherit `XDG_RUNTIME_DIR`; `paths.ts` falls back to
 `/run/user/<uid>`.

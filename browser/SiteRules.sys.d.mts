@@ -4,6 +4,8 @@ export type Config = {
   sites: Sites;
   workspace?: string;
   container?: string;
+  browser?: string;
+  profile?: string;
 };
 export function normalizeDomain(value: unknown): string;
 export function normalizeConfig(raw?: any): Config;

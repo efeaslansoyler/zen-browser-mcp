@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { call, subscribe } from "./zen.ts";
+import { browserResolver, deliveryScope } from "./instances.ts";
 import { SERVER_NAME, VERSION } from "./paths.ts";
 import { syncBrowserFiles } from "./install.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
@@ -144,7 +145,34 @@ async function push(event: any) {
   else if (t3) await runT3Send(t3.cli, t3.threadId, t3Message(event));
   else if (!opencode || !(await pushToOpenCode(t3Message(event)))) throw new Error(NO_PUSH);
 }
-const server = createServer(call, async ({ threadId, label }) => {
+let watchScope: string | undefined;
+let watchStarting = false;
+async function connectCodexWatch() {
+  if (watchStarting) return;
+  watchStarting = true;
+  try {
+    const target = await browserResolver.resolve();
+    const scope = deliveryScope(target);
+    if (scope !== watchScope) {
+      await ensureCodexWatch(target);
+      watchScope = scope;
+    }
+  } catch {
+    // The browser may be closed at initialize; try again when tools are used.
+  } finally {
+    watchStarting = false;
+  }
+}
+const callWithDelivery: typeof call = async (...args) => {
+  try {
+    return await call(...args);
+  } finally {
+    if (args[3]?.id === "codex") void connectCodexWatch();
+  }
+};
+const server = createServer(callWithDelivery, async ({ threadId, label }) => {
+  const change = browserResolver.browserChange(await browserResolver.resolve());
+  if (change) throw new Error(change);
   await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
 });
 
@@ -154,7 +182,7 @@ export async function serve() {
     // Codex's MCP process lives in a background service, independent of conversations;
     // codex-watch connects Codex conversations, and a process session would mislead in menus.
     if (agent.id === "codex") {
-      ensureCodexWatch().catch(() => {});
+      void connectCodexWatch();
       return;
     }
     connectOwner(agent);

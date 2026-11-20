@@ -94,6 +94,7 @@ export function configCommand(args: string[]) {
     const [en, tr] = MODE_TEXT[config.mode];
     console.log(L(`mode: ${config.mode}  (${en})`, `mod: ${config.mode}  (${tr})`));
     printSites(config.sites);
+    console.log(`browser: ${config.browser ?? "(automatic)"}${config.profile ? ` / ${config.profile}` : ""}`);
     console.log(
       L(
         `workspace: ${config.workspace ?? "(the space you're in)"}`,
@@ -108,10 +109,27 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off`,
+        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name>] | clear`,
+        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name>] | clear`,
       ),
     );
+    return;
+  }
+  if (cmd === "browser") {
+    const [browser, flag, profile] = rest.map((value) => value.trim());
+    const { browser: _, profile: __, ...remaining } = config;
+    if (browser === "clear" && rest.length === 1) {
+      writeConfig(remaining);
+      console.log("✓ browser selection cleared");
+    } else if (
+      browser &&
+      browser !== "clear" &&
+      !browser.startsWith("--") &&
+      (rest.length === 1 || (rest.length === 3 && flag === "--profile" && profile && !profile.startsWith("--")))
+    ) {
+      writeConfig({ ...remaining, browser, ...(profile ? { profile } : {}) });
+      console.log(`✓ browser: ${browser}${profile ? ` / ${profile}` : ""}`);
+    } else throw new Error("Use: config browser <name|dir> [--profile <name>] | clear");
     return;
   }
   if (cmd === "mode") {
@@ -187,6 +205,7 @@ export function configCommand(args: string[]) {
     } else if (action !== "list")
       throw new Error("Use: config site [list] | mode blocklist|allowlist | block|unblock|allow|disallow <domain>…");
     printSites(config.sites);
+    console.log(`browser: ${config.browser ?? "(automatic)"}${config.profile ? ` / ${config.profile}` : ""}`);
     return;
   }
   throw new Error(L(`Unknown config command: ${cmd}`, `Bilinmeyen config komutu: ${cmd}`));

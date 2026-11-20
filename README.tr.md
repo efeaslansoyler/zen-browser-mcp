@@ -49,6 +49,13 @@ olarak `dist/cli.js` dosyasının tam yolunu ver. Kurulumu `node dist/cli.js doc
 ile kontrol edebilirsin. Installer tarayıcıyı bulamazsa `--browser /kurulum/yolu`
 ile `application.ini` dosyasının bulunduğu klasörü belirt.
 
+[Browser and profile selection](docs/permissions.md#browser-and-profile-selection)
+
+```sh
+node dist/cli.js config browser Zen --profile Default
+node dist/cli.js doctor
+```
+
 ## Kullanım
 
 - **Ajandan bir sayfa açmasını iste.** “example.com’u aç ve sayfada ne yazdığını

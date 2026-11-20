@@ -1,8 +1,19 @@
-import test from "node:test";
+import test, { beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import net from "node:net";
 import { EventEmitter } from "node:events";
 import { call } from "../dist/zen.js";
+
+// These tests mock the protocol connection itself; discovery is exercised in instances.test.mjs.
+let previousSocket;
+beforeEach(() => {
+  previousSocket = process.env.ZEN_MCP_SOCKET;
+  process.env.ZEN_MCP_SOCKET = "/wire-test.sock";
+});
+afterEach(() => {
+  if (previousSocket === undefined) delete process.env.ZEN_MCP_SOCKET;
+  else process.env.ZEN_MCP_SOCKET = previousSocket;
+});
 
 test("wire carries identity and preserves partial batch failures", async (t) => {
   let request;
@@ -20,7 +31,8 @@ test("wire carries identity and preserves partial batch failures", async (t) => 
       ),
     );
   };
-  t.mock.method(net, "createConnection", () => {
+  t.mock.method(net, "createConnection", (path) => {
+    assert.equal(path, "/wire-test.sock");
     queueMicrotask(() => socket.emit("connect"));
     return socket;
   });

@@ -6,21 +6,23 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { RUNTIME_DIR, NAME } from "./paths.ts";
 import { subscribe } from "./zen.ts";
+import { browserResolver, deliveryScope, type Selection } from "./instances.ts";
 import { THREAD_ID, deliverCodexPick } from "./delivery.ts";
 
 export type RelayOptions = { threadId: string; cwd: string; label?: string };
-export function relaySocket(threadId: string) {
+export function relaySocket(threadId: string, scope = deliveryScope()) {
   if (!THREAD_ID.test(threadId)) throw new Error("An exact Codex thread UUID is required.");
-  return path.join(RUNTIME_DIR, `${NAME}-codex`, threadId + ".sock");
+  return path.join(RUNTIME_DIR, `${NAME}-codex`, `${scope ? scope + "." : ""}${threadId}.sock`);
 }
 
 export function contactRelay(
   threadId: string,
   action: "ping" | "stop" | "refresh" = "ping",
   options?: RelayOptions,
+  scope?: string,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = net.createConnection(relaySocket(threadId));
+    const socket = net.createConnection(relaySocket(threadId, scope));
     let data = "";
     let settled = false;
     const finish = (ok: boolean) => {
@@ -48,12 +50,18 @@ export function contactRelay(
 
 export async function ensureCodexRelay(options: RelayOptions) {
   if (!THREAD_ID.test(options.threadId)) throw new Error("An exact Codex thread UUID is required.");
-  if (await contactRelay(options.threadId, "refresh", options)) return;
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--relay", JSON.stringify(options)], {
-    detached: true,
-    stdio: "ignore",
-    cwd: options.cwd,
-  });
+  const target = await browserResolver.resolve();
+  const scope = deliveryScope(target);
+  if (await contactRelay(options.threadId, "refresh", options, scope)) return;
+  const child = spawn(
+    process.execPath,
+    [fileURLToPath(import.meta.url), "--relay", JSON.stringify(options), JSON.stringify(target)],
+    {
+      detached: true,
+      stdio: "ignore",
+      cwd: options.cwd,
+    },
+  );
   let spawnError: Error | undefined;
   child.on("error", (error) => {
     spawnError = error;
@@ -62,12 +70,12 @@ export async function ensureCodexRelay(options: RelayOptions) {
   for (let i = 0; i < 25; i++) {
     await new Promise((resolve) => setTimeout(resolve, 40));
     if (spawnError) throw spawnError;
-    if (await contactRelay(options.threadId)) return;
+    if (await contactRelay(options.threadId, "ping", undefined, scope)) return;
   }
   throw new Error("The Codex browser receiver did not start.");
 }
 
-export async function stopCodexRelays() {
+export async function stopCodexRelays({ scope, threadId }: { scope?: string; threadId?: string } = {}) {
   const directory = path.join(RUNTIME_DIR, `${NAME}-codex`);
   let files: string[];
   try {
@@ -76,16 +84,24 @@ export async function stopCodexRelays() {
     return;
   }
   await Promise.all(
-    files
-      .filter((file) => file.endsWith(".sock") && THREAD_ID.test(file.slice(0, -5)))
-      .map((file) => contactRelay(file.slice(0, -5), "stop")),
+    files.map((file) => {
+      if (!file.endsWith(".sock")) return;
+      const parts = file.slice(0, -5).split(".");
+      const id = parts.pop()!;
+      const route = parts.join(".");
+      if (!THREAD_ID.test(id) || (route && !/^[a-f0-9]{12}$/.test(route))) return;
+      if ((scope === undefined || scope === route) && (threadId === undefined || threadId === id))
+        return contactRelay(id, "stop", undefined, route);
+    }),
   );
 }
 
-export async function runCodexRelay(initial: RelayOptions) {
-  const socketPath = relaySocket(initial.threadId);
+export async function runCodexRelay(initial: RelayOptions, target: Selection) {
+  browserResolver.pinDelivery(target);
+  const scope = deliveryScope(target);
+  const socketPath = relaySocket(initial.threadId, scope);
   fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
-  if (await contactRelay(initial.threadId)) return; // idempotent on resume/compaction
+  if (await contactRelay(initial.threadId, "ping", undefined, scope)) return; // idempotent on resume/compaction
   let options = initial;
   let subscription: ReturnType<typeof subscribe> | undefined;
   let idleTimer: ReturnType<typeof setTimeout>;
@@ -201,5 +217,5 @@ export async function runCodexRelay(initial: RelayOptions) {
 }
 
 if ((import.meta as { main?: boolean }).main && process.argv[2] === "--relay") {
-  await runCodexRelay(JSON.parse(process.argv[3]));
+  await runCodexRelay(JSON.parse(process.argv[3]), JSON.parse(process.argv[4]));
 }

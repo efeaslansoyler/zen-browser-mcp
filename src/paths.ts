@@ -29,7 +29,12 @@ export const RECIPES_DIR = path.join(STATE_DIR, "recipes");
 const userRuntime = process.platform === "linux" && process.getuid ? `/run/user/${process.getuid()}` : undefined;
 export const RUNTIME_DIR =
   env.XDG_RUNTIME_DIR || (userRuntime && existsSync(userRuntime) ? userRuntime : undefined) || env.TMPDIR || "/tmp";
-export const SOCKET = env.ZEN_MCP_SOCKET || path.join(RUNTIME_DIR, `${NAME}.sock`);
+// On shared tmp directories, namespace the private directory by user home (also in Gecko).
+const runtimeSuffix = /\/(?:var\/)?tmp\/?$/.test(RUNTIME_DIR)
+  ? "-" + [...home].reduce((hash, c) => (Math.imul(hash, 31) + c.codePointAt(0)!) >>> 0, 0).toString(16)
+  : "";
+export const INSTANCES_DIR = path.join(RUNTIME_DIR, NAME + runtimeSuffix);
+export const LEGACY_SOCKET = path.join(RUNTIME_DIR, `${NAME}.sock`);
 export const LOG_FILE = path.join(RUNTIME_DIR, `${NAME}.log`);
 
 // the package root (the parent of src/ or dist/): browser/ and package.json live here

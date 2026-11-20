@@ -1,7 +1,8 @@
 // Talks to the bridge in the browser: one request line and one reply line per connection.
 import net from "node:net";
 import { randomUUID } from "node:crypto";
-import { PACKAGE, SOCKET as socketPath } from "./paths.ts";
+import { PACKAGE } from "./paths.ts";
+import { browserResolver, instanceLabel } from "./instances.ts";
 
 export type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
@@ -18,12 +19,49 @@ const ascii = (s: string) => s.replace(/[\u007f-￿]/g, (c) => "\\u" + c.charCod
 export type AgentIdentity = { id: string; name: string };
 
 // as: the session of this call (such as a Codex conversation); defaults to this MCP process's session
-export function call(
+export async function call(
   tool: string,
   args: object = {},
   timeout = 60_000,
   agent?: AgentIdentity,
   as: string = session,
+): Promise<BrowserContent> {
+  const target = await browserResolver.resolve();
+  const socketPath = target.socket;
+  const change = agent && browserResolver.browserChange(target);
+  if (change) throw new Error(change);
+  const content = await request(socketPath, tool, args, timeout, agent, as);
+  if (tool === "inbox_take" && content[0]?.type === "text" && !content[0].text) {
+    // Prompt hooks run outside the MCP process. Its existing session can be sticky to a
+    // different browser. The bridge only releases picks for the exact client ID or PID.
+    const other = (await browserResolver.list()).filter((entry) => entry.socket !== socketPath);
+    const replies = await Promise.allSettled(
+      other.map((entry) => request(entry.socket, tool, args, timeout, agent, as)),
+    );
+    const messages = replies.flatMap((reply) => {
+      const first = reply.status === "fulfilled" ? reply.value[0] : undefined;
+      return first?.type === "text" && first.text ? [first.text] : [];
+    });
+    if (messages.length) content[0].text = messages.join("\n");
+  }
+
+  if (tool === "tabs_context_mcp" && target.instance && !content.isError && content[0]?.type === "text") {
+    const instances = await browserResolver.list().catch(() => []);
+    if (instances.length > 1) {
+      const entry = { ...JSON.parse(content[0].text), browser: instanceLabel(target.instance) };
+      content[0].text = JSON.stringify(entry);
+    }
+  }
+  return content;
+}
+
+function request(
+  socketPath: string,
+  tool: string,
+  args: object,
+  timeout: number,
+  agent: AgentIdentity | undefined,
+  as: string,
 ): Promise<BrowserContent> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
@@ -90,7 +128,15 @@ export function subscribe(onEvent: (event: any) => void | Promise<void>, info: S
   let closed = false;
   let current: net.Socket | undefined;
   let reconnect: ReturnType<typeof setTimeout> | undefined;
-  const connect = () => {
+  const connect = async () => {
+    if (closed) return;
+    let socketPath: string;
+    try {
+      ({ socket: socketPath } = await browserResolver.resolve());
+    } catch {
+      if (!closed) reconnect = setTimeout(connect, 3000);
+      return;
+    }
     if (closed) return;
     const socket = net.createConnection(socketPath);
     current = socket;

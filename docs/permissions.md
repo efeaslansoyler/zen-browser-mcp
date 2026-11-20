@@ -71,3 +71,23 @@ Settings live in the XDG config directory, typically
 directory, typically `~/.local/state/zen-mcp/activity.jsonl`. Use **Agent history**
 in the tab menu to review activity. Uninstalling the bridge keeps settings and
 state. See [architecture](architecture.md#permissions) for enforcement details.
+
+## Browser and profile selection
+
+The optional `browser` and `profile` keys in `config.json` choose the browser
+process for new MCP sessions. Choose by application name or the installation
+directory containing `application.ini`. The profile selector uses the registered
+profile name when available and the profile directory's basename otherwise.
+Permission mode and site rules apply across the installed bridges.
+
+```sh
+node dist/cli.js config browser Zen --profile Default
+node dist/cli.js config
+node dist/cli.js doctor
+node dist/cli.js config browser clear
+```
+
+To override the config for one MCP client, append `--browser <name|dir>` or
+`--profile <name>` to its server arguments, or set `ZEN_MCP_BROWSER` and
+`ZEN_MCP_PROFILE` in that client's server environment. Reconnect the client to
+apply a change to an existing session.

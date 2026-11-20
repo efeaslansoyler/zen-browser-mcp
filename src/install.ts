@@ -6,7 +6,6 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import readline from "node:readline/promises";
 import { L } from "./i18n.ts";
 import { DATA_DIR, NAME, PACKAGE, PACKAGE_DIR, SERVER_NAME, VERSION } from "./paths.ts";
 import { call } from "./zen.ts";
@@ -322,7 +321,7 @@ export async function syncBrowserFiles() {
 
 // ---- komutlar ----
 
-async function chooseBrowsers(args: string[]): Promise<Browser[]> {
+function chooseBrowsers(args: string[]): Browser[] {
   const flag = args.indexOf("--browser");
   if (flag >= 0) {
     const dir = args[flag + 1];
@@ -353,20 +352,11 @@ async function chooseBrowsers(args: string[]): Promise<Browser[]> {
           : ""),
     );
   }
-  if (found.length === 1 || !process.stdin.isTTY || args.includes("--all"))
-    return args.includes("--all") ? found : [found[0]];
-  console.log(L("Found these browsers:", "Bulunan tarayıcılar:"));
-  found.forEach((b, i) => console.log(`  ${i + 1}. ${b.name}  (${b.dir})`));
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question(L("Which one? [1] ", "Hangisi? [1] "));
-  rl.close();
-  const n = Number(answer.trim() || "1");
-  if (!found[n - 1]) throw new Error(L("Invalid choice.", "Geçersiz seçim."));
-  return [found[n - 1]];
+  return found;
 }
 
 export async function install(args: string[]) {
-  const browsers = await chooseBrowsers(args);
+  const browsers = chooseBrowsers(args);
   for (const browser of browsers) {
     const plan = planInstall(browser.dir);
     writeFiles(plan.writes);
@@ -392,6 +382,8 @@ export async function install(args: string[]) {
     copyBrowserFiles();
     console.log(L(`✓ browser files copied to ${DATA_DIR}`, `✓ tarayıcı dosyaları ${DATA_DIR} klasörüne kopyalandı`));
   }
+  if (browsers.length > 1)
+    console.log(`Choose a browser with: npx ${PACKAGE} config browser <name|dir> [--profile <name>]`);
   console.log(
     L(
       `
@@ -417,7 +409,7 @@ Hepsini kontrol etmek için: npx ${PACKAGE} doctor`,
 }
 
 export async function uninstall(args: string[]) {
-  const browsers = args.includes("--browser") ? await chooseBrowsers(args) : findBrowsers();
+  const browsers = args.includes("--browser") ? chooseBrowsers(args) : findBrowsers();
   for (const browser of browsers) {
     const plan = planUninstall(browser.dir);
     if (!plan.length) continue;

@@ -29,6 +29,19 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 
 ## Sockets and streams
 
+- A Unix socket can be unlinked while its server is listening. With the old shared
+  `zen-mcp.sock` path, the last browser to start took over the path and a subsequent
+  crash left a refused socket while the first browser was still running. Give each bind
+  a fresh path and publish metadata after the listener is bound. `nsIFile.isSymlink()`
+  throws on a path that does not exist.
+- The full Unix socket path is limited to 107 UTF-8 bytes on Linux and 103 on macOS.
+  Long `XDG_RUNTIME_DIR` values can exceed the limit even with a short filename.
+  On Linux use a short directory under `/run/user/<uid>` for disposable profiles.
+- In Zen, `CurProcD` is the installation's `browser/` subdirectory. Use `GreD`
+  for the directory that matches the installer.
+- On Linux, file input streams cannot report `available()` for `/proc/self/status`.
+  Read the first 512 bytes to find the UID when resolving the runtime directory.
+
 - Closing a buffered socket output stream cut replies at 32 KB: open it with `OPEN_UNBUFFERED`.
 - `NetUtil.asyncCopy` also closes the sink. For a subscription that must stay open, write with
   `nsIAsyncStreamCopier` and `closeSink: false`.

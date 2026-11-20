@@ -15,6 +15,10 @@ export function normalizeConfig(raw = {}) {
   // A container (by name) that agent tabs open in by default: their own cookies and site data
   const container = typeof raw.container === "string" ? raw.container.trim().slice(0, 80) : "";
   if (container) config.container = container;
+  for (const key of ["browser", "profile"]) {
+    const value = typeof raw[key] === "string" ? raw[key].trim() : "";
+    if (value) config[key] = value;
+  }
   return config;
 }
 

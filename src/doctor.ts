@@ -7,8 +7,9 @@ import { claudeHookInstalled, claudeSettingsFile } from "./hooks.ts";
 import { openCodePluginFile, openCodePluginInstalled } from "./opencode.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
 import { readConfig, readPermissions } from "./config.ts";
-import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, PERMISSIONS_FILE, SERVER_NAME, SOCKET, VERSION } from "./paths.ts";
+import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, PERMISSIONS_FILE, SERVER_NAME, VERSION } from "./paths.ts";
 import { call } from "./zen.ts";
+import { browserResolver, instanceLabel } from "./instances.ts";
 
 const ok = (s: string) => console.log(`✓ ${s}`);
 const bad = (s: string, fix?: string) => console.log(`✗ ${s}${fix ? `\n    → ${fix}` : ""}`);
@@ -80,6 +81,12 @@ export async function doctor() {
   }
 
   try {
+    const instances = await browserResolver.list();
+    if (instances.length) console.log("Running browser instances:");
+    for (const entry of instances)
+      console.log(`  ${instanceLabel(entry)} (pid ${entry.pid}) — ${entry.installationDir} — ${entry.profileDir}`);
+    const { socket, instance, reason } = await browserResolver.resolve();
+    console.log(`Selected: ${instance ? `${instanceLabel(instance)} (pid ${instance.pid})` : socket} (${reason})`);
     const [reply] = await call("ping", {}, 5000);
     const info = JSON.parse(reply.type === "text" ? reply.text : "{}");
     ok(
@@ -93,9 +100,9 @@ export async function doctor() {
         `  ${L(`files on disk are ${info.onDisk}; the bridge reloads them next time the MCP client starts the server`, `diskteki dosyalar ${info.onDisk}; köprü MCP istemcisi sunucuyu bir sonraki başlatışında yeniden yükler`)}`,
       );
     }
-  } catch {
+  } catch (error) {
     fail(
-      L(`The bridge doesn't answer on ${SOCKET}.`, `Köprü ${SOCKET} üzerinden cevap vermiyor.`),
+      (error as Error).message,
       L(
         `Is the browser open? After installing, restart it once. Errors: ${LOG_FILE}`,
         `Tarayıcı açık mı? Kurduktan sonra bir kez yeniden başlat. Hatalar: ${LOG_FILE}`,

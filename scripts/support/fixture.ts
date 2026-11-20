@@ -2,12 +2,19 @@
 // and inspection of fixtures must not go through javascript_tool, which asks the user in auto
 // mode; the bridge's background query reaches the page without the agents' permission checks.
 import { call } from "../../src/zen.ts";
-import { SOCKET } from "../../src/paths.ts";
 
 export function fixtureTransportEnv() {
-  const keys = ["XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"];
+  const keys = [
+    "XDG_RUNTIME_DIR",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "ZEN_MCP_SOCKET",
+    "ZEN_MCP_BROWSER",
+    "ZEN_MCP_PROFILE",
+  ];
   const env = Object.fromEntries(keys.flatMap((key) => (process.env[key] ? [[key, process.env[key]!]] : [])));
-  return { ...env, ZEN_MCP_SOCKET: SOCKET, ZEN_MCP_CHANNEL: "0" };
+  return { ...env, ZEN_MCP_CHANNEL: "0" };
 }
 
 export async function pageEval(tabId: number, code: string): Promise<string> {

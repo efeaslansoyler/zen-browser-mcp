@@ -2,7 +2,7 @@
 // through loadSubScript; its scope has zenMcpDir (this folder's real path) and zenMcpName (the
 // package name, used in paths).
 //
-// It listens on $XDG_RUNTIME_DIR/<name>.sock: one JSON request line per connection, answered
+// It listens on a private Unix socket: one JSON request line per connection, answered
 // with one JSON line before the connection closes. Mouse and keyboard events come from each
 // frame's actor, as Zen's own WebDriver code does: the page sees trusted input and, since the
 // remote agent never starts, navigator.webdriver stays false.
@@ -17,8 +17,8 @@
 // Zen's stderr usually goes to /dev/null and autoconfig runs before the console is ready, so
 // errors are also written to $XDG_RUNTIME_DIR/<name>.log.
 const zenMcpApp = typeof zenMcpName === "string" ? zenMcpName : "zen-mcp";
-// macOS has no XDG_RUNTIME_DIR; TMPDIR is per user there.
-const zenMcpRuntimeDir = () => Services.env.get("XDG_RUNTIME_DIR") || Services.env.get("TMPDIR") || "/tmp";
+const zenMcpRuntimeDir = () =>
+  Services.env.get("XDG_RUNTIME_DIR") || globalThis.zenMcpRuntime || Services.env.get("TMPDIR") || "/tmp";
 
 function logError(where, e) {
   const msg = `${new Date().toISOString()} ${where}: ${e}\n${e?.stack ?? ""}\n`;
@@ -53,8 +53,7 @@ function logError(where, e) {
     const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
     const dirURI = Services.io.newFileURI(localFile(dir)).spec.replace(/\/?$/, "/");
     const version = (globalThis.zenMcpVersion = (globalThis.zenMcpVersion || 0) + 1);
-    // ZEN_MCP_SOCKET: a second browser of the same user (demo, tests) listens on its own socket
-    const socketPath = Services.env.get("ZEN_MCP_SOCKET") || `${zenMcpRuntimeDir()}/${zenMcpApp}.sock`;
+    const socketOverride = Services.env.get("ZEN_MCP_SOCKET");
     const configHome = Services.env.get("XDG_CONFIG_HOME") || Services.env.get("HOME") + "/.config";
     const stateHome = Services.env.get("XDG_STATE_HOME") || Services.env.get("HOME") + "/.local/state";
 
@@ -64,24 +63,37 @@ function logError(where, e) {
       return f;
     }
 
-    function readTextFile(file) {
+    function readTextFile(file, length) {
       const stream = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
       stream.init(file, 0x01, 0, 0);
       try {
-        return NetUtil.readInputStreamToString(stream, stream.available(), { charset: "UTF-8" });
+        return NetUtil.readInputStreamToString(stream, length ?? stream.available(), { charset: "UTF-8" });
       } finally {
         stream.close();
       }
     }
 
     // Private (0600) file in a private (0700) folder; replaces the file unless append is set.
-    function writeTextFile(file, text, { append = false } = {}) {
+    function writeTextFile(file, text, { append = false, atomic = false } = {}) {
       if (!file.parent.exists()) file.parent.create(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
-      const out = Cc["@mozilla.org/network/file-output-stream;1"].createInstance(Ci.nsIFileOutputStream);
+      const contract = atomic
+        ? "@mozilla.org/network/safe-file-output-stream;1"
+        : "@mozilla.org/network/file-output-stream;1";
+      const out = Cc[contract].createInstance(Ci.nsIFileOutputStream);
       out.init(file, 0x02 | 0x08 | (append ? 0x10 : 0x20), 0o600, 0); // write | create | append or truncate
       const bytes = unescape(encodeURIComponent(text));
       out.write(bytes, bytes.length);
-      out.close();
+      if (atomic) out.QueryInterface(Ci.nsISafeOutputStream).finish();
+      else out.close();
+    }
+
+    // Match paths.ts when the desktop session does not supply XDG_RUNTIME_DIR.
+    if (!Services.env.get("XDG_RUNTIME_DIR") && Services.appinfo.OS === "Linux") {
+      try {
+        // procfs cannot report the available byte count. Uid is near the start of status.
+        const uid = /^Uid:\s+\d+\s+(\d+)/m.exec(readTextFile(localFile("/proc/self/status"), 512))?.[1];
+        if (uid && localFile(`/run/user/${uid}`).exists()) globalThis.zenMcpRuntime = `/run/user/${uid}`;
+      } catch {}
     }
 
     // ---- setup: zen.cfg already mapped resource://zenmcp/ (loadSubScript rejects file://);
@@ -104,6 +116,22 @@ function logError(where, e) {
 
     // ?v= makes a reload load the new module versions instead of the cached ones.
     const load = (name) => ChromeUtils.importESModule(`resource://zenmcp/${name}.sys.mjs?v=${version}`);
+    globalThis.zenMcpBrowserStart ||= Date.now();
+    const { instanceSocket } = load("Instances");
+    const listener = instanceSocket({
+      socketOverride,
+      runtime: zenMcpRuntimeDir(),
+      app: zenMcpApp,
+      localFile,
+      writeTextFile,
+      logError,
+      setTimeout,
+      clearTimeout,
+      lifetime: (globalThis.zenMcpInstanceLifetime ??= {
+        startedAt: globalThis.zenMcpBrowserStart,
+        focusedAt: 0,
+      }),
+    });
     const { agentTheme, applyTheme, agentIcon, commonAgent } = load("Agent");
     const { TabAccess } = load("TabAccess");
     const { normalizeConfig, siteAllowed, siteEntry } = load("SiteRules");
@@ -176,7 +204,6 @@ function logError(where, e) {
       (state.tabMemberships ||= { next: 1 }),
       (state.tabHolds ||= new Map()),
     );
-    globalThis.zenMcpBrowserStart ||= Date.now();
 
     const ctx = {
       // environment
@@ -760,6 +787,7 @@ function logError(where, e) {
     const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
 
     function attachWindow(win) {
+      listener.attach(win);
       ctx.island?.attach(win);
       ctx.tabMenu.attach(win);
       ctx.picks.attachPageMenu(win);
@@ -789,6 +817,7 @@ function logError(where, e) {
     let sessionSweep = null;
 
     function start() {
+      const file = listener.prepare();
       ctx.shuttingDown = false;
       sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
       const { Island } = load("Island");
@@ -859,23 +888,39 @@ function logError(where, e) {
         allFrames: true,
       });
 
-      const file = localFile(socketPath);
-      if (file.exists()) file.remove(false);
-      server = Cc["@mozilla.org/network/server-socket;1"].createInstance(Ci.nsIServerSocket);
-      server.initWithFilename(file, 0o600, -1);
-      server.asyncListen({
-        onSocketAccepted(_server, transport) {
-          try {
-            onConnection(transport);
-          } catch (e) {
-            logError("connection", e);
-          }
-        },
-        onStopListening() {},
-      });
+      const socket = Cc["@mozilla.org/network/server-socket;1"].createInstance(Ci.nsIServerSocket);
+      socket.initWithFilename(file, 0o600, -1);
+      server = socket;
+      try {
+        server.asyncListen({
+          onSocketAccepted(_server, transport) {
+            try {
+              onConnection(transport);
+            } catch (e) {
+              logError("connection", e);
+            }
+          },
+          onStopListening() {},
+        });
+        listener.publish(loadedVersion, version);
+        Services.obs.addObserver(stop, "quit-application");
+      } catch (e) {
+        listener.stop(true);
+        server.close();
+        server = null;
+        throw e;
+      }
     }
 
     function stop() {
+      try {
+        Services.obs.removeObserver(stop, "quit-application");
+      } catch {}
+      listener.stop(!!server);
+      try {
+        server?.close();
+      } catch {}
+      server = null;
       ctx.shuttingDown = true;
       ctx.releaseAllInputs();
       ctx.browserSettings.destroy();
@@ -908,13 +953,7 @@ function logError(where, e) {
       ctx.recordings.stopAll();
       for (const win of ctx.browserWindows()) ctx.unwatchWindow(win);
       try {
-        server?.close();
-      } catch {}
-      try {
         ChromeUtils.unregisterWindowActor("ZenMcp");
-      } catch {}
-      try {
-        localFile(socketPath).remove(false);
       } catch {}
       delete globalThis.zenMcpStop;
     }

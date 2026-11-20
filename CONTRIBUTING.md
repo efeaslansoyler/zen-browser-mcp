@@ -64,6 +64,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 
 | Script | Covers |
 |---|---|
+| `check-instances.ts <Zen binary>` | Two disposable headless profiles, socket discovery, selection, reload, failover and crash cleanup |
 | `check-compat.ts --reload` | Claude, Codex and generic identities: read, write, click, keys, screenshots, theming |
 | `check-input.ts` | Held keys and buttons, human-like input, `browser_settings` |
 | `check-permissions.ts` | Permission modes, the site blocklist, batch re-checks, redirects, iframes |
@@ -109,8 +110,13 @@ To try risky changes on a copy:
    checks. For fixtures without a visible UI requirement, use `--headless`.
 3. Run `zenctl` and the check scripts from the same shell so the MCP subprocesses inherit
    the same paths. Close the disposable browser when finished.
-4. Serve test pages with `python3 -m http.server 8765`.
-5. For console errors add `--marionette --remote-allow-system-access` and read
+4. For `node scripts/check-instances.ts <copy>/zen`, leave `ZEN_MCP_SOCKET` unset and
+   put the isolated XDG directories under a short runtime directory, such as one created
+   by `mktemp -d /run/user/$(id -u)/zi.XXXXXX`. The script starts and closes both
+   headless processes and removes their profiles. Remove the scratch runtime directory
+   and installation copy when finished.
+5. Serve test pages with `python3 -m http.server 8765`.
+6. For console errors add `--marionette --remote-allow-system-access` and read
    `Services.console.getMessageArray()`.
 
 To screenshot browser UI (the island, menus), use the window's

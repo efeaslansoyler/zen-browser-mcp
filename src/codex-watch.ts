@@ -13,12 +13,14 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { RUNTIME_DIR, NAME } from "./paths.ts";
 import { subscribe } from "./zen.ts";
+import { browserResolver, deliveryScope, listening, type Selection } from "./instances.ts";
 import { THREAD_ID, deliverCodexPick } from "./delivery.ts";
 import { stopCodexRelays } from "./codex-relay.ts";
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 export const DAEMON_SOCKET = path.join(CODEX_HOME, "app-server-control", "app-server-control.sock");
-const WATCH_SOCKET = path.join(RUNTIME_DIR, `${NAME}-codex`, "watch.sock");
+const watchSocket = (scope: string) =>
+  path.join(RUNTIME_DIR, `${NAME}-codex`, scope ? `watch.${scope}.sock` : "watch.sock");
 const POLL_MS = 2000;
 const IDLE_EXIT_MS = 10 * 60_000; // exit after this long without a Codex window; a hook or the MCP server restarts it
 
@@ -226,9 +228,12 @@ class DaemonClient {
   }
 }
 
-export async function runCodexWatch() {
-  fs.mkdirSync(path.dirname(WATCH_SOCKET), { recursive: true, mode: 0o700 });
-  if (await contactWatch()) return;
+export async function runCodexWatch(target: Selection) {
+  browserResolver.pinDelivery(target);
+  const scope = deliveryScope(target);
+  const socketPath = watchSocket(scope);
+  fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
+  if (await contactWatch("ping", scope)) return;
   const threads = new Map<string, Thread>();
   const receivers = new Map<string, { title?: string; subscription: ReturnType<typeof subscribe> }>();
   let daemon: DaemonClient | undefined;
@@ -249,7 +254,7 @@ export async function runCodexWatch() {
     await client.connect();
     daemon = client;
     // old relays started by hooks bind the same session; they would keep replacing each other
-    await stopCodexRelays();
+    await stopCodexRelays({ scope });
   };
 
   const poll = async () => {
@@ -323,16 +328,27 @@ export async function runCodexWatch() {
       }
     });
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    try {
-      fs.unlinkSync(WATCH_SOCKET);
-    } catch {}
-    server.listen(WATCH_SOCKET, () => {
-      fs.chmodSync(WATCH_SOCKET, 0o600);
-      resolve();
+  function listen() {
+    return new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, () => {
+        server.off("error", reject);
+        fs.chmodSync(socketPath, 0o600);
+        resolve();
+      });
     });
-  });
+  }
+
+  try {
+    await listen();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+    const before = fs.lstatSync(socketPath, { throwIfNoEntry: false });
+    if (await listening(socketPath)) return; // another watcher started at the same time
+    const after = fs.lstatSync(socketPath, { throwIfNoEntry: false });
+    if (before?.isSocket() && after?.ino === before.ino) fs.unlinkSync(socketPath);
+    await listen();
+  }
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
   for (;;) {
@@ -342,9 +358,12 @@ export async function runCodexWatch() {
   }
 }
 
-export function contactWatch(action: "ping" | "stop" = "ping"): Promise<{ daemon: boolean } | null> {
+export function contactWatch(
+  action: "ping" | "stop" = "ping",
+  scope = deliveryScope(),
+): Promise<{ daemon: boolean } | null> {
   return new Promise((resolve) => {
-    const socket = net.createConnection(WATCH_SOCKET);
+    const socket = net.createConnection(watchSocket(scope));
     let data = "";
     const finish = (value: { daemon: boolean } | null) => {
       socket.destroy();
@@ -367,10 +386,12 @@ export function contactWatch(action: "ping" | "stop" = "ping"): Promise<{ daemon
 }
 
 // Starts the watcher if it isn't running; true if it reached the service (hooks then skip the relay)
-export async function ensureCodexWatch(): Promise<boolean> {
-  let state = await contactWatch();
+export async function ensureCodexWatch(target?: Selection): Promise<boolean> {
+  target ??= await browserResolver.resolve();
+  const scope = deliveryScope(target);
+  let state = await contactWatch("ping", scope);
   if (!state) {
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--watch"], {
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--watch", JSON.stringify(target)], {
       detached: true,
       stdio: "ignore",
     });
@@ -378,17 +399,17 @@ export async function ensureCodexWatch(): Promise<boolean> {
     child.unref();
     for (let i = 0; i < 25 && !state; i++) {
       await new Promise((resolve) => setTimeout(resolve, 80));
-      state = await contactWatch();
+      state = await contactWatch("ping", scope);
     }
   }
   // the first round tries to reach the service; a short margin until it does
   for (let i = 0; i < 10 && state && !state.daemon; i++) {
     await new Promise((resolve) => setTimeout(resolve, 100));
-    state = await contactWatch();
+    state = await contactWatch("ping", scope);
   }
   return !!state?.daemon;
 }
 
 if ((import.meta as { main?: boolean }).main && process.argv[2] === "--watch") {
-  await runCodexWatch();
+  await runCodexWatch(JSON.parse(process.argv[3]));
 }

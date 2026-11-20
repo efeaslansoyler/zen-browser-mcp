@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { THREAD_ID } from "./delivery.ts";
-import { ensureCodexRelay, contactRelay } from "./codex-relay.ts";
+import { ensureCodexRelay, stopCodexRelays } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
 import { PACKAGE_DIR } from "./paths.ts";
 
@@ -26,11 +26,10 @@ export function parseHookInput(value: unknown): CodexHookInput {
 // watch: replaceable so tests don't touch the real Codex service
 export async function handleCodexHook(value: unknown, watch: () => Promise<boolean> = ensureCodexWatch) {
   const input = parseHookInput(value);
-  // If the Codex service can be watched, the watcher connects conversations; the per-conversation relay is only a fallback.
-  if (await watch().catch(() => false)) return;
   if (input.hook_event_name === "SessionEnd") {
-    await contactRelay(input.session_id, "stop");
-  } else {
+    await stopCodexRelays({ threadId: input.session_id });
+  } else if (!(await watch().catch(() => false))) {
+    // If the Codex service can be watched, the watcher connects conversations.
     await ensureCodexRelay({ threadId: input.session_id, cwd: input.cwd });
   }
 }

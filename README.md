@@ -31,8 +31,8 @@ npm run build
 node dist/cli.js install
 ```
 
-The installer adds an autoconfig loader to the browser installation. It may
-request `sudo` for that step. Restart the browser, then register the server with
+The installer adds an autoconfig loader to each browser installation it finds. It may
+request `sudo` for that step. Restart the browsers you want to use, then register the server with
 your client. Run one of these commands from the checkout:
 
 ```sh
@@ -44,9 +44,15 @@ codex mcp add zen -- node "$PWD/dist/cli.js"
 ```
 
 For another MCP client, add a local stdio server with command `node` and the
-absolute path to `dist/cli.js` as its only argument. Check the setup with
+absolute path to `dist/cli.js` as its first argument. Check the setup with
 `node dist/cli.js doctor`. If the installer cannot find your browser, pass
 `--browser /path/to/install` with the folder containing `application.ini`.
+
+If several browsers or profiles are running, new MCP sessions use the most
+recently focused one. To choose a default, run
+`node dist/cli.js config browser Zen --profile Default`. One client can
+override that choice with the server arguments `--browser` and `--profile`.
+Run `node dist/cli.js doctor` to see the running instances and the selection.
 
 ## Use it
 

@@ -7,7 +7,7 @@ trusted events through the page actor without starting the remote agent or WebDr
 ```
 MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser/main.js (browser parent process)
 (Claude, Codex…)      tool schemas,     $XDG_RUNTIME_DIR/   ├─ Island.sys.mjs   status island, prompts
-                      agent identity    zen-mcp.sock 0600   ├─ TabMenu, Picks   tab menu, element picker
+                      agent identity    zen-mcp/<id>.sock  ├─ TabMenu, Picks   tab menu, element picker
                                                             ├─ *Tools.sys.mjs   tool implementations
                                                             └─ JSWindowActor ──▶ actors/ZenMcpChild.sys.mjs
                                                                                  (every frame, page process)
@@ -25,6 +25,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | `claude.ts` | Channel detection and the Claude conversation title |
 | `skill.ts` | `skill install`: copies `skills/zen-browser` into Claude Code's and Codex's skill folders |
 | `zen.ts` | Socket client: one request per connection (`call`) and long-lived subscriptions (`subscribe`) |
+| `instances.ts` | Live instance discovery, stale endpoint cleanup and sticky browser selection |
 | `paths.ts` | Package name and every user-visible path in one place |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
 | `codex-watch.ts` | Watches the Codex service and connects open Codex conversations (see [codex.md](codex.md)) |
@@ -47,6 +48,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 
 | File | Role |
 |---|---|
+| `Instances.sys.mjs` | Private socket naming, discovery metadata, window activation and shutdown |
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
 | `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` notes and status |
@@ -83,6 +85,38 @@ One JSON line per connection: request `{tool, args, session, agent}`, reply `{ok
 `{ok: false, error}`. JSON is converted to pure ASCII on both ends so encodings never matter.
 `subscribe` is the exception: the connection stays open, the bridge writes events line by
 line and, for acknowledged subscriptions, the client answers `{event: "delivery", id, ok}`.
+
+## Browser instances
+
+Every bridge binds a private socket in `$XDG_RUNTIME_DIR/zen-mcp/` (directory mode
+`0700`, socket and metadata mode `0600`). Linux falls back to `/run/user/<uid>`
+when available. With a shared temporary directory the instance directory has a
+per-user suffix. The socket name is a short random ID minted on each bind. The
+matching `<id>.json` contains `browser`, `installationDir`, `profileDir`,
+optional `profileName`, `pid`, `bridgeVersion` (the installed files' version),
+`bridgeGeneration` (the in-process reload counter), `startedAt` and `focusedAt`
+(Unix time in milliseconds, with zero for no recorded activation). A bridge
+publishes metadata atomically after binding, updates focus on activation at most
+twice per second, and removes its files on stop. Discovery checks the PID and
+socket listener and removes entries left by crashes.
+
+The resolver uses `ZEN_MCP_SOCKET` directly when set. Otherwise client flags
+`--browser <name|dir>` and `--profile <name>` override their respective
+`ZEN_MCP_BROWSER` and `ZEN_MCP_PROFILE` values. The resulting client selection
+overrides the config selection. With neither, the resolver uses the only running
+instance or the most recently focused one, with newest startup breaking focus ties.
+An explicit selection that has no live match produces an error. The legacy
+`$XDG_RUNTIME_DIR/zen-mcp.sock` is available for older bridges when discovery
+finds no instance and the user has no explicit browser or profile selection.
+
+Requests and the lifecycle subscription share one selection per MCP process.
+Installation and profile directories identify the profile. The PID and start time
+allow a bridge reload to replace its socket without changing the session's browser.
+When the selected process goes away and a different process takes its place, the
+next tool result tells the agent to refresh its tab context. Codex receivers use
+control sockets scoped to the selected installation and profile. A standalone
+prompt hook can find the exact client session's inbox in another live instance
+when the selected instance has no queued picks.
 
 ## Sessions and tab access
 
@@ -136,8 +170,8 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
 
 ## Permissions
 
-`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent"}`
-(`workspace` is optional: the Zen space new agent tabs open in).
+`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent", "browser": "Zen", "profile": "Default"}`
+(`workspace` is the optional Zen space for new agent tabs. See [Browser instances](#browser-instances) for `browser` and `profile`).
 
 - **Operations and templates** (`Policy.sys.mjs`, shared with the CLI): every tool call is an
   operation (`operationOf`: a tool, or `tool.action` for `computer`, `clipboard`,
