@@ -314,6 +314,19 @@ const CSS = `
       &.answer-note { height: 32px; }
       &::placeholder { color: rgba(243, 243, 243, 0.45); }
     }
+    & .element-notes {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      &:empty { display: none; }
+    }
+    & .element-note {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      & .number { flex: none; width: 16px; text-align: center; opacity: 0.7; font-size: 11.5px; }
+      & textarea { flex: 1; width: auto; height: 32px; }
+    }
     & .compose-footer {
       display: flex;
       align-items: center;
@@ -434,7 +447,7 @@ export class Island {
   #clearTimeout;
 
   // actions: { stop(), resume(), goTo(browser), answer(key, "done" | "cancelled", note, choice?),
-  //            pick(win), send(note), cancelPick(), toggleMode(), holdOf?(browser) → { session,
+  //            pick(win), send(note, targetId, elementNotes?), cancelPick(), toggleMode(), holdOf?(browser) → { session,
   //            reason, endsIn, noWorkaround } | null, releaseHold?(browser) }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
@@ -535,7 +548,9 @@ export class Island {
     const discard = node("button", "", L("Cancel", "Vazgeç"));
     const send = node("button", "primary", L("Send", "Gönder"));
     footer.append(target, discard, send);
-    compose.append(note, footer);
+    // a multi-element pick: one optional note per numbered element, filled in by compose()
+    const elementNotes = node("div", "element-notes");
+    compose.append(note, elementNotes, footer);
     const reviewHost = node("div", "review-host");
     el.append(row, detail, workers, holdline, reviewHost, compose, preview);
     doc.documentElement.append(el);
@@ -543,19 +558,23 @@ export class Island {
     const submit = () => {
       if (this.#pick?.mode !== "compose") return;
       const value = note.value.trim();
-      if (value && !this.#pick.sending) {
+      const fields = this.#windows.get(win)?.elementFields ?? [];
+      const notes = fields.map((field) => field.value.trim());
+      if ((value || notes.some(Boolean)) && !this.#pick.sending) {
         this.#pick.sending = true;
         target.disabled = true;
         send.disabled = true;
         send.textContent = L("Sending…", "Gönderiliyor…");
         note.disabled = true;
-        this.#actions.send(value, this.#pick.targetId);
+        for (const field of fields) field.disabled = true;
+        if (fields.length) this.#actions.send(value, this.#pick.targetId, notes);
+        else this.#actions.send(value, this.#pick.targetId);
       } else note.focus();
     };
     send.addEventListener("click", submit);
     discard.addEventListener("click", () => this.#actions.cancelPick());
     // Enter sends, Shift+Enter adds a line, Esc cancels
-    note.addEventListener("keydown", (event) => {
+    const onNoteKey = (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         submit();
@@ -563,7 +582,8 @@ export class Island {
         event.preventDefault();
         this.#actions.cancelPick();
       }
-    });
+    };
+    note.addEventListener("keydown", onNoteKey);
 
     const goTo = (browser) => {
       if (!this.#pick && browser) this.#actions.goTo(browser);
@@ -666,6 +686,9 @@ export class Island {
       goto,
       ok,
       note,
+      elementNotes,
+      elementFields: [],
+      onNoteKey,
       target,
       send,
       canvas,
@@ -1048,7 +1071,8 @@ export class Island {
   }
 
   // Element picked: the note box; target is the receiving session's name (none: clipboard).
-  compose(browser, label, targets = [], targetId = "") {
+  // count > 1: a general note plus one numbered note per element.
+  compose(browser, label, targets = [], targetId = "", count = 1) {
     this.#clearTimeout(this.#pickTimer);
     const selected = targets.find((t) => t.id === targetId);
     this.#pick = {
@@ -1065,7 +1089,29 @@ export class Island {
       parts.send.disabled = false;
       parts.send.textContent = L("Send", "Gönder");
     }
-    for (const parts of this.#windows.values()) parts.note.value = "";
+    for (const [win, parts] of this.#windows) {
+      parts.note.value = "";
+      parts.note.placeholder =
+        count > 1
+          ? L("Note for all elements (optional)", "Tüm öğeler için not (isteğe bağlı)")
+          : L("What should the agent do?", "Ne yapılsın?");
+      parts.elementFields = [];
+      const rows = [];
+      for (let number = 1; count > 1 && number <= count; number++) {
+        const row = win.document.createElementNS(XHTML, "div");
+        row.className = "element-note";
+        const badge = win.document.createElementNS(XHTML, "span");
+        badge.className = "number";
+        badge.textContent = String(number);
+        const field = win.document.createElementNS(XHTML, "textarea");
+        field.placeholder = L(`Note for element ${number} (optional)`, `${number}. öğe için not (isteğe bağlı)`);
+        field.addEventListener("keydown", parts.onNoteKey);
+        row.append(badge, field);
+        rows.push(row);
+        parts.elementFields.push(field);
+      }
+      parts.elementNotes.replaceChildren(...rows);
+    }
     this.#render();
     const owner = browser.ownerDocument?.defaultView;
     this.#windows.get(owner)?.note.focus();
@@ -1119,7 +1165,8 @@ export class Island {
       siteName = "";
       if (pick.mode === "picking") {
         action = L("Select elements (up to 8)", "Öğeleri seç (en çok 8)");
-        hintText = L("Shift-click: add/remove · Enter: done · Esc", "Shift+tık: ekle/çıkar · Enter: bitir · Esc");
+        const mod = Services.appinfo?.OS === "Darwin" ? "Cmd" : "Ctrl";
+        hintText = L(`${mod}-click: add/remove · Enter: done · Esc`, `${mod}+tık: ekle/çıkar · Enter: bitir · Esc`);
       } else if (pick.mode === "compose") {
         try {
           siteName = browser.currentURI.host;

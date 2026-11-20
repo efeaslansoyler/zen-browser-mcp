@@ -884,7 +884,8 @@ function logError(where, e) {
           goTo: (browser) => ctx.goToTab(browser),
           answer: (...args) => ctx.answerIsland(...args),
           pick: (win, options) => ctx.picks.start(win, options),
-          send: (note, targetId) => ctx.picks.send(note, targetId).catch((e) => logError("send", e)),
+          send: (note, targetId, elementNotes) =>
+            ctx.picks.send(note, targetId, elementNotes).catch((e) => logError("send", e)),
           selectTarget: (target) => ctx.picks.selectTarget(target),
           cancelPick: () => ctx.picks.end(),
           toggleMode: () => ctx.toggleMode(),

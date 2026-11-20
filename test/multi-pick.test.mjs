@@ -5,7 +5,7 @@ import * as themes from "../browser/Agent.sys.mjs";
 import { Picks } from "../browser/Picks.sys.mjs";
 import { Inbox, sendTargets, sentNotice } from "../browser/Inbox.sys.mjs";
 
-function harness() {
+function harness({ locale = "en", os = "Linux" } = {}) {
   class Node {
     children = [];
     attrs = new Map();
@@ -95,7 +95,7 @@ function harness() {
     },
   };
   const Actor = loadActor({
-    Services: { locale: { appLocaleAsBCP47: "en" } },
+    Services: { locale: { appLocaleAsBCP47: locale }, appinfo: { OS: os } },
     Cu: { waiveXrays: (value) => value },
   });
   const actor = new Actor();
@@ -121,11 +121,18 @@ function harness() {
     hit = nodes[index];
     emit("mousemove", { clientX: 30, clientY: 45 });
   };
-  const click = (index, shiftKey = false) => {
+  const click = (index, modifiers = false) => {
     hover(index);
-    return emit("click", { button: 0, shiftKey });
+    return emit("click", { button: 0, ...(modifiers === true ? { shiftKey: true } : modifiers) });
   };
-  return { actor, nodes, document, listeners, send, emit, hover, click, frame: () => nextFrame?.() };
+  // The hint bar in the picker's shadow root: { keys, count } text, or null when not shown.
+  const hint = () => {
+    const bar = document.documentElement.children[0]?.shadow?.children.find((n) => n.className === "hint");
+    if (!bar || bar.hidden) return null;
+    const [keys, count] = bar.children;
+    return { keys: keys.textContent, count: count.textContent };
+  };
+  return { actor, nodes, document, listeners, send, emit, hover, click, hint, frame: () => nextFrame?.() };
 }
 
 test("single click stays compatible; picker consumes page events and removes listeners", async () => {
@@ -156,6 +163,84 @@ test("Shift-click collects distinct nodes, toggles them off, and Enter preserves
     ["#element-1", "#element-2"],
   );
   assert.equal(h.listeners.size, 0);
+});
+
+test("Ctrl-click toggles elements on Linux and never reaches the page", async () => {
+  const h = harness(),
+    pending = h.send("pick_start");
+  const event = h.click(0, { ctrlKey: true });
+  assert(event.prevented && event.stopped);
+  h.click(1, { ctrlKey: true });
+  h.click(0, { ctrlKey: true });
+  h.click(2, { shiftKey: true });
+  h.emit("keydown", { key: "Enter" });
+  assert.deepEqual(
+    Array.from((await pending).items, (item) => item.selector),
+    ["#element-1", "#element-2"],
+  );
+});
+
+test("Cmd-click toggles elements on macOS", async () => {
+  const h = harness({ os: "Darwin" }),
+    pending = h.send("pick_start");
+  h.click(0, { metaKey: true });
+  h.click(1, { metaKey: true });
+  h.emit("keydown", { key: "Enter" });
+  assert.equal((await pending).items.length, 2);
+});
+
+test("a plain click with a selection adds that element and finishes", async () => {
+  const h = harness(),
+    pending = h.send("pick_start");
+  h.click(0, { ctrlKey: true });
+  h.click(1);
+  assert.deepEqual(
+    Array.from((await pending).items, (item) => item.selector),
+    ["#element-0", "#element-1"],
+  );
+});
+
+test("the hint bar lists every gesture with a live count and goes away when picking ends", async () => {
+  const h = harness(),
+    pending = h.send("pick_start");
+  const { keys, count } = h.hint();
+  for (const gesture of ["Click", "Ctrl-click", "↑/↓", "Backspace", "Enter", "Esc"])
+    assert(keys.includes(gesture), keys);
+  assert.equal(count, "0/8 selected");
+  h.click(0, { ctrlKey: true });
+  h.click(1, { ctrlKey: true });
+  assert.equal(h.hint().count, "2/8 selected");
+  h.click(1, { ctrlKey: true });
+  assert.equal(h.hint().count, "1/8 selected");
+  h.emit("keydown", { key: "Backspace" });
+  assert.equal(h.hint().count, "0/8 selected");
+  h.click(2);
+  await pending;
+  assert.equal(h.hint(), null);
+  await h.send("pick_end");
+
+  const cancelled = harness(),
+    again = cancelled.send("pick_start");
+  assert(cancelled.hint());
+  cancelled.emit("keydown", { key: "Escape" });
+  await again;
+  assert.equal(cancelled.hint(), null);
+});
+
+test("the hint bar uses the platform's modifier and the browser language", async () => {
+  const mac = harness({ os: "Darwin" });
+  mac.send("pick_start");
+  assert.match(mac.hint().keys, /Cmd-click/);
+  assert.doesNotMatch(mac.hint().keys, /Ctrl/);
+
+  const tr = harness({ locale: "tr" });
+  tr.send("pick_start");
+  assert.match(tr.hint().keys, /Ctrl\+tık/);
+  assert.equal(tr.hint().count, "0/8 seçili");
+
+  const menu = harness();
+  menu.actor.receiveMessage({ name: "pick_start", data: { fromContext: true } });
+  assert(menu.hint());
 });
 
 test("Backspace removes the last item; normal click completes without duplicate items", async () => {
@@ -502,4 +587,34 @@ test("all selected outline boxes follow geometry on animation frames and remain 
   assert.equal(root.children.find((node) => node.className === "box").hidden, true);
   await h.send("pick_end");
   assert.equal(h.document.documentElement.children.length, 0);
+});
+
+test("per-element notes lead their element's section; the general note leads the message", () => {
+  const { context, current } = messageHarness();
+  const both = context.message(current, "Make the pricing lighter", "owner-A", ["Bigger", ""]).content;
+  assert(both.startsWith("Make the pricing lighter\n"));
+  assert.match(both, /--- Selected element 1 ---\nUser note for element 1: Bigger\nPage: /);
+  assert.match(both, /--- Selected element 2 ---\nPage: /);
+  assert.doesNotMatch(both, /User note for element 2/);
+
+  const onlyElements = context.message(current, "", "owner-A", ["", " Remove it "]).content;
+  assert(onlyElements.startsWith("Selected elements: 2"));
+  assert.match(onlyElements, /--- Selected element 2 ---\nUser note for element 2: Remove it\nPage: [\s\S]*#item-2/);
+  assert.doesNotMatch(onlyElements, /User note for element 1/);
+
+  const generalOnly = context.message(current, "Align these controls", "owner-A", ["", ""]);
+  assert.deepEqual(generalOnly, context.message(current, "Align these controls", "owner-A"));
+  assert.doesNotMatch(generalOnly.content, /User note for/);
+});
+
+test("send carries per-element notes to delivery and the clipboard alike", async () => {
+  const { context, current } = messageHarness();
+  const document = {};
+  Object.assign(current.browser, { browsingContext: { currentWindowGlobal: document } });
+  current.document = document;
+  const clipboard = [];
+  context.env.copy = (text) => clipboard.push(text);
+  context.current = current;
+  await context.send("", "", ["Bigger", ""]);
+  assert.match(clipboard[0], /^Selected elements: 2[\s\S]*User note for element 1: Bigger\nPage: /);
 });

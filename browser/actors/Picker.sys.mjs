@@ -5,7 +5,7 @@
 // don't fire); mouse movement isn't, so hover menus stay open. Picked elements stay outlined
 // while the note is written; pick_end removes the outline.
 //
-// env: { document(), window(), agent(), applyTheme, contextTarget(), unwrap, L,
+// env: { document(), window(), agent(), applyTheme, contextTarget(), unwrap, L, mac(),
 //        reader: the PageReader module, info: the ElementInfo module }
 
 // limits for the outerHTML and text sent for a picked element
@@ -33,6 +33,14 @@ const PICK_CSS = `
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
   .label span { font-weight: 400; opacity: 0.8; }
+  .hint {
+    position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; gap: 10px; max-width: calc(100vw - 24px); box-sizing: border-box;
+    padding: 5px 12px; border-radius: 8px; pointer-events: none;
+    background: rgba(20, 20, 20, 0.88); color: #fff;
+    font: 12px/1.4 system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+  .hint .count { font-weight: 600; white-space: nowrap; color: var(--zen-agent-accent, #d97757); }
 `;
 
 const MOUSE = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "dblclick", "contextmenu"];
@@ -55,7 +63,15 @@ export class Picker {
     const { L } = this.env;
     const doc = this.env.document();
     const win = this.env.window();
-    const overlay = this.#overlayElement();
+    const mac = this.env.mac();
+    const mod = mac ? "Cmd" : "Ctrl";
+    const overlay = this.#overlayElement({
+      keys: L(
+        `Click: pick · ${mod}-click: add/remove · ↑/↓: parent/child · Backspace: undo · Enter: done · Esc: cancel`,
+        `Tık: seç · ${mod}+tık: ekle/çıkar · ↑/↓: üst/alt öğe · Backspace: geri al · Enter: bitir · Esc: iptal`,
+      ),
+      count: (n) => L(`${n}/${MAX_PICKS} selected`, `${n}/${MAX_PICKS} seçili`),
+    });
     let current = null;
     let hovered = null;
     let trail = []; // elements left with ↑; ↓ goes back down
@@ -65,7 +81,7 @@ export class Picker {
       if (selected.includes(el)) return true;
       if (selected.length === MAX_PICKS) {
         overlay.notice(
-          L("Up to 8 elements; Shift-click one to remove it", "En fazla 8 öğe; çıkarmak için Shift+tıkla"),
+          L(`Up to 8 elements; ${mod}-click one to remove it`, `En fazla 8 öğe; çıkarmak için ${mod}+tıkla`),
         );
         return false;
       }
@@ -104,7 +120,7 @@ export class Picker {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (event.type === "click" && event.button === 0 && current) {
-          if (event.shiftKey) toggle(current);
+          if (event.shiftKey || (mac ? event.metaKey : event.ctrlKey)) toggle(current);
           else if (add(current)) finish(selected);
         } else if (event.type === "contextmenu") finish(null);
       };
@@ -173,7 +189,7 @@ export class Picker {
   }
 
   // An outline and label ("button.cta 320×48") in a closed shadow root; follows the element.
-  #overlayElement() {
+  #overlayElement(hintText) {
     const { elementLabel } = this.env.reader;
     const doc = this.env.document();
     const win = this.env.window();
@@ -190,7 +206,15 @@ export class Picker {
     box.className = "box";
     const label = doc.createElement("div");
     label.className = "label";
-    root.append(style, box, label);
+    const hint = doc.createElement("div");
+    hint.className = "hint";
+    const keys = doc.createElement("span");
+    keys.textContent = hintText.keys;
+    const count = doc.createElement("span");
+    count.className = "count";
+    count.textContent = hintText.count(0);
+    hint.append(keys, count);
+    root.append(style, box, label, hint);
     doc.documentElement.append(host);
 
     let target = null;
@@ -256,10 +280,11 @@ export class Picker {
           root.append(selectedBox, selectedLabel);
           return { el, box: selectedBox, label: selectedLabel };
         });
+        count.textContent = hintText.count(elements.length);
       },
       freeze: () => {
         target = null;
-        box.hidden = label.hidden = true;
+        box.hidden = label.hidden = hint.hidden = true;
       },
       remove: () => {
         try {

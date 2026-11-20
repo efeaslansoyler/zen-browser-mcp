@@ -120,7 +120,7 @@ try {
   const fixture =
     "data:text/html;charset=utf-8," +
     encodeURIComponent(
-      `<!doctype html><title>${token}</title><style>body{font:16px system-ui;padding:35px}.grid{display:grid;grid-template-columns:repeat(5,130px);gap:12px}button{padding:15px}</style><h1>Disposable multi-pick test</h1><div class="grid">${Array.from({ length: 10 }, (_, i) => `<button id="item${i}" onclick="window.pageClicks++">Item ${i}</button>`).join("")}</div><script>window.pageClicks=0</script>`,
+      `<!doctype html><title>${token}</title><style>body{font:16px system-ui;padding:35px}.grid{display:grid;grid-template-columns:repeat(5,130px);gap:12px}button{padding:15px}</style><h1>Disposable multi-pick test</h1><div class="grid">${Array.from({ length: 10 }, (_, i) => `<button id="item${i}" onclick="window.pageClicks++">Item ${i}</button>`).join("")}</div><a id="link" href="https://example.invalid/" onclick="window.pageClicks++">Fixture link</a><script>window.pageClicks=0</script>`,
     );
   await command("navigate", { tabId, url: fixture });
   const tree = text(await command("read_page", { tabId }));
@@ -129,14 +129,18 @@ try {
     assert(ref, tree);
     return ref;
   });
+  const linkRef = /link "Fixture link" \[([^\]]+)\]/.exec(tree)?.[1];
+  assert(linkRef, tree);
+  // The picker's toggle modifier: Cmd on macOS, Ctrl elsewhere.
+  const toggle = process.platform === "darwin" ? "cmd" : "ctrl";
   const start = async () => {
     await chrome(
       `(() => {const browser=h.findTab(${tabId}).linkedBrowser;h.startPick(browser.ownerDocument.defaultView,{browser});return true;})()`,
     );
     await until(() => chrome('h.island.pickMode==="picking"'), "Picker did not start.");
   };
-  const click = (index: number, shift = true) =>
-    command("computer", { tabId, action: "left_click", ref: refs[index], ...(shift ? { text: "shift" } : {}) });
+  const click = (index: number, modifier: string | null = toggle) =>
+    command("computer", { tabId, action: "left_click", ref: refs[index], ...(modifier ? { text: modifier } : {}) });
   const key = (key: string) => command("computer", { tabId, action: "key", text: key });
   const ready = () =>
     until(() => chrome('h.island.pickMode==="compose" && !h.pick?.preparing'), "Picker did not reach compose.");
@@ -163,7 +167,7 @@ try {
     await click(0);
     await click(1);
     await click(0);
-    await click(2); // Toggle first off.
+    await click(2, "shift"); // Toggle first off; Shift still toggles.
     await key("Return");
     await ready();
     const selected = await chrome("h.pick.items.map(item=>({selector:item.info.selector,shot:item.shot}))");
@@ -185,11 +189,11 @@ try {
     assert(event.content.indexOf("#item1") < event.content.indexOf("#item2"));
     assert.equal(events.filter((item) => item.event.note === note).length, 1);
     console.log(
-      `✓ ${target.name} fixture: trusted Shift-click/toggle/Enter → two contexts/images, shared note, pinned destination and receipt`,
+      `✓ ${target.name} fixture: trusted ${toggle}/Shift-click toggle/Enter → two contexts/images, shared note, pinned destination and receipt`,
     );
   }
   await start();
-  await click(0, false);
+  await click(0, null);
   await ready();
   assert.equal(await chrome("h.pick.items.length"), 1);
   await end();
@@ -215,8 +219,18 @@ try {
   await until(() => chrome("!h.pick"), "Escape did not cancel all picks.");
   console.log("✓ Eight-item limit, Backspace and Escape clean up correctly");
 
+  const tabCount = () => chrome(`h.findTab(${tabId}).ownerGlobal.gBrowser.tabs.length`);
+  const tabsBefore = await tabCount();
   await start();
-  await click(0, false);
+  await command("computer", { tabId, action: "left_click", ref: linkRef, text: toggle });
+  await key("Escape");
+  await until(() => chrome("!h.pick"), "Escape did not cancel the pick.");
+  await sleep(300);
+  assert.equal(await tabCount(), tabsBefore, `${toggle}-click on a link opened a tab.`);
+  console.log(`✓ ${toggle}-click on a link during a pick opens nothing`);
+
+  await start();
+  await click(0, null);
   await ready();
   await command("navigate", { tabId, url: fixture });
   const stale = await chrome(
