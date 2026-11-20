@@ -312,7 +312,6 @@ export function inputTools(ctx) {
         default:
           throw new Error(`Unsupported action: ${args.action}`);
       }
-      await operationSleep(100, call);
       return text(`${args.action} done.`);
     },
 

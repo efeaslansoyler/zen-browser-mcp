@@ -56,7 +56,8 @@ text. Cookies and authorization headers are hidden. Other headers, URLs and
 bodies can still contain sensitive data.
 
 Input results can report `openedTabs` when Gecko provides a verifiable opener.
-Check `tabs_context_mcp` for delayed notices. Use the usual `request_tab` flow to
+Gecko can register a new tab after the triggering input returns. Check
+`tabs_context_mcp` for delayed notices. Use the usual `request_tab` flow to
 gain access. Tabs with an unknown opener can still appear in the tab list.
 
 ## Cross-host HAR capture

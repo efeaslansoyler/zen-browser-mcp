@@ -3,6 +3,7 @@ import { loadActor } from "./support/actor.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { Cancellation } from "../browser/Cancellation.sys.mjs";
 import { bridgeContext, testCall } from "./support/bridge.mjs";
 const timers = { setTimeout, clearTimeout };
@@ -36,7 +37,7 @@ test("cancel wins even when a response resolved before its continuation runs", a
   await assert.rejects(result, /stopped/);
 });
 
-function actorHarness() {
+function actorHarness(actorTimers = timers) {
   const events = [];
   let firstEvent;
   const first = new Promise((resolve) => {
@@ -62,7 +63,7 @@ function actorHarness() {
         },
       },
     },
-    { timers },
+    { timers: actorTimers },
   );
   const actor = new Actor();
   actor.contentWindow = { innerWidth: 100, innerHeight: 100, devicePixelRatio: 1 };
@@ -76,16 +77,48 @@ function actorHarness() {
       return node();
     },
   });
-  actor.document = {
+  actor.document = Object.assign(new EventTarget(), {
     activeElement: null,
     hidden: true,
     createElement: node,
     documentElement: node(),
     elementFromPoint: () => null,
     scrollingElement: { scrollLeft: 0, scrollTop: 0, scrollBy: () => emit(["fallback-scroll"]) },
-  };
+  });
   return { actor, events, first };
 }
+
+test("wheel acknowledges a scroll position change before the fallback deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { actor, events, first } = actorHarness({ setTimeout, clearTimeout });
+  let result;
+  const pending = actor
+    .receiveMessage({ name: "input", data: { requestId: 1, kind: "wheel", x: 10, y: 10, dy: 100 } })
+    .then((reply) => (result = reply));
+  await first;
+  actor.document.dispatchEvent(new Event("scroll"));
+  await nextTurn();
+  assert.equal(result, undefined, "An event without a position change acknowledged the wheel");
+  actor.document.scrollingElement.scrollTop = 100;
+  actor.document.dispatchEvent(new Event("scroll"));
+  await nextTurn();
+  assert.equal(result?.value, "done");
+  t.mock.timers.tick(150);
+  await pending;
+  assert.deepEqual(events, [["wheel"]]);
+  actor.didDestroy();
+});
+
+test("wheel falls back within a bounded wait when native scrolling does not move", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { actor, events, first } = actorHarness({ setTimeout, clearTimeout });
+  const pending = actor.receiveMessage({ name: "input", data: { requestId: 1, kind: "wheel", x: 10, y: 10, dy: 100 } });
+  await first;
+  t.mock.timers.tick(150);
+  assert.equal((await pending).value, "done");
+  assert.deepEqual(events, [["wheel"], ["fallback-scroll"]]);
+  actor.didDestroy();
+});
 
 for (const kind of ["text", "keys"]) {
   test(`actor cancels ${kind} midway; fresh request works without resuming old input`, async () => {

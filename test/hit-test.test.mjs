@@ -257,14 +257,15 @@ test("routing refuses a ref click if the deepest hit frame changes", async () =>
   assert.equal(sent, false);
 });
 
-test("all four computer click actions request hit testing and forward the expected ref", async () => {
+test("all four computer click actions request hit testing and return after input completes", async () => {
   const calls = [];
+  const sleeps = [];
   const context = vm.createContext({
     heldFrame: () => null,
     releaseInputs() {},
     rememberInputs() {},
     browserFor: () => ({}),
-    operationSleep: async () => {},
+    operationSleep: async (ms) => sleeps.push(ms),
     text: (value) => value,
     target: async (_, args) => {
       assert.equal(args.forClick, true);
@@ -282,6 +283,7 @@ test("all four computer click actions request hit testing and forward the expect
   assert.equal(calls[1].button, 2);
   assert.equal(calls[2].count, 2);
   assert.equal(calls[3].count, 3);
+  assert.deepEqual(sleeps, []);
 });
 
 test("scaled screenshot coordinates round-trip with size caps rather than the requested scale", async () => {

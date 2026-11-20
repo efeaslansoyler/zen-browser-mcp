@@ -12,7 +12,20 @@ const records = (items: Content[]) =>
     }
   });
 const tabId = records(await call("tabs_create_mcp"))[0].tabId;
-let childId: number | undefined;
+async function clickAndFindOpenedTab(ref: string, except?: number) {
+  const match = (items: Content[]) =>
+    records(items)
+      .flatMap((row) => row.openedTabs ?? [])
+      .find((row: { sourceTabId: number; tabId: number }) => row.sourceTabId === tabId && row.tabId !== except)?.tabId;
+  const immediate = match(await call("computer", { tabId, action: "left_click", ref }));
+  if (immediate) return immediate;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const tab = match(await call("tabs_context_mcp"));
+    if (tab) return tab;
+    await sleep(50);
+  }
+}
+
 try {
   const page =
     "data:text/html," +
@@ -24,21 +37,12 @@ try {
   assert.equal(tree.type, "text");
   const ref = tree.text.match(/\[(ref_\w+)\]/)?.[1];
   assert(ref);
-  const result = records(await call("computer", { tabId, action: "left_click", ref }));
-  const notice =
-    result.find((row) => row.openedTabs)?.openedTabs ?? records(await call("tabs_context_mcp"))[0].openedTabs;
-  childId = notice?.find((row: { sourceTabId: number }) => row.sourceTabId === tabId)?.tabId;
+  const childId = await clickAndFindOpenedTab(ref);
   assert(childId, "No matching opener notice");
   const delayedRef = tree.text.match(/button "Open after delay" \[(ref_\w+)\]/)?.[1];
   assert(delayedRef);
-  await call("computer", { tabId, action: "left_click", ref: delayedRef });
-  await sleep(350);
-  const delayed = records(await call("tabs_context_mcp"))[0].openedTabs;
-  assert(
-    delayed?.some((row: { sourceTabId: number; tabId: number }) => row.sourceTabId === tabId && row.tabId !== childId),
-    "No delayed opener notice",
-  );
-  console.log("OK: input result and delayed tab listing report verified openers");
+  assert(await clickAndFindOpenedTab(delayedRef, childId), "No delayed opener notice");
+  console.log("OK: verified opener notices for immediate and delayed tab opens");
 } finally {
   const cleanup = `(() => {
     const source = h.findTab(${tabId});

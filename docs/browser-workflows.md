@@ -49,6 +49,10 @@ tabs in a separate workspace. The equivalent CLI is
   the blocker when the browser can resolve it.
 - Use `navigate`, `computer`, `form_input`, and `file_upload` to work on a page.
   `browser_batch` runs several steps in sequence and stops at the first error.
+- After `computer` input completes, a follow-up read can see synchronous input effects.
+  Wheel scrolling returns once the scroll position changes or the browser applies its
+  fallback after a bounded wait. Use `wait_for` for application updates that happen
+  asynchronously after input.
 - Use `wait_for` for short page conditions and `watch` for longer or ongoing
   changes. A watch returns a local events file. `live: true` keeps the tab
   active for timer and animation work and cannot be combined with `hold: true`.

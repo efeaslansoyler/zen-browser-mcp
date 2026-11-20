@@ -49,9 +49,13 @@ try {
   assert(field && button, tree);
   const computer = (action: string, args: object = {}) => tool("computer", { tabId, action, ...args });
   const evaluate = (code: string) => pageEval(tabId!, code);
+  assert.notEqual(
+    await chrome('Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.browserId'),
+    tabId,
+  );
   await computer("left_click", { ref: field });
   await computer("type", { text: "Hello 世界", typing: "human", delay_ms: 2, seed: 42 });
-  assert((await evaluate('document.querySelector("textarea").value')).includes("Hello 世界"));
+  assert.match(text(await tool("read_page", { tabId })), /Hello 世界/);
   await computer("key_down", { text: "Shift" });
   await computer("key", { text: "a" });
   await computer("key_up", { text: "Shift" });
@@ -97,6 +101,47 @@ try {
   );
   assert.equal(released.keys.length, 0);
   console.log("✓ Held-key watchdog releases input without a later key_up call");
+
+  const frameUrl =
+    "data:text/html," +
+    encodeURIComponent(
+      "<!doctype html><button onclick=\"if(event.isTrusted)this.textContent='Frame clicked'\">Frame target</button>",
+    );
+  await evaluate(
+    `document.body.insertAdjacentHTML("beforeend", '<iframe id="input-frame"></iframe>');document.getElementById("input-frame").src=${JSON.stringify(frameUrl)}`,
+  );
+  await tool("wait_for", { tabId, text: "Frame target" });
+  const frameRef = text(await tool("read_page", { tabId })).match(/button "Frame target" \[(ref_\d+_f\d+)\]/)?.[1];
+  assert(frameRef, "Missing cross-origin frame button");
+  await computer("left_click", { ref: frameRef, movement: "instant" });
+  assert.match(text(await tool("read_page", { tabId })), /Frame clicked/);
+  await evaluate('document.getElementById("input-frame").remove()');
+  console.log("✓ Immediate read_page sees synchronous input effects in a background tab and cross-origin frame");
+
+  await evaluate(`(() => {
+    document.body.insertAdjacentHTML("beforeend", '<div id="scroll-area" style="overflow:auto;width:300px;height:120px"><div style="height:600px"><button>Wheel target</button></div></div>');
+    const area = document.getElementById("scroll-area");
+    area.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      if (area.dataset.handler === "move") requestAnimationFrame(() => area.scrollTop = 50);
+    }, { passive: false });
+    area.dataset.handler = "move";
+  })()`);
+  const wheelRef = text(await tool("read_page", { tabId })).match(/button "Wheel target" \[([^\]]+)\]/)?.[1];
+  assert(wheelRef, "Missing wheel target");
+  const wheel = () => computer("scroll", { ref: wheelRef, scroll_direction: "down", scroll_amount: 1 });
+  await wheel();
+  assert.equal(await evaluate('document.getElementById("scroll-area").scrollTop'), "50");
+  await evaluate(`(() => {
+    const area = document.getElementById("scroll-area");
+    area.scrollTop = 0;
+    delete area.dataset.handler;
+  })()`);
+  await wheel();
+  assert.equal(await evaluate('document.getElementById("scroll-area").scrollTop'), "100");
+  await evaluate('document.getElementById("scroll-area").remove()');
+  console.log("✓ Wheel acknowledges scrolling or applies the bounded fallback before returning");
+
   await evaluate("document.activeElement.blur()");
   await computer("screenshot", { if_changed: true });
   const same = await computer("screenshot", { if_changed: true });

@@ -98,6 +98,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - A progress listener added to a fresh tab may receive `about:blank`'s STOP after
   the requested navigation begins. Ignore that initial stop and hold a strong reference
   to the listener while waiting, since Gecko stores it weakly.
+- Gecko can register a new tab after the actor replies to the click that opens it, even
+  for a link with `target="_blank"`. The bridge retains the opener watch so a later
+  `tabs_context_mcp` can report it.
 - Fission can replace a browsing context on cross-site navigation while carrying its emulation
   overrides to the new context. Restore the override on the current context. Read the reported
   user agent and DPR from content because privileged reads can bypass emulation.

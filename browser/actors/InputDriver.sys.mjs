@@ -265,18 +265,35 @@ export class InputDriver {
   // why: Background wheel events reach listeners but do not scroll (docs/gecko-pitfalls.md, Input and frames).
   async #wheel(x, y, dx, dy, [mx, my], scope) {
     const win = this.env.window();
+    const doc = this.env.document();
     const scroller = this.#scrollerAt(x, y);
-    const before = [scroller.scrollLeft, scroller.scrollTop];
+    const { scrollLeft, scrollTop } = scroller;
+    const moved = () => scroller.scrollLeft !== scrollLeft || scroller.scrollTop !== scrollTop;
     const dpr = win.devicePixelRatio;
     this.env
       .eventUtils()
       .synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
-    await scope.wait(150, this.env);
-    scope.check();
-    const moved = [scroller.scrollLeft - before[0], scroller.scrollTop - before[1]];
-    if (!moved[0] && !moved[1]) {
-      scroller.scrollBy({ left: dx, top: dy, behavior: "instant" });
+    if (!moved()) {
+      const target = scroller === doc.scrollingElement ? doc : scroller;
+      const options = { mozSystemGroup: true };
+      let timer, onScroll;
+      try {
+        await scope.race(
+          new Promise((resolve) => {
+            onScroll = () => {
+              if (moved()) resolve();
+            };
+            target.addEventListener("scroll", onScroll, options);
+            timer = this.env.setTimeout(resolve, 150);
+          }),
+        );
+      } finally {
+        this.env.clearTimeout(timer);
+        target.removeEventListener("scroll", onScroll, options);
+      }
     }
+    scope.check();
+    if (!moved()) scroller.scrollBy({ left: dx, top: dy, behavior: "instant" });
     return "done";
   }
 
