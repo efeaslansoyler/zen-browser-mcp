@@ -988,7 +988,8 @@ function logError(where, e) {
         logError("start", e);
       }
     };
-    if (ctx.browserWindows().length) safeStart();
+    // why: On a reload the startup topics have already fired, so waiting for them would never start.
+    if (ctx.browserWindows().length || globalThis.zenMcpRunning !== undefined) safeStart();
     else {
       // why: A dedicated bridge must have a usable window before clients discover it.
       const dedicated = Services.env.get("ZEN_MCP_LAUNCHED") === "1" && Services.env.get("ZEN_MCP_LAUNCHED_PROFILE");

@@ -95,3 +95,19 @@ for (const legacySessionStore of [false, true]) {
     assert.equal(importedLegacy, legacySessionStore);
   });
 }
+
+test("a reload with no browser window starts at once instead of waiting for startup", () => {
+  observers.clear();
+  const context = vm.createContext({
+    ...gecko,
+    zenMcpDir: "/zen-mcp",
+    zenMcpName: "zen-mcp",
+    console,
+    zenMcpRunning: 1,
+    zenMcpStop() {},
+  });
+  vm.runInContext(fs.readFileSync(new URL("main.js", dir), "utf8"), context, { filename: "main.js" });
+  assert.equal(observers.has("final-ui-startup"), false);
+  assert.equal(context.zenMcpRunning, context.zenMcpVersion);
+  context.zenMcpStop();
+});
