@@ -90,6 +90,14 @@ One JSON line per connection: request `{tool, args, session, agent}`, reply `{ok
 `subscribe` is the exception: the connection stays open, the bridge writes events line by
 line and, for acknowledged subscriptions, the client answers `{event: "delivery", id, ok}`.
 
+Closing a request connection does not cancel the call. When the MCP process gives up after the
+tool's answer timeout (`callTimeout` in `tools.ts`), it closes the socket and reports
+"did not answer". The bridge keeps running the call and drops the reply, so the action may
+or may not have happened: the agent should read the page before it retries. MCP
+`notifications/cancelled` is not forwarded either; it only aborts a pending `browser.launch`
+approval. Only Stop on the island, the user taking a tab back or giving it to another session, and a
+bridge reload or quit cancel calls in the browser.
+
 ## Browser instances
 
 Every bridge binds a private socket in `$XDG_RUNTIME_DIR/zen-mcp/` (directory mode

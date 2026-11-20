@@ -66,7 +66,11 @@ function request(
     const socket = net.createConnection(socketPath);
     let buffer = "";
     socket.setTimeout(timeout, () =>
-      socket.destroy(new Error(`The browser did not answer within ${timeout / 1000} s.`)),
+      socket.destroy(
+        new Error(
+          `The browser did not answer within ${timeout / 1000} s. The call may still finish in the browser: check the page before you retry.`,
+        ),
+      ),
     );
     socket.on("connect", () => socket.write(ascii(JSON.stringify({ tool, args, session: as, agent })) + "\n"));
     socket.on("data", (chunk) => {
