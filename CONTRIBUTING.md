@@ -64,6 +64,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 
 | Script | Covers |
 |---|---|
+| `check-launch.ts <Zen binary>` | On-demand launch from a real stdio MCP tool call, denial, shared startup and process detachment |
 | `check-instances.ts <Zen binary>` | Two disposable headless profiles, socket discovery, selection, reload, failover and crash cleanup |
 | `check-compat.ts --reload` | Claude, Codex and generic identities: read, write, click, keys, screenshots, theming |
 | `check-input.ts` | Held keys and buttons, human-like input, `browser_settings` |
@@ -81,7 +82,8 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-workspace.ts` | Zen: agent tabs in a configured hidden space, input and screenshots there |
 | `check-pick-delivery.ts` | **Sends a real message to a real Codex conversation**; needs `CODEX_THREAD_ID`. Don't run casually. |
 
-They require the global mode to be `auto` and refuse to run in `ask` mode. `check-input`
+The page checks require the global mode to be `auto` and refuse to run in `ask` mode.
+`check-launch.ts` sets its own rules in a disposable config. `check-input`
 (device emulation) and `check-extensions` (toolbar popups) also need the Zen window visible:
 on Hyprland a window on a hidden workspace is suspended. For clipboard checks, use
 `wl-clipboard` on Wayland or `xclip` on X11. Afterwards check that
@@ -110,11 +112,14 @@ To try risky changes on a copy:
    checks. For fixtures without a visible UI requirement, use `--headless`.
 3. Run `zenctl` and the check scripts from the same shell so the MCP subprocesses inherit
    the same paths. Close the disposable browser when finished.
-4. For `node scripts/check-instances.ts <copy>/zen`, leave `ZEN_MCP_SOCKET` unset and
+4. For `node scripts/check-instances.ts <copy>/zen` and `node scripts/check-launch.ts <copy>/zen`, leave `ZEN_MCP_SOCKET` unset and
    put the isolated XDG directories under a short runtime directory, such as one created
    by `mktemp -d /run/user/$(id -u)/zi.XXXXXX`. The script starts and closes both
    headless processes and removes their profiles. Remove the scratch runtime directory
    and installation copy when finished.
+   For `check-launch.ts`, also put `HOME` and the installation copy inside the disposable
+   runtime directory. This check starts a stdio server with explicitly injected
+   `--headless` and `--no-remote` test arguments and cleans up the detached browser.
 5. Serve test pages with `python3 -m http.server 8765`.
 6. For console errors add `--marionette --remote-allow-system-access` and read
    `Services.console.getMessageArray()`.

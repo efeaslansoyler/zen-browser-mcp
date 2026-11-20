@@ -2,7 +2,7 @@
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { PACKAGE } from "./paths.ts";
-import { browserResolver, instanceLabel } from "./instances.ts";
+import { browserResolver, instanceLabel, type Selection } from "./instances.ts";
 
 export type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
@@ -25,8 +25,9 @@ export async function call(
   timeout = 60_000,
   agent?: AgentIdentity,
   as: string = session,
+  selection?: Selection,
 ): Promise<BrowserContent> {
-  const target = await browserResolver.resolve();
+  const target = selection ?? (await browserResolver.resolve());
   const socketPath = target.socket;
   const change = agent && browserResolver.browserChange(target);
   if (change) throw new Error(change);

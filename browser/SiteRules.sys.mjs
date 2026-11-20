@@ -19,6 +19,7 @@ export function normalizeConfig(raw = {}) {
     const value = typeof raw[key] === "string" ? raw[key].trim() : "";
     if (value) config[key] = value;
   }
+  if (["ask", "allow", "deny"].includes(raw.launch)) config.launch = raw.launch;
   return config;
 }
 

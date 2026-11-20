@@ -55,6 +55,10 @@ export const SECTIONS = [
     ],
   ],
   [
+    "Browser startup",
+    [["browser.launch", Q, A, "Open the selected browser and profile when no matching bridge is running."]],
+  ],
+  [
     "Agent tabs",
     [
       ["tabs_create_mcp", A, A, "Open a new tab for the agent."],
@@ -244,7 +248,7 @@ export function examplePermissions(base = "auto") {
     "//",
     '// base: the built-in template you start from, "ask" or "auto". Rules below override it:',
     '//   "allow"  the agent does it without asking',
-    '//   "ask"    you approve it on the island first',
+    '//   "ask"    you approve it on the island, or in the MCP client for browser.launch',
     '//   "deny"   the agent is refused',
     "// Delete a line to keep the base template's rule. The comment after each line shows the",
     "// built-in rules as (ask template / auto template).",

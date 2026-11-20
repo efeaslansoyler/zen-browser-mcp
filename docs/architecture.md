@@ -1,7 +1,7 @@
 # Architecture
 
-zen-browser-mcp lets AI agents (Claude Code, Codex, any MCP client) use the browser you already have
-open: Zen or another Firefox-based browser, your window, your logins. Input reaches pages as
+zen-browser-mcp lets AI agents (Claude Code, Codex, any MCP client) use your
+Zen or Firefox-based browser with your window and logins. Input reaches pages as
 trusted events through the page actor without starting the remote agent or WebDriver.
 
 ```
@@ -26,6 +26,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | `skill.ts` | `skill install`: copies `skills/zen-browser` into Claude Code's and Codex's skill folders |
 | `zen.ts` | Socket client: one request per connection (`call`) and long-lived subscriptions (`subscribe`) |
 | `instances.ts` | Live instance discovery, stale endpoint cleanup and sticky browser selection |
+| `launch.ts` | Resolve an installation, check launch permission, start the browser and wait for its bridge |
 | `paths.ts` | Package name and every user-visible path in one place |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
 | `codex-watch.ts` | Watches the Codex service and connects open Codex conversations (see [codex.md](codex.md)) |
@@ -101,13 +102,22 @@ twice per second, and removes its files on stop. Discovery checks the PID and
 socket listener and removes entries left by crashes.
 
 The resolver uses `ZEN_MCP_SOCKET` directly when set. Otherwise client flags
-`--browser <name|dir>` and `--profile <name>` override their respective
+`--browser <name|dir>` and `--profile <name|dir>` override their respective
 `ZEN_MCP_BROWSER` and `ZEN_MCP_PROFILE` values. The resulting client selection
 overrides the config selection. With neither, the resolver uses the only running
 instance or the most recently focused one, with newest startup breaking focus ties.
-An explicit selection that has no live match produces an error. The legacy
-`$XDG_RUNTIME_DIR/zen-mcp.sock` is available for older bridges when discovery
+The legacy `$XDG_RUNTIME_DIR/zen-mcp.sock` is available for older bridges when discovery
 finds no instance and the user has no explicit browser or profile selection.
+
+If selection finds no live bridge, an MCP browser tool can start the selected
+installation and profile, or the first installation found (Zen first) with its
+default profile. A profile name uses `-P`; a directory uses `--profile`.
+For the default profile Gecko makes the choice. Concurrent tool calls share
+one approval and launch attempt per server. The server spawns the browser
+detached with the inherited XDG environment, then waits up to 30 seconds
+for discovery to publish its bridge. The result becomes the sticky selection.
+Doctor, hooks, subscriptions and standalone bridge clients only connect to
+existing browsers. A `ZEN_MCP_SOCKET` pin also bypasses launch.
 
 Requests and the lifecycle subscription share one selection per MCP process.
 Installation and profile directories identify the profile. The PID and start time
@@ -170,17 +180,22 @@ when the selected instance has no queued picks.
 
 ## Permissions
 
-`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent", "browser": "Zen", "profile": "Default"}`
+`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent", "browser": "Zen", "profile": "Default", "launch": "allow"}`
 (`workspace` is the optional Zen space for new agent tabs. See [Browser instances](#browser-instances) for `browser` and `profile`).
 
 - **Operations and templates** (`Policy.sys.mjs`, shared with the CLI): every tool call is an
   operation (`operationOf`: a tool, or `tool.action` for `computer`, `clipboard`,
   `extensions`, `browser_settings`, `handle_dialog`, `network_capture`, `recipes`), plus `submit`,
-  `secret_field` and `request_tab.agent_tab`. A mode gives each one a rule: `allow`, `ask` or
+  `secret_field`, `request_tab.agent_tab` and `browser.launch`. A mode gives each one a rule: `allow`, `ask` or
   `deny`. The `ask` and `auto` columns of `SECTIONS` are the built-in templates; `custom`
   reads `permissions.jsonc` (a base template plus the user's rules, parsed by
   `parsePermissions`; errors fail closed). A test checks that every MCP tool and action has an
   operation.
+- **Startup approval** is handled by the MCP server, which resolves `browser.launch`
+  with the same template logic as the island. The optional `launch` preference
+  overrides the template except for a denial. MCP clients that advertise form
+  elicitation can show the approval before the bridge exists. **Always open**
+  saves `launch: "allow"` in `config.json`.
 - **One decision** (`Permissions.sys.mjs`): `requirePermission` checks a page call (every
   step of a batch, against the current document, origin and settings; a redirect or new
   document invalidates earlier approvals), `requireToolPermission` a call without a page, and

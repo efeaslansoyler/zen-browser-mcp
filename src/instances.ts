@@ -125,13 +125,13 @@ export function parseBrowserFlags(args: string[]): BrowserChoice {
     const flag = args[i];
     const value = args[i + 1]?.trim();
     if ((flag !== "--browser" && flag !== "--profile") || !value || value.startsWith("--"))
-      throw new Error("Use: zen-browser-mcp [serve|doctor] [--browser <name|dir>] [--profile <name>]");
+      throw new Error("Use: zen-browser-mcp [serve|doctor] [--browser <name|dir>] [--profile <name|dir>]");
     choice[flag === "--browser" ? "browser" : "profile"] = value;
   }
   return choice;
 }
 
-function installationPath(input: string) {
+export function canonicalPath(input: string) {
   const dir = path.resolve(input.replace(/^~(?=\/|$)/, os.homedir()));
   try {
     return fs.realpathSync(dir);
@@ -140,20 +140,28 @@ function installationPath(input: string) {
   }
 }
 
-export function selectInstance(instances: Instance[], choice: BrowserChoice, source: string) {
+export function installationDirectory(input: string) {
+  const dir = canonicalPath(input);
+  return dir.endsWith(".app") ? canonicalPath(path.join(dir, "Contents", "Resources")) : dir;
+}
+
+export const profileDirectory = (profile?: string) => (profile?.includes("/") ? canonicalPath(profile) : undefined);
+
+export function matchesProfile(entry: Instance, profile?: string) {
+  const dir = profileDirectory(profile);
+  return !profile || (dir ? canonicalPath(entry.profileDir) === dir : profileLabel(entry) === profile);
+}
+
+function selectInstance(instances: Instance[], choice: BrowserChoice, source: string) {
   const { browser, profile } = choice;
-  const installation = browser && installationPath(browser);
+  const installation = browser && installationDirectory(browser);
   const matching = instances.filter(
     (entry) =>
-      (!browser || entry.browser.toLowerCase() === browser.toLowerCase() || entry.installationDir === installation) &&
-      (!profile || profileLabel(entry) === profile),
+      (!browser ||
+        entry.browser.toLowerCase() === browser.toLowerCase() ||
+        canonicalPath(entry.installationDir) === installation) &&
+      matchesProfile(entry, profile),
   );
-  if (!matching.length && (browser || profile)) {
-    const target = [browser && `browser "${browser}"`, profile && `profile "${profile}"`].filter(Boolean).join(", ");
-    throw new Error(
-      `The selected ${target} (${source}) is not running. Open it, or check with \`npx ${PACKAGE} doctor\`.`,
-    );
-  }
   const instance = matching.sort(
     (a, b) => b.focusedAt - a.focusedAt || b.startedAt - a.startedAt || a.socket.localeCompare(b.socket),
   )[0];
@@ -168,6 +176,8 @@ export function selectInstance(instances: Instance[], choice: BrowserChoice, sou
 }
 
 export type Selection = { socket: string; instance?: Instance; reason: string };
+type MissingSelection = { choice: BrowserChoice; source: string };
+type LaunchSelection = (choice: BrowserChoice, list: () => Promise<Instance[]>) => Promise<Instance>;
 const sameBrowser = (a: Selection, b: Selection) =>
   a.instance && b.instance
     ? a.instance.pid === b.instance.pid &&
@@ -179,7 +189,8 @@ const sameBrowser = (a: Selection, b: Selection) =>
 export class BrowserResolver {
   flags: BrowserChoice = {};
   private selected?: Selection;
-  private pending?: Promise<Selection>;
+  private pending?: Promise<Selection | MissingSelection>;
+  private pendingTool?: Promise<Selection>;
   private previous?: Selection;
   private deliveryProfile?: Instance;
 
@@ -217,7 +228,12 @@ export class BrowserResolver {
     this.deliveryProfile = target.instance;
   }
 
-  private async select(): Promise<Selection> {
+  private remember(next: Selection) {
+    if (this.selected && !sameBrowser(this.selected, next)) this.previous ??= this.selected;
+    return (this.selected = next);
+  }
+
+  private async select(): Promise<Selection | MissingSelection> {
     const { legacy, env, config } = this.options;
     const override = this.override;
     if (override) return { socket: override, reason: "ZEN_MCP_SOCKET" };
@@ -247,21 +263,38 @@ export class BrowserResolver {
     const browser = this.flags.browser ?? env.ZEN_MCP_BROWSER?.trim();
     const profile = this.flags.profile ?? env.ZEN_MCP_PROFILE?.trim();
     const choice = browser || profile ? { browser, profile } : config();
-    const next: Selection = selectInstance(
-      instances,
-      choice,
-      browser || profile ? "MCP client override" : "config.json",
-    ) ?? { socket: legacy, reason: "legacy socket fallback" };
-
-    if (next.instance || (await listening(next.socket))) {
-      if (current && !sameBrowser(current, next)) this.previous ??= current;
-      this.selected = next;
-    }
-    return next;
+    const source = browser || profile ? "MCP client override" : "config.json";
+    const next = selectInstance(instances, choice, source);
+    if (next) return this.remember(next);
+    if (!choice.browser && !choice.profile && (await listening(legacy)))
+      return this.remember({ socket: legacy, reason: "legacy socket fallback" });
+    return { choice, source };
   }
 
-  resolve(): Promise<Selection> {
+  private probe() {
     return (this.pending ??= this.select().finally(() => (this.pending = undefined)));
+  }
+
+  async resolve(): Promise<Selection> {
+    const next = await this.probe();
+    if ("socket" in next) return next;
+    const { browser, profile } = next.choice;
+    if (!browser && !profile) return { socket: this.options.legacy, reason: "legacy socket fallback" };
+    const target = [browser && `browser "${browser}"`, profile && `profile "${profile}"`].filter(Boolean).join(", ");
+    throw new Error(
+      `The selected ${target} (${next.source}) is not running. Open it, or check with \`npx ${PACKAGE} doctor\`.`,
+    );
+  }
+
+  // Only MCP tool handlers opt in. Passive requests share discovery, never an approval or launch.
+  resolveForTool(launch: LaunchSelection): Promise<Selection> {
+    return (this.pendingTool ??= this.probe()
+      .then(async (next) => {
+        if ("socket" in next) return next;
+        const instance = await launch(next.choice, () => this.list());
+        return this.remember({ socket: instance.socket, instance, reason: "on-demand browser" });
+      })
+      .finally(() => (this.pendingTool = undefined)));
   }
 
   browserChange(next: Selection) {

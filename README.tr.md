@@ -51,10 +51,22 @@ ile `application.ini` dosyasının bulunduğu klasörü belirt.
 
 [Browser and profile selection](docs/permissions.md#browser-and-profile-selection)
 
+Birden fazla browser veya profile açıksa yeni MCP session en son focus alanı
+kullanır. Bir MCP client için seçimi `--browser <name|dir>` ve
+`--profile <name|dir>` server argümanlarıyla değiştirebilirsin.
+Linux ve macOS'ta seçili browser kapalıysa bir tool çağrısı onu açabilir.
+Seçim otomatikse ve açık browser yoksa bulunan ilk browser (önce Zen) kendi
+default profile'ıyla açılır. Auto mode açılışa izin verir. Ask mode, form
+elicitation destekleyen MCP client'ta onay ister.
+
 ```sh
 node dist/cli.js config browser Zen --profile Default
+node dist/cli.js config launch allow|ask|deny
+node dist/cli.js config launch default
 node dist/cli.js doctor
 ```
+
+[Browser startup and permissions](docs/permissions.md#on-demand-browser-startup)
 
 ## Kullanım
 

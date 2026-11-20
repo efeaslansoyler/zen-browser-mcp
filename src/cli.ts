@@ -29,7 +29,7 @@ const help = L(
 Usage:
 ${usage([
   [`npx ${PACKAGE}`, "run the MCP server (your MCP client starts it this way)"],
-  ["    --browser <name|dir> --profile <name>", "choose a running browser or profile for this MCP client"],
+  ["    --browser <name|dir> --profile <name|dir>", "choose a browser or profile for this MCP client"],
   [`npx ${PACKAGE} install`, "install the browser part (asks for sudo if needed)"],
   ["    --browser <dir>", "a specific installation (the folder with application.ini)"],
   ["    --all", "every browser found"],
@@ -45,7 +45,7 @@ ${usage([
 Kullanım:
 ${usage([
   [`npx ${PACKAGE}`, "MCP sunucusunu çalıştırır (MCP istemcin böyle başlatır)"],
-  ["    --browser <name|dir> --profile <name>", "choose a running browser or profile for this MCP client"],
+  ["    --browser <name|dir> --profile <name|dir>", "choose a browser or profile for this MCP client"],
   [`npx ${PACKAGE} install`, "tarayıcı tarafını kurar (gerekirse sudo ister)"],
   ["    --browser <klasör>", "belirli bir kurulum (application.ini'nin olduğu klasör)"],
   ["    --all", "bulunan bütün tarayıcılar"],

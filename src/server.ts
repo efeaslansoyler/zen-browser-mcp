@@ -2,11 +2,13 @@
 // browser (browser/main.js), reached over a Unix socket (zen.ts).
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { z } from "zod";
 import { call, subscribe } from "./zen.ts";
 import { browserResolver, deliveryScope } from "./instances.ts";
 import { SERVER_NAME, VERSION } from "./paths.ts";
 import { syncBrowserFiles } from "./install.ts";
+import { createBrowserLauncher, type LaunchApproval } from "./launch.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
 import { NO_PUSH, THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
@@ -36,7 +38,41 @@ export function codexSession(agent: { id: string }, meta: any) {
     : undefined;
 }
 
-export function createServer(callBrowser: typeof call = call, connectSession?: ConnectSession) {
+function launchApproval(server: McpServer, options: RequestOptions): LaunchApproval | undefined {
+  if (!server.server.getClientCapabilities()?.elicitation?.form) return;
+  return async (label) => {
+    const { action, content } = await server.server.elicitInput(
+      {
+        mode: "form",
+        message: `Open ${label}?`,
+        requestedSchema: {
+          type: "object",
+          properties: {
+            launch: {
+              type: "string",
+              title: "Browser launch",
+              oneOf: [
+                { const: "open", title: "Open" },
+                { const: "always", title: "Always open (don't ask again)" },
+              ],
+            },
+          },
+          required: ["launch"],
+        },
+      },
+      options,
+    );
+    return action === "accept" && (content?.launch === "open" || content?.launch === "always")
+      ? content.launch
+      : "declined";
+  };
+}
+
+export function createServer(
+  callBrowser: typeof call = call,
+  connectSession?: ConnectSession,
+  launch?: ReturnType<typeof createBrowserLauncher>,
+) {
   const server = new McpServer(
     { name: SERVER_NAME, version: VERSION },
     channel
@@ -92,12 +128,18 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
     server.registerTool(name, { description, inputSchema }, async (args: object, extra: any) => {
       try {
         const agent = identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT);
+        const target = launch
+          ? await browserResolver.resolveForTool((choice, list) =>
+              launch(choice, list, launchApproval(server, { relatedRequestId: extra.requestId, signal: extra.signal })),
+            )
+          : undefined;
         const content = await callBrowser(
           name,
           args,
           callTimeout(name, args),
           agent,
           codexSession(agent, extra?._meta),
+          target,
         );
         return { content, ...(content.isError ? { isError: true } : {}) };
       } catch (e) {
@@ -115,9 +157,9 @@ export function createServer(callBrowser: typeof call = call, connectSession?: C
 let ownerSubscription: ReturnType<typeof subscribe> | undefined;
 let ownerAgent: { id: string; name: string } | undefined;
 let title = claudeTitle();
-function connectOwner(agent: { id: string; name: string }) {
+function connectOwner(server: McpServer, agent: { id: string; name: string }) {
   ownerAgent = agent;
-  ownerSubscription = subscribe(push, {
+  ownerSubscription = subscribe((event) => push(server, event), {
     cwd: process.cwd(),
     toolsOnly: true,
     ack: true,
@@ -135,7 +177,7 @@ function connectOwner(agent: { id: string; name: string }) {
           : {}),
   });
 }
-async function push(event: any) {
+async function push(server: McpServer, event: any) {
   if (event?.event !== "channel") return;
   if (channel)
     await server.server.notification({
@@ -170,13 +212,16 @@ const callWithDelivery: typeof call = async (...args) => {
     if (args[3]?.id === "codex") void connectCodexWatch();
   }
 };
-const server = createServer(callWithDelivery, async ({ threadId, label }) => {
-  const change = browserResolver.browserChange(await browserResolver.resolve());
-  if (change) throw new Error(change);
-  await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
-});
-
-export async function serve() {
+export async function serve(launch = createBrowserLauncher()) {
+  const server = createServer(
+    callWithDelivery,
+    async ({ threadId, label }) => {
+      const change = browserResolver.browserChange(await browserResolver.resolve());
+      if (change) throw new Error(change);
+      await ensureCodexRelay({ threadId, label, cwd: process.cwd() });
+    },
+    launch,
+  );
   server.server.oninitialized = () => {
     const agent = identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT);
     // Codex's MCP process lives in a background service, independent of conversations;
@@ -185,7 +230,7 @@ export async function serve() {
       void connectCodexWatch();
       return;
     }
-    connectOwner(agent);
+    connectOwner(server, agent);
   };
   await server.connect(new StdioServerTransport());
   // Browser files older than this version are updated and the bridge reloads.
@@ -199,7 +244,7 @@ export async function serve() {
     title = now;
     if (ownerSubscription) {
       ownerSubscription.close();
-      connectOwner(ownerAgent!);
+      connectOwner(server, ownerAgent!);
     }
   }, 15_000).unref();
   // stdin closes when Claude Code exits; the browser connection must not keep the process alive.

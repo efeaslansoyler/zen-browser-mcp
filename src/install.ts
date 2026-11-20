@@ -43,7 +43,7 @@ ${END}
 // ---- finding browsers ----
 
 // a folder with application.ini is a Gecko installation
-function browserAt(dir: string): Browser | null {
+export function browserAt(dir: string): Browser | null {
   try {
     const ini = fs.readFileSync(path.join(dir, "application.ini"), "utf8");
     const name = /^Name=(.+)$/m.exec(ini)?.[1]?.trim() ?? path.basename(dir);

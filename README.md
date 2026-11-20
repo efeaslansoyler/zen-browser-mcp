@@ -54,6 +54,14 @@ recently focused one. To choose a default, run
 override that choice with the server arguments `--browser` and `--profile`.
 Run `node dist/cli.js doctor` to see the running instances and the selection.
 
+When the selected browser is closed, a tool call can open it on demand on Linux
+and macOS. With automatic selection and no live browser, the server opens the
+first browser it finds (Zen first) with its default profile. Auto mode allows
+startup, and ask mode prompts in MCP clients that support form elicitation.
+Use `node dist/cli.js config launch allow|ask|deny` to set a preference,
+or `config launch default` to follow the active permission template.
+See [browser startup and permissions](docs/permissions.md#on-demand-browser-startup).
+
 ## Use it
 
 - **Ask your agent to open a page.** Try “Open example.com and tell me what the

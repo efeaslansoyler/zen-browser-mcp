@@ -2,6 +2,7 @@
 // it changes; no browser restart needed.
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { L } from "./i18n.ts";
 import { CONFIG_FILE, PACKAGE, PERMISSIONS_FILE } from "./paths.ts";
 import { examplePermissions, parsePermissions, ruleOf } from "../browser/Policy.sys.mjs";
@@ -20,7 +21,22 @@ export function readConfig(): Config {
 
 function writeConfig(config: Config) {
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  const temp = `${CONFIG_FILE}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temp, JSON.stringify(config, null, 2) + "\n", { mode: 0o600, flag: "wx" });
+    fs.renameSync(temp, CONFIG_FILE);
+  } finally {
+    fs.rmSync(temp, { force: true });
+  }
+}
+
+export function setLaunchPreference(launch: Config["launch"]) {
+  writeConfig({ ...readConfig(), launch });
+}
+
+export function launchRule(config = readConfig()) {
+  const rule = ruleOf("browser.launch", config.mode, config.mode === "custom" ? readPermissions() : null);
+  return rule === "deny" ? rule : (config.launch ?? rule);
 }
 
 const MODE_TEXT = {
@@ -41,7 +57,7 @@ export function readPermissions() {
   return parsePermissions(fs.readFileSync(PERMISSIONS_FILE, "utf8"));
 }
 
-// `config permissions [init [ask|auto]]`: creates the example file, or shows what it changes.
+// `config permissions [init [ask|auto]]`: creates the example file or reports template rules.
 function permissionsCommand([action, base = "auto"]: string[]) {
   if (action === "init") {
     if (base !== "ask" && base !== "auto") throw new Error("Use: config permissions init [ask|auto]");
@@ -67,6 +83,8 @@ function permissionsCommand([action, base = "auto"]: string[]) {
   const changed = Object.entries(custom.rules).filter(([key, rule]) => rule !== ruleOf(key, custom.base));
   console.log(`${PERMISSIONS_FILE}\n`);
   console.log(L(`base: ${custom.base}`, `temel: ${custom.base}`));
+  const baseLaunch = ruleOf("browser.launch", custom.base);
+  if (ruleOf("browser.launch", "custom", custom) === baseLaunch) console.log(`browser.launch: ${baseLaunch}`);
   console.log(
     changed.length
       ? L("changed from the base:", "temelden farklı olanlar:") +
@@ -95,6 +113,7 @@ export function configCommand(args: string[]) {
     console.log(L(`mode: ${config.mode}  (${en})`, `mod: ${config.mode}  (${tr})`));
     printSites(config.sites);
     console.log(`browser: ${config.browser ?? "(automatic)"}${config.profile ? ` / ${config.profile}` : ""}`);
+    console.log(`launch: ${config.launch ?? "default (permission template)"}`);
     console.log(
       L(
         `workspace: ${config.workspace ?? "(the space you're in)"}`,
@@ -109,8 +128,8 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name>] | clear`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name>] | clear`,
+        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
+        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
       ),
     );
     return;
@@ -129,7 +148,19 @@ export function configCommand(args: string[]) {
     ) {
       writeConfig({ ...remaining, browser, ...(profile ? { profile } : {}) });
       console.log(`✓ browser: ${browser}${profile ? ` / ${profile}` : ""}`);
-    } else throw new Error("Use: config browser <name|dir> [--profile <name>] | clear");
+    } else throw new Error("Use: config browser <name|dir> [--profile <name|dir>] | clear");
+    return;
+  }
+  if (cmd === "launch") {
+    const [pref] = rest;
+    if (rest.length === 0) {
+      console.log(`launch: ${config.launch ?? "default"} (effective: ${launchRule(config)})`);
+      return;
+    }
+    if (rest.length !== 1 || (pref !== "default" && pref !== "ask" && pref !== "allow" && pref !== "deny"))
+      throw new Error("Use: config launch [default|ask|allow|deny]");
+    setLaunchPreference(pref === "default" ? undefined : pref);
+    console.log(`✓ launch: ${pref}`);
     return;
   }
   if (cmd === "mode") {

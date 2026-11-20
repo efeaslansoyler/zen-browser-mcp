@@ -6,6 +6,7 @@ export type Config = {
   container?: string;
   browser?: string;
   profile?: string;
+  launch?: "ask" | "allow" | "deny";
 };
 export function normalizeDomain(value: unknown): string;
 export function normalizeConfig(raw?: any): Config;

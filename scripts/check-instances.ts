@@ -82,6 +82,7 @@ async function context(client: Client) {
 const metadataPath = (entry: Instance) => entry.socket.replace(/\.sock$/, ".json");
 
 try {
+  cli("config", "launch", "deny");
   const firstProfile = start("first");
   const secondProfile = start("second");
   const both = await until(async () => {
@@ -169,7 +170,7 @@ try {
   assert.equal((await context(automatic)).browser, undefined);
   const unavailable = await overridden.callTool({ name: "tabs_context_mcp", arguments: {} });
   assert(unavailable.isError);
-  assert.match((unavailable.content as { text: string }[])[0].text, /profile "first".*not running/);
+  assert.match((unavailable.content as { text: string }[])[0].text, /Zen \/ first.*denied.*browser.launch/);
   console.log("✓ Closing the first browser removes its files, preserves the second, and reports MCP failover");
 
   await close(children[1], "SIGKILL");
