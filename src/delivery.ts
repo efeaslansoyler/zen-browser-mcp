@@ -1,8 +1,6 @@
 // why: Pass page-derived text as data and keep client-specific delivery out of the browser.
 import { execFile } from "node:child_process";
 
-export const NO_PUSH = "no push path";
-
 export const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PickEvent = {
   event: string;

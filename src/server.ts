@@ -10,7 +10,7 @@ import { syncBrowserFiles } from "./install.ts";
 import { createBrowserLauncher, type LaunchApproval } from "./launch.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
-import { NO_PUSH, THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
+import { THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
 import { channelEnabled, claudeTitle } from "./claude.ts";
 import { antigravityHookInstalled, claudeHookInstalled } from "./hooks.ts";
 import { openCodePluginInstalled, pushToOpenCode } from "./opencode.ts";
@@ -172,7 +172,7 @@ function connectOwner(server: McpServer, agent: { id: string; name: string }) {
           : {}),
   });
 }
-async function push(server: McpServer, event: any) {
+async function push(server: McpServer, event: any): Promise<void | "unavailable"> {
   if (event?.event !== "channel") return;
   if (channel)
     await server.server.notification({
@@ -180,7 +180,7 @@ async function push(server: McpServer, event: any) {
       params: { content: event.content, meta: event.meta },
     });
   else if (t3) await runT3Send(t3.cli, t3.threadId, t3Message(event));
-  else if (!opencode || !(await pushToOpenCode(t3Message(event)))) throw new Error(NO_PUSH);
+  else if (!opencode || !(await pushToOpenCode(t3Message(event)))) return "unavailable";
 }
 let watchScope: string | undefined;
 let watchStarting = false;

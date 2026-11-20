@@ -54,8 +54,13 @@ test("an empty closed browser connection rejects instead of hanging", async (t) 
   await assert.rejects(call("ping"), /closed the connection without a reply/);
 });
 
-for (const fail of [false, true]) {
-  test(`subscription acknowledges delivery only after handler settles (failure=${fail})`, async (t) => {
+for (const [outcome, receipt] of [
+  ["sent", { ok: true }],
+  ["unavailable", { ok: false, status: "unavailable", error: "no push path" }],
+  ["queue denied", { ok: false, status: "failed", error: "queue denied" }],
+  ["no push path", { ok: false, status: "failed", error: "Delivery rejected: no push path" }],
+]) {
+  test(`subscription acknowledges delivery only after handler settles (${outcome})`, async (t) => {
     const { subscribe } = await import("../dist/zen.js");
     const writes = [];
     const socket = new EventEmitter();
@@ -81,13 +86,11 @@ for (const fail of [false, true]) {
       socket.emit("data", Buffer.from('{"event":"channel","id":"receipt","content":"test"}\n'));
       await new Promise((resolve) => setImmediate(resolve));
       assert.equal(writes.length, 1, "no premature acknowledgement");
-      if (fail) reject(new Error("queue denied"));
-      else complete();
+      if (outcome === "unavailable") complete("unavailable");
+      else if (outcome === "sent") complete();
+      else reject(new Error(outcome));
       await new Promise((resolve) => setImmediate(resolve));
-      assert.equal(writes[1].event, "delivery");
-      assert.equal(writes[1].id, "receipt");
-      assert.equal(writes[1].ok, !fail);
-      if (fail) assert.equal(writes[1].error, "queue denied");
+      assert.deepEqual(writes[1], { event: "delivery", id: "receipt", ...receipt });
     } finally {
       sub.close();
     }
