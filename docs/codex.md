@@ -76,3 +76,16 @@ Keep the socket's private permissions. Development commands stay on the local so
 
 Codex MCP processes may not inherit `XDG_RUNTIME_DIR`; `paths.ts` falls back to
 `/run/user/<uid>`.
+
+## Starting a visible browser from Codex
+
+Codex starts MCP servers with a minimal environment (`HOME`, `PATH`, `USER`, `LANG` and a
+few more), without `DISPLAY`, `WAYLAND_DISPLAY` or `XDG_RUNTIME_DIR`. Before starting a
+visible browser on Linux, the launcher fills the missing variables from the systemd user
+manager (`systemctl --user show-environment`), where desktop sessions import them. If none
+is found, the call fails and names the fix: pass them with
+`env_vars = ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"]` in the server's
+`[mcp_servers]` entry, or use a headless browser mode.
+
+`codex exec` declines MCP elicitation without showing it, so with the `ask` launch rule the
+browser is not started there; allow launching with `config launch allow`.

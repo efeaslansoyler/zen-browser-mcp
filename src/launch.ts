@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
@@ -91,7 +91,50 @@ export function browserExecutable(installation: Browser, platform = process.plat
   throw new Error(`No executable for ${name} found in ${binDir}. Check with \`npx ${PACKAGE} doctor\`.`);
 }
 
-function startBrowser(request: LaunchRequest, start: StartBrowser) {
+const SESSION_KEYS = [
+  "DISPLAY",
+  "WAYLAND_DISPLAY",
+  "XDG_RUNTIME_DIR",
+  "DBUS_SESSION_BUS_ADDRESS",
+  "XDG_CURRENT_DESKTOP",
+  "XDG_SESSION_TYPE",
+];
+
+function systemdUserEnv(): NodeJS.ProcessEnv {
+  // systemctl finds the user bus through XDG_RUNTIME_DIR, which such clients don't pass either.
+  const uid = process.getuid?.();
+  if (uid === undefined) return {};
+  const result = spawnSync("systemctl", ["--user", "show-environment"], {
+    encoding: "utf8",
+    timeout: 2000,
+    env: { PATH: process.env.PATH, XDG_RUNTIME_DIR: `/run/user/${uid}` },
+  });
+  if (result.status !== 0 || typeof result.stdout !== "string") return {};
+  return Object.fromEntries(
+    result.stdout.split("\n").flatMap((line) => {
+      const at = line.indexOf("=");
+      return at > 0 ? [[line.slice(0, at), line.slice(at + 1)]] : [];
+    }),
+  );
+}
+
+// MCP clients may start this server with a minimal environment (Codex passes only HOME, PATH,
+// USER and a few more), so a visible browser would find no display. Desktop sessions import
+// their display variables into the systemd user manager; fill the missing ones from there.
+export function withDisplay(env: NodeJS.ProcessEnv, platform = process.platform, session = systemdUserEnv) {
+  if (platform !== "linux" || env.DISPLAY || env.WAYLAND_DISPLAY) return env;
+  const found = session();
+  for (const key of SESSION_KEYS) if (!env[key] && found[key]) env[key] = found[key];
+  if (!env.DISPLAY && !env.WAYLAND_DISPLAY)
+    throw new Error(
+      "No graphical display for a visible browser: the MCP client started this server without DISPLAY or " +
+        'WAYLAND_DISPLAY. Pass them to the server (Codex: env_vars = ["DISPLAY", "WAYLAND_DISPLAY", ' +
+        '"XDG_RUNTIME_DIR"] in its mcp_servers entry) or use a headless browser mode.',
+    );
+  return env;
+}
+
+function startBrowser(request: LaunchRequest, start: StartBrowser, display: typeof withDisplay) {
   const dir = profileDirectory(request.profile);
   const profileArgs = dir ? ["--profile", dir] : request.profile ? ["-P", request.profile] : [];
   const env = { ...process.env, ...request.extraEnv };
@@ -110,18 +153,21 @@ function startBrowser(request: LaunchRequest, start: StartBrowser) {
     ...(isAutonomousMode(request.mode) ? ["--headless"] : []),
     ...(request.extraArgs ?? []),
   ];
+  if (!args.includes("--headless")) display(env);
   return start(browserExecutable(request.installation), args, { env, detached: true, stdio: "ignore" });
 }
 
 export function createBrowserLauncher({
   find = findBrowsers,
   start = spawn,
+  display = withDisplay,
   timeout = 30_000,
   extraArgs,
   extraEnv,
 }: {
   find?: typeof findBrowsers;
   start?: StartBrowser;
+  display?: typeof withDisplay;
   timeout?: number;
   extraArgs?: string[];
   extraEnv?: NodeJS.ProcessEnv;
@@ -172,7 +218,12 @@ export function createBrowserLauncher({
             `or they can run \`npx ${PACKAGE} config launch allow\` to allow startup.`,
         );
       const answer = await approve(label);
-      if (answer === "declined") throw new Error(`The user declined to open ${label}.`);
+      // Non-interactive clients (e.g. codex exec) decline without showing the prompt.
+      if (answer === "declined")
+        throw new Error(
+          `Opening ${label} was not approved: the user declined, or this client could not show the prompt. ` +
+            `Ask the user to open it, or they can run \`npx ${PACKAGE} config launch allow\`.`,
+        );
       if (launchRule() === "deny") throw denied();
       if (answer === "always") setLaunchPreference("allow");
       const opened = await matching();
@@ -208,7 +259,7 @@ export function createBrowserLauncher({
       checkOpen();
       if (temporary) profile = spawnedProfile = createTemporaryProfile();
       if (mode !== "together") prepareProfile(profile!);
-      child = startBrowser({ installation, profile, mode, extraArgs, extraEnv }, start);
+      child = startBrowser({ installation, profile, mode, extraArgs, extraEnv }, start, display);
       const processStarted = child;
       starting.set(key, child);
       const clear = () => {

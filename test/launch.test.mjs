@@ -65,6 +65,7 @@ function launcher({ exitCode = null, started, ...options } = {}) {
   const calls = [];
   const launch = createBrowserLauncher({
     find: () => [zen, firefox],
+    display: (env) => env,
     timeout: 50,
     start(file, args, spawnOptions) {
       calls.push({ file, args, options: spawnOptions });
@@ -185,8 +186,8 @@ test("times out with the chosen browser, profile and log; an early exit never re
 for (const { action, value, expected, grant } of [
   { action: "accept", value: "open" },
   { action: "accept", value: "always", grant: "allow" },
-  { action: "decline", expected: /user declined/ },
-  { action: "cancel", expected: /user declined/ },
+  { action: "decline", expected: /not approved[\s\S]*config launch allow/ },
+  { action: "cancel", expected: /not approved[\s\S]*config launch allow/ },
   { expected: /cannot ask.*config launch allow/ },
   { action: "deny", expected: /denied.*browser.launch/ },
 ]) {
@@ -280,6 +281,7 @@ test("dedicated launches prepare the chosen profile and pass isolation flags and
     let child;
     let request;
     const launch = createBrowserLauncher({
+      display: (env) => env,
       start(file, args, options) {
         request = { file, args, env: options.env };
         return (child = Object.assign(new EventEmitter(), {
@@ -386,4 +388,33 @@ test("reset checks Gecko's locks even without a bridge and only removes the chos
   assert.equal(await resetAgentProfile(zen.dir), profile);
   assert(!fs.existsSync(profile));
   assert(fs.existsSync(other));
+});
+
+test("a visible launch fills a missing display from the user session or explains how to pass one", async () => {
+  const { withDisplay } = await import("../dist/launch.js");
+  const session = () => ({
+    WAYLAND_DISPLAY: "wayland-1",
+    XDG_RUNTIME_DIR: "/run/user/1000",
+    DISPLAY: ":0",
+    OTHER: "x",
+  });
+  const minimal = { HOME: "/home/u", PATH: "/usr/bin" };
+  assert.deepEqual(withDisplay({ ...minimal }, "linux", session), {
+    ...minimal,
+    DISPLAY: ":0",
+    WAYLAND_DISPLAY: "wayland-1",
+    XDG_RUNTIME_DIR: "/run/user/1000",
+  });
+  const own = { ...minimal, XDG_RUNTIME_DIR: "/tmp/own" };
+  assert.equal(withDisplay(own, "linux", session).XDG_RUNTIME_DIR, "/tmp/own", "Set variables are kept");
+  const shown = { ...minimal, WAYLAND_DISPLAY: "wayland-0" };
+  assert.deepEqual(
+    withDisplay({ ...shown }, "linux", () => assert.fail("not consulted")),
+    shown,
+  );
+  assert.deepEqual(
+    withDisplay({ ...minimal }, "darwin", () => assert.fail("not consulted")),
+    minimal,
+  );
+  assert.throws(() => withDisplay({ ...minimal }, "linux", () => ({})), /No graphical display[\s\S]*env_vars/);
 });
