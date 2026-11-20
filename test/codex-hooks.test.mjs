@@ -7,9 +7,8 @@ import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseHookInput, configureCodexHooks, handleCodexHook } from "../dist/codex-hooks.js";
-// why: Force the watcher-unavailable path so the test covers hook fallback.
-const noWatch = async () => false;
 import { contactRelay, ensureCodexRelay, relaySocket } from "../dist/codex-relay.js";
+import { deliveryScope } from "../dist/instances.js";
 
 test("hooks accept exact host IDs, never infer or guess a session", () => {
   const input = { session_id: randomUUID(), cwd: "/project", hook_event_name: "SessionStart" };
@@ -69,12 +68,27 @@ function readControl(threadId) {
   });
 }
 
-test("start/resume/prompt auto-connect one receiver; end cleans up; stale sockets recover", async () => {
+test("a connected watcher leaves hooks available for unconfirmed threads; relay refresh and cleanup still work", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-relay-"));
   const previous = process.env.ZEN_MCP_SOCKET;
   process.env.ZEN_MCP_SOCKET = path.join(dir, "browser.sock");
   const threadId = randomUUID();
+  const confirmedId = randomUUID();
   const input = { session_id: threadId, cwd: dir, hook_event_name: "SessionStart" };
+  const watchSocket = path.join(path.dirname(relaySocket(threadId)), `watch.${deliveryScope()}.sock`);
+  fs.mkdirSync(path.dirname(watchSocket), { recursive: true, mode: 0o700 });
+  const watcher = net.createServer((socket) => {
+    socket.once("data", (bytes) => {
+      const request = JSON.parse(bytes.toString());
+      socket.end(
+        JSON.stringify({
+          ok: true,
+          daemon: true,
+          threadId: request.threadId === confirmedId ? confirmedId : undefined,
+        }) + "\n",
+      );
+    });
+  });
   const clients = new Set();
   const registrations = [];
   const browser = net.createServer((socket) => {
@@ -84,11 +98,14 @@ test("start/resume/prompt auto-connect one receiver; end cleans up; stale socket
     socket.once("data", (bytes) => registrations.push(JSON.parse(bytes.toString())));
   });
   await new Promise((resolve) => browser.listen(process.env.ZEN_MCP_SOCKET, resolve));
+  await new Promise((resolve) => watcher.listen(watchSocket, resolve));
   try {
-    await Promise.all([handleCodexHook(input, noWatch), handleCodexHook(input, noWatch)]);
+    await handleCodexHook({ ...input, session_id: confirmedId });
+    assert.equal(await contactRelay(confirmedId), false);
+    await Promise.all([handleCodexHook(input), handleCodexHook(input)]);
     await waitUntil(() => clients.size === 1 && registrations.length >= 1);
     const first = await readControl(threadId);
-    await handleCodexHook({ ...input, hook_event_name: "UserPromptSubmit" }, noWatch);
+    await handleCodexHook({ ...input, hook_event_name: "UserPromptSubmit" });
     await waitUntil(() => clients.size === 1 && registrations.length >= 2);
     assert.equal((await readControl(threadId)).pid, first.pid, "refresh must not spawn another process");
     assert.equal(registrations.at(-1).args.threadId, threadId);
@@ -99,10 +116,12 @@ test("start/resume/prompt auto-connect one receiver; end cleans up; stale socket
     await ensureCodexRelay({ threadId, cwd: dir });
     await waitUntil(() => clients.size === 1);
     assert.notEqual((await readControl(threadId)).pid, first.pid);
-    await handleCodexHook({ ...input, hook_event_name: "SessionEnd" }, noWatch);
+    await handleCodexHook({ ...input, hook_event_name: "SessionEnd" });
     await waitUntil(async () => !(await contactRelay(threadId)) && clients.size === 0);
   } finally {
     await contactRelay(threadId, "stop");
+    await contactRelay(confirmedId, "stop");
+    await new Promise((resolve) => watcher.close(resolve));
     for (const socket of clients) socket.destroy();
     await new Promise((resolve) => browser.close(resolve));
     if (previous === undefined) delete process.env.ZEN_MCP_SOCKET;

@@ -23,12 +23,11 @@ export function parseHookInput(value: unknown): CodexHookInput {
   return input as CodexHookInput;
 }
 
-// why: Inject the watcher in tests to avoid connecting to the real Codex service.
-export async function handleCodexHook(value: unknown, watch: () => Promise<boolean> = ensureCodexWatch) {
+export async function handleCodexHook(value: unknown) {
   const input = parseHookInput(value);
   if (input.hook_event_name === "SessionEnd") {
     await stopCodexRelays({ threadId: input.session_id });
-  } else if (!(await watch().catch(() => false))) {
+  } else if (!(await ensureCodexWatch(undefined, input.session_id).catch(() => false))) {
     await ensureCodexRelay({ threadId: input.session_id, cwd: input.cwd });
   }
 }

@@ -1,5 +1,4 @@
 // why: Quit can background a Codex conversation, which should disappear from active menus.
-// why: Use hook-backed delivery if the experimental service cannot be reached.
 import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
@@ -7,11 +6,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { RUNTIME_DIR, NAME } from "./paths.ts";
 import { subscribe } from "./zen.ts";
 import { browserResolver, deliveryScope, listening, type Selection } from "./instances.ts";
 import { THREAD_ID, deliverCodexPick } from "./delivery.ts";
-import { stopCodexRelays } from "./codex-relay.ts";
+import { contactRelay } from "./codex-relay.ts";
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 export const DAEMON_SOCKET = path.join(CODEX_HOME, "app-server-control", "app-server-control.sock");
@@ -24,33 +24,28 @@ export type Thread = {
   id: string;
   name?: string;
   cwd: string;
-  createdAt: number;
   ephemeral: boolean;
-  loadedAt: number;
 };
-export type Tui = { pid: number; startedAt: number; threadId?: string };
+type Tui = { threadId?: string };
 
 export function visibleThreads(threads: Thread[], tuis: Tui[]): Set<string> {
   const visible = new Set<string>();
   const candidates = threads.filter((t) => !t.ephemeral);
   for (const tui of tuis) if (tui.threadId && candidates.some((t) => t.id === tui.threadId)) visible.add(tui.threadId);
-  for (const tui of [...tuis].filter((t) => !t.threadId).sort((a, b) => b.startedAt - a.startedAt)) {
-    const best = candidates
-      .filter((t) => !visible.has(t.id) && Math.max(t.createdAt, t.loadedAt) >= tui.startedAt - 2000)
-      .sort((a, b) => Math.max(b.createdAt, b.loadedAt) - Math.max(a.createdAt, a.loadedAt))[0];
-    if (best) visible.add(best.id);
-  }
   return visible;
 }
 
 const NOT_WINDOWS = new Set([
   "app-server",
+  "exec-server",
+  "remote-control",
   "exec",
   "e",
   "agents",
   "queue",
   "mcp",
   "mcp-server",
+  "plugin",
   "login",
   "logout",
   "apply",
@@ -59,34 +54,88 @@ const NOT_WINDOWS = new Set([
   "debug",
   "sandbox",
   "cloud",
+  "cloud-tasks",
   "features",
+  "doctor",
+  "archive",
+  "unarchive",
+  "delete",
+  "migrate-rollouts",
+  "migrate-nfs-db",
+  "tcp-tunnel",
+  "git-credential",
+  "execpolicy",
+  "responses-api-proxy",
   "help",
   "update",
   "review",
 ]);
-export function parseTui(argv: string[]): { threadId?: string } | null {
+
+const TUI_OPTIONS = {
+  config: { type: "string", short: "c" },
+  model: { type: "string", short: "m" },
+  profile: { type: "string", short: "p" },
+  sandbox: { type: "string", short: "s" },
+  cd: { type: "string", short: "C" },
+  image: { type: "string", short: "i" },
+  "ask-for-approval": { type: "string", short: "a" },
+  "add-dir": { type: "string" },
+  "local-provider": { type: "string" },
+  enable: { type: "string" },
+  disable: { type: "string" },
+  remote: { type: "string" },
+  "remote-auth-token-env": { type: "string" },
+  help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "V" },
+  last: { type: "boolean" },
+  all: { type: "boolean" },
+  "include-non-interactive": { type: "boolean" },
+  "strict-config": { type: "boolean" },
+  oss: { type: "boolean" },
+  "approve-for-me": { type: "boolean" },
+  "dangerously-bypass-approvals-and-sandbox": { type: "boolean" },
+  "dangerously-bypass-hook-trust": { type: "boolean" },
+  "no-alt-screen": { type: "boolean" },
+  "no-daemon": { type: "boolean" },
+  worktree: { type: "boolean" },
+  search: { type: "boolean" },
+} as const;
+
+export function parseTui(argv: string[]): Tui | null {
   if (path.basename(argv[0] ?? "") !== "codex") return null;
-  if (argv.slice(1).some((a) => NOT_WINDOWS.has(a))) return null;
-  if (argv.includes("resume")) {
-    const id = argv.slice(argv.indexOf("resume") + 1).find((a) => THREAD_ID.test(a));
-    return { threadId: id };
-  }
-  return {};
+  const { values, positionals, tokens } = parseArgs({
+    args: argv.slice(1),
+    options: TUI_OPTIONS,
+    strict: false,
+    tokens: true,
+  });
+  if (values.help || values.version) return null;
+  const command = tokens.find((token) => token.kind !== "option");
+  if (command?.kind !== "positional") return {};
+  // why: An unfamiliar option may consume what looks like a subcommand or its first positional.
+  const unknown = tokens.find((token) => token.kind === "option" && !Object.hasOwn(TUI_OPTIONS, token.name));
+  if (unknown && unknown.index < command.index) return {};
+  if (NOT_WINDOWS.has(command.value)) return null;
+  if (command.value !== "resume") return {};
+  const id = positionals[1];
+  const localResume = !unknown && !values.last && !values.remote && !values["no-daemon"];
+  return { threadId: localResume && id && THREAD_ID.test(id) ? id.toLowerCase() : undefined };
 }
 
 function listTuis(): Tui[] {
-  const ticks = 100;
-  const bootTime = Number(/^btime (\d+)/m.exec(fs.readFileSync("/proc/stat", "utf8"))?.[1]) * 1000;
   const tuis: Tui[] = [];
-  for (const entry of fs.readdirSync("/proc")) {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync("/proc");
+  } catch {
+    return tuis;
+  }
+  for (const entry of entries) {
     if (!/^\d+$/.test(entry)) continue;
     try {
-      const argv = fs.readFileSync(`/proc/${entry}/cmdline`, "utf8").split("\0").filter(Boolean);
+      const argv = fs.readFileSync(`/proc/${entry}/cmdline`, "utf8").split("\0").slice(0, -1);
       const tui = parseTui(argv);
-      if (!tui) continue;
-      const stat = fs.readFileSync(`/proc/${entry}/stat`, "utf8");
-      const startTicks = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]);
-      tuis.push({ pid: Number(entry), startedAt: bootTime + (startTicks / ticks) * 1000, ...tui });
+      if (tui) tuis.push(tui);
     } catch {}
   }
   return tuis;
@@ -230,7 +279,6 @@ export async function runCodexWatch(target: Selection) {
   let daemon: DaemonClient | undefined;
   let lastTui = Date.now();
   let stopped = false;
-  let firstRead = true; // why: The watcher cannot reconstruct the load time of conversations already present when it connects.
 
   const connectDaemon = async () => {
     const client = new DaemonClient();
@@ -244,36 +292,48 @@ export async function runCodexWatch(target: Selection) {
     };
     await client.connect();
     daemon = client;
-    // why: Watcher and hook relays must not compete for the same conversation receiver.
-    await stopCodexRelays({ scope });
   };
 
   const poll = async () => {
-    if (!daemon) await connectDaemon().catch(() => {});
     const tuis = listTuis();
     if (tuis.length) lastTui = Date.now();
-    if (daemon) {
+    const explicitIds = new Set(tuis.map((tui) => tui.threadId).filter((id) => id !== undefined));
+    if (explicitIds.size && !daemon) await connectDaemon().catch(() => {});
+    const client = daemon;
+    if (client && explicitIds.size) {
       try {
-        const loaded: string[] = (await daemon.request("thread/loaded/list", {})).data ?? [];
-        for (const id of threads.keys()) if (!loaded.includes(id)) threads.delete(id);
+        const loaded = new Set<string>((await client.request("thread/loaded/list", {})).data ?? []);
+        for (const id of threads.keys()) if (!loaded.has(id) || !explicitIds.has(id)) threads.delete(id);
         for (const id of loaded) {
+          if (!explicitIds.has(id)) continue;
           const known = threads.get(id);
           // why: Refresh visible names because the conversation may be renamed.
           if (known && !receivers.has(id)) continue;
-          const { thread } = await daemon.request("thread/read", { threadId: id });
-          threads.set(id, {
-            id,
-            name: thread.name ?? undefined,
-            cwd: thread.cwd ?? "",
-            ephemeral: !!thread.ephemeral,
-            createdAt: (thread.createdAt ?? 0) * 1000,
-            loadedAt: known?.loadedAt ?? (firstRead ? (thread.createdAt ?? 0) * 1000 : Date.now()),
-          });
+          try {
+            const { thread } = await client.request("thread/read", { threadId: id });
+            threads.set(id, {
+              id,
+              name: thread.name ?? undefined,
+              cwd: thread.cwd ?? "",
+              ephemeral: !!thread.ephemeral,
+            });
+          } catch {
+            threads.delete(id);
+          }
         }
-        firstRead = false;
-      } catch {}
-    }
-    const visible = daemon ? visibleThreads([...threads.values()], tuis) : new Set<string>();
+      } catch {
+        threads.clear();
+      }
+    } else threads.clear();
+    const visible = visibleThreads([...threads.values()], tuis);
+    // why: A hook can register between the watcher's status reply and its next poll.
+    await Promise.all(
+      [...visible].map(async (id) => {
+        if (await contactRelay(id, "ping", undefined, scope)) visible.delete(id);
+      }),
+    );
+    if (stopped) return;
+    if (!daemon) visible.clear();
     for (const [id, receiver] of receivers) {
       if (visible.has(id) && receiver.title === threads.get(id)?.name) continue;
       receiver.subscription.close();
@@ -312,7 +372,8 @@ export async function runCodexWatch(target: Selection) {
     socket.once("data", (chunk) => {
       try {
         const request = JSON.parse(String(chunk));
-        socket.end(JSON.stringify({ ok: true, daemon: !!daemon, pid: process.pid }) + "\n");
+        const threadId = daemon && receivers.has(request.threadId) ? request.threadId : undefined;
+        socket.end(JSON.stringify({ ok: true, threadId }) + "\n");
         if (request.action === "stop") stop();
       } catch {
         socket.destroy();
@@ -352,23 +413,25 @@ export async function runCodexWatch(target: Selection) {
 export function contactWatch(
   action: "ping" | "stop" = "ping",
   scope = deliveryScope(),
-): Promise<{ daemon: boolean } | null> {
+  threadId?: string,
+): Promise<{ threadId?: string } | null> {
   return new Promise((resolve) => {
     const socket = net.createConnection(watchSocket(scope));
     let data = "";
-    const finish = (value: { daemon: boolean } | null) => {
+    const finish = (value: { threadId?: string } | null) => {
       socket.destroy();
       resolve(value);
     };
     socket.setTimeout(500, () => finish(null));
     socket.on("error", () => finish(null));
-    socket.on("connect", () => socket.write(JSON.stringify({ action }) + "\n"));
+    socket.on("close", () => finish(null));
+    socket.on("connect", () => socket.write(JSON.stringify({ action, threadId }) + "\n"));
     socket.on("data", (chunk) => {
       data += chunk;
       if (!data.includes("\n")) return;
       try {
         const reply = JSON.parse(data);
-        finish(reply.ok ? { daemon: !!reply.daemon } : null);
+        finish(reply.ok ? { threadId: reply.threadId } : null);
       } catch {
         finish(null);
       }
@@ -376,10 +439,10 @@ export function contactWatch(
   });
 }
 
-export async function ensureCodexWatch(target?: Selection): Promise<boolean> {
+export async function ensureCodexWatch(target?: Selection, threadId?: string): Promise<boolean> {
   target ??= await browserResolver.resolve();
   const scope = deliveryScope(target);
-  let state = await contactWatch("ping", scope);
+  let state = await contactWatch("ping", scope, threadId);
   if (!state) {
     const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--watch", JSON.stringify(target)], {
       detached: true,
@@ -389,15 +452,10 @@ export async function ensureCodexWatch(target?: Selection): Promise<boolean> {
     child.unref();
     for (let i = 0; i < 25 && !state; i++) {
       await new Promise((resolve) => setTimeout(resolve, 80));
-      state = await contactWatch("ping", scope);
+      state = await contactWatch("ping", scope, threadId);
     }
   }
-  // why: Give the first probe time to confirm the daemon is reachable before falling back to hooks.
-  for (let i = 0; i < 10 && state && !state.daemon; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    state = await contactWatch("ping", scope);
-  }
-  return !!state?.daemon;
+  return threadId !== undefined && state?.threadId === threadId;
 }
 
 if ((import.meta as { main?: boolean }).main && process.argv[2] === "--watch") {

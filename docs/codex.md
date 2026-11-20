@@ -19,30 +19,24 @@ that talks to the Codex service:
 - Socket: `~/.codex/app-server-control/app-server-control.sock`, WebSocket JSON-RPC
   (`initialize`, then read-only `thread/loaded/list` and `thread/read`). The protocol is
   marked experimental by Codex.
-- A conversation exists as soon as a Codex window opens, before the first message, and its
-  name (`thread.name`) arrives after the first reply.
-- `/quit` only detaches the window; the conversation keeps running in the service ("Any
-  running work continues"). Detached background conversations are hidden on purpose.
-- If the service can't be reached (the protocol changes, or an older Codex), hooks take over
-  and a conversation appears after its first message.
-- The service doesn't say which conversation a window shows, so the watcher looks at
-  `codex` window processes: `codex resume <id>` is exact; otherwise each window gets the
-  newest conversation created or loaded after the window started. Ephemeral helper
-  conversations (title generation) are skipped. Two windows opening old conversations with
-  the `resume` picker at the same time can be mismatched.
-- For every shown conversation the watcher holds a subscription
-  `{session: "codex:<thread>", title: name}`; when it disappears the subscription closes and
-  the menus drop it. The watcher exits after ten minutes without a Codex window.
+- On Linux, a local `codex resume <uuid>` supplies the launch conversation ID. The watcher
+  subscribes only while that process is present and the exact non-ephemeral conversation is
+  loaded in the service. It uses `thread.name` for the menu title when available.
+- A new window, the resume picker, `--last`, or a session name leaves ownership unresolved
+  by the watcher. These conversations can appear through lifecycle hooks, which receive
+  the conversation's exact ID from Codex.
+- When the process exits or the conversation unloads, the watcher's subscription closes.
+  The watcher exits after ten minutes without a Codex window.
 
 ## Hooks (fallback)
 
 `node dist/cli.js hooks install` (all supported clients) or
 `node dist/cli.js codex-hooks install` (Codex only) adds SessionStart, UserPromptSubmit and SessionEnd hooks to
-`~/.codex/hooks.json` (other hooks are kept; the old file is backed up). Each hook first tries
-to start the watcher. Only if the Codex service can't be reached does it start the older
-per-conversation receiver (`codex-relay.ts`), which connects after the first message and stops
-on SessionEnd (or after 24 idle hours). Codex asks the user to trust new hooks once in
-`/hooks`.
+`~/.codex/hooks.json` (other hooks are kept; the old file is backed up). SessionStart and
+UserPromptSubmit start or refresh the per-conversation receiver (`codex-relay.ts`) when the
+watcher lacks a subscription for the hook's exact `session_id`, including when it can reach
+the service. The watcher leaves existing hook receivers in place. The hook receiver stops on
+SessionEnd or after 24 idle hours. Codex asks the user to trust new hooks once in `/hooks`.
 
 The UserPromptSubmit hook also adds what the user sent from the browser and couldn't be queued
 to their next message (see [architecture.md](architecture.md#sending-to-a-session-browser--agent)).
