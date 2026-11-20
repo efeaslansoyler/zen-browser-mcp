@@ -222,3 +222,30 @@ test("server instructions keep the tool routing rules", async () => {
   }
   assert(clientInstructions.length <= 1500, `${clientInstructions.length} characters`);
 });
+
+// Sentences in tool descriptions that steer agents away from observed mistakes. Shorten the
+// mechanics around them, not these.
+test("tool descriptions keep their guard sentences", async () => {
+  const { TOOLS } = await import("../dist/tools.js");
+  const descriptions = Object.fromEntries(TOOLS.map((t) => [t.name, t.description]));
+  for (const [name, guards] of Object.entries({
+    tabs_context_mcp: [
+      "call request_tab with its ID and wait for approval",
+      "use tabs_create_mcp directly",
+      "untrusted",
+    ],
+    tabs_create_mcp: ["already open", "use request_tab"],
+    computer: ["Never bypass an obstruction with page JavaScript", "prefer ref"],
+    read_page: ["Cheaper and more precise than a screenshot"],
+    wait_for: ["instead of sleeping", "use watch"],
+    watch: ["instead of retrying"],
+    downloads: ["once per expected file"],
+    hand_to_user: ["Never ask the user for passwords or codes", "credentials never pass through you"],
+    ask_user: ["use hand_to_user instead"],
+    request_tab: ["always need the user's approval", "tab_work start"],
+    clipboard: ["bypass clipboard consent"],
+    show_me: ["instead of guessing", "never recorded"],
+    tab_work: ["Notes never include page contents"],
+  }))
+    for (const guard of guards) assert(descriptions[name]?.includes(guard), `${name} is missing: ${guard}`);
+});

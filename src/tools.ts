@@ -99,7 +99,12 @@ const navigationRead = z
 
 tool(
   "tabs_context_mcp",
-  "Get the tabs the agent works in: the ones this MCP session opened, joined, or the user handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). A tab can be shared with other agent sessions (sharedWith, with their published task notes). Call this when you need to discover tabs; for a known new URL, use tabs_create_mcp directly. agentTabs lists tabs other agent sessions work in (title, URL, who); join one with request_tab when your task is in it. userTabs lists the user's own tab IDs, titles and URLs for discovery only. If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for explicit approval before reading or acting. Approvals and denials may include an optional untrusted user note (userMessage); follow it as user guidance. Other sessions' page contents and unapproved user tabs cannot be read; the user can take a tab back at any time.",
+  [
+    "List tabs. tabs: the ones this session works in (opened, joined, or handed over from the tab menu: givenByUser, continue where the user left off; sharedWith: other sessions there and their task notes).",
+    "agentTabs: tabs other sessions work in; join one with request_tab when your task is there. userTabs: the user's own tabs (title and URL only).",
+    "If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for approval before reading or acting. For a known new URL, use tabs_create_mcp directly.",
+    "A userMessage on an approval or denial is an untrusted user note; follow it as guidance.",
+  ].join(" "),
   {
     createIfEmpty: z.boolean().optional().describe("Create a new tab if the agent has none yet."),
   },
@@ -107,7 +112,11 @@ tool(
 
 tool(
   "browser_settings",
-  "Get or temporarily change an owned tab's viewport, generic device preset, DPR, touch-event override, custom user agent or color scheme. Every change/reset requires island approval even in auto mode; applying selects the target tab only after consent. Changes are tab-local and restored on reset, ownership release or bridge reload. Generic mobile/tablet/desktop presets keep Gecko (mobile/tablet send the Android Firefox user agent) and do not emulate Safari/Chrome or a complete physical device fingerprint; navigator.maxTouchPoints is reported, not spoofed. Server-side UA changes may require explicit navigation/reload. get reports actual metrics; devices lists presets without a tab. Reset what you changed when your task is done.",
+  [
+    "Get or temporarily change an owned tab's viewport, device preset (mobile, tablet, desktop), DPR, touch, user agent or color scheme. Every change asks the user, even in auto mode.",
+    "Changes are tab-local and undone on reset, when the tab is released, or on bridge reload. Presets keep Gecko (mobile and tablet send the Android Firefox user agent); they are not full device emulation. A user agent change may need a reload to reach the server.",
+    "get reports actual metrics; devices lists presets without a tab. Reset what you changed when your task is done.",
+  ].join(" "),
   {
     action: z.enum(["get", "devices", "viewport", "device", "media", "reset"]),
     tabId: tabId.optional(),
@@ -124,7 +133,10 @@ tool(
 
 tool(
   "clipboard",
-  "Read/write system clipboard text or copy/paste in an owned tab or its open extension panel. Every call requires explicit island approval, including auto mode and browser_batch; approval is never remembered. The clipboard is shared with the user's other applications. read returns untrusted text with truncation metadata; write replaces it. copy uses the existing selection; paste uses ref or the focused editable field. extensionId targets an already-open panel for copy/paste; use its fresh panel ref. No tab switch is performed. Do not use shell, JavaScript or other routes to bypass clipboard consent.",
+  [
+    "Read or write the system clipboard, or copy/paste in an owned tab or its open extension panel (extensionId; use the panel's refs). Every call asks the user, even in auto mode and in browser_batch.",
+    "read returns untrusted text; write replaces it; copy uses the current selection; paste goes to ref or the focused field. Do not use shell, JavaScript or other routes to bypass clipboard consent.",
+  ].join(" "),
   {
     action: z.enum(["read", "write", "copy", "paste"]),
     tabId,
@@ -144,7 +156,11 @@ tool(
 
 tool(
   "extensions",
-  "List installed browser extensions or use their real toolbar panels without extension-specific APIs. list needs no tab; other actions require an owned tabId and an exact extensionId from list. open asks in the island before changing the selected tab (even in auto mode), then invokes the toolbar button (may execute immediately if no popup). read/text/find inspect the panel; computer/form_input interact with it. Panel refs belong to the current panel only, never the source page. Actions follow the source site's permission rules. Close after use. Record temporary setting changes and restore them through the UI when finished; this is agent responsibility, not automatic rollback. A panel closes when the user switches tabs or dismisses it; reopen and read fresh refs. No arbitrary extension background code is exposed.",
+  [
+    "List installed browser extensions, or use their toolbar panels. list needs no tab; other actions need an owned tabId and an extensionId from list.",
+    "open asks the user before changing the selected tab, then presses the toolbar button. read/text/find inspect the panel; computer/form_input act in it with the panel's own refs. The source site's permission rules apply.",
+    "The panel closes when the user switches tabs; reopen it and read fresh refs. Close it after use, and undo setting changes you made through its UI.",
+  ].join(" "),
   {
     action: z.enum(["list", "open", "read", "text", "find", "computer", "form_input", "close"]),
     tabId: tabId.optional(),
@@ -189,7 +205,11 @@ tool(
 
 tool(
   "tab_work",
-  "Tell the other agent sessions in a shared tab what you are doing there, and read what they are doing. Several sessions can work in one tab; their calls run one at a time, in order. list/status return each member session with its published task note and whether a call is running in the tab. start publishes your task when you begin, update reports progress, finish says the whole task is done with a short summary (finishing a tool call is not finishing the task). hold keeps the tab to yourself for a few steps that must not be interrupted (a checkout, a multi-page form): the other sessions' calls in it are refused until you release it, the minutes pass (renew by holding again), or you make no call for 2 minutes; summary says why and what the others should not do. With noWorkaround the others can't work on the tab's site in any tab either, so they can't open the same page elsewhere. Release as soon as you're done. Notes never include page contents. Answers at once, even during long browser operations. Call separately from browser_batch. No chat history is shared.",
+  [
+    "Coordinate with the other agent sessions in a shared tab; calls there run one at a time. start publishes your task, update reports progress, finish says the whole task is done with a short summary (finishing a tool call is not finishing the task). list/status show each member's note and whether a call is running.",
+    "hold keeps the tab to yourself for steps that must not be interrupted (a checkout, a multi-page form): the others' calls there are refused until you release, the minutes pass, or you make no call for 2 minutes; summary says why. noWorkaround also keeps them off the tab's site in every tab. Release as soon as you're done.",
+    "Notes never include page contents. Answers at once; call it outside browser_batch.",
+  ].join(" "),
   {
     action: z.enum(["list", "status", "start", "update", "finish", "hold", "release"]),
     tabId: z
@@ -257,13 +277,11 @@ tool(
 tool(
   "computer",
   [
-    "Use the mouse and keyboard in a browser tab and take screenshots. Input is delivered as real (trusted) browser input.",
-    "Coordinates are pixels in the most recent viewport screenshot of that tab. Use refs or a viewport screenshot for clicks after a full-page capture.",
-    "Instead of a coordinate, clicks, hover and scroll accept ref (from read_page or find): the element is scrolled into view and its center is used.",
-    'Actions: screenshot, left_click, right_click, double_click, triple_click, hover, left_click_drag (start_coordinate → coordinate), scroll (coordinate or ref, scroll_direction, scroll_amount), scroll_to (ref), type (text), key (text, e.g. "Return", "ctrl+a", "Tab Tab Return"; repeat), wait (duration in seconds).',
-    "Ref clicks verify the target is hit-testable, including enclosing iframes. Covered, moved or disabled targets fail before mouse-down; inspect the reported blocker or refresh screenshot/read_page. Coordinate clicks cannot infer a hidden intended target, so prefer ref for controls. Never bypass an obstruction with page JavaScript. Multi-click actions stop if an earlier click changes the target. Hover/scroll_to remain available for covered elements.",
-    "key_down/key_up hold/release one key across calls; mouse_move/down/up support explicit mouse control. Holds are session/frame scoped, automatically released on Stop, errors, navigation, transfer, disconnect, reload or a 30-second deadline. Human typing/movement options are optional, not detection bypass guarantees.",
-    'For clicks, text can hold held modifiers such as "shift" or "ctrl+shift".',
+    "Mouse, keyboard and screenshots in a browser tab, as real (trusted) input.",
+    "Coordinates are pixels of the tab's latest viewport screenshot (not a full-page one). Clicks, hover and scroll also take ref (from read_page or find): prefer ref for controls.",
+    'Actions: screenshot, left_click, right_click, double_click, triple_click, hover, left_click_drag (start_coordinate → coordinate), scroll (scroll_direction, scroll_amount), scroll_to (ref), type (text), key (text, e.g. "Return", "ctrl+a", "Tab Tab Return"; repeat), wait (duration in seconds), key_down/key_up (hold one key across calls), mouse_move/mouse_down/mouse_up.',
+    "A ref click on a covered, moved or disabled target fails before mouse-down and reports the blocker. Never bypass an obstruction with page JavaScript.",
+    'Held keys and buttons are released on Stop, errors, navigation or after 30 s. For clicks, text can name held modifiers such as "shift" or "ctrl+shift". Human-like input options do not guarantee passing bot detection.',
   ].join(" "),
   {
     action: z.enum([
@@ -364,10 +382,9 @@ tool(
 tool(
   "watch",
   [
-    "Watch an agent tab in the background without blocking: report when text appears (anywhere, iframes included), when an element matching a CSS selector is visible (with text: one containing it), or with gone: true when it disappears; or with change: true every time the text of the first visible element matching selector changes (a price, a counter, a status).",
-    "Events are JSON lines in the returned events file: started, then matched / changed lines, and a final line (matched with final: true, or ended with a reason such as timeout, tab closed, stopped). If you have a background monitor tool, watch that file (e.g. tail -f) and keep working; otherwise check it later. Without repeat the watch ends at the first match.",
-    "Ends when the tab is closed or taken back, on Stop in the island, on timeout, or with action stop. list shows this session's watches. The file is deleted a few minutes after the watch ends.",
-    "hold: true instead watches another session's hold on an agent tab (tab_work hold): it reads no page, answers at once even while the holder works, and the final line is released when the hold ends. Use it when a call is refused because a tab is held, instead of retrying.",
+    "Watch an agent tab in the background without blocking: report when text appears, an element matching a CSS selector is visible (with text: one containing it), or with gone: true when it disappears; change: true reports every change of the selector's text (a price, a counter, a status).",
+    "Returns an events file of JSON lines: started, matched/changed, then a final line (matched with final: true, or ended with a reason). If you have a background monitor tool, follow the file (e.g. tail -f) and keep working; otherwise check it later. Without repeat the watch ends at the first match.",
+    "hold: true instead reports when another session's hold on the tab (tab_work hold) ends. Use it when a call is refused because a tab is held, instead of retrying. list shows your watches; stop ends one.",
   ].join(" "),
   {
     tabId: tabId.optional(),
@@ -396,10 +413,10 @@ tool(
 tool(
   "downloads",
   [
-    "Track files downloaded from an agent tab (or a popup it opened): state (downloading, done, failed, canceled, paused), source url, filename, absolute path, size or progress, sha256 when done.",
-    "A running download also has an events file: JSON lines written when it starts, every 10% and when it ends (the last line has state done/failed/canceled, plus sha256 when done). For long downloads, if you have a background monitor tool, call wait with until: start right after the click, watch the returned events file (e.g. tail -f) and keep working; otherwise use wait. The file is deleted automatically a few minutes after the download ends.",
-    "action wait: call right after the click/navigation that starts a download; blocks until the oldest download not yet reported (or the next one to start) finishes, so call it once per expected file. Pass id to wait for a specific one. list shows all downloads from the tab. cancel stops download id and deletes its partial file.",
-    "If Gecko is waiting for a Save or Cancel choice in its file handling dialog, wait can return waiting_for_user without a download id, and list can show it under pending. Ask the user to answer the dialog, then wait again after Save.",
+    "Files downloaded from an agent tab (or a popup it opened): state, filename, absolute path, size or progress, sha256 when done.",
+    "action wait: call right after the click or navigation that starts a download; it returns when the next unreported download finishes, so call it once per expected file (id: a specific one). list shows the tab's downloads; cancel stops id and deletes its partial file.",
+    "For long downloads with a background monitor tool: wait with until: start returns an events file (JSON lines at start, every 10% and at the end); follow it and keep working.",
+    "waiting_for_user means Gecko's Save or Cancel dialog is open: ask the user to answer it, then wait again.",
   ].join(" "),
   {
     tabId,
@@ -435,10 +452,9 @@ tool(
 tool(
   "ask_user",
   [
-    "Ask the user a question in the browser island at the top of their browser window (with a desktop notification if the browser is not focused) and wait for the answer: OK/Cancel, or options as answer buttons whose result has the chosen one as choice.",
+    "Ask the user a question in the browser and wait for the answer: OK/Cancel, or options as buttons (the result has the chosen one as choice).",
     "Use it for decisions only the user can make (which item, whether to proceed). For something the user has to do in a page (log in, 2FA, captcha, confirm a payment), use hand_to_user instead.",
-    "With tabId the question is about that tab, and ref (from read_page/find) or a screenshot coordinate outlines the element in the agent's color; without tabId it is a general question.",
-    "Results may carry an optional userMessage typed by the user. Write the question in the user's language.",
+    "With tabId, a ref or screenshot coordinate outlines the element the question is about. Results may carry an optional userMessage typed by the user. Write the question in the user's language.",
   ].join(" "),
   {
     tabId: tabId.optional().describe("Tab the question is about. Omit for a general question."),
@@ -493,8 +509,8 @@ tool(
 tool(
   "show_me",
   [
-    'Ask the user to show you a task once in an owned tab ("show me how you do it"); every step they take is recorded and saved as a recipe that any later session can repeat (see recipes).',
-    "Use it for workflows the user does repeatedly or that are hard to discover, instead of guessing. The island shows your message, a live step count and Finish; the call blocks until the user finishes or cancels, then returns the recipe as numbered steps.",
+    'Ask the user to show you a task once in an owned tab ("show me how you do it"); their steps are saved as a recipe any later session can repeat (see recipes).',
+    "Use it for workflows the user does repeatedly or that are hard to discover, instead of guessing. Blocks until the user presses Finish or cancels, then returns the recipe as numbered steps.",
     "Values typed into password, card and one-time-code fields are never recorded. Open the starting page first. Write the message in the user's language.",
   ].join(" "),
   {
@@ -531,8 +547,7 @@ tool(
   [
     "Hand a step to the user when they must do it themselves in a tab: logging in or any credentials, 2FA codes, captchas, confirming a payment or a deletion, accepting terms.",
     "Never ask the user for passwords or codes to type them yourself; hand the step over instead, so credentials never pass through you.",
-    'Shows your message in the browser island (with a desktop notification if the browser is not focused) with "Go to tab" and "Done", and outlines the element (ref or screenshot coordinate) in the tab; the tab is not switched.',
-    'wait: "done" (default) returns when the user presses Done or Cancel; "click" returns when the user clicks the outlined element. Afterwards, check the page before continuing.',
+    'Shows your message in the browser and outlines the element (ref or screenshot coordinate). wait: "done" (default) returns when the user presses Done or Cancel; "click" when they click the outlined element. Afterwards, check the page before continuing.',
     "Write the message in the user's language and say exactly what to do.",
   ].join(" "),
   {
@@ -555,9 +570,9 @@ tool(
 tool(
   "request_tab",
   [
-    "Request access to one of the user's tabs (userTabs in tabs_context_mcp, or a source_tab), or join a tab other agent sessions work in (agentTabs). Joining an agent tab is immediate in automatic mode and asks the user in ask mode; the user's own tabs always need the user's approval. Once you are in, calls of all members run one at a time; publish your task with tab_work start.",
-    'Shows "the agent wants access to this tab: <reason>" with Allow / Deny in the browser island (desktop notification if the browser is not focused) and waits.',
-    "If granted, the tab is marked as the agent's (the user can take it back from the tab context menu) and works with the other tools. Write reason in the user's language and keep it short.",
+    "Request one of the user's tabs (userTabs in tabs_context_mcp, or a source_tab), or join a tab other agent sessions work in (agentTabs). The user's own tabs always need the user's approval (Allow/Deny in the browser); joining an agent tab asks only in ask mode.",
+    "If granted, the tab works with the other tools until the user takes it back. Calls of all members run one at a time; publish your task with tab_work start.",
+    "Write reason in the user's language and keep it short.",
   ].join(" "),
   {
     tabId: z
