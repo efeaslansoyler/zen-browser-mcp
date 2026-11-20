@@ -31,6 +31,10 @@ your logins, real input, and an island at the top of the window that shows what 
 You need Node.js 22+, Linux or macOS, and a Zen or Firefox-based browser installed in a
 folder you can write to.
 
+> [!WARNING]
+> **macOS is untested. Use it at your own risk.** The code has macOS paths, but every test
+> so far ran on Linux. Reports of what works and what doesn't are welcome.
+
 ```sh
 npm install -g zen-browser-mcp
 zen-browser-mcp install

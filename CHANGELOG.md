@@ -24,10 +24,11 @@ change tool names, parameters or results.
   disappear; they ask for a global install instead.
 - The agent skill tells agents to read the page before retrying a call that timed out or was
   cut off by a bridge stop. Run `zen-browser-mcp skill install` to update an installed skill.
+- The README and installation guide mark macOS as untested.
 
 ### Fixed
 
-- `install` can write a loader into a root-owned browser folder on macOS too.
+- `install` can write a loader into a root-owned browser folder on macOS too (untested).
 - A browser that kept running old bridge files while another browser received an update is
   reloaded with the new files when an MCP client connects to it.
 

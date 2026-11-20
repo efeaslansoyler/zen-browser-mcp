@@ -23,6 +23,11 @@ Claude Code, Codex ve diğer MCP ajanları hâlihazırda kullandığınız taray
 
 Node.js 22 veya üzeri, Linux ya da macOS ve yazma izninizin olduğu bir klasöre kurulmuş Zen veya Firefox tabanlı bir tarayıcı gerekir.
 
+> [!WARNING]
+> **macOS test edilmedi, kullanım riski size aittir.** Kodda macOS desteği var ancak şimdiye
+> kadarki tüm testler Linux'ta yapıldı. Neyin çalışıp neyin çalışmadığına dair geri bildirimlere
+> açığız.
+
 ```sh
 npm install -g zen-browser-mcp
 zen-browser-mcp install

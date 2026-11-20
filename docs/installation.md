@@ -4,7 +4,8 @@
 
 - Node.js 22 or newer.
 - An MCP client: Claude Code, Codex, OpenCode or any client that runs a local stdio server.
-- Linux or macOS, and a Gecko browser installed in a folder you can write to (with `sudo` if
+- Linux, or macOS **(untested: use it at your own risk)**, and a Gecko browser installed in a
+  folder you can write to (with `sudo` if
   needed). The [compatibility matrix](browser-compatibility.md) lists the tested Linux builds
   of Zen, Firefox, Firefox ESR, LibreWolf, Floorp and Waterfox. Flatpak and Snap installations
   are read-only and not supported.
