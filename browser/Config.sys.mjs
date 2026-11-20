@@ -52,7 +52,7 @@ export function config(ctx) {
     if (!file.exists()) {
       customModified = -1;
       throw new Error(
-        `The permission mode is custom, but ${ctx.permissionsPath} doesn't exist. Ask the user to create it (npx zen-browser-mcp config permissions init) or switch the mode.`,
+        `The permission mode is custom, but ${ctx.permissionsPath} doesn't exist. Ask the user to create it (node dist/cli.js config permissions init, in the zen-browser-mcp checkout) or switch the mode.`,
       );
     }
     if (file.lastModifiedTime !== customModified) {
