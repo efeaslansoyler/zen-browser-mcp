@@ -32,4 +32,12 @@ export const LEGACY_SOCKET = path.join(RUNTIME_DIR, `${NAME}.sock`);
 export const LOG_FILE = path.join(RUNTIME_DIR, `${NAME}.log`);
 
 export const PACKAGE_DIR = path.resolve(import.meta.dirname, "..");
+
+// why: npx keeps packages in a cache it may clean or reuse, so hooks pointing there break later.
+export function assertStableInstall(dir = PACKAGE_DIR) {
+  if (dir.split(path.sep).includes("_npx"))
+    throw new Error(
+      `Hooks need a lasting install, not the npx cache. Run \`npm install -g ${PACKAGE}\`, then \`${PACKAGE} hooks install\`.`,
+    );
+}
 export const VERSION: string = JSON.parse(readFileSync(path.join(PACKAGE_DIR, "package.json"), "utf8")).version;

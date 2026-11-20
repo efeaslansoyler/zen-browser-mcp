@@ -7,7 +7,19 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+### Added
+
+- Install from npm: `npm install -g zen-browser-mcp`, then `zen-browser-mcp install`. MCP
+  clients run the `zen-browser-mcp` command, and an update reloads the bridge in the running
+  browser on the next client start. Releases are published from GitHub Actions with
+  provenance.
+
 ### Changed
+
+- CLI, `doctor` and error messages name the `zen-browser-mcp` command instead of `npx` or
+  `node dist/cli.js`. Source checkouts get the same command with `npm link`.
+- `hooks install` and `codex-hooks install` refuse to run from the npx cache, whose files can
+  disappear; they ask for a global install instead.
 
 - The agent skill tells agents to read the page before retrying a call that timed out or was
   cut off by a bridge stop. Run `node dist/cli.js skill install` to update an installed skill.

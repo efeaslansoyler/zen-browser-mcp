@@ -53,8 +53,8 @@ export function readPermissions() {
   if (!fs.existsSync(PERMISSIONS_FILE))
     throw new Error(
       L(
-        `${PERMISSIONS_FILE} doesn't exist. Create it with: npx ${PACKAGE} config permissions init`,
-        `${PERMISSIONS_FILE} yok. Oluşturmak için: npx ${PACKAGE} config permissions init`,
+        `${PERMISSIONS_FILE} doesn't exist. Create it with: ${PACKAGE} config permissions init`,
+        `${PERMISSIONS_FILE} yok. Oluşturmak için: ${PACKAGE} config permissions init`,
       ),
     );
   return parsePermissions(fs.readFileSync(PERMISSIONS_FILE, "utf8"));
@@ -74,8 +74,8 @@ function permissionsCommand([action, base = "auto"]: string[]) {
     fs.writeFileSync(PERMISSIONS_FILE, examplePermissions(base), { mode: 0o600 });
     console.log(
       L(
-        `✓ ${PERMISSIONS_FILE} (every operation, starting from the ${base} template)\n  Edit it, then: npx ${PACKAGE} config mode custom`,
-        `✓ ${PERMISSIONS_FILE} (tüm işlemler, ${base} şablonundan başlayarak)\n  Düzenle, sonra: npx ${PACKAGE} config mode custom`,
+        `✓ ${PERMISSIONS_FILE} (every operation, starting from the ${base} template)\n  Edit it, then: ${PACKAGE} config mode custom`,
+        `✓ ${PERMISSIONS_FILE} (tüm işlemler, ${base} şablonundan başlayarak)\n  Düzenle, sonra: ${PACKAGE} config mode custom`,
       ),
     );
     return;
@@ -131,8 +131,8 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config browser-mode [mode]\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config browser-mode [mode]\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
+        `\nUsage:\n  ${PACKAGE} config mode ask|auto|custom\n  ${PACKAGE} config browser-mode [mode]\n  ${PACKAGE} config permissions [init [ask|auto]]\n  ${PACKAGE} config launch [default|ask|allow|deny]\n  ${PACKAGE} config site [list] | mode blocklist|allowlist\n  ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  ${PACKAGE} config workspace <name>|current\n  ${PACKAGE} config container <name>|off\n  ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
+        `\nKullanım:\n  ${PACKAGE} config mode ask|auto|custom\n  ${PACKAGE} config browser-mode [mode]\n  ${PACKAGE} config permissions [init [ask|auto]]\n  ${PACKAGE} config launch [default|ask|allow|deny]\n  ${PACKAGE} config site [list] | mode blocklist|allowlist\n  ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  ${PACKAGE} config workspace <ad>|current\n  ${PACKAGE} config container <ad>|off\n  ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
       ),
     );
     return;

@@ -49,8 +49,8 @@ export function installationFor(browser: string | undefined, installed: () => Br
     if (installation) return installation;
   }
   throw new Error(
-    `No browser installation found${browser ? ` for "${browser}"` : ""}. Check with \`npx ${PACKAGE} doctor\` or set ` +
-      `the folder containing application.ini with \`npx ${PACKAGE} config browser <dir>\`.`,
+    `No browser installation found${browser ? ` for "${browser}"` : ""}. Check with \`${PACKAGE} doctor\` or set ` +
+      `the folder containing application.ini with \`${PACKAGE} config browser <dir>\`.`,
   );
 }
 
@@ -88,7 +88,7 @@ export function browserExecutable(installation: Browser, platform = process.plat
       return file;
     } catch {}
   }
-  throw new Error(`No executable for ${name} found in ${binDir}. Check with \`npx ${PACKAGE} doctor\`.`);
+  throw new Error(`No executable for ${name} found in ${binDir}. Check with \`${PACKAGE} doctor\`.`);
 }
 
 const SESSION_KEYS = [
@@ -173,7 +173,7 @@ export function createBrowserLauncher({
   // why: A timed-out child may still own the profile, so do not start another process.
   const starting = new Map<string, ChildProcess>();
   const instructions =
-    `Check with \`npx ${PACKAGE} doctor\`, install the loader with \`npx ${PACKAGE} install\` and restart the browser. ` +
+    `Check with \`${PACKAGE} doctor\`, install the loader with \`${PACKAGE} install\` and restart the browser. ` +
     `Bridge log: ${LOG_FILE}.`;
   const temporaryChildren = new Map<ChildProcess, Promise<void>>();
   let closed = false;
@@ -213,14 +213,14 @@ export function createBrowserLauncher({
       if (!approve)
         throw new Error(
           `${label} is closed and this MCP client cannot ask for launch approval. Ask the user to open it, ` +
-            `or they can run \`npx ${PACKAGE} config launch allow\` to allow startup.`,
+            `or they can run \`${PACKAGE} config launch allow\` to allow startup.`,
         );
       const answer = await approve(label);
       // why: Noninteractive clients can decline without showing the prompt.
       if (answer === "declined")
         throw new Error(
           `Opening ${label} was not approved: the user declined, or this client could not show the prompt. ` +
-            `Ask the user to open it, or they can run \`npx ${PACKAGE} config launch allow\`.`,
+            `Ask the user to open it, or they can run \`${PACKAGE} config launch allow\`.`,
         );
       if (launchRule() === "deny") throw denied();
       if (answer === "always") setLaunchPreference("allow");

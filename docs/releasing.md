@@ -53,16 +53,22 @@ Only when the owner asks. Agents never bump the version, tag or publish on their
      changes (see [Contributing](../CONTRIBUTING.md#live-checks)).
    - A clean source install works: `git archive HEAD` into an empty directory, then
      `npm ci`, `npm run build` and `node dist/cli.js --version`.
-   - `npm pack --dry-run` lists only the expected files.
+   - `npm pack --dry-run` lists only the expected files, and installing that tarball in an
+     empty folder gives a working `zen-browser-mcp --version`.
 2. Pick the version from the table above. Rename `## [Unreleased]` to
    `## [X.Y.Z] - YYYY-MM-DD`, add a new empty `## [Unreleased]` above it and update the
    compare links at the bottom.
 3. Run `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and
    `package-lock.json`), then commit everything as `Release X.Y.Z`.
 4. Tag that commit and push both:
-   `git tag -a vX.Y.Z -m "X.Y.Z"`, `git push origin main vX.Y.Z`.
-5. Create the GitHub release with the version's changelog section as its notes:
+   `git tag -a vX.Y.Z -m "X.Y.Z"`, `git push origin main vX.Y.Z`. The tag starts
+   `.github/workflows/publish.yml`, which checks that the tag matches `package.json`, runs
+   every check again and publishes to npm through trusted publishing (OIDC, no token), with
+   provenance.
+5. When the workflow is green, check `npm view zen-browser-mcp version`, then create the
+   GitHub release with the version's changelog section as its notes:
    `gh release create vX.Y.Z --title "X.Y.Z" --notes-file <section.md> --verify-tag`.
 
-Fixes for a released version go to `main` and ship as the next patch; there are no release
-branches. npm publication is a separate decision and not part of these steps yet.
+A failed publish leaves nothing on npm: fix the cause on `main` and release the next patch
+version, since tags are protected and can't be moved. Fixes for a released version go to
+`main` and ship as the next patch; there are no release branches.

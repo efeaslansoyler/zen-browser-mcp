@@ -6,7 +6,7 @@ import { resetAgentProfile } from "./launch.ts";
 import { install, uninstall } from "./install.ts";
 import { stopCodexRelays } from "./codex-relay.ts";
 import { configureCodexHooks, handleCodexHook } from "./codex-hooks.ts";
-import { PACKAGE, VERSION } from "./paths.ts";
+import { PACKAGE, VERSION, assertStableInstall } from "./paths.ts";
 import { serve } from "./server.ts";
 import { recipesCommand } from "./recipes.ts";
 import { hooksCommand, promptHook } from "./hooks.ts";
@@ -27,40 +27,37 @@ const help = L(
 
 Usage:
 ${usage([
-  [`npx ${PACKAGE}`, "run the MCP server (your MCP client starts it this way)"],
+  [`${PACKAGE}`, "run the MCP server (your MCP client starts it this way)"],
   ["    --browser <name|dir> --profile <name|dir>", "choose a browser or profile for this MCP client"],
   ["    --browser-mode <mode>", "choose a browser mode for this MCP client"],
-  [`npx ${PACKAGE} reset-agent-profile [--browser <name|dir>]`, "delete the persistent agent profile after closing it"],
-  [`npx ${PACKAGE} install`, "install the browser part (asks for sudo if needed)"],
+  [`${PACKAGE} reset-agent-profile [--browser <name|dir>]`, "delete the persistent agent profile after closing it"],
+  [`${PACKAGE} install`, "install the browser part (asks for sudo if needed)"],
   ["    --browser <dir>", "a specific installation (the folder with application.ini)"],
   ["    --all", "every browser found"],
-  [`npx ${PACKAGE} uninstall`, "remove it"],
-  [`npx ${PACKAGE} doctor`, "check the setup"],
-  [`npx ${PACKAGE} skill install|uninstall`, "add the agent skill to Claude Code and Codex"],
-  [`npx ${PACKAGE} hooks install|uninstall`, "deliver browser picks with your next message (Claude Code, Codex)"],
-  [`npx ${PACKAGE} config`, "show or change settings (mode, site rules)"],
-  [`npx ${PACKAGE} recipes [list]|show|rm <id>`, "recipes the user showed the agent once"],
+  [`${PACKAGE} uninstall`, "remove it"],
+  [`${PACKAGE} doctor`, "check the setup"],
+  [`${PACKAGE} skill install|uninstall`, "add the agent skill to Claude Code and Codex"],
+  [`${PACKAGE} hooks install|uninstall`, "deliver browser picks with your next message (Claude Code, Codex)"],
+  [`${PACKAGE} config`, "show or change settings (mode, site rules)"],
+  [`${PACKAGE} recipes [list]|show|rm <id>`, "recipes the user showed the agent once"],
 ])}`,
   `${PACKAGE} ${VERSION}: AI ajanlarının Zen'i (ya da başka bir Firefox tabanlı tarayıcıyı) kullanmasını sağlar.
 
 Kullanım:
 ${usage([
-  [`npx ${PACKAGE}`, "MCP sunucusunu çalıştırır (MCP istemcin böyle başlatır)"],
+  [`${PACKAGE}`, "MCP sunucusunu çalıştırır (MCP istemcin böyle başlatır)"],
   ["    --browser <name|dir> --profile <name|dir>", "choose a browser or profile for this MCP client"],
   ["    --browser-mode <mode>", "choose a browser mode for this MCP client"],
-  [`npx ${PACKAGE} reset-agent-profile [--browser <name|dir>]`, "delete the persistent agent profile after closing it"],
-  [`npx ${PACKAGE} install`, "tarayıcı tarafını kurar (gerekirse sudo ister)"],
+  [`${PACKAGE} reset-agent-profile [--browser <name|dir>]`, "delete the persistent agent profile after closing it"],
+  [`${PACKAGE} install`, "tarayıcı tarafını kurar (gerekirse sudo ister)"],
   ["    --browser <klasör>", "belirli bir kurulum (application.ini'nin olduğu klasör)"],
   ["    --all", "bulunan bütün tarayıcılar"],
-  [`npx ${PACKAGE} uninstall`, "kaldırır"],
-  [`npx ${PACKAGE} doctor`, "kurulumu kontrol eder"],
-  [`npx ${PACKAGE} skill install|uninstall`, "ajan skill'ini Claude Code ve Codex'e ekler"],
-  [
-    `npx ${PACKAGE} hooks install|uninstall`,
-    "tarayıcıdan gönderilenleri sonraki mesajınla iletir (Claude Code, Codex)",
-  ],
-  [`npx ${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
-  [`npx ${PACKAGE} recipes [list]|show|rm <id>`, "ajana bir kez gösterdiğin tarifler"],
+  [`${PACKAGE} uninstall`, "kaldırır"],
+  [`${PACKAGE} doctor`, "kurulumu kontrol eder"],
+  [`${PACKAGE} skill install|uninstall`, "ajan skill'ini Claude Code ve Codex'e ekler"],
+  [`${PACKAGE} hooks install|uninstall`, "tarayıcıdan gönderilenleri sonraki mesajınla iletir (Claude Code, Codex)"],
+  [`${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
+  [`${PACKAGE} recipes [list]|show|rm <id>`, "ajana bir kez gösterdiğin tarifler"],
 ])}`,
 );
 
@@ -102,11 +99,13 @@ try {
       break;
     }
     case "hooks":
+      if (args[0] === "install") assertStableInstall();
       console.log(hooksCommand(args[0]));
       break;
     case "codex-hooks": {
       if (args[0] !== "install" && args[0] !== "uninstall")
         throw new Error("Usage: zen-browser-mcp codex-hooks install|uninstall");
+      if (args[0] === "install") assertStableInstall();
       console.log(configureCodexHooks(args[0]));
       if (args[0] === "uninstall") await stopCodexRelays();
       if (args[0] === "install")

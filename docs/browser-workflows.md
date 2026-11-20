@@ -26,11 +26,11 @@ describes the hold, lock and reconnect behavior.
 
 New agent tabs use the browser profile's sessions by default. Set `clean: true`
 on `tabs_create_mcp` for a separate **Agent** container, or run
-`node dist/cli.js config container Agent` to use it by default. Containers
+`zen-browser-mcp config container Agent` to use it by default. Containers
 separate cookies and site storage. History and extensions still belong to the
 profile. In Zen, the tab menu's **Agent settings** can also place new agent
 tabs in a separate workspace. The equivalent CLI is
-`node dist/cli.js config workspace Agents`. Use `off` for the container or
+`zen-browser-mcp config workspace Agents`. Use `off` for the container or
 `current` for the workspace to restore the default.
 
 ## Read and act on a page
@@ -113,10 +113,10 @@ message, or waits for the next browser tool call:
 | OpenCode | The hook installer adds an OpenCode plugin for delivery. |
 | Other clients | Pick up pending items with the next tool result, or choose **Clipboard** to paste manually. |
 
-From a built checkout, `node dist/cli.js hooks install` sets up the supported
+`zen-browser-mcp hooks install` sets up the supported
 client hooks and plugin. Use `hooks uninstall` to remove them. Optional
-`node dist/cli.js skill install` installs the agent guide for Claude Code and
-Codex. Use `node dist/cli.js doctor` to see detected setup. If delivery fails
+`zen-browser-mcp skill install` installs the agent guide for Claude Code and
+Codex. Use `zen-browser-mcp doctor` to see detected setup. If delivery fails
 or the chosen session is gone, the browser can copy the pick to the clipboard.
 
 To record a workflow, use **Record steps for an agent…** or respond when an
@@ -124,7 +124,7 @@ agent calls `show_me`. Press **Finish**, review or delete steps, and mark values
 that change before saving. Recorded steps include clicks and field changes.
 Values typed into recognized secret fields are excluded. Recipes are stored
 locally. Agents can read them with `recipes` and repeat the steps with the
-browser tools. Use `node dist/cli.js recipes list` or `recipes show <id>` from
+browser tools. Use `zen-browser-mcp recipes list` or `recipes show <id>` from
 the CLI.
 
 ## Clipboard and extensions

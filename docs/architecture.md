@@ -19,7 +19,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 
 | File | Role |
 |---|---|
-| `cli.ts` | `node dist/cli.js`: no arguments runs the MCP server. Setup and configuration commands are listed by `--help`. |
+| `cli.ts` | The `zen-browser-mcp` command: no arguments runs the MCP server. Setup and configuration commands are listed by `--help`. |
 | `server.ts` | The MCP server: registers the tools, agent identity and per-call session, channel and lifecycle subscriptions |
 | `tools.ts`, `instructions.ts` | Tool schemas, descriptions and answer timeouts; server instructions |
 | `claude.ts` | Channel detection and the Claude conversation title |
@@ -38,7 +38,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 ### Browser side (`browser/`)
 
 The loader is a few lines of [autoconfig](https://support.mozilla.org/kb/customizing-firefox-using-autoconfig):
-`node dist/cli.js install` adds a marked block to the browser's `.cfg` that maps
+`zen-browser-mcp install` adds a marked block to the browser's `.cfg` that maps
 `resource://zenmcp/` to the data directory (usually `~/.local/share/zen-mcp`) and
 loads `main.js` with `loadSubScript`. Developers can link that directory to
 the checkout's `browser/`.

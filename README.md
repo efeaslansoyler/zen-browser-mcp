@@ -4,7 +4,7 @@ Let Claude Code, Codex and other MCP agents work in the browser you already use:
 your logins, real input, and an island at the top of the window that shows what they do.
 
 [![CI](https://github.com/efeaslansoyler/zen-browser-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/efeaslansoyler/zen-browser-mcp/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/efeaslansoyler/zen-browser-mcp)](https://github.com/efeaslansoyler/zen-browser-mcp/releases)
+[![npm](https://img.shields.io/npm/v/zen-browser-mcp)](https://www.npmjs.com/package/zen-browser-mcp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [English](README.md) · [Türkçe](README.tr.md)
@@ -32,25 +32,23 @@ You need Node.js 22+, Linux or macOS, and a Zen or Firefox-based browser install
 folder you can write to.
 
 ```sh
-git clone https://github.com/efeaslansoyler/zen-browser-mcp.git
-cd zen-browser-mcp
-npm ci && npm run build
-node dist/cli.js install
+npm install -g zen-browser-mcp
+zen-browser-mcp install
 ```
 
-Restart the browser, then connect your client from the same folder:
+Restart the browser, then connect your client:
 
 ```sh
-claude mcp add --scope user zen -- node "$PWD/dist/cli.js"   # Claude Code
-codex mcp add zen -- node "$PWD/dist/cli.js"                 # Codex
+claude mcp add --scope user zen -- zen-browser-mcp   # Claude Code
+codex mcp add zen -- zen-browser-mcp                 # Codex
 ```
 
 Ask your agent: *"Open example.com and tell me what the page says."* An agent tab opens and
 the island shows the work. To let it use a tab you already have open, right-click the tab
 and choose **Give to session…**, or approve the agent's request.
 
-[Installation](docs/installation.md) covers other clients, `doctor`, updating and
-uninstalling.
+[Installation](docs/installation.md) covers other clients, `doctor`, updating, uninstalling
+and running from source.
 
 ## How it works
 

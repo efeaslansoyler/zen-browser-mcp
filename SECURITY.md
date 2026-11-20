@@ -11,7 +11,7 @@ Report privately through GitHub:
 [Security → Report a vulnerability](https://github.com/efeaslansoyler/zen-browser-mcp/security/advisories/new).
 Don't open a public issue, pull request or discussion for it.
 
-Include the version (`node dist/cli.js --version`), the browser and its version, the
+Include the version (`zen-browser-mcp --version`), the browser and its version, the
 permission mode, and the steps or page that trigger it. A minimal local HTML page is the most
 useful reproduction. Leave out real cookies, tokens and page contents from your accounts.
 

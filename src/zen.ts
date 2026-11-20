@@ -1,10 +1,7 @@
 import net from "node:net";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { PACKAGE_DIR } from "./paths.ts";
+import { PACKAGE } from "./paths.ts";
 import { browserResolver, instanceLabel, type Selection } from "./instances.ts";
-
-const CLI = path.join(PACKAGE_DIR, "dist", "cli.js");
 
 export type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
@@ -81,7 +78,7 @@ function request(
       reject(
         e.code === "ENOENT" || e.code === "ECONNREFUSED"
           ? new Error(
-              `Could not connect to the browser (${e.code}, socket: ${socketPath}). Is it open? Install with \`node ${CLI} install\`, check with \`node ${CLI} doctor\`.`,
+              `Could not connect to the browser (${e.code}, socket: ${socketPath}). Is it open? Install with \`${PACKAGE} install\`, check with \`${PACKAGE} doctor\`.`,
             )
           : e.code === "EPERM" || e.code === "EACCES"
             ? new Error(

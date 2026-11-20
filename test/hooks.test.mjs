@@ -109,3 +109,13 @@ test("the Antigravity hook is one named entry in its hooks.json", () => {
   configureAntigravityHook("install", empty);
   assert.equal(antigravityHookInstalled(empty), true);
 });
+
+test("hooks refuse to point at the npx cache", async () => {
+  const { assertStableInstall } = await import("../dist/paths.js");
+  assert.throws(
+    () => assertStableInstall("/home/u/.npm/_npx/0123abcd/node_modules/zen-browser-mcp"),
+    /npm install -g zen-browser-mcp/,
+  );
+  assert.doesNotThrow(() => assertStableInstall("/usr/lib/node_modules/zen-browser-mcp"));
+  assert.doesNotThrow(() => assertStableInstall("/home/u/src/zen-browser-mcp"));
+});

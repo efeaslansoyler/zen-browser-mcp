@@ -9,11 +9,13 @@ Thanks for helping. Read [docs/architecture.md](docs/architecture.md) first and
 git clone https://github.com/efeaslansoyler/zen-browser-mcp && cd zen-browser-mcp
 npm ci
 npm run build
-node dist/cli.js install
-claude mcp add --scope user zen -- node "$PWD/dist/cli.js"
+npm link                     # the zen-browser-mcp command now runs this checkout
+zen-browser-mcp install
+claude mcp add --scope user zen -- zen-browser-mcp
 ```
 
-Restart the browser after installing the loader. Developers with a fresh
+Restart the browser after installing the loader. In a worktree or a second checkout, call
+`node dist/cli.js` directly: the linked command always runs the checkout you linked. Developers with a fresh
 data directory can link `browser/` to `${XDG_DATA_HOME:-$HOME/.local/share}/zen-mcp`
 before installation. The installer leaves a development symlink in place.
 
@@ -156,7 +158,7 @@ To check the local package contents, run `npm pack --dry-run`.
 
 | Symptom | Where to look |
 |---|---|
-| "Could not connect", the wrong browser or profile is used, a launch fails | `node dist/cli.js doctor`: versions, installed loaders, running instances, which one is selected and why, the permission mode |
+| "Could not connect", the wrong browser or profile is used, a launch fails | `zen-browser-mcp doctor`: versions, installed loaders, running instances, which one is selected and why, the permission mode |
 | The bridge did not start, or a reload failed | `node scripts/zenctl.ts ping` (`bridge` version, `startError`, `onDisk`) and `zen-mcp.log` in the runtime directory: `$XDG_RUNTIME_DIR`, else `/run/user/<uid>`, else `$TMPDIR` |
 | A tool does the wrong thing on a page | Reproduce it in the sandbox with `zenctl` calls, then inspect bridge state with `zenctl eval` (`h.state`, `h.sessions`, `h.access`…) |
 | What agents did and when | `~/.local/state/zen-mcp/activity.jsonl`, or **Agent history** in the tab menu |

@@ -3,7 +3,7 @@
 Claude Code, Codex ve diğer MCP ajanları hâlihazırda kullandığınız tarayıcıda çalışsın: açık sekmelerinizle, oturum açtığınız hesaplarla ve gerçek kullanıcı etkileşimleriyle. Tarayıcı penceresinin üst kısmındaki küçük bir panel (island), ajanların neler yaptığını gösterir.
 
 [![CI](https://github.com/efeaslansoyler/zen-browser-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/efeaslansoyler/zen-browser-mcp/actions/workflows/ci.yml)
-[![Sürüm](https://img.shields.io/github/v/release/efeaslansoyler/zen-browser-mcp)](https://github.com/efeaslansoyler/zen-browser-mcp/releases)
+[![npm](https://img.shields.io/npm/v/zen-browser-mcp)](https://www.npmjs.com/package/zen-browser-mcp)
 [![Lisans: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [English](README.md) · [Türkçe](README.tr.md)
@@ -24,22 +24,20 @@ Claude Code, Codex ve diğer MCP ajanları hâlihazırda kullandığınız taray
 Node.js 22 veya üzeri, Linux ya da macOS ve yazma izninizin olduğu bir klasöre kurulmuş Zen veya Firefox tabanlı bir tarayıcı gerekir.
 
 ```sh
-git clone https://github.com/efeaslansoyler/zen-browser-mcp.git
-cd zen-browser-mcp
-npm ci && npm run build
-node dist/cli.js install
+npm install -g zen-browser-mcp
+zen-browser-mcp install
 ```
 
-Tarayıcıyı yeniden başlatın. Ardından aynı klasörden kullandığınız MCP istemcisini bağlayın:
+Tarayıcıyı yeniden başlatın. Ardından kullandığınız MCP istemcisini bağlayın:
 
 ```sh
-claude mcp add --scope user zen -- node "$PWD/dist/cli.js"   # Claude Code
-codex mcp add zen -- node "$PWD/dist/cli.js"                 # Codex
+claude mcp add --scope user zen -- zen-browser-mcp   # Claude Code
+codex mcp add zen -- zen-browser-mcp                 # Codex
 ```
 
 Ajanınıza şunu söyleyin: *"example.com adresini aç ve sayfada ne yazdığını anlat."* Ajan için yeni bir sekme açılır ve üstteki panel yapılan işlemleri gösterir. Ajanın hâlihazırda açık olan bir sekmenizi kullanmasını istiyorsanız sekmeye sağ tıklayıp **Oturuma ver…** seçeneğini seçin veya ajanın erişim isteğini onaylayın.
 
-Diğer istemciler, `doctor` komutu, güncelleme ve kaldırma işlemleri hakkında bilgi için [Kurulum](docs/installation.md) rehberine bakın.
+Diğer istemciler, `doctor` komutu, güncelleme, kaldırma ve kaynak koddan çalıştırma hakkında bilgi için [Kurulum](docs/installation.md) rehberine bakın.
 
 ## Nasıl çalışır?
 

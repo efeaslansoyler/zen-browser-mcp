@@ -30,8 +30,8 @@ that talks to the Codex service:
 
 ## Hooks (fallback)
 
-`node dist/cli.js hooks install` (all supported clients) or
-`node dist/cli.js codex-hooks install` (Codex only) adds SessionStart, UserPromptSubmit and SessionEnd hooks to
+`zen-browser-mcp hooks install` (all supported clients) or
+`zen-browser-mcp codex-hooks install` (Codex only) adds SessionStart, UserPromptSubmit and SessionEnd hooks to
 `~/.codex/hooks.json` (other hooks are kept; the old file is backed up). SessionStart and
 UserPromptSubmit start or refresh the per-conversation receiver (`codex-relay.ts`) when the
 watcher lacks a subscription for the hook's exact `session_id`, including when it can reach

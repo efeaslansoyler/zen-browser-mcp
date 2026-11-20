@@ -17,7 +17,7 @@ sessions within one profile.
 ## Permission modes
 
 Change mode from the island, **Agent settings** in the tab menu, or
-`node dist/cli.js config mode <auto|ask|custom>` from the built checkout.
+`zen-browser-mcp config mode <auto|ask|custom>`.
 
 | Mode | Behavior |
 |---|---|
@@ -34,10 +34,10 @@ and tab access. The bridge checks each step and stops on a denial.
 ## Custom rules
 
 ```sh
-node dist/cli.js config permissions init
+zen-browser-mcp config permissions init
 # Edit ~/.config/zen-mcp/permissions.jsonc before enabling it
-node dist/cli.js config mode custom
-node dist/cli.js config permissions
+zen-browser-mcp config mode custom
+zen-browser-mcp config permissions
 ```
 
 Use `init ask` to generate rules from the ask template. The file accepts
@@ -82,11 +82,11 @@ listed sites. Both lists are stored and the selected mode applies. A domain
 entry covers subdomains.
 
 ```sh
-node dist/cli.js config site block example.com
-node dist/cli.js config site unblock example.com
-node dist/cli.js config site allow localhost example.org
-node dist/cli.js config site mode allowlist
-node dist/cli.js config site list
+zen-browser-mcp config site block example.com
+zen-browser-mcp config site unblock example.com
+zen-browser-mcp config site allow localhost example.org
+zen-browser-mcp config site mode allowlist
+zen-browser-mcp config site list
 ```
 
 Blocked tabs expose only their IDs to agents. A disallowed iframe can prevent

@@ -12,9 +12,9 @@ this order:
 3. Otherwise the only running browser, or the one you focused last.
 
 ```sh
-node dist/cli.js config browser Zen --profile Default   # set a default
-node dist/cli.js config browser clear                   # back to automatic
-node dist/cli.js doctor                                 # running browsers and the selection
+zen-browser-mcp config browser Zen --profile Default   # set a default
+zen-browser-mcp config browser clear                   # back to automatic
+zen-browser-mcp doctor                                 # running browsers and the selection
 ```
 
 A browser is an application name or the installation folder containing `application.ini`.
@@ -35,7 +35,7 @@ session. A session stays with its browser and tells the agent if that browser wa
 | `autonomous` | A temporary profile for this MCP process | Headless |
 | `autonomous-agent` | The same persistent profile as `agent` | Headless |
 
-Set the default with `node dist/cli.js config browser-mode agent`. For one client, pass
+Set the default with `zen-browser-mcp config browser-mode agent`. For one client, pass
 `--browser-mode <mode>` in its server arguments or set `ZEN_MCP_BROWSER_MODE` in its server
 environment, then reconnect it.
 
@@ -45,7 +45,7 @@ already open, both modes reuse it as it is. `doctor` shows where the agent profi
 erase its logins and site data, close it and run:
 
 ```sh
-node dist/cli.js reset-agent-profile --browser <name|dir>
+zen-browser-mcp reset-agent-profile --browser <name|dir>
 ```
 
 Temporary profiles are deleted when their browser exits. A browser the MCP server started
@@ -68,11 +68,11 @@ elicitation): **Open** allows this launch, **Always open** saves the preference.
 that can't show the question gets a message saying how to open or allow the browser.
 
 ```sh
-node dist/cli.js config launch          # show the preference and the effective rule
-node dist/cli.js config launch allow    # open on demand
-node dist/cli.js config launch ask      # ask first
-node dist/cli.js config launch deny     # never open
-node dist/cli.js config launch default  # follow the permission mode
+zen-browser-mcp config launch          # show the preference and the effective rule
+zen-browser-mcp config launch allow    # open on demand
+zen-browser-mcp config launch ask      # ask first
+zen-browser-mcp config launch deny     # never open
+zen-browser-mcp config launch default  # follow the permission mode
 ```
 
 An explicit preference applies in every mode, but a custom `deny` always wins. Codex starts

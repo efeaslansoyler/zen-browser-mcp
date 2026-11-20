@@ -254,7 +254,7 @@ export function examplePermissions(base = "auto") {
   const width = Math.max(...[...OPERATIONS.keys()].map((key) => key.length)) + 4;
   const lines = [
     '// zen-browser-mcp: your own permission template. It is used when the mode is "custom"',
-    "// (`node dist/cli.js config mode custom` in the zen-browser-mcp checkout, the island or the tab menu).",
+    "// (`zen-browser-mcp config mode custom`, the island or the tab menu).",
     "//",
     '// base: the built-in template you start from, "ask" or "auto". Rules below override it:',
     '//   "allow"  the agent does it without asking',

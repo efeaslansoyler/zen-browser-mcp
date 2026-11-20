@@ -317,7 +317,7 @@ export class BrowserResolver {
       .filter(Boolean)
       .join(", ");
     throw new Error(
-      `The selected ${target} (${next.source}) is not running. Open it, or check with \`npx ${PACKAGE} doctor\`.`,
+      `The selected ${target} (${next.source}) is not running. Open it, or check with \`${PACKAGE} doctor\`.`,
     );
   }
 

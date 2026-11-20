@@ -41,7 +41,7 @@ export async function doctor() {
     const flatpak = unsupportedInstalls();
     fail(
       L("No browser has the loader.", "Hiçbir tarayıcıda yükleyici yok."),
-      `npx ${PACKAGE} install` +
+      `${PACKAGE} install` +
         (flatpak.length
           ? L(
               ` (Flatpak/Snap can't be supported: ${flatpak.join(", ")})`,
@@ -53,7 +53,7 @@ export async function doctor() {
 
   const files = installedVersion();
   if (!files || !fs.existsSync(DATA_DIR))
-    fail(L(`No browser files in ${DATA_DIR}.`, `${DATA_DIR} içinde tarayıcı dosyaları yok.`), `npx ${PACKAGE} install`);
+    fail(L(`No browser files in ${DATA_DIR}.`, `${DATA_DIR} içinde tarayıcı dosyaları yok.`), `${PACKAGE} install`);
   else if (files === "dev") ok(L(`${DATA_DIR} → development symlink`, `${DATA_DIR} → geliştirme bağı`));
   else if (files !== VERSION)
     console.log(
@@ -66,18 +66,18 @@ export async function doctor() {
     if (claudeHookInstalled()) ok(L("Claude Code: prompt hook installed", "Claude Code: prompt hook'u kurulu"));
     else
       console.log(
-        `  Claude Code: ${L("prompt hook not installed", "prompt hook'u kurulu değil")} → npx ${PACKAGE} hooks install`,
+        `  Claude Code: ${L("prompt hook not installed", "prompt hook'u kurulu değil")} → ${PACKAGE} hooks install`,
       );
   if (fs.existsSync(path.dirname(path.dirname(openCodePluginFile()))))
     if (openCodePluginInstalled()) ok(L("OpenCode: plugin installed", "OpenCode: plugin kurulu"));
-    else console.log(`  OpenCode: ${L("plugin not installed", "plugin kurulu değil")} → npx ${PACKAGE} hooks install`);
+    else console.log(`  OpenCode: ${L("plugin not installed", "plugin kurulu değil")} → ${PACKAGE} hooks install`);
 
   // why: The optional skill should not make a healthy installation fail doctor.
   for (const { client, status } of skillStatus()) {
     if (status === "current") ok(L(`${client}: skill installed`, `${client}: skill kurulu`));
     else
       console.log(
-        `  ${client}: ${status === "missing" ? L("skill not installed", "skill kurulu değil") : L("skill outdated", "skill eski")} → npx ${PACKAGE} skill install`,
+        `  ${client}: ${status === "missing" ? L("skill not installed", "skill kurulu değil") : L("skill outdated", "skill eski")} → ${PACKAGE} skill install`,
       );
   }
 
@@ -133,7 +133,7 @@ export async function doctor() {
     } catch (e) {
       fail(
         (e as Error).message,
-        L(`fix the file, or: npx ${PACKAGE} config mode auto`, `dosyayı düzelt ya da: npx ${PACKAGE} config mode auto`),
+        L(`fix the file, or: ${PACKAGE} config mode auto`, `dosyayı düzelt ya da: ${PACKAGE} config mode auto`),
       );
     }
   ok(
@@ -145,11 +145,11 @@ export async function doctor() {
 
   console.log(
     L(
-      `\nIn Claude Code: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${PACKAGE}`,
-      `\nClaude Code'da: claude mcp add --scope user ${SERVER_NAME} -- npx -y ${PACKAGE}`,
+      `\nIn Claude Code: claude mcp add --scope user ${SERVER_NAME} -- ${PACKAGE}`,
+      `\nClaude Code'da: claude mcp add --scope user ${SERVER_NAME} -- ${PACKAGE}`,
     ),
   );
-  console.log(`Codex: codex mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}`);
+  console.log(`Codex: codex mcp add ${SERVER_NAME} -- ${PACKAGE}`);
   console.log(
     problems ? L(`\n${problems} problem(s).`, `\n${problems} sorun var.`) : L("\nAll good.", "\nHer şey yolunda."),
   );

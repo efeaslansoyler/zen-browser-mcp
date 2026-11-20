@@ -4,7 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { NAME, PACKAGE_DIR, RUNTIME_DIR } from "./paths.ts";
+import { NAME, PACKAGE, PACKAGE_DIR, RUNTIME_DIR } from "./paths.ts";
 import { call } from "./zen.ts";
 
 export const openCodeSocket = (pid: number) => path.join(RUNTIME_DIR, `${NAME}-opencode`, `${pid}.sock`);
@@ -107,7 +107,7 @@ export function openCodePluginFile(env = process.env, home = os.homedir()) {
 const MARKER = "// zen-browser-mcp plugin";
 export function openCodePluginSource() {
   const module = path.join(PACKAGE_DIR, "dist", "opencode.js");
-  return `${MARKER}: delivers what you send from the browser. Remove with \`node ${path.join(PACKAGE_DIR, "dist", "cli.js")} hooks uninstall\`.
+  return `${MARKER}: delivers what you send from the browser. Remove with \`${PACKAGE} hooks uninstall\`.
 import { openCodePlugin } from ${JSON.stringify(module)};
 export const ZenBrowser = (input) => openCodePlugin(input);
 `;
