@@ -236,7 +236,7 @@ when the selected instance has no queued picks.
 
 ## Sending to a session (browser → agent)
 
-Element picks (Ctrl+Shift+F or the page menu; Shift+click selects up to 8 elements; the island
+Element picks (Ctrl+Shift+F or the page menu; Ctrl/Cmd-click or Shift-click selects up to 8 elements; the island
 asks for a note and a target session) and recipes the user recorded go through
 `Inbox.sys.mjs`:
 

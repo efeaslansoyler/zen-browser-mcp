@@ -1165,7 +1165,8 @@ export class Island {
       siteName = "";
       if (pick.mode === "picking") {
         action = L("Select elements (up to 8)", "Öğeleri seç (en çok 8)");
-        hintText = L("Shift-click: add/remove · Enter: done · Esc", "Shift+tık: ekle/çıkar · Enter: bitir · Esc");
+        const mod = Services.appinfo?.OS === "Darwin" ? "Cmd" : "Ctrl";
+        hintText = L(`${mod}-click: add/remove · Enter: done · Esc`, `${mod}+tık: ekle/çıkar · Enter: bitir · Esc`);
       } else if (pick.mode === "compose") {
         try {
           siteName = browser.currentURI.host;

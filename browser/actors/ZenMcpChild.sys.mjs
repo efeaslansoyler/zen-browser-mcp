@@ -58,6 +58,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     mousePath,
     typingPlan,
     L,
+    mac: () => Services.appinfo?.OS === "Darwin",
     setTimeout,
     clearTimeout,
     reader,
