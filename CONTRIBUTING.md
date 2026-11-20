@@ -75,6 +75,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-tab-access.ts` | Tab access between sessions: joining, turns in a shared tab, parallel tabs, share and take-back menus, leaving, shutdown, the ask-mode join prompt |
 | `check-cancellation.ts`, `check-hit-test.ts` | Stop, covered-click detection |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |
+| `check-source-stacks.ts [dir] [stack…]` | Source locations on real Next.js (Turbopack, webpack), Vite React 19/18, Svelte, Vue, Astro and Angular dev servers; run in `sandbox.ts`, rerun after a framework major release |
 | `check-screenshots.ts`, `check-opened-tabs.ts` | Deploy and full-page screenshots, opener tracking |
 | `check-network-diagnostics.ts`, `check-web-vitals.ts` | Network filters, HAR and local performance |
 | `check-extensions.ts`, `check-clipboard.ts` | Extension popups with a temporary extension, clipboard consent |
