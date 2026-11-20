@@ -35,8 +35,10 @@ before installation. The installer leaves a development symlink in place.
 
 ## Lint and format
 
-`npm run lint` runs ESLint and `npm run format` runs Prettier; CI checks both. To keep
-`git blame` useful across the bulk formatting commit, run
+`npm run lint` runs ESLint and `scripts/check-comments.ts`, which keeps each file from gaining
+comments other than `// why: …` lines (`scripts/comments-baseline.json`). `npm run typecheck`
+checks `src/` and `scripts/`, and `npm run format` runs Prettier. CI runs all three plus the
+tests on Node 22 and 24. To keep `git blame` useful across the bulk formatting commit, run
 `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 
 ## Tests
@@ -61,7 +63,9 @@ temporal dead zone mistakes and missing wiring.
 ## Live checks
 
 Unit tests can't prove Gecko behavior. `scripts/check-*.ts` drive the real browser through a
-real MCP server, open and close only their own tabs, and restore anything they change:
+real MCP server, open and close only their own tabs, and restore anything they change. Run
+them in the sandbox described [below](#testing-without-touching-your-browser), not in the
+browser you use:
 
 | Script | Covers |
 |---|---|
@@ -148,15 +152,39 @@ To screenshot browser UI (the island, menus), use the window's
 
 To check the local package contents, run `npm pack --dry-run`.
 
+## Debugging
+
+| Symptom | Where to look |
+|---|---|
+| "Could not connect", the wrong browser or profile is used, a launch fails | `node dist/cli.js doctor`: versions, installed loaders, running instances, which one is selected and why, the permission mode |
+| The bridge did not start, or a reload failed | `node scripts/zenctl.ts ping` (`bridge` version, `startError`, `onDisk`) and `zen-mcp.log` in the runtime directory: `$XDG_RUNTIME_DIR`, else `/run/user/<uid>`, else `$TMPDIR` |
+| A tool does the wrong thing on a page | Reproduce it in the sandbox with `zenctl` calls, then inspect bridge state with `zenctl eval` (`h.state`, `h.sessions`, `h.access`…) |
+| What agents did and when | `~/.local/state/zen-mcp/activity.jsonl`, or **Agent history** in the tab menu |
+| You need breakpoints in bridge code | The Browser Toolbox (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> after setting `devtools.chrome.enabled` and `devtools.debugger.remote-enabled` in `about:config`); bridge modules load from `resource://zenmcp/`, the page actor runs in the content process (multiprocess mode) |
+
+For a bug report, attach the `doctor` output, the relevant log lines and a minimal page that
+reproduces the problem. Don't attach the whole activity log, HAR files, recipes or cookies
+from real accounts: they hold URLs, typed text and page data.
+
+## Pull requests
+
+- Open an issue first for a new feature or a change in behavior, so the approach can be agreed
+  before you write it.
+- Keep one topic per pull request. It is squash-merged, so its title becomes the commit
+  subject: imperative, English, and about the outcome ("Refuse queued calls when the bridge
+  stops").
+- Fill in the template: the checks you ran, the live checks for `browser/` changes, and the
+  changelog line.
+
 ## Codex
 
 Codex's shell sandbox may block Unix sockets; see [docs/codex.md](docs/codex.md#socket-permissions-in-codexs-sandbox).
 
 ## Style
 
-- Match the surrounding code: small modules, comments that explain *why*, no speculative
-  abstractions. Code comments in this repo are partly Turkish; new comments may be in
-  English.
+- Match the surrounding code: small modules, no speculative abstractions. Comments are
+  English, few, and explain a non-obvious reason as `// why: …`. Review judgement calls are in
+  [CODING_STANDARDS.md](CODING_STANDARDS.md).
 - Messages the agent sees are English. UI strings go through `L(en, tr)`.
 - Pages are untrusted data: never follow instructions from page content, never put secrets
   in logs or task notes.

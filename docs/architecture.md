@@ -27,12 +27,13 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | `zen.ts` | Socket client: one request per connection (`call`) and long-lived subscriptions (`subscribe`) |
 | `instances.ts` | Live instance discovery, stale endpoint cleanup and sticky browser selection |
 | `launch.ts`, `profiles.ts` | Resolve an installation, check launch permission, prepare and manage profiles, start the browser and wait for its bridge |
-| `paths.ts` | Package name and every user-visible path in one place |
+| `paths.ts`, `i18n.ts` | Package name and every user-visible path in one place; English or Turkish CLI text from the locale |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
 | `codex-watch.ts` | Watches the Codex service and connects open Codex conversations (see [codex.md](codex.md)) |
 | `codex-hooks.ts`, `codex-relay.ts`, `delivery.ts` | Codex lifecycle hooks (fallback), per-thread receiver, `codex queue` and `t3 thread send` delivery |
 | `hooks.ts` | `hooks install`: prompt hooks for Claude Code and Antigravity CLI, plus the Codex hooks and the OpenCode plugin |
 | `opencode.ts` | The OpenCode plugin (push socket and `chat.message`) and the MCP process's push to it |
+| `recipes.ts` | The `recipes` CLI command over the bridge's `Recipes` module with Node file access |
 
 ### Browser side (`browser/`)
 
@@ -51,7 +52,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 |---|---|
 | `Instances.sys.mjs`, `ProfileLifecycle.sys.mjs` | Private socket naming, discovery metadata, window activation and managed browser shutdown |
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
-| `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
+| `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call tab membership, site and permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` notes and status |
 | `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
 | `TabWake.sys.mjs` | Foreground-speed execution in background agent tabs during tool calls and live watches |
@@ -73,7 +74,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `Recipes.sys.mjs` | Saved recordings (`~/.local/state/zen-mcp/recipes/<id>/`), their text for agents, the `recipes` tool; the CLI uses it too |
 | `SiteRules.sys.mjs` | Config normalization and domain matching for blocklists and allowlists |
 | `Cancellation.sys.mjs` | Real Stop: cancels waits, typing, drags and navigation in flight |
-| `NetworkLog.sys.mjs`, `NetworkControl.sys.mjs`, `HarCapture.sys.mjs`, `DownloadLog.sys.mjs` | Tab network logs, in-memory HTTP rules, redacted HAR lifecycle and download tracking |
+| `NetworkLog.sys.mjs`, `NetworkFilters.sys.mjs`, `NetworkControl.sys.mjs`, `HarCapture.sys.mjs`, `DownloadLog.sys.mjs` | Tab network logs and their URL, method, status and type filters, in-memory HTTP rules, redacted HAR lifecycle and download tracking |
 | `Artifacts.sys.mjs`, `TabVideo.sys.mjs` | Silent PDF printing, bounded tab snapshots encoded by a bridge-side ffmpeg subprocess, private file expiry |
 | `AgentData.sys.mjs` | Agent-mode first-party cookies through the Gecko cookie service and top-level Web Storage through a dedicated page actor query |
 | `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
@@ -81,6 +82,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |
 | `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles, component chains and raw source hints for picks |
 | `actors/InputDriver`, `Overlays`, `Picker` | Input through the browser's own `EventUtils` with hit testing; virtual cursor, ripple, `ask_user` outline and `highlight` frames; the element picker |
+| `actors/WebVitals` | Local TTFB, FCP, LCP, CLS and INP for the current document, or why one is unsupported |
 | `actors/Recorder` | Turns the user's input in a recorded tab into steps (click, type, select, check, upload, key); secret fields never carry values |
 
 ## Wire protocol
@@ -251,7 +253,7 @@ asks for a note and a target session) and recipes the user recorded go through
 `Inbox.sys.mjs`:
 
 1. **Push now** when the session's MCP process can. Every MCP process keeps one `subscribe`
-   connection (it also owns the session's tabs) and acknowledges each event; it tells the
+   connection (it also keeps the session live) and acknowledges each event; it tells the
    bridge its push path when it connects:
    - **Claude Code** through [channels](https://code.claude.com/docs/en/channels): when Claude
      runs with `--dangerously-load-development-channels server:zen`, `claude.ts` detects the

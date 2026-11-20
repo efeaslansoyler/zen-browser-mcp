@@ -70,7 +70,7 @@ reports the running mode.
   check the tab and the requested URL against the site rules. Web Storage
   applies to the tab's top-level origin. Values are untrusted page data.
 - All four `network_control` actions ask in both templates and work only on
-  tabs opened by an agent. A tab offered by the user via handoff is ineligible.
+  tabs opened by an agent. A tab the user gave to a session is ineligible.
   Rules affect the whole agent tab if sessions share it. Closing or taking back
   the tab, ending the rule owner's session, the island Stop control, and bridge
   reload clear those rules.

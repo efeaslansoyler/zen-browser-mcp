@@ -17,7 +17,8 @@ kullanabilirsin.
 > Bridge, tarayıcı yetkileriyle çalışır ve açık hesap oturumlarını kullanabilir.
 > Güvendiğin client’ları kullan ve ajanın istediği işlemleri kontrol et. Projenin
 > testleri var ancak güvenlik denetiminden geçmedi.
-> Ayrıntılar için [izinler ve güvenlik](docs/permissions.md) sayfasına bak.
+> Ayrıntılar için [izinler ve güvenlik](docs/permissions.md) sayfasına bak. Güvenlik
+> açıklarını [SECURITY.md](SECURITY.md)'deki gibi gizli olarak bildir.
 
 ## Kaynak koddan kurulum
 

@@ -17,4 +17,8 @@ the page can write the same line.
 A unit test that fakes a Gecko API (a global, an actor method, an inspector call) needs a live
 check in `scripts/` that exercises the real API, or a note in the review saying why not.
 
-Write non-obvious local reasons as `// why: …`; lint prevents other comment counts from increasing per file.
+## Comments
+
+Write a non-obvious local reason as one `// why: …` line, in English. Don't restate the code
+or record what a change did; that belongs in the commit message. Lint keeps each file from
+gaining other comments.

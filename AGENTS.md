@@ -5,11 +5,14 @@ edit/test loop.
 
 - **The bridge runs inside the user's real browser.** Test on a copy or in your own tabs;
   never act on the user's tabs without `request_tab` approval.
-- After changing `browser/`: `node scripts/zenctl.ts reload` (it fails loudly if the new
-  version didn't start). After changing `src/`: the MCP client must reconnect.
-- `npm test` and `npm run typecheck` must pass. For behavior that depends on Gecko, also run the matching
-  `scripts/check-*.ts` live check. Never run `check-pick-delivery.ts` casually: it messages a
-  real Codex conversation.
+- After changing `browser/`: `node scripts/zenctl.ts reload` in the sandbox (it fails loudly
+  if the new version didn't start). Reload the user's own bridge only when they ask: a reload
+  cancels every running agent call. Copy `browser/` to the installed directory first
+  (`~/.local/share/zen-mcp`) unless it is a symlink to the checkout. After changing `src/`:
+  run `npm run build`; MCP clients must reconnect.
+- `npm test`, `npm run typecheck`, `npm run lint` and `npm run format:check` must pass. For
+  behavior that depends on Gecko, also run the matching `scripts/check-*.ts` live check.
+  Never run `check-pick-delivery.ts` casually: it messages a real Codex conversation.
 - Run live checks in an isolated headless Zen that runs your checkout's `browser/`:
   `node scripts/sandbox.ts up`, then `source` the printed env file in the same shell. This is
   required from a worktree or next to other agents. If a check uses the user's config,

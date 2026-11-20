@@ -16,7 +16,7 @@ can skip identical images. `annotate` labels up to 80 visible controls in the
 top frame. For pixel diffs, first capture with `diff: true`, then pass the
 returned baseline ID as `since` with `diff: true` on a later capture. Default
 baselines are document-scoped. Save with `baseline_scope: "deploy"` to compare
-across a reload or another tab owned by the same session. Keep access to the
+across a reload or another tab the same session is a member of. Keep access to the
 source tab and match viewport, scale and scroll position. Baselines are
 in-memory, bounded, and expire after an hour or on bridge reload.
 
@@ -62,12 +62,12 @@ gain access. Tabs with an unknown opener can still appear in the tab list.
 
 ## Cross-host HAR capture
 
-1. Call `network_capture` with `action: "start"` on an owned tab before navigation.
+1. Call `network_capture` with `action: "start"` on a tab you can access, before navigation.
    The capture follows that tab across allowed hosts.
 2. For another tab, obtain access first, then call `action: "attach"` with
    `childTabId`. Attachment covers requests started after it succeeds.
 3. Use `status` for counters, `stop` for a local HAR file, or `cancel` to
-   discard the recording. Only the owner can manage it. Start and attach ask
+   discard the recording. Only the session that started it can manage it. Start and attach ask
    in the built-in modes.
 
 Apply the network filters on `stop` to narrow the export. The capture holds
@@ -140,7 +140,7 @@ wins. A tab holds up to 32 rules, and a new rule with the same pattern
 replaces the earlier one. `offline` cancels any HTTP(S) channel Gecko attributes
 to this tab, ahead of other rules. `clear` removes both kinds of state. A
 top-level HTTP(S) navigation to another origin clears the rules. Tab close,
-release, owner disconnect, Stop and bridge reload clear them too.
+release, disconnect of the session that set them, Stop and bridge reload clear them too.
 
 `mock` returns a synthetic HTTP response at the original URL before the
 request reaches the server. Set a UTF-8 `body` of up to 65,536 characters,

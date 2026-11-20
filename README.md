@@ -15,7 +15,8 @@ lets you approve, take over, or stop the work.
 > The bridge runs with browser privileges and can work with your signed-in
 > accounts. Use it with clients you trust, and review what an agent asks to do.
 > The project has tests and has not undergone a security audit.
-> See [permissions and security](docs/permissions.md).
+> See [permissions and security](docs/permissions.md), and report vulnerabilities
+> privately as described in [SECURITY.md](SECURITY.md).
 
 ## Install from source
 
