@@ -362,6 +362,15 @@ test("launch rules also gate autonomous startup before a profile is created", as
   assert.equal(calls.length, 0);
 });
 
+test("new agent profiles get a user.js Gecko can parse", async () => {
+  const { agentProfile, prepareProfile } = await import("../dist/profiles.js");
+  const profile = agentProfile(zen.dir);
+  prepareProfile(profile);
+  for (const line of fs.readFileSync(path.join(profile, "user.js"), "utf8").trim().split("\n"))
+    assert.match(line, /^user_pref\("[^"]+", (true|false|-?\d+|"[^"]*")\);$/);
+  fs.rmSync(profile, { recursive: true, force: true });
+});
+
 test("reset checks Gecko's locks even without a bridge and only removes the chosen agent profile", async () => {
   const { agentProfile, prepareProfile } = await import("../dist/profiles.js");
   const { resetAgentProfile } = await import("../dist/launch.js");

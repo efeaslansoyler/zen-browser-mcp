@@ -109,7 +109,9 @@ const PREFS = {
 
 export function prepareProfile(profile: string) {
   fs.mkdirSync(profile, { recursive: true, mode: 0o700 });
-  const prefs = Object.entries(PREFS).map(([key, value]) => `user_pref(${JSON.stringify(key)}, ${value});\n`);
+  const prefs = Object.entries(PREFS).map(
+    ([key, value]) => `user_pref(${JSON.stringify(key)}, ${JSON.stringify(value)});\n`,
+  );
   try {
     fs.writeFileSync(path.join(profile, "user.js"), prefs.join(""), { flag: "wx", mode: 0o600 });
   } catch (error) {
