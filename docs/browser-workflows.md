@@ -59,8 +59,9 @@ tabs in a separate workspace. The equivalent CLI is
 ## Send an element or a recipe
 
 Choose **Show to agent…** from the page menu or start the picker with
-Ctrl+Shift+F. Click to send one element, or Shift-click up to eight elements
-and press Enter. Add a note and choose a destination. The pick can include
+Ctrl+Shift+F. Click to send one element, or Ctrl-click (Cmd-click on macOS;
+Shift-click also works) up to eight elements and press Enter. A bar at the
+bottom of the page lists every picker key and how many elements are selected. Add a note and choose a destination. The pick can include
 the page URL, selector, visible crop, styles and component context. A pick
 does not grant live access to its source tab.
 
