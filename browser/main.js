@@ -343,7 +343,13 @@ function logError(where, e) {
         access.check(source.browserId, session);
         ctx.assertSiteAccess(source);
       },
-      context: (source) => JSON.stringify([source.currentURI.spec, access.version(source.browserId), ctx.readConfig()]),
+      context: (source) =>
+        JSON.stringify([
+          source.currentURI.spec,
+          access.version(source.browserId),
+          ctx.readConfig(),
+          ctx.permissionContext(source).policy,
+        ]),
       wait: (ms, source) => ctx.operationSleep(ms, ctx.callOf(source)),
       geckoVersion: Services.appinfo.platformVersion.split(".").slice(0, 2).join("."),
       ask: async (source, args, value) => {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Locks } from "../browser/Locks.sys.mjs";
+import { browserTools } from "../browser/BrowserTools.sys.mjs";
 import { bridgeContext, testCall } from "./support/bridge.mjs";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -171,17 +172,39 @@ test("questions don't wait for each other: each is a card with the agent that as
   assert.equal(cards.size, 0);
 });
 
-test("clipboard, browser settings and extensions take the exclusive lock until the call ends", async () => {
-  const context = bridgeContext({});
-  const first = { tabs: new Set(), check() {}, race: (p) => p };
-  const second = { tabs: new Set(), check() {}, race: (p) => p };
-  await context.exclusive(first);
-  await context.exclusive(first);
-  let entered = false;
-  const waiting = context.exclusive(second).then(() => (entered = true));
-  await tick();
-  assert.equal(entered, false);
-  first.exclusive.release();
-  await waiting;
-  second.exclusive.release();
+test("clipboard, browser settings and extensions take the exclusive lock through dispatch, even on other tabs", async () => {
+  const replies = [];
+  const ran = [];
+  let failClipboard;
+  const clipboardGate = new Promise((_, reject) => (failClipboard = reject));
+  const context = bridgeContext({
+    browserFor: (call, tabId) => (call.tabs.add(tabId), { browserId: tabId }),
+    logActivity() {},
+    findTab() {},
+    requireToolPermission() {},
+    text: (value) => [{ type: "text", text: JSON.stringify(value) }],
+    reply: (_, __, result) => replies.push(result),
+    performClipboard: async () => {
+      ran.push("clipboard");
+      await clipboardGate;
+    },
+    query: async () => (ran.push("settings"), { value: {} }),
+    browserSettings: { entries: new Map() },
+    extensionPanels: { close: () => ran.push("extensions") },
+  });
+  Object.assign(context.tools, browserTools(context));
+  const request = (tool, args) =>
+    context.handle(JSON.stringify({ session: tool, agent: { id: "codex" }, tool, args }), null, {});
+  const calls = [
+    request("clipboard", { action: "read", tabId: 1 }),
+    request("browser_settings", { action: "get", tabId: 2 }),
+    request("extensions", { action: "close", tabId: 3, extensionId: "x" }),
+  ];
+  for (let i = 0; i < 5; i++) await tick();
+  assert.deepEqual(ran, ["clipboard"]);
+  failClipboard(new Error("clipboard failed"));
+  await Promise.all(calls);
+  assert.deepEqual(ran, ["clipboard", "settings", "extensions"]);
+  assert.deepEqual(replies[0], { ok: false, error: "clipboard failed" });
+  assert(replies.slice(1).every((reply) => reply.ok && !reply.isError));
 });

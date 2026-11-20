@@ -402,3 +402,34 @@ test("autonomous permissions preserve deny rules and site restrictions", async (
     assert.deepEqual(h.prompts, []);
   }
 });
+
+test("custom rules apply to browser_settings reads and tab_work", async () => {
+  for (const rule of ["deny", "ask", "allow"]) {
+    const custom = policy.parsePermissions(
+      JSON.stringify({ base: "auto", rules: { "browser_settings.read": rule, tab_work: rule } }),
+    );
+    const h = harness({ mode: "custom", custom });
+    h.context.tools.browser_settings = async () => {
+      h.effects.push("settings");
+      return [];
+    };
+    const request = async (tool, args) => {
+      let reply;
+      h.context.reply = (_transport, _output, value) => (reply = value);
+      await h.context.handle(JSON.stringify({ tool, args, session: "test-session" }));
+      return reply;
+    };
+    const settings = await request("browser_settings", { action: "get", tabId: 1 });
+    const work = await request("tab_work", { action: "status", tabId: 1 });
+    if (rule === "deny") {
+      assert.match(settings.error, /settings don't allow this \(browser_settings.read\)/);
+      assert.match(work.error, /settings don't allow this \(tab_work\)/);
+      assert.deepEqual(h.effects, []);
+    } else {
+      assert.equal(settings.ok, true, settings.error);
+      assert.equal(work.ok, true, work.error);
+      assert.deepEqual(h.effects, ["settings"]);
+    }
+    assert.equal(h.prompts.length, rule === "ask" ? 2 : 0);
+  }
+});

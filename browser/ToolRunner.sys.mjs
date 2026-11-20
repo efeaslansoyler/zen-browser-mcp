@@ -55,7 +55,7 @@ export function toolRunner(ctx) {
           ctx.assertNotHeld(args.tabId, call.session, destination.spec);
         }
       }
-      if (browser && !["browser_batch", "clipboard", "browser_settings"].includes(tool) && !cleanup) {
+      if (browser && !["browser_batch", "clipboard"].includes(tool) && !cleanup) {
         const what = await ctx.describeWrite(tool, args, browser);
         if (what) entry.what = what;
         let grant = approvals?.get(browser);
@@ -172,8 +172,9 @@ export function toolRunner(ctx) {
     });
   }
 
-  // why: A hold or watch control must answer while another call holds the tab lock.
-  const immediate = (tool, args) => tool === "watch" && (args.hold || ["list", "stop"].includes(args.action));
+  // why: tab_work and watch controls must answer while another call holds the tab lock.
+  const immediate = (tool, args) =>
+    tool === "tab_work" || (tool === "watch" && (args.hold || ["list", "stop"].includes(args.action)));
 
   async function runImmediate(session, agent, tool, args) {
     const call = newCall(session, agent);
@@ -203,10 +204,6 @@ export function toolRunner(ctx) {
         const info = ctx.sessionInfo(session, ctx.agentTheme(agent ?? { id: "claude" }));
         info.disconnected = false;
         if (state.paused) throw new ctx.Stopped();
-        if (tool === "tab_work") {
-          ctx.reply(transport, output, { ok: true, content: ctx.coordinateTab(args, session) });
-          return;
-        }
         if (immediate(tool, args)) {
           ctx.reply(transport, output, { ok: true, content: await runImmediate(session, agent, tool, args) });
           return;
