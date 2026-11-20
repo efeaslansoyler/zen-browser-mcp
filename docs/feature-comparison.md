@@ -1,60 +1,46 @@
-# Feature comparison with agent-browser
+# Browser automation alternatives
 
-Reference: [agent-browser commands](https://agent-browser.dev/commands), a CDP/WebDriver based
-agent CLI for Chromium and Safari. zen-browser-mcp's goal is different: work together with the user
-in their everyday Firefox-based browser instead of launching a separate one. Rows below are
-rough equivalents, not API or engine parity.
+zen-browser-mcp is an MCP bridge for working with an agent in an open Zen or
+Firefox-based window. Its browser UI covers approval, tab sharing and take-back,
+element picks sent to a conversation, and recording tasks as recipes. The
+autoconfig loader requires write access to the browser installation and runs the
+bridge with browser privileges. See [browser workflows](browser-workflows.md)
+and [permissions and security](permissions.md).
 
-| Area | zen-browser-mcp |
-|---|---|
-| Snapshot, refs, interactive tree | `read_page`, `find`, `form_input` |
-| Page text and text diff | `get_page_text`, `diff`/`since` on reads |
-| Navigation, tabs, iframes, dialogs | Yes, with per-session tab access; agents can share a tab and take turns in it |
-| Spawned tabs | Opener-based notices on input results and tab listing; request access before use |
-| Hover, click, drag, scroll | Real input, covered-target check before clicks |
-| Key down / up | `computer` `key_down`/`key_up` |
-| Mouse move / down / up | `computer` `mouse_move`/`mouse_down`/`mouse_up` |
-| Variable typing speed | `typing: human`, `delay_ms`, `seed`; fast by default |
-| Smooth / curved mouse paths | `movement: smooth`/`human`, `duration_ms`, `steps`, `seed` |
-| Viewport / device | `browser_settings`: per-tab size, native DPR, touch events, user agent |
-| Color scheme | `browser_settings` `media`: dark / light / no-preference |
-| Fewer repeated screenshots | `if_changed`: exact image equality per session/document/options |
-| Visual screenshot diff | Opt-in viewport baselines for interactions and deploy comparisons |
-| Screenshot labels | `annotate`: refs of up to 80 visible controls in the top frame |
-| Clipboard | Every operation and shortcut asks in the island |
-| File upload | `file_upload` |
-| Downloads | `downloads`: list / wait / cancel, native dialog status, file details and progress events |
-| Console and network | Console; filter requests by URL, method, status and type; inspect headers and bodies |
-| HAR export | Bounded redacted capture across allowed hosts and explicitly attached tabs |
-| Network route / mock / throttling | Not available; the tools only observe |
-| React | `react` tree/inspect with optional props; no render history or Suspense tracking |
-| Accessibility audit | `accessibility`: bundled axe-core, findings and refs per frame |
-| Full-page screenshot / PDF | Full document capture with `full_page`; PDF is unavailable |
-| Web Vitals | Local TTFB, FCP, LCP, INP and navigation milestones; CLS when Gecko exposes layout shifts |
-| Cookie / storage / session export | Not available: the user's sessions are already there |
-| CDP / headless / launching a browser | Out of scope: the everyday browser and window |
-| Proxy / geolocation / TLS settings | Not available; global profile settings are never changed |
-| Video recording / streaming / profiling | Not available. The recipe recorder captures user actions as replayable steps. |
-| Element picks, island, Stop, shared tabs | zen-browser-mcp's own focus |
-| Installed extension popups | `extensions`; tab switch asks even in auto mode |
+## When to use each tool
 
-## Limits
+| Tool | Browser and connection | Where it fits |
+|---|---|---|
+| **zen-browser-mcp** | Autoconfig loader and a local Unix socket in the running Gecko browser | Work alongside an agent in the window you use. Grant a live tab to one or more MCP sessions, approve actions in the island, or send an element or recipe to a conversation. |
+| [Kitsune](https://github.com/junyeong-nero/kitsune) | WebExtension and local bridge for Firefox, Zen and LibreWolf | Work in the existing browser with background agent tabs and handoff. By default, agents can read user tabs and need handoff to change them. Kitsune offers a compact Python tool surface and a direct tool mode with scripting disabled. |
+| [ZenPilot](https://github.com/beSaif/zenpilot) | WebDriver BiDi in Zen, with a fresh profile or one you choose | Use an allowlisted Zen profile with page-level Stop, HAR capture and opt-in request mocking. Zen may need to restart with remote control enabled. One agent controls Zen at a time. |
+| [spaxe-dev/zen-mcp](https://github.com/spaxe-dev/zen-mcp) | Launches its own Zen window through Marionette, with a dedicated profile by default | Organize research in native Spaces, folders, pins and split view. It offers one consent decision per server session and a Pause control. The optional normal profile requires closing the other Zen instance first. |
+| [Claude for Firefox](https://github.com/NetVar1337/claude-for-firefox) | Community WebExtension with native messaging and a Firefox MCP server for Claude Code | Bring Claude's browser sidebar and Claude integrations to Firefox. Its documented setup uses a temporary add-on and Claude Code's authenticated session. |
+| [Vercel Agent Browser](https://github.com/vercel-labs/agent-browser#how-it-works) | CLI and stdio MCP. Chrome for Testing by default, with CDP attachment to a running Chrome | Automate web tasks through refs, selectors, batch actions and diagnostics. Choose it when the workflow is designed for a managed browser or an existing Chrome session. |
+| [Firefox DevTools MCP](https://firefox-source-docs.mozilla.org/ai-agent-tools/firefox-devtools-mcp.html) | Mozilla's BiDi and WebDriver Classic bridge, with a temporary Firefox profile by default | Test Firefox builds and debug browser or site behavior with developer tools, profiling and browser logs. |
+| [MCP for Firefox](https://addons.mozilla.org/en-US/firefox/addon/mcp-for-firefox/) | Firefox extension and local companion MCP server | Use signed-in Firefox with a toolbar pairing flow, claimed tabs and a Stop control. |
 
-- Human-like input is optional. It produces real, trusted events but is no guarantee against
-  bot detection.
-- Held keys and buttons belong to a session and frame. They are released on key up, Stop,
-  errors, navigation, leaving the tab, disconnect and bridge reload, and at the latest 30 s
-  after the last `key_down`/`mouse_down` (`hold_ms` can shorten that). A held button doesn't move
-  between frames; it's released with an error.
-- `browser_settings` changes per-tab overrides. Changes and reset ask in the
-  island in both built-in modes. Previous inline CSS and native overrides are restored
-  on reset, leaving the tab, take-back, disconnect and bridge shutdown.
-- Mobile / tablet / desktop are generic Gecko presets (mobile and tablet send the Android
-  Firefox user agent), not Safari or a full device fingerprint; `maxTouchPoints` isn't spoofed.
-  Measured values can differ from requested ones because of native scaling and privacy
-  behavior; servers that sniff the user agent may need an explicit reload.
-- `if_changed` compares encoded images exactly, with no pixel tolerance; the cache holds 8 MB
-  / 32 entries. `annotate` doesn't label iframe content; labels are removed after the capture.
+These descriptions are based on the linked project documentation as reviewed on
+November 20, 2026. Shared features cover different scopes. For example, a
+connection approval, permission to read a tab, and consent to submit a form
+are separate decisions.
 
-See [browser diagnostics](browser-diagnostics-plan.md) for the current tool workflows
-and the [compatibility matrix](browser-compatibility.md) for tested builds.
+## What sharing a tab means in zen-browser-mcp
+
+- **Read access.** User tabs appear as metadata. The agent needs access from
+  `request_tab` or **Give to session…** before it can read the page. A tab
+  can have multiple MCP session members, with queued turns and a way to
+  revoke access.
+- **User participation.** The island shows active work and approval cards.
+  The agent can hand off sign-in or another step, and the user can send an
+  element back to a conversation or save steps as a recipe.
+- **Gecko diagnostics.** The bridge supports viewport diffs across deploys,
+  full-page screenshots, redacted HAR, local Web Vitals, React and axe
+  inspection, and download tracking. See [browser diagnostics](browser-diagnostics-plan.md)
+  and the [tested browser builds](browser-compatibility.md).
+
+## Token benchmark
+
+See [the Codex and Zen benchmark](browser-benchmark.md) for measured usage on
+common browser tasks in isolated profiles. The measurements do not cover
+the sharing and approval workflows described above.

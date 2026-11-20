@@ -69,6 +69,8 @@ karşılaştırabilir, ağ ve performans verisi toplayabilir. Tool ayrıntılar�
 
 ## Daha fazla bilgi
 
+- [Tarayıcı araçları karşılaştırması](docs/feature-comparison.md) ve aynı Zen build’inde
+  Kitsune ve ZenPilot ile yapılan [Codex token benchmark’ı](docs/browser-benchmark.md)
 - Ayarlar, iş akışları ve mimari için [docs](docs/README.md)
 - Geliştirme ve live check’ler için [CONTRIBUTING.md](CONTRIBUTING.md)
 - Checkout’u güncelledikten sonra `npm ci`, `npm run build` ve

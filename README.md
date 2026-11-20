@@ -68,6 +68,8 @@ for tool usage and limits.
 
 ## More help
 
+- [Browser tool comparison](docs/feature-comparison.md) and a
+  [Codex token benchmark](docs/browser-benchmark.md) with Kitsune and ZenPilot on the same Zen build
 - [Documentation](docs/README.md) for configuration, workflows, and internals
 - [Contributing](CONTRIBUTING.md) for development and live checks
 - After updating the checkout, rerun `npm ci`, `npm run build`, and

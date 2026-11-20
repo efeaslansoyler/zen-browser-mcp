@@ -12,7 +12,8 @@ to install and connect your MCP client.
 | [Codex integration](codex.md) | Conversation identity, hooks, pick delivery and socket access |
 | [Architecture](architecture.md) | MCP server, browser bridge, actors, transport, sessions and permissions |
 | [Gecko pitfalls](gecko-pitfalls.md) | Browser behavior to check before debugging |
-| [Feature comparison](feature-comparison.md) | Rough equivalents with agent-browser and known limits |
+| [Feature comparison](feature-comparison.md) | Shared-browser tools, Gecko alternatives and general automation |
+| [Browser token benchmark](browser-benchmark.md) | Reproducible Codex runs on the same Zen build, with per-attempt data |
 
 See [Contributing](../CONTRIBUTING.md) for development setup, tests and live
 fixtures.
