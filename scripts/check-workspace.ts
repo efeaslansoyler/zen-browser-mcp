@@ -30,6 +30,10 @@ try {
     original === null || JSON.parse(original).mode !== "ask",
     "Requires your existing auto mode; no settings changed.",
   );
+  // why: A just-started window has no initialized workspaces, so its active space is not known yet.
+  await chrome(
+    `(async () => { const w = Services.wm.getMostRecentWindow("navigator:browser"); await w.delayedStartupPromise; await w.gZenWorkspaces?.promiseInitialized; return "ok"; })()`,
+  );
   assert.equal(
     await chrome(`!!${spaces}?.workspaceEnabled`),
     "true",

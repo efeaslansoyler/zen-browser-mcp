@@ -38,7 +38,7 @@ function harness(config = {}) {
     hostOf: () => "",
   });
   ctx.sessionInfo("A");
-  return { ctx, created, identities };
+  return { ctx, created, identities, win };
 }
 
 test("clean tabs share one Agent container, created on first use", async () => {
@@ -69,4 +69,39 @@ test("a configured container is the default; clean: false still uses the user's 
     h.created.map((o) => o.userContextId),
     [5, 0],
   );
+});
+
+test("a tab opened while the window starts is placed once Zen's workspaces are ready", async () => {
+  const h = harness({ workspace: "Agents" });
+  let startupDone, initDone;
+  const moved = [];
+  h.win.delayedStartupPromise = new Promise((resolve) => (startupDone = resolve));
+  const spaces = {
+    workspaceEnabled: true,
+    promiseInitialized: new Promise((resolve) => (initDone = resolve)),
+    workspaces: [],
+    getWorkspaces: () => spaces.workspaces,
+    async createAndSaveWorkspace(name) {
+      const space = { name, uuid: "{agents}" };
+      spaces.workspaces.push(space);
+      return space;
+    },
+    async moveTabToWorkspace(tab, uuid) {
+      moved.push(uuid);
+      tab.setAttribute("zen-workspace-id", uuid);
+    },
+  };
+  let done = false;
+  const created = h.ctx.createTab("A").then((tab) => ((done = true), tab));
+  await new Promise(setImmediate);
+  assert.equal(h.created.length, 0);
+  h.win.gZenWorkspaces = spaces;
+  startupDone();
+  await new Promise(setImmediate);
+  assert.equal(done, false);
+  assert.deepEqual(spaces.workspaces, []);
+  initDone();
+  const tab = await created;
+  assert.deepEqual(moved, ["{agents}"]);
+  assert.equal(tab.getAttribute("zen-workspace-id"), "{agents}");
 });

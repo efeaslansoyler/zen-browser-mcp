@@ -166,6 +166,8 @@ export function tabs(ctx) {
   async function createTab(session, { clean } = {}) {
     const win = Services.wm.getMostRecentWindow("navigator:browser");
     if (!win) throw new Error("No browser window is open.");
+    // why: A just-opened window has no tab browser or Zen workspaces until its delayed startup ends.
+    await win.delayedStartupPromise;
     const together = !ctx.browserMode || ctx.browserMode === "together";
     const userContextId = together && (clean ?? !!ctx.readConfig().container) ? agentContainerId() : 0;
     const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true, userContextId });
@@ -200,6 +202,7 @@ export function tabs(ctx) {
     const name = ctx.readConfig().workspace;
     const spaces = win.gZenWorkspaces;
     if (!name || !spaces?.workspaceEnabled) return;
+    await spaces.promiseInitialized;
     let space = spaces.getWorkspaces().find((w) => w.name === name);
     space ??= await spaces.createAndSaveWorkspace(name, undefined, true);
     if (space && tab.getAttribute("zen-workspace-id") !== space.uuid) await spaces.moveTabToWorkspace(tab, space.uuid);

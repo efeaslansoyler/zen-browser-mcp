@@ -215,6 +215,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   agent loses its tab as soon as the user switches spaces.
 - `gZenWorkspaces.createAndSaveWorkspace(name, icon, true)` creates a space without switching;
   `moveTabToWorkspace(tab, uuid)` moves a background tab without selecting it.
+- A just-opened window can be listed before `gBrowser` and `gZenWorkspaces` exist, so
+  workspace placement silently did nothing. Await `win.delayedStartupPromise`, then
+  `gZenWorkspaces.promiseInitialized`; until that resolves, `activeWorkspace` is `""`.
 - Layout emulation may need to select a background tab to update its suspended layout.
   Native extension toolbar popups also use the selected tab for `activeTab` and
   `tabs.query({active: true})`. Let the tab and focus handlers finish before opening
