@@ -26,18 +26,49 @@ test("only interactive codex windows count; resume gives the exact thread", () =
   assert.equal(parseTui(["node", "codex"]), null);
 });
 
-test("detached background threads stay hidden; a window shows its newest thread", () => {
-  const threads = [thread(A, 1000), thread(B, 5000), thread(C, 5100, { ephemeral: true })];
+test("options and prompts cannot select a subcommand or supply a resume ID", () => {
+  assert.deepEqual(parseTui(["codex", "-m", "exec"]), {});
+  assert.deepEqual(parseTui(["codex", "--profile", "agents"]), {});
+  assert.deepEqual(parseTui(["codex", "--model", "resume", B]), {});
+  assert.deepEqual(parseTui(["codex", "--", "exec"]), {});
+  assert.deepEqual(parseTui(["codex", "-mexec", "resume", "--image", "review", B, "login"]), { threadId: B });
+  assert.deepEqual(parseTui(["codex", "resume", "--model=exec", B.toUpperCase()]), { threadId: B });
+  assert.deepEqual(parseTui(["codex", "resume", "--model", B, "named-session", A]), { threadId: undefined });
+  assert.deepEqual(parseTui(["codex", "resume", "exec", A]), { threadId: undefined });
+  assert.deepEqual(parseTui(["codex", "resume", B, "--last"]), { threadId: undefined });
+  assert.deepEqual(parseTui(["codex", "resume", "--no-daemon", A]), { threadId: undefined });
+  assert.deepEqual(parseTui(["codex", "resume", "--remote", "unix:///other.sock", A]), { threadId: undefined });
+  assert.deepEqual(parseTui(["codex", "fork", B]), {});
+  assert.equal(parseTui(["codex", "--profile", "resume", "exec", "hi"]), null);
+  assert.equal(parseTui(["codex", "resume", B, "--help"]), null);
+});
+
+test("concurrent windows with unknown ownership never advertise a loaded thread", () => {
+  const threads = [thread(A, 5000), thread(B, 5001), thread(C, 5100, { ephemeral: true })];
   assert.deepEqual([...visibleThreads(threads, [])], []);
-  assert.deepEqual([...visibleThreads(threads, [{ pid: 1, startedAt: 4900 }])], [B]);
+  assert.deepEqual([...visibleThreads([threads[0]], [{ pid: 1, startedAt: 4900 }])], []);
   assert.deepEqual(
-    new Set(
-      visibleThreads(threads, [
-        { pid: 1, startedAt: 900, threadId: A },
+    [
+      ...visibleThreads(threads, [
+        { pid: 1, startedAt: 4900 },
         { pid: 2, startedAt: 4900 },
       ]),
-    ),
-    new Set([A, B]),
+    ],
+    [],
+  );
+});
+
+test("explicit resume IDs confirm only the matching non-ephemeral loaded threads", () => {
+  const threads = [thread(A, 1000), thread(B, 5000), thread(C, 5100, { ephemeral: true })];
+  assert.deepEqual(
+    [
+      ...visibleThreads(threads, [
+        { pid: 1, startedAt: 4900, ...parseTui(["codex", "resume", A]) },
+        { pid: 2, startedAt: 4900 },
+        { pid: 3, startedAt: 4900, ...parseTui(["codex", "resume", C]) },
+      ]),
+    ],
+    [A],
   );
   assert.deepEqual([...visibleThreads([thread(B, 5000)], [{ pid: 1, startedAt: 9000, threadId: A }])], []);
 });

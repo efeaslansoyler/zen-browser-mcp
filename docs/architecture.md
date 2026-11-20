@@ -166,7 +166,7 @@ when the selected instance has no queued picks.
   When an agent tab arrives on a site the user has open, the navigation result lists those
   user tabs (`userTabsOnThisSite`) and points to `request_tab`.
 - A session is *live* while it holds a lifecycle subscription: Claude's MCP process opens one
-  at initialize, Codex conversations through `codex-watch`. Menus ("Give to session",
+  at initialize, Codex conversations through `codex-watch` or lifecycle hooks. Menus ("Give to session",
   pick targets) list live sessions only, named by conversation title. When the last
   connection closes, access survives a 5 s grace period, then the session leaves its tabs; a
   tab with no member left returns to the user (it stays open). Connectionless sessions (one-off calls such as `zenctl`) are never listed
