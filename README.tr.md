@@ -2,6 +2,9 @@
 
 [English](README.md) · [Türkçe](README.tr.md) · [MIT Lisansı](LICENSE)
 
+Bağımsız bir proje: Zen Browser ekibi veya Mozilla ile bağlantısı yoktur, onlar tarafından
+desteklenmez.
+
 Claude Code, Codex veya başka bir MCP client ile Zen ya da Firefox tabanlı
 tarayıcını kullan. Ajan kendi sekmelerinde ve ona verdiğin sekmelerde sayfa
 okuyabilir, tıklayabilir ve yazabilir. Tarayıcının üstündeki ada, ajanın ne

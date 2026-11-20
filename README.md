@@ -2,6 +2,8 @@
 
 [English](README.md) · [Türkçe](README.tr.md) · [MIT License](LICENSE)
 
+An independent project, not affiliated with or endorsed by the Zen Browser team or Mozilla.
+
 Give Claude Code, Codex, or another MCP client access to your Zen or Firefox-based
 browser. The agent can read pages, click and type in its own tabs, and work in a
 tab you share. The island at the top of the browser shows what it is doing and

@@ -60,6 +60,10 @@
     "claude-code",
     "zen-browser",
     "firefox",
+    "librewolf",
+    "floorp",
+    "waterfox",
+    "gecko",
     "browser-automation",
     "model-context-protocol"
   ]
