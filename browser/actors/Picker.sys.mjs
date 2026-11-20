@@ -323,7 +323,7 @@ export class Picker {
       },
       styles: pickStyles(el, win),
       components: componentChain(el, this.env.unwrap),
-      sourceHints: sourceHints(el, this.env.unwrap),
+      sourceHints: sourceHints(el, this.env.unwrap, win),
     };
   }
 }

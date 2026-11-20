@@ -10,7 +10,14 @@ const SNIPPET_AFTER = 4;
 const MAX_COMPONENTS = 3;
 
 // One resolver per hint kind; each returns a location or null.
-const FRAMEWORKS = [["react19", resolveReact19]];
+const FRAMEWORKS = [
+  ["react19", resolveReact19],
+  ["react18", resolveReact18],
+  ["svelte", resolveSvelte],
+  ["astro", resolveAstro],
+  ["vue", resolveVue],
+  ["angular", resolveAngular],
+];
 
 export class SourceResolver {
   #maps = new WeakMap(); // document → Map(script URL → Promise<parsed map | null>)
@@ -107,6 +114,77 @@ async function resolveReact19({ element, owners = [] }, { mapFrame }) {
     chain: chain.map(({ content, ...link }) => link),
     snippet: snippet(own),
   };
+}
+
+// The stacks below record positions in the user's own files, so no source map is needed.
+
+function resolveReact18({ element, owners = [] }) {
+  const place = (source) => userPlace(source?.fileName, source?.lineNumber, source?.columnNumber);
+  return elementChain(
+    "React",
+    place(element),
+    owners.map((owner) => ({ name: owner.name, ...place(owner.source) })),
+  );
+}
+
+// Svelte columns are zero-based.
+function resolveSvelte({ element, parents = [] }) {
+  const place = (loc) => userPlace(loc?.file, loc?.line, loc?.column + 1);
+  return elementChain(
+    "Svelte",
+    place(element),
+    parents.map((parent) => ({ name: parent.name, ...place(parent) })),
+  );
+}
+
+function resolveAstro({ file, loc }) {
+  const [line, column] = String(loc ?? "")
+    .split(":")
+    .map(Number);
+  return elementChain("Astro", userPlace(file, line, column), []);
+}
+
+function resolveVue({ components = [] }) {
+  for (const { name, file } of components) {
+    const place = userPlace(file);
+    if (place) return componentDefinition("Vue", name, place);
+  }
+  return null;
+}
+
+function resolveAngular({ name, file, line }) {
+  const place = userPlace(file, line);
+  return place && componentDefinition("Angular", name, place);
+}
+
+function elementChain(framework, element, components) {
+  if (!element) return null;
+  const chain = [{ role: "element", ...element }];
+  for (const component of components) {
+    if (chain.length > MAX_COMPONENTS) break;
+    if (component.file) chain.push({ role: "component", ...component });
+  }
+  return { framework, precision: "element", chain, snippet: null };
+}
+
+function componentDefinition(framework, name, place) {
+  return {
+    framework,
+    precision: "component",
+    chain: [{ role: "definition", ...(name && { name }), ...place }],
+    snippet: null,
+  };
+}
+
+// { file, line?, column? } for a file outside node_modules, else null.
+function userPlace(file, line, column) {
+  if (typeof file !== "string" || !file || isLibrary(file)) return null;
+  const place = { file };
+  if (Number.isInteger(line) && line > 0) {
+    place.line = line;
+    if (Number.isInteger(column) && column > 0) place.column = column;
+  }
+  return place;
 }
 
 // The first frame outside node_modules, mapped to the original source.

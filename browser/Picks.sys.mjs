@@ -334,10 +334,13 @@ export class Picks {
 function sourceLines({ framework, precision, chain, snippet }) {
   // the map's own path only when it says more than the project path
   const place = ({ file, original, line, column }) =>
-    `${file}:${line}:${column}${original && original !== file && !file.endsWith(`/${original}`) ? ` (${original})` : ""}`;
+    `${file}${line ? `:${line}` : ""}${line && column ? `:${column}` : ""}${original && original !== file && !file.endsWith(`/${original}`) ? ` (${original})` : ""}`;
   const lines = [`Source (${framework}, ${precision}-level):`];
   for (const link of chain)
-    lines.push(link.role === "element" ? `  element: ${place(link)}` : `  <${link.name}> rendered at ${place(link)}`);
+    if (link.role === "element") lines.push(`  element: ${place(link)}`);
+    else if (link.role === "definition")
+      lines.push(`  ${link.name ? `<${link.name}>` : "component"} defined in ${place(link)}`);
+    else lines.push(`  <${link.name}> rendered at ${place(link)}`);
   if (snippet) {
     const width = String(snippet.start + snippet.lines.length - 1).length;
     const language = /\.(\w+)$/.exec(snippet.file)?.[1] ?? "";

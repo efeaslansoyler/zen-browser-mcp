@@ -180,28 +180,139 @@ const componentName = (type) =>
 const fiberKey = (raw) =>
   Object.keys(raw).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
 
-// Unresolved hints for the source resolver: React 19 keeps the JSX call site of every element and
-// owner component in _debugStack (an Error); the parent maps these stacks through source maps.
-export function sourceHints(el, unwrap) {
-  try {
-    const raw = unwrap(el);
-    const key = fiberKey(raw);
-    const stackOf = (fiber) => {
-      const stack = fiber?._debugStack?.stack;
-      return typeof stack === "string" ? truncate(stack, MAX_STACK) : null;
-    };
-    const element = key && stackOf(raw[key]);
-    if (!element) return null;
-    const owners = [];
-    for (let owner = raw[key]._debugOwner; owner && owners.length < MAX_OWNERS; owner = owner._debugOwner) {
-      const stack = stackOf(owner);
-      const name = owner.type && typeof owner.type !== "string" ? componentName(owner.type) : null;
-      if (stack && typeof name === "string" && name) owners.push({ name, stack });
-    }
-    return { react19: { element, owners } };
-  } catch {}
-  return null;
+// Unresolved hints for the source resolver, one per stack whose dev build left metadata on the
+// element. Page values are copied into plain strings and numbers.
+export function sourceHints(el, unwrap, win) {
+  const hints = {};
+  for (const [key, collect] of HINTS) {
+    try {
+      const hint = collect(el, unwrap, win);
+      if (hint) hints[key] = hint;
+    } catch {}
+  }
+  return Object.keys(hints).length ? hints : null;
 }
+
+const MAX_PATH = 500;
+const text = (value) => (typeof value === "string" && value ? truncate(value, MAX_PATH) : null);
+const number = (value) => (Number.isFinite(value) ? value : null);
+const ownerName = (fiber) => {
+  const name = fiber.type && typeof fiber.type !== "string" ? componentName(fiber.type) : null;
+  return typeof name === "string" && name ? name : null;
+};
+
+// React 19 keeps the JSX call site of every element and owner component in _debugStack (an
+// Error); the parent maps these stacks through source maps.
+function react19Hints(el, unwrap) {
+  const raw = unwrap(el);
+  const key = fiberKey(raw);
+  const stackOf = (fiber) => {
+    const stack = fiber?._debugStack?.stack;
+    return typeof stack === "string" ? truncate(stack, MAX_STACK) : null;
+  };
+  const element = key && stackOf(raw[key]);
+  if (!element) return null;
+  const owners = [];
+  for (let owner = raw[key]._debugOwner; owner && owners.length < MAX_OWNERS; owner = owner._debugOwner) {
+    const stack = stackOf(owner);
+    const name = ownerName(owner);
+    if (stack && name) owners.push({ name, stack });
+  }
+  return { element, owners };
+}
+
+// React 18 (with Babel's JSX source transform) records each element's JSX position in _debugSource.
+function react18Hints(el, unwrap) {
+  const raw = unwrap(el);
+  const key = fiberKey(raw);
+  const sourceOf = (fiber) => {
+    const source = fiber?._debugSource;
+    const fileName = text(source?.fileName);
+    return fileName
+      ? { fileName, lineNumber: number(source.lineNumber), columnNumber: number(source.columnNumber) }
+      : null;
+  };
+  const element = key && sourceOf(raw[key]);
+  if (!element) return null;
+  const owners = [];
+  for (let owner = raw[key]._debugOwner; owner && owners.length < MAX_OWNERS; owner = owner._debugOwner) {
+    const source = sourceOf(owner);
+    const name = ownerName(owner);
+    if (source && name) owners.push({ name, source });
+  }
+  return { element, owners };
+}
+
+// Svelte 5 dev builds: __svelte_meta.loc is the element's position (column zero-based); its
+// parent entries include the places where the enclosing components were rendered.
+function svelteHints(el, unwrap) {
+  const meta = unwrap(el).__svelte_meta;
+  const file = text(meta?.loc?.file);
+  if (!file) return null;
+  const parents = [];
+  for (let entry = meta.parent; entry && parents.length < MAX_OWNERS; entry = entry.parent) {
+    const parentFile = text(entry.file);
+    if (entry.type === "component" && parentFile)
+      parents.push({
+        name: text(entry.componentTag),
+        file: parentFile,
+        line: number(entry.line),
+        column: number(entry.column),
+      });
+  }
+  return { element: { file, line: number(meta.loc.line), column: number(meta.loc.column) }, parents };
+}
+
+// Astro's dev server annotates elements with their .astro file and "line:column", and its dev
+// toolbar removes the attributes soon after load, so the actor records them at DOMContentLoaded.
+const ASTRO_FILE = "data-astro-source-file";
+const ASTRO_LOC = "data-astro-source-loc";
+const astroSources = new WeakMap();
+
+export function rememberSourceAttributes(doc) {
+  for (const el of doc.querySelectorAll(`[${ASTRO_FILE}]`))
+    astroSources.set(el, { file: text(el.getAttribute(ASTRO_FILE)), loc: text(el.getAttribute(ASTRO_LOC)) });
+}
+
+function astroHints(el) {
+  const file = text(el.getAttribute(ASTRO_FILE));
+  return file ? { file, loc: text(el.getAttribute(ASTRO_LOC)) } : (astroSources.get(el) ?? null);
+}
+
+// A Vue 3 dev build records each component's file (no line), nearest component first.
+function vueHints(el, unwrap) {
+  const components = [];
+  for (
+    let instance = unwrap(el).__vueParentComponent;
+    instance && components.length < MAX_OWNERS;
+    instance = instance.parent
+  ) {
+    const file = text(instance.type?.__file);
+    if (file) components.push({ name: text(instance.type.__name || instance.type.name), file });
+  }
+  return components.length ? { components } : null;
+}
+
+// Angular dev mode: the global ng helpers find the element's component, whose definition
+// carries the class's debug info (file and line of the class).
+function angularHints(el, unwrap, win) {
+  const ng = win && unwrap(win).ng;
+  if (!ng) return null;
+  const raw = unwrap(el);
+  const component = ng.getComponent?.(raw) ?? ng.getOwningComponent?.(raw);
+  const info = component?.constructor?.["ɵcmp"]?.debugInfo;
+  const file = text(info?.filePath);
+  return file ? { name: text(info.className), file, line: number(info.lineNumber) } : null;
+}
+
+const HINTS = [
+  ["react19", react19Hints],
+  ["react18", react18Hints],
+  ["svelte", svelteHints],
+  ["astro", astroHints],
+  ["vue", vueHints],
+  ["angular", angularHints],
+];
 
 // A console.* argument is a page object: try JSON without Xrays, fall back to String.
 export function formatArg(arg, unwrap) {

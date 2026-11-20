@@ -77,6 +77,18 @@ site rules allow it, and within two seconds; otherwise the pick says
 `Source: unknown` and keeps its full content. Production pages and other stacks
 send the same pick as before.
 
+Other stacks give the location their development build records, without a
+snippet. The pick names the framework and whether the location points at the
+element itself or only at its component:
+
+| Stack | Location |
+| --- | --- |
+| React 18 | element: the JSX file, line and column, plus component call sites |
+| Svelte 5 | element: the file, line and column, plus component call sites |
+| Astro 5–6 (dev toolbar on) | element: the `.astro` file and line; Astro 7 no longer records it |
+| Vue 3 | component: the nearest component's file, without a line |
+| Angular | component: the component class's file and line |
+
 The destination menu shows whether delivery is immediate, follows your next
 message, or waits for the next browser tool call:
 

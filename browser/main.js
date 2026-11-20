@@ -927,9 +927,11 @@ function logError(where, e) {
         parent: { esModuleURI: `resource://zenmcp/actors/ZenMcpParent.sys.mjs?v=${version}` },
         child: {
           esModuleURI: `resource://zenmcp/actors/ZenMcpChild.sys.mjs?v=${version}`,
-          // the right-clicked element for "Show to agent…"; the others feed recordings
+          // the right-clicked element for "Show to agent…"; dev source attributes that a page
+          // removes after load (Astro); the others feed recordings
           events: {
             contextmenu: { capture: true, mozSystemGroup: true },
+            DOMContentLoaded: { capture: true, mozSystemGroup: true },
             pageshow: { capture: true, mozSystemGroup: true },
             pagehide: { capture: true, mozSystemGroup: true },
             click: { capture: true, mozSystemGroup: true },
