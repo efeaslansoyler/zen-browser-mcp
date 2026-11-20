@@ -4,9 +4,9 @@
 // in tool descriptions or the skill (skills/zen-browser).
 
 const coreInstructions = [
-  "These tools drive the user's own browser (Zen or another Firefox-based one). Use tabs_context_mcp to discover tabs, extensions and recipes.",
+  "These tools drive the user's own Zen or Firefox-based browser. Start with tabs_context_mcp: your tabs, the user's open tabs (userTabs), extensions and recipes.",
   'If the user means a page already open (a site by name, "this page", a video they are watching), call request_tab on it from userTabs; use tabs_create_mcp only for new URLs, when nothing matches or the user declines.',
-  'For a known new URL, call tabs_create_mcp directly with url and read: "all" or "interactive" to open and read it in one call.',
+  'For a new URL: tabs_create_mcp with url and read ("all" or "interactive") opens and reads it in one call, no tabs_context_mcp needed.',
   "User-only steps (login, 2FA codes, captchas, payments, irreversible confirmations): hand_to_user, then check the page; never ask for passwords or codes. Questions and choices: ask_user.",
   "Prefer read_page and find over screenshots; batch predictable steps with browser_batch.",
   "Recipes are tasks the user showed you once: recipes get returns their steps. For an unclear repetitive workflow, ask with show_me instead of guessing.",
@@ -27,5 +27,5 @@ export const channelInstructions = [
 // Other clients (Codex in particular).
 export const clientInstructions = [
   coreInstructions,
-  "Codex conversations connect automatically; if none appears in the browser, call connect_session with the exact CODEX_THREAD_ID from your environment, never a guess.",
+  "Codex conversations connect automatically; if none appears, call connect_session with the exact CODEX_THREAD_ID from your environment, never a guess.",
 ].join(" ");

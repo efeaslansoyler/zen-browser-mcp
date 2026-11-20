@@ -199,11 +199,11 @@ test("server instructions keep the tool routing rules", async () => {
   const { channelInstructions, clientInstructions } = await import("../dist/instructions.js");
   for (const text of [channelInstructions, clientInstructions]) {
     for (const rule of [
-      "tabs_context_mcp",
+      "Start with tabs_context_mcp",
       "already open",
       "request_tab",
       "tabs_create_mcp only",
-      'read: "all" or "interactive"',
+      "tabs_create_mcp with url and read",
       "hand_to_user",
       "never ask for passwords or codes",
       "ask_user",
