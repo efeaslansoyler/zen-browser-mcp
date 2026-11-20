@@ -26,6 +26,13 @@ const MAX_TEXT = 100000;
 const RECORDING_KEY = "zen-mcp:recording";
 const RECORD_EVENTS = new Set(["click", "change", "keydown", "input", "pagehide"]);
 
+// why: A sandbox inherits the document's principal; on a browser-internal page that is chrome privilege.
+function pageSandbox(win) {
+  if (!win.document.nodePrincipal.isContentPrincipal && !win.document.nodePrincipal.isNullPrincipal)
+    throw new Error("Agents can't run code in browser-internal pages.");
+  return Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
+}
+
 export class ZenMcpChild extends JSWindowActorChild {
   #operations = new Map();
   #refs = new Map();
@@ -291,7 +298,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   // why: Gecko's privileged reads can bypass content emulation overrides.
   #pageMetrics() {
     const win = this.contentWindow;
-    const sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
+    const sandbox = pageSandbox(win);
     try {
       return JSON.parse(
         Cu.evalInSandbox(
@@ -312,7 +319,7 @@ export class ZenMcpChild extends JSWindowActorChild {
 
   async #eval(code) {
     const win = this.contentWindow;
-    const sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
+    const sandbox = pageSandbox(win);
     let value = Cu.evalInSandbox(code, sandbox, null, "zen-mcp", 1);
     if (value && typeof value.then === "function") value = await value;
     return info.describe(value);
@@ -326,7 +333,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const win = this.contentWindow;
     let sandbox, timer;
     try {
-      sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
+      sandbox = pageSandbox(win);
       Object.defineProperty(sandbox, "window", { value: sandbox });
       Object.defineProperty(sandbox, "document", { value: Cu.waiveXrays(this.document) });
       sandbox.scanTarget = ref ? Cu.waiveXrays(this.#element(ref)) : sandbox.document;

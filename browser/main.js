@@ -3,12 +3,19 @@
 const zenMcpApp = typeof zenMcpName === "string" ? zenMcpName : "zen-mcp";
 const zenMcpRuntimeDir = () =>
   Services.env.get("XDG_RUNTIME_DIR") || globalThis.zenMcpRuntime || Services.env.get("TMPDIR") || "/tmp";
+const zenMcpSharedTemp = () => /\/(?:var\/)?tmp\/?$/.test(zenMcpRuntimeDir());
+// why: Other users can plant symlinks at fixed names in a shared temp directory; use the private instance folder there.
+const zenMcpFilesDir = () => {
+  if (!zenMcpSharedTemp()) return zenMcpRuntimeDir();
+  const home = Services.env.get("HOME");
+  return `${zenMcpRuntimeDir()}/${zenMcpApp}-${[...home].reduce((hash, c) => (Math.imul(hash, 31) + c.codePointAt(0)) >>> 0, 0).toString(16)}`;
+};
 
 function logError(where, e) {
   const msg = `${new Date().toISOString()} ${where}: ${e}\n${e?.stack ?? ""}\n`;
   try {
     const f = Components.classes["@mozilla.org/file/local;1"].createInstance(Components.interfaces.nsIFile);
-    f.initWithPath(`${zenMcpRuntimeDir()}/${zenMcpApp}.log`);
+    f.initWithPath(`${zenMcpFilesDir()}/${zenMcpApp}.log`);
     const out = Components.classes["@mozilla.org/network/file-output-stream;1"].createInstance(
       Components.interfaces.nsIFileOutputStream,
     );
@@ -187,7 +194,7 @@ function logError(where, e) {
       L,
       version,
       app: zenMcpApp,
-      runtimeDir: zenMcpRuntimeDir(),
+      runtimeDir: zenMcpFilesDir(),
       logError,
       localFile,
       readTextFile,
@@ -476,7 +483,7 @@ function logError(where, e) {
         return ctx.island;
       },
       maxEdge: MAX_EDGE,
-      shotsDir: `${zenMcpRuntimeDir()}/${zenMcpApp}-picks`,
+      shotsDir: `${zenMcpFilesDir()}/${zenMcpApp}-picks`,
       hasAccess: (browserId, session) => access.has(browserId, session),
       assertSiteAccess: (browser) => ctx.assertSiteAccess(browser),
       logError,
@@ -544,12 +551,12 @@ function logError(where, e) {
     });
 
     ctx.assertAgentDataMode = assertAgentDataMode;
-    ctx.artifacts = new Artifacts(`${zenMcpRuntimeDir()}/${zenMcpApp}-artifacts`, { setTimeout });
+    ctx.artifacts = new Artifacts(`${zenMcpFilesDir()}/${zenMcpApp}-artifacts`, { setTimeout });
     ctx.video = new TabVideo(videoEnvironment(ctx));
     ctx.networkControl = new NetworkControl();
     const { HarCapture, validateHarProjection } = load("HarCapture");
     ctx.validateHarProjection = validateHarProjection;
-    const harDir = `${zenMcpRuntimeDir()}/zen-mcp-har`;
+    const harDir = `${zenMcpFilesDir()}/zen-mcp-har`;
     ctx.har = new HarCapture({
       allowed: (tabId, session, host) => !state.paused && access.has(tabId, session) && ctx.siteAllowed(host),
       setTimeout,
@@ -594,7 +601,7 @@ function logError(where, e) {
 
     const eventFiles = (name) =>
       new EventFiles({
-        dir: `${zenMcpRuntimeDir()}/${zenMcpApp}-${name}`,
+        dir: `${zenMcpFilesDir()}/${zenMcpApp}-${name}`,
         setTimeout,
         logError,
       });
@@ -827,6 +834,12 @@ function logError(where, e) {
 
     function start() {
       const file = listener.prepare();
+      if (zenMcpSharedTemp()) {
+        const files = localFile(zenMcpFilesDir());
+        if (!files.exists()) files.create(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
+        if (files.isSymlink() || !files.isDirectory() || files.permissions & 0o077)
+          throw new Error(`Private runtime folder must be a 0700 directory: ${files.path}`);
+      }
       ctx.shuttingDown = false;
       sss.loadAndRegisterSheet(markSheet, sss.USER_SHEET);
       const { Island } = load("Island");
@@ -857,7 +870,7 @@ function logError(where, e) {
       ctx.artifacts.sweep().catch((e) => logError("exported files", e));
       // why: Sweep temporary captures left by a reload or restart that interrupted recording.
       Promise.resolve()
-        .then(() => ctx.recipes.io.remove(`${zenMcpRuntimeDir()}/${zenMcpApp}-recordings`))
+        .then(() => ctx.recipes.io.remove(`${zenMcpFilesDir()}/${zenMcpApp}-recordings`))
         .catch(() => {});
       ctx.downloads.start().catch((e) => logError("downloads", e));
       ctx.watches.env.events.start().catch((e) => logError("watch", e));

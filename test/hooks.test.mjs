@@ -119,3 +119,20 @@ test("hooks refuse to point at the npx cache", async () => {
   assert.doesNotThrow(() => assertStableInstall("/usr/lib/node_modules/zen-browser-mcp"));
   assert.doesNotThrow(() => assertStableInstall("/home/u/src/zen-browser-mcp"));
 });
+
+test("sockets owned by another OS user are refused", async () => {
+  const { foreignOwned } = await import("../dist/paths.js");
+  const { call } = await import("../dist/zen.js");
+  if (process.getuid?.() === 0) return;
+  assert.equal(foreignOwned("/etc/passwd"), true);
+  assert.equal(foreignOwned(import.meta.filename), false);
+  assert.equal(foreignOwned("/nonexistent/zen-mcp.sock"), false);
+  const previous = process.env.ZEN_MCP_SOCKET;
+  process.env.ZEN_MCP_SOCKET = "/etc/passwd";
+  try {
+    await assert.rejects(call("ping", {}, 1000), /belongs to another user/);
+  } finally {
+    if (previous === undefined) delete process.env.ZEN_MCP_SOCKET;
+    else process.env.ZEN_MCP_SOCKET = previous;
+  }
+});

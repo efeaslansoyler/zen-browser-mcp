@@ -4,7 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import { inputTools } from "../browser/InputTools.sys.mjs";
 import { readTools } from "../browser/ReadTools.sys.mjs";
 import { normalizeConfig } from "../browser/SiteRules.sys.mjs";
-import { bridgeContext } from "./support/bridge.mjs";
+import { bridgeContext, uri } from "./support/bridge.mjs";
 
 function harness({ sites, rules = {}, redirect, waitForLoad = async () => {}, userTabs = [] } = {}) {
   const loads = [];
@@ -14,7 +14,7 @@ function harness({ sites, rules = {}, redirect, waitForLoad = async () => {}, us
   const tabs = new Map();
   const services = (globalThis.Services = {
     uriFixup: {
-      getFixupURIInfo: (url) => ({ preferredURI: { spec: new URL(url.includes(":") ? url : "https://" + url).href } }),
+      getFixupURIInfo: (url) => ({ preferredURI: uri(url.includes(":") ? url : "https://" + url) }),
     },
     io: { newURI: (url) => ({ host: new URL(url).hostname }) },
     scriptSecurityManager: { getSystemPrincipal: () => ({}) },
@@ -92,7 +92,7 @@ test("creating a tab keeps the metadata-only default and can append a bounded re
   const page = await h.tool("tabs_create_mcp", { url: "example.test/form", read: "all", clean: true });
   assert.deepEqual(JSON.parse(page.content[0].text), { tabId: 3, url: "https://example.test/form" });
   assert.equal(h.tabs.get(3).clean, true);
-  assert.deepEqual(h.loads, ["example.test", "example.test/form"]);
+  assert.deepEqual(h.loads, ["https://example.test/", "https://example.test/form"]);
   assert.equal(page.content[1].text, 'button "Continue" [ref_1]');
   assert.equal(h.reads.length, 1);
   assert.equal(h.reads[0].url, "https://example.test/form");
@@ -134,7 +134,7 @@ test("a blocked destination after redirect is never read", async () => {
   const result = await h.tool("tabs_create_mcp", { url: "example.test", read: "all" });
   assert.equal(result.ok, false);
   assert.match(result.error, /Site access blocked/);
-  assert.deepEqual(h.loads, ["example.test"]);
+  assert.deepEqual(h.loads, ["https://example.test/"]);
   assert.deepEqual(h.reads, []);
 });
 
@@ -155,7 +155,7 @@ test("creation, navigation and the destination read each enforce their own permi
   };
   assert.equal((await h.tool("tabs_create_mcp", { url: "example.test", read: "all" })).ok, true);
   assert.deepEqual(h.prompts, [
-    ["about:blank", 'Claude wants to: go to "example.test"'],
+    ["about:blank", 'Claude wants to: go to "https://example.test/"'],
     ["https://example.test/", "Claude wants to: read_page"],
   ]);
 });
@@ -167,11 +167,11 @@ test("a second navigation queues behind the new tab's load and read", async () =
   await setImmediate();
   const second = h.tool("navigate", { tabId: 1, url: "example.test/second" });
   await setImmediate();
-  assert.deepEqual(h.loads, ["example.test/first"]);
+  assert.deepEqual(h.loads, ["https://example.test/first"]);
   resolve();
   assert.equal((await first).ok, true);
   assert.equal((await second).ok, true);
-  assert.deepEqual(h.loads, ["example.test/first", "example.test/second"]);
+  assert.deepEqual(h.loads, ["https://example.test/first", "https://example.test/second"]);
   assert.equal(h.reads[0].url, "https://example.test/first");
 });
 

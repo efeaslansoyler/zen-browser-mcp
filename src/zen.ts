@@ -1,6 +1,6 @@
 import net from "node:net";
 import { randomUUID } from "node:crypto";
-import { PACKAGE } from "./paths.ts";
+import { PACKAGE, foreignOwned } from "./paths.ts";
 import { browserResolver, instanceLabel, type Selection } from "./instances.ts";
 
 export type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -60,6 +60,10 @@ function request(
   as: string,
 ): Promise<BrowserContent> {
   return new Promise((resolve, reject) => {
+    if (foreignOwned(socketPath)) {
+      reject(new Error(`Refusing the browser socket ${socketPath}: it belongs to another user.`));
+      return;
+    }
     const socket = net.createConnection(socketPath);
     let buffer = "";
     socket.setTimeout(timeout, () =>

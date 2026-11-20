@@ -95,6 +95,12 @@ export function bridgeContext(fakes = {}) {
   return ctx;
 }
 
+// why: Fake nsIURI with the fields the bridge reads, so scheme checks see what Gecko gives them.
+export function uri(url) {
+  const parsed = new URL(url);
+  return { spec: parsed.href, scheme: parsed.protocol.slice(0, -1), host: parsed.hostname, filePath: parsed.pathname };
+}
+
 export function testCall(ctx, { session = "A", agent = { id: "codex" }, tabs = [] } = {}) {
   const call = Object.assign(new Cancellation(), {
     session,

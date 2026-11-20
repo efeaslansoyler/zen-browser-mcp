@@ -47,8 +47,8 @@ function harness(run) {
     { timers: timerStub },
   );
   const actor = new Actor();
-  actor.document = {};
-  actor.contentWindow = {};
+  actor.document = { nodePrincipal: { isContentPrincipal: true } };
+  actor.contentWindow = { document: actor.document };
   actor.browsingContext = { id: 1 };
   return { actor, sandboxes, timers, send: (name, data = {}) => actor.receiveMessage({ name, data }) };
 }
@@ -122,4 +122,11 @@ test("bundled axe distribution and license exactly match the locked npm dependen
       fs.readFileSync(new URL(`../node_modules/axe-core/${upstream}`, import.meta.url)),
     );
   }
+});
+
+test("page code never runs in a browser-internal document", async () => {
+  const h = harness(() => assert.fail("axe must not run"));
+  h.actor.document.nodePrincipal = { isContentPrincipal: false, isNullPrincipal: false, isSystemPrincipal: true };
+  assert.match((await h.send("axe", {})).error, /browser-internal pages/);
+  assert.equal(h.sandboxes.length, 0);
 });

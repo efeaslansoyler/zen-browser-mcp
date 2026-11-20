@@ -31,6 +31,18 @@ like form submission. Use `ask` or a site rule if the distinction matters.
 Approvals in a batch are scoped to the current document, site, permissions
 and tab access. The bridge checks each step and stops on a denial.
 
+## Browser pages and local files
+
+Agents work only on web pages: `http`, `https`, `data` and `about:blank`. Browser-internal pages
+(`about:` pages such as settings, `chrome:`, `resource:`, extension pages opened in a tab and
+anything else with browser privileges) are closed to them, even in a tab you give them: they
+can't open, read or run code there.
+
+Opening a file from your computer (`file:` URLs or a plain path) is the separate operation
+`navigate.local_file`, because the agent can then read the file and send it elsewhere. It asks
+in both templates, can be set in custom rules, and is denied in the autonomous modes unless a
+custom rule allows it.
+
 ## Custom rules
 
 ```sh

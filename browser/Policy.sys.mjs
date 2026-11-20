@@ -100,6 +100,7 @@ export const SECTIONS = [
       ["network_control.offline", Q, Q, "Simulate offline HTTP requests in an agent-opened tab."],
       ["network_control.clear", Q, Q, "Clear the HTTP rules in an agent-opened tab."],
       ["file_upload", Q, Q, "Upload files from your computer to a page."],
+      ["navigate.local_file", Q, Q, "Open a file from your computer in an agent tab (the agent can then read it)."],
       ["handle_dialog.accept", Q, Q, 'Accept a page\'s confirm or prompt ("Delete this?" → OK).'],
       ["extensions.act", Q, Q, "Click or type inside an extension's panel (password managers, wallets…)."],
     ],
@@ -161,6 +162,8 @@ function operationKey(tool, args) {
       return `${tool}.${args.action}`;
     case "browser_batch":
       return null;
+    case "navigate":
+      return /^file:/i.test(args.url ?? "") ? "navigate.local_file" : "navigate";
     case "computer":
       return COMPUTER_ACTIONS[args.action] ?? "computer.click";
     case "clipboard":
@@ -200,6 +203,8 @@ export function ruleOf(key, mode = "auto", custom = null) {
 
 export function autonomousRule(key, rule) {
   if (key.startsWith("clipboard.")) return "deny";
+  // why: Nobody is there to notice a local file being read and sent elsewhere.
+  if (key === "navigate.local_file" && rule === "ask") return "deny";
   return rule === "ask" ? "allow" : rule;
 }
 

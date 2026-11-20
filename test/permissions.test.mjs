@@ -4,10 +4,10 @@ import { normalizeConfig, normalizeSites } from "../browser/SiteRules.sys.mjs";
 import { permissions } from "../browser/Permissions.sys.mjs";
 import * as policy from "../browser/Policy.sys.mjs";
 import { TabAccess } from "../browser/TabAccess.sys.mjs";
-import { bridgeContext, testCall } from "./support/bridge.mjs";
+import { bridgeContext, testCall, uri } from "./support/bridge.mjs";
 
 globalThis.Services = {
-  uriFixup: { getFixupURIInfo: (url) => ({ preferredURI: { spec: new URL(url).href } }) },
+  uriFixup: { getFixupURIInfo: (url) => ({ preferredURI: uri(url) }) },
   io: { newURI: (url) => ({ host: new URL(url).hostname }) },
 };
 
@@ -18,7 +18,7 @@ function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", an
   const browser = { browserId: 1, browsingContext: {} };
   const navigate = (url, document = {}) => {
     const parsed = new URL(url);
-    browser.currentURI = { host: parsed.hostname, prePath: parsed.origin, spec: parsed.href };
+    browser.currentURI = { ...uri(url), host: parsed.hostname, prePath: parsed.origin };
     browser.browsingContext.currentWindowGlobal = document;
   };
   navigate(site);
@@ -432,4 +432,40 @@ test("custom rules apply to browser_settings reads and tab_work", async () => {
     }
     assert.equal(h.prompts.length, rule === "ask" ? 2 : 0);
   }
+});
+
+test("browser-internal pages are closed to agents and local files need the user's approval", async () => {
+  for (const url of ["about:config", "about:preferences", "chrome://browser/content/browser.xhtml", "javascript:1"]) {
+    const h = harness();
+    const result = await h.batch([h.action("navigate", { url })]);
+    assert(result.isError, url);
+    assert.match(result[0].text, /browser-internal pages/);
+    assert.equal(h.browser.currentURI.host, "ordinary.test");
+  }
+  const h = harness({ answer: () => "cancelled" });
+  const denied = await h.batch([h.action("navigate", { url: "file:///etc/passwd" })]);
+  assert(denied.isError);
+  assert.match(h.prompts[0].message, /go to "file:\/\/\/etc\/passwd"/);
+  assert.equal(h.browser.currentURI.host, "ordinary.test");
+
+  h.navigate("about:preferences", {});
+  const read = await h.batch([h.action("read_page")]);
+  assert.match(read[0].text, /browser-internal page/);
+});
+
+test("local files follow custom rules and are denied unattended unless allowed", () => {
+  assert.equal(policy.operationOf("navigate", { url: "file:///home/u/notes.html" }), "navigate.local_file");
+  assert.equal(policy.operationOf("navigate", { url: "https://example.test/" }), "navigate");
+  assert.equal(policy.autonomousRule("navigate.local_file", "ask"), "deny");
+  assert.equal(policy.autonomousRule("navigate.local_file", "allow"), "allow");
+  assert.equal(policy.autonomousRule("navigate", "ask"), "allow");
+});
+
+test("a custom rule can stop agents from closing tabs", async () => {
+  const custom = policy.parsePermissions(JSON.stringify({ base: "auto", rules: { tabs_close_mcp: "deny" } }));
+  const h = harness({ mode: "custom", custom });
+  h.context.tools.tabs_close_mcp = async () => (h.effects.push("closed"), []);
+  const result = await h.batch([h.action("tabs_close_mcp")]);
+  assert.match(result[0].text, /settings don't allow this \(tabs_close_mcp\)/);
+  assert.deepEqual(h.effects, []);
 });

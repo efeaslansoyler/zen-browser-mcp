@@ -101,8 +101,25 @@ export function config(ctx) {
     assertSiteHost(host);
   }
 
+  // why: Browser-internal pages run with chrome privilege; an agent there could act as the browser.
+  const AGENT_SCHEMES = new Set(["http", "https", "file", "data"]);
+  function agentPage(uri) {
+    if (!uri) return true;
+    if (uri.scheme === "about") return ["blank", "srcdoc"].includes(uri.filePath);
+    return AGENT_SCHEMES.has(uri.scheme);
+  }
+
+  function assertAgentURL(uri) {
+    if (!agentPage(uri))
+      throw new Error(
+        `Agents can't open browser-internal pages (${uri.scheme}:). Use http, https, data or, with the user's approval, file URLs.`,
+      );
+  }
+
   function assertSiteAccess(browser) {
     const source = ctx.controlledSource(browser);
+    if (!agentPage(source.currentURI) || source.contentPrincipal?.isSystemPrincipal)
+      throw new Error("This tab shows a browser-internal page, which agents can't use.");
     assertSiteHost(ctx.hostOf(source));
     // why: Apply the same site checks to embedded remote content from extension UI.
     for (const root of source === browser ? [source] : [source, browser]) {
@@ -114,6 +131,7 @@ export function config(ctx) {
   }
 
   return {
+    assertAgentURL,
     readConfig,
     writeConfig,
     toggleMode,

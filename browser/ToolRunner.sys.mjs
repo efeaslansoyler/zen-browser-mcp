@@ -51,6 +51,9 @@ export function toolRunner(ctx) {
             args.url,
             Services.uriFixup.FIXUP_FLAG_FIX_SCHEME_TYPOS,
           ).preferredURI;
+          ctx.assertAgentURL(destination);
+          // why: Permission rules see the resolved URL, so a bare path counts as a local file.
+          args.url = destination.spec;
           ctx.assertSiteURL(destination.spec);
           ctx.assertNotHeld(args.tabId, call.session, destination.spec);
         }
@@ -68,8 +71,9 @@ export function toolRunner(ctx) {
           break;
         }
       }
-      // why: Page-less calls must still honor custom operation rules.
-      if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(call, tool, args);
+      // why: Page-less and cleanup calls skip the page check but must still honor custom operation rules.
+      if ((!browser || cleanup) && !["request_tab", "tab_work"].includes(tool))
+        await ctx.requireToolPermission(call, tool, args);
       call.check();
       if (browser) access.check(args.tabId, call.session);
       const input =

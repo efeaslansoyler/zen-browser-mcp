@@ -14,6 +14,15 @@ const safeHeaders = {
     /^(?:(?:public|private|no-cache|no-store|immutable|must-revalidate|proxy-revalidate|no-transform|(?:s-maxage|max-age|stale-while-revalidate|stale-if-error)=\d+)(?:,\s*|$))+$/i,
 };
 
+// why: A marker segment can arrive percent-encoded and must still redact the value after it.
+function decodedSegment(segment = "") {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function sanitizeHarURL(value, base) {
   const url = new URL(value, base);
   if (!["http:", "https:"].includes(url.protocol)) throw new Error("Unsupported request URL.");
@@ -29,7 +38,7 @@ export function sanitizeHarURL(value, base) {
       } catch {
         return "redacted";
       }
-      return /^(?:token|password|secret|session|reset|verify|invite|code)$/i.test(path[index - 1] ?? "") ||
+      return /^(?:token|password|secret|session|reset|verify|invite|code)$/i.test(decodedSegment(path[index - 1])) ||
         /@|[\w-]{24,}|^\d{6,}$|%/.test(decoded)
         ? "redacted"
         : segment;

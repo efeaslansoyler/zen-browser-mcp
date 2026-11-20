@@ -26,6 +26,21 @@ change tool names, parameters or results.
   cut off by a bridge stop. Run `zen-browser-mcp skill install` to update an installed skill.
 - The README and installation guide mark macOS as untested.
 
+### Security
+
+- Agents could open browser-internal pages such as `about:config` and run approved page
+  JavaScript there with the browser's own privileges. These pages are now closed to agents in
+  every mode, and page code refuses to run in them.
+- Agents could open and read local files with `file:` URLs without a question in auto mode.
+  This is now the operation `navigate.local_file`, which asks in both templates and is denied in
+  the autonomous modes unless a custom rule allows it.
+- Pick messages indent page HTML inside a fence the page can't close, and page-derived names
+  stay on one line, so page content can't pass for the user's note.
+- A custom deny for `tabs_close_mcp` is enforced.
+- HAR export redacts values after percent-encoded sensitive path segments too.
+- When the runtime folder is a shared temp directory, the bridge keeps its files in its private
+  per-user folder, and the MCP server refuses browser and OpenCode sockets owned by another user.
+
 ### Fixed
 
 - `install` can write a loader into a root-owned browser folder on macOS too (untested).

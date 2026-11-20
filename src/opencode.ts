@@ -4,13 +4,14 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { NAME, PACKAGE, PACKAGE_DIR, RUNTIME_DIR } from "./paths.ts";
+import { NAME, PACKAGE, PACKAGE_DIR, RUNTIME_DIR, foreignOwned } from "./paths.ts";
 import { call } from "./zen.ts";
 
 export const openCodeSocket = (pid: number) => path.join(RUNTIME_DIR, `${NAME}-opencode`, `${pid}.sock`);
 
 export function pushToOpenCode(text: string, pid = process.ppid): Promise<boolean> {
   return new Promise((resolve) => {
+    if (foreignOwned(openCodeSocket(pid))) return resolve(false);
     const socket = net.createConnection(openCodeSocket(pid));
     let reply = "";
     socket.setTimeout(15_000, () => socket.destroy());
