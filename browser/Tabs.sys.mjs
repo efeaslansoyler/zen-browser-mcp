@@ -181,7 +181,8 @@ export function tabs(ctx) {
   async function createTab(session, { clean } = {}) {
     const win = Services.wm.getMostRecentWindow("navigator:browser");
     if (!win) throw new Error("No browser window is open.");
-    const userContextId = (clean ?? !!ctx.readConfig().container) ? agentContainerId() : 0;
+    const together = !ctx.browserMode || ctx.browserMode === "together";
+    const userContextId = together && (clean ?? !!ctx.readConfig().container) ? agentContainerId() : 0;
     const tab = win.gBrowser.addTrustedTab("about:blank", { inBackground: true, userContextId });
     mark(tab, "true", session);
     await placeInWorkspace(win, tab).catch((e) => ctx.logError("workspace", e));

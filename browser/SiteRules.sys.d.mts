@@ -1,3 +1,8 @@
+export type BrowserMode = "together" | "agent" | "scratch" | "autonomous" | "autonomous-agent";
+export const BROWSER_MODES: BrowserMode[];
+export function parseBrowserMode(mode: unknown): BrowserMode;
+export function isTemporaryMode(mode?: BrowserMode): boolean;
+export function isAutonomousMode(mode?: BrowserMode): boolean;
 export type Sites = { mode: "blocklist" | "allowlist"; blocklist: string[]; allowlist: string[] };
 export type Config = {
   mode: "auto" | "ask" | "custom";
@@ -6,6 +11,7 @@ export type Config = {
   container?: string;
   browser?: string;
   profile?: string;
+  browserMode?: BrowserMode;
   launch?: "ask" | "allow" | "deny";
 };
 export function normalizeDomain(value: unknown): string;

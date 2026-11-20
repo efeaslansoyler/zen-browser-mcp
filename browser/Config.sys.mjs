@@ -80,7 +80,8 @@ export function config(ctx) {
   // The rule ("allow", "ask" or "deny") of an operation (Policy.sys.mjs) in the current mode.
   function rule(key) {
     const { mode } = ctx.readConfig();
-    return ctx.policy.ruleOf(key, mode, mode === "custom" ? ctx.readPermissions() : null);
+    const rule = ctx.policy.ruleOf(key, mode, mode === "custom" ? ctx.readPermissions() : null);
+    return ctx.autonomous ? ctx.policy.autonomousRule(key, rule) : rule;
   }
 
   const hostOf = (browser) => {

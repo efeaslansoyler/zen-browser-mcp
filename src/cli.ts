@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Entry point: without arguments the MCP server (how MCP clients start it), plus setup commands
-import { configCommand } from "./config.ts";
+import { configCommand, readConfig } from "./config.ts";
 import { doctor } from "./doctor.ts";
 import { L } from "./i18n.ts";
+import { resetAgentProfile } from "./launch.ts";
 import { install, uninstall } from "./install.ts";
 import { stopCodexRelays } from "./codex-relay.ts";
 import { configureCodexHooks, handleCodexHook } from "./codex-hooks.ts";
@@ -15,7 +16,7 @@ import { skillCommand } from "./skill.ts";
 import { browserResolver, parseBrowserFlags } from "./instances.ts";
 
 const argv = process.argv.slice(2);
-const [cmd, ...args] = ["--browser", "--profile"].includes(argv[0]) ? ["serve", ...argv] : argv;
+const [cmd, ...args] = ["--browser", "--profile", "--browser-mode"].includes(argv[0]) ? ["serve", ...argv] : argv;
 
 function applyBrowserFlags() {
   browserResolver.flags = parseBrowserFlags(args);
@@ -30,6 +31,8 @@ Usage:
 ${usage([
   [`npx ${PACKAGE}`, "run the MCP server (your MCP client starts it this way)"],
   ["    --browser <name|dir> --profile <name|dir>", "choose a browser or profile for this MCP client"],
+  ["    --browser-mode <mode>", "choose a browser mode for this MCP client"],
+  [`npx ${PACKAGE} reset-agent-profile [--browser <name|dir>]`, "delete the persistent agent profile after closing it"],
   [`npx ${PACKAGE} install`, "install the browser part (asks for sudo if needed)"],
   ["    --browser <dir>", "a specific installation (the folder with application.ini)"],
   ["    --all", "every browser found"],
@@ -46,6 +49,8 @@ Kullanım:
 ${usage([
   [`npx ${PACKAGE}`, "MCP sunucusunu çalıştırır (MCP istemcin böyle başlatır)"],
   ["    --browser <name|dir> --profile <name|dir>", "choose a browser or profile for this MCP client"],
+  ["    --browser-mode <mode>", "choose a browser mode for this MCP client"],
+  [`npx ${PACKAGE} reset-agent-profile [--browser <name|dir>]`, "delete the persistent agent profile after closing it"],
   [`npx ${PACKAGE} install`, "tarayıcı tarafını kurar (gerekirse sudo ister)"],
   ["    --browser <klasör>", "belirli bir kurulum (application.ini'nin olduğu klasör)"],
   ["    --all", "bulunan bütün tarayıcılar"],
@@ -123,6 +128,13 @@ try {
       applyBrowserFlags();
       await doctor();
       break;
+    case "reset-agent-profile": {
+      if (args.length && (args.length !== 2 || args[0] !== "--browser"))
+        throw new Error("Use: reset-agent-profile [--browser <name|dir>]");
+      const browser = parseBrowserFlags(args).browser ?? readConfig().browser;
+      console.log(`✓ Agent profile reset: ${await resetAgentProfile(browser)}`);
+      break;
+    }
     case "config":
       configCommand(args);
       break;

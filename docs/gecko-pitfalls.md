@@ -46,6 +46,20 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - `NetUtil.asyncCopy` also closes the sink. For a subscription that must stay open, write with
   `nsIAsyncStreamCopier` and `closeSink: false`.
 
+## Launching dedicated profiles
+
+- Launch with `--profile <dir> --new-instance --no-remote`. The isolated Zen check
+  runs the user profile and an agent profile of the same installation side by side.
+  New Gecko uses `--new-instance` to bypass remote dispatch and accepts
+  `--no-remote` for compatibility with older builds.
+  See [Gecko's command-line handling](https://searchfox.org/firefox-main/source/toolkit/xre/nsAppRunner.cpp#10723).
+- Headless Gecko also creates a browser window internally. `final-ui-startup`
+  can fire before it has a usable `gBrowser`. A newly launched dedicated bridge
+  waits for `browser-delayed-startup-finished` before publishing its socket.
+- Gecko can leave an advisory lock file in the profile after shutdown. Reset
+  and orphan cleanup check whether a process holds the lock.
+  See [Gecko's profile lock implementation](https://searchfox.org/firefox-main/source/toolkit/profile/nsProfileLock.cpp#1693).
+
 ## Input and frames
 
 - Mouse and keyboard events sent with the top page's `windowUtils` don't reach out-of-process

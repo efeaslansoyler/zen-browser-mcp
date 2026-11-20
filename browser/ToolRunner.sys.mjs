@@ -21,6 +21,10 @@ export function toolRunner(ctx) {
   // Batch grants cover only listed actions on the unchanged document/site/policy.
   async function runTool(call, tool, args, { approvals, steps = [{ tool, args }] } = {}) {
     const { access, state } = ctx;
+    if (ctx.autonomous) {
+      ctx.policy.assertUserPresent(true, tool);
+      if (tool === "clipboard") ctx.gate(ctx.policy.operationOf(tool, args));
+    }
     if (state.paused) throw new ctx.Stopped();
     call.check();
     if (args.tabId != null && tool !== "request_tab" && tool !== "tab_work") {
@@ -218,6 +222,10 @@ export function toolRunner(ctx) {
       if (!fn) throw new Error(`Unknown tool: ${tool}`);
       if (session && ctx.tools[tool]) ctx.lastUse.set(session, Date.now());
       if (ctx.tools[tool]) {
+        if (ctx.autonomous) {
+          ctx.policy.assertUserPresent(true, tool);
+          if (tool === "clipboard") ctx.gate(ctx.policy.operationOf(tool, args));
+        }
         const info = ctx.sessionInfo(session, ctx.agentTheme(agent ?? { id: "claude" }));
         info.disconnected = false;
         if (state.paused) throw new ctx.Stopped();

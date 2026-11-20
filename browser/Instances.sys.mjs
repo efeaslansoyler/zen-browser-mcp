@@ -96,7 +96,7 @@ export function instanceSocket({
       return file;
     },
 
-    publish(bridgeVersion, bridgeGeneration) {
+    publish(bridgeVersion, bridgeGeneration, identity) {
       if (socketOverride) return;
       const profile = Services.dirsvc.get("ProfD", Ci.nsIFile);
       const installation = Services.dirsvc.get("GreD", Ci.nsIFile);
@@ -106,6 +106,7 @@ export function instanceSocket({
         profileName = [...profiles.profiles].find((entry) => entry.rootDir.equals(profile))?.name;
       } catch {}
       metadata = {
+        ...identity,
         browser: Services.appinfo.name,
         installationDir: installation.path,
         profileDir: profile.path,
@@ -136,4 +137,27 @@ export function instanceSocket({
       metadata = null;
     },
   };
+}
+
+// The CLI setting selects a browser. Only the launch environment for the current profile
+// can enable unattended permissions or opt the browser into automatic shutdown.
+export function browserIdentity(profilesDir, localFile) {
+  const profile = Services.dirsvc.get("ProfD", Ci.nsIFile).path;
+  const root = localFile(profilesDir);
+  if (root.exists()) root.normalize();
+  const relative = profile.startsWith(root.path + "/") ? profile.slice(root.path.length + 1) : "";
+  const [group, name, ...rest] = relative.split("/");
+  const persistent = !rest.length && group && group !== "temporary" && name === "agent";
+  const temporary = !rest.length && group === "temporary" && !!name;
+  const mode = Services.env.get("ZEN_MCP_BROWSER_MODE");
+  const owner = Services.env.get("ZEN_MCP_PROFILE_OWNER");
+  const launched = Services.env.get("ZEN_MCP_LAUNCHED") === "1";
+  if (launched && Services.env.get("ZEN_MCP_LAUNCHED_PROFILE") === profile) {
+    if (persistent && (mode === "agent" || mode === "autonomous-agent"))
+      return { browserMode: mode, launchedByMcp: true };
+    if (temporary && owner && (mode === "scratch" || mode === "autonomous"))
+      return { browserMode: mode, launchedByMcp: true, profileOwner: owner };
+  }
+  if (persistent || temporary) return { browserMode: persistent ? "agent" : "scratch", launchedByMcp: false };
+  return { browserMode: "together", launchedByMcp: launched && mode === "together" };
 }

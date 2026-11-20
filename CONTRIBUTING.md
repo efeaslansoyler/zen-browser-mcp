@@ -64,6 +64,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 
 | Script | Covers |
 |---|---|
+| `check-browser-modes.ts <Zen binary>` | Separate profiles, unattended permissions, temporary cleanup, and persistent cookie reuse after the two-minute idle grace period |
 | `check-launch.ts <Zen binary>` | On-demand launch from a real stdio MCP tool call, denial, shared startup and process detachment |
 | `check-instances.ts <Zen binary>` | Two disposable headless profiles, socket discovery, selection, reload, failover and crash cleanup |
 | `check-compat.ts --reload` | Claude, Codex and generic identities: read, write, click, keys, screenshots, theming |
@@ -117,9 +118,12 @@ To try risky changes on a copy:
    by `mktemp -d /run/user/$(id -u)/zi.XXXXXX`. The script starts and closes both
    headless processes and removes their profiles. Remove the scratch runtime directory
    and installation copy when finished.
-   For `check-launch.ts`, also put `HOME` and the installation copy inside the disposable
-   runtime directory. This check starts a stdio server with explicitly injected
-   `--headless` and `--no-remote` test arguments and cleans up the detached browser.
+   For `check-launch.ts` and `check-browser-modes.ts`, also put `HOME` and the
+   installation copy inside the disposable runtime directory. Both launch a real
+   stdio server with test-only headless arguments. The browser modes check forces
+   the visible modes headless in its spawn callback, preserving their profile and
+   permission behavior. It waits about two minutes for the real idle shutdown.
+   Both checks clean up detached browsers and their fixtures.
 5. Serve test pages with `python3 -m http.server 8765`.
 6. For console errors add `--marionette --remote-allow-system-access` and read
    `Services.console.getMessageArray()`.

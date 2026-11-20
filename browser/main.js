@@ -117,7 +117,8 @@ function logError(where, e) {
     // ?v= makes a reload load the new module versions instead of the cached ones.
     const load = (name) => ChromeUtils.importESModule(`resource://zenmcp/${name}.sys.mjs?v=${version}`);
     globalThis.zenMcpBrowserStart ||= Date.now();
-    const { instanceSocket } = load("Instances");
+    const { instanceSocket, browserIdentity } = load("Instances");
+    const { profileLifecycle } = load("ProfileLifecycle");
     const listener = instanceSocket({
       socketOverride,
       runtime: zenMcpRuntimeDir(),
@@ -134,7 +135,7 @@ function logError(where, e) {
     });
     const { agentTheme, applyTheme, agentIcon, commonAgent } = load("Agent");
     const { TabAccess } = load("TabAccess");
-    const { normalizeConfig, siteAllowed, siteEntry } = load("SiteRules");
+    const { normalizeConfig, siteAllowed, siteEntry, isAutonomousMode, isTemporaryMode } = load("SiteRules");
     const { ScreenshotCache, VisualBaselines } = load("ScreenshotCache");
     const { BrowserSettings, DEVICE_PRESETS } = load("BrowserSettings");
     const { clipboardShortcut, systemClipboard } = load("Clipboard");
@@ -736,6 +737,7 @@ function logError(where, e) {
       NetUtil.asyncCopy(stream, output, () => transport.close(Cr.NS_OK));
     };
 
+    let lifecycle;
     function onConnection(transport) {
       const input = transport.openInputStream(0, 0, 0);
       // Unbuffered: asyncCopy finishes only once the data is on the socket, so closing after it
@@ -746,6 +748,7 @@ function logError(where, e) {
       let buffer = "";
       let handled = false;
       let session = null; // set for a subscription connection
+      let leased = false;
       pump.asyncRead({
         onStartRequest() {},
         onDataAvailable(_request, stream, _offset, count) {
@@ -758,12 +761,28 @@ function logError(where, e) {
             try {
               request = JSON.parse(line);
             } catch {}
+            if (leased) {
+              if (request?.event === "release") lifecycle?.release(transport);
+              continue;
+            }
             if (session) {
               ctx.channels.acknowledge(session, transport, request);
               continue;
             }
             if (handled) return;
             handled = true;
+            if (request?.tool === "profile_lease") {
+              try {
+                if (!lifecycle) throw new Error("This browser is not managed by the MCP launcher.");
+                lifecycle.connect(transport, request.owner);
+                leased = true;
+                const reply = '{"ok":true}\n';
+                output.write(reply, reply.length);
+              } catch (e) {
+                ctx.reply(transport, output, { ok: false, error: String(e?.message ?? e) });
+              }
+              continue;
+            }
             if (request?.tool !== "subscribe") {
               ctx.handle(line, transport, output);
               return;
@@ -776,6 +795,7 @@ function logError(where, e) {
           }
         },
         onStopRequest() {
+          if (leased) lifecycle?.disconnect(transport);
           if (session) ctx.channels.unsubscribe(session, transport);
         },
       });
@@ -902,9 +922,24 @@ function logError(where, e) {
           },
           onStopListening() {},
         });
-        listener.publish(loadedVersion, version);
+        const identity = browserIdentity(`${stateHome}/${zenMcpApp}/profiles`, localFile);
+        ctx.browserMode = identity.browserMode;
+        ctx.autonomous = isAutonomousMode(identity.browserMode);
+        if (identity.launchedByMcp && identity.browserMode !== "together") {
+          lifecycle = profileLifecycle({
+            temporary: isTemporaryMode(identity.browserMode),
+            owner: identity.profileOwner,
+            setTimeout,
+            clearTimeout,
+            quit: () => Services.startup.quit(Ci.nsIAppStartup.eForceQuit),
+          });
+          lifecycle.start();
+        }
+        listener.publish(loadedVersion, version, identity);
         Services.obs.addObserver(stop, "quit-application");
       } catch (e) {
+        lifecycle?.stop();
+        lifecycle = null;
         listener.stop(true);
         server.close();
         server = null;
@@ -916,6 +951,8 @@ function logError(where, e) {
       try {
         Services.obs.removeObserver(stop, "quit-application");
       } catch {}
+      lifecycle?.stop();
+      lifecycle = null;
       listener.stop(!!server);
       try {
         server?.close();
@@ -973,11 +1010,15 @@ function logError(where, e) {
     // reload starts at once.
     if (ctx.browserWindows().length) safeStart();
     else {
+      // A dedicated browser gets tool calls as soon as it publishes. Wait for its first
+      // usable window instead of publishing during Gecko's pre-window startup.
+      const dedicated = Services.env.get("ZEN_MCP_LAUNCHED") === "1" && Services.env.get("ZEN_MCP_LAUNCHED_PROFILE");
+      const topic = dedicated ? "browser-delayed-startup-finished" : "final-ui-startup";
       const observer = () => {
-        Services.obs.removeObserver(observer, "final-ui-startup");
+        Services.obs.removeObserver(observer, topic);
         safeStart();
       };
-      Services.obs.addObserver(observer, "final-ui-startup");
+      Services.obs.addObserver(observer, topic);
     }
   } catch (e) {
     logError("setup", e);

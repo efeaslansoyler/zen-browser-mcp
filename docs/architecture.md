@@ -26,7 +26,7 @@ MCP client ──stdio──▶ src/server.ts ──Unix socket──▶ browser
 | `skill.ts` | `skill install`: copies `skills/zen-browser` into Claude Code's and Codex's skill folders |
 | `zen.ts` | Socket client: one request per connection (`call`) and long-lived subscriptions (`subscribe`) |
 | `instances.ts` | Live instance discovery, stale endpoint cleanup and sticky browser selection |
-| `launch.ts` | Resolve an installation, check launch permission, start the browser and wait for its bridge |
+| `launch.ts`, `profiles.ts` | Resolve an installation, check launch permission, prepare and manage profiles, start the browser and wait for its bridge |
 | `paths.ts` | Package name and every user-visible path in one place |
 | `install.ts`, `doctor.ts`, `config.ts` | Loader installation, health checks, `~/.config/zen-mcp/config.json` |
 | `codex-watch.ts` | Watches the Codex service and connects open Codex conversations (see [codex.md](codex.md)) |
@@ -49,7 +49,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 
 | File | Role |
 |---|---|
-| `Instances.sys.mjs` | Private socket naming, discovery metadata, window activation and shutdown |
+| `Instances.sys.mjs`, `ProfileLifecycle.sys.mjs` | Private socket naming, discovery metadata, window activation and managed browser shutdown |
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
 | `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call ownership/site/permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` notes and status |
@@ -94,30 +94,52 @@ Every bridge binds a private socket in `$XDG_RUNTIME_DIR/zen-mcp/` (directory mo
 when available. With a shared temporary directory the instance directory has a
 per-user suffix. The socket name is a short random ID minted on each bind. The
 matching `<id>.json` contains `browser`, `installationDir`, `profileDir`,
-optional `profileName`, `pid`, `bridgeVersion` (the installed files' version),
+optional `profileName`, `browserMode`, `launchedByMcp`, temporary `profileOwner`, `pid`, `bridgeVersion` (the installed files' version),
 `bridgeGeneration` (the in-process reload counter), `startedAt` and `focusedAt`
 (Unix time in milliseconds, with zero for no recorded activation). A bridge
 publishes metadata atomically after binding, updates focus on activation at most
 twice per second, and removes its files on stop. Discovery checks the PID and
 socket listener and removes entries left by crashes.
 
-The resolver uses `ZEN_MCP_SOCKET` directly when set. Otherwise client flags
-`--browser <name|dir>` and `--profile <name|dir>` override their respective
-`ZEN_MCP_BROWSER` and `ZEN_MCP_PROFILE` values. The resulting client selection
-overrides the config selection. With neither, the resolver uses the only running
-instance or the most recently focused one, with newest startup breaking focus ties.
-The legacy `$XDG_RUNTIME_DIR/zen-mcp.sock` is available for older bridges when discovery
-finds no instance and the user has no explicit browser or profile selection.
+The resolver uses `ZEN_MCP_SOCKET` directly when explicitly pinned. For discovery
+the client flags `--browser`, `--profile` and `--browser-mode` override their
+corresponding environment variables, then config. The mode defaults to
+`together` and is fixed for the MCP process. Discovery applies mode and installation
+filters before using focus and startup time to rank eligible instances.
+
+- `together` discovers user profiles and applies the optional profile selector.
+  Older metadata defaults to this mode. The legacy `$XDG_RUNTIME_DIR/zen-mcp.sock`
+  is available in this mode with automatic browser and profile selection.
+- `agent` and `autonomous-agent` match the persistent `agent` profile under
+  `$XDG_STATE_HOME/zen-mcp/profiles/<installation-slug>/`. The slug includes a
+  hash of the canonical installation directory. Both modes reuse a live instance
+  for that profile with its current window mode and permission behavior.
+- `scratch` and `autonomous` discover only instances with the requested mode and
+  the MCP process's random owner ID. Their profiles live under
+  `$XDG_STATE_HOME/zen-mcp/profiles/temporary/`.
 
 If selection finds no live bridge, an MCP browser tool can start the selected
-installation and profile, or the first installation found (Zen first) with its
-default profile. A profile name uses `-P`; a directory uses `--profile`.
+installation, or the first installation found (Zen first). In `together` it uses
+the selected profile or lets Gecko pick the default profile. A profile name uses `-P`; a directory uses `--profile`.
 For the default profile Gecko makes the choice. Concurrent tool calls share
 one approval and launch attempt per server. The server spawns the browser
 detached with the inherited XDG environment, then waits up to 30 seconds
 for discovery to publish its bridge. The result becomes the sticky selection.
+Dedicated profiles use `--profile` with a separate instance and a seed `user.js`.
+The launcher sets `ZEN_MCP_BROWSER_MODE` and identifies the launched profile in
+the browser process environment. The bridge checks that identity against its
+actual profile directory before enabling autonomous rules or managed shutdown.
+It reports its effective mode in `tabs_context_mcp` for dedicated profiles.
 Doctor, hooks, subscriptions and standalone bridge clients only connect to
 existing browsers. A `ZEN_MCP_SOCKET` pin also bypasses launch.
+
+The `profile_lease` connection follows the MCP process independently of pick
+delivery and reconnects after a bridge reload. For a temporary profile the owning
+process requests browser quit on disconnect and deletes the directory after the
+child exits. If the MCP process crashes, lease loss schedules browser quit.
+Server startup sweeps temporary directories with dead owners and browsers.
+An MCP-launched persistent browser quits about two minutes after its last lease
+ends. Together browsers and manually started persistent browsers stay open.
 
 Requests and the lifecycle subscription share one selection per MCP process.
 Installation and profile directories identify the profile. The PID and start time
@@ -180,8 +202,8 @@ when the selected instance has no queued picks.
 
 ## Permissions
 
-`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent", "browser": "Zen", "profile": "Default", "launch": "allow"}`
-(`workspace` is the optional Zen space for new agent tabs. See [Browser instances](#browser-instances) for `browser` and `profile`).
+`~/.config/zen-mcp/config.json`: `{"mode": "ask" | "auto" | "custom", "sites": {"mode": "blocklist" | "allowlist", "blocklist": [], "allowlist": []}, "workspace": "Agents", "container": "Agent", "browser": "Zen", "profile": "Default", "browserMode": "together", "launch": "allow"}`
+(`workspace` is the optional Zen space for new agent tabs. See [Browser instances](#browser-instances) for `browser`, `profile` and `browserMode`).
 
 - **Operations and templates** (`Policy.sys.mjs`, shared with the CLI): every tool call is an
   operation (`operationOf`: a tool, or `tool.action` for `computer`, `clipboard`,

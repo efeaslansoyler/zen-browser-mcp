@@ -7,6 +7,15 @@ export function normalizeDomain(value) {
   return url.hostname.toLowerCase().replace(/\.$/, "");
 }
 
+export const BROWSER_MODES = ["together", "agent", "scratch", "autonomous", "autonomous-agent"];
+export const isTemporaryMode = (mode) => mode === "scratch" || mode === "autonomous";
+export const isAutonomousMode = (mode) => mode === "autonomous" || mode === "autonomous-agent";
+
+export function parseBrowserMode(mode) {
+  if (!BROWSER_MODES.includes(mode)) throw new Error(`browserMode must be one of: ${BROWSER_MODES.join(", ")}.`);
+  return mode;
+}
+
 export function normalizeConfig(raw = {}) {
   const config = { mode: ["ask", "custom"].includes(raw.mode) ? raw.mode : "auto", sites: normalizeSites(raw.sites) };
   // Zen: the workspace (by name) for tabs agents open; otherwise the user's current one
@@ -19,6 +28,7 @@ export function normalizeConfig(raw = {}) {
     const value = typeof raw[key] === "string" ? raw[key].trim() : "";
     if (value) config[key] = value;
   }
+  if (raw.browserMode !== undefined) config.browserMode = parseBrowserMode(raw.browserMode);
   if (["ask", "allow", "deny"].includes(raw.launch)) config.launch = raw.launch;
   return config;
 }

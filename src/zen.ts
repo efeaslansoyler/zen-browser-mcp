@@ -192,3 +192,73 @@ export function subscribe(onEvent: (event: any) => void | Promise<void>, info: S
     },
   };
 }
+
+// A dedicated browser lease is independent of conversation identity and pick subscriptions.
+export function leaseProfile(target: Selection) {
+  const instance = target.instance!;
+  let socket: net.Socket;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  let ready = false;
+
+  const open = (socketPath: string) => {
+    ready = false;
+    socket = net.createConnection(socketPath);
+    const connected = new Promise<void>((resolve, reject) => {
+      socket.setTimeout(2000, () => socket.destroy(new Error("Timed out connecting the browser profile lease.")));
+      socket.once("connect", () =>
+        socket.write(ascii(JSON.stringify({ tool: "profile_lease", owner: instance.profileOwner })) + "\n"),
+      );
+      let response = "";
+      socket.on("data", (chunk) => {
+        response += chunk.toString("latin1");
+        if (!response.includes("\n")) return;
+        try {
+          const reply = JSON.parse(response);
+          if (!reply.ok) throw new Error(reply.error);
+          socket.setTimeout(0);
+          ready = true;
+          resolve();
+        } catch (error) {
+          reject(error);
+          socket.destroy();
+        }
+      });
+      socket.on("error", reject);
+      socket.on("close", () => {
+        ready = false;
+        reject(new Error("The browser closed the profile lease."));
+        if (!closed) retry = setTimeout(reconnect, 500).unref();
+      });
+    });
+    return connected;
+  };
+
+  async function reconnect() {
+    try {
+      const same = (await browserResolver.list()).find(
+        (entry) => entry.pid === instance.pid && entry.startedAt === instance.startedAt,
+      );
+      if (closed) return;
+      if (same) await open(same.socket).catch(() => {});
+      else retry = setTimeout(reconnect, 500).unref();
+    } catch {
+      if (!closed) retry = setTimeout(reconnect, 500).unref();
+    }
+  }
+
+  return {
+    target,
+    connected: open(target.socket),
+    close(quit = false) {
+      closed = true;
+      clearTimeout(retry);
+      if (quit && ready) {
+        socket.end('{"event":"release"}\n');
+        return true;
+      }
+      socket.destroy();
+      return false;
+    },
+  };
+}

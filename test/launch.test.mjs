@@ -14,11 +14,13 @@ after(() => fs.rmSync(root, { recursive: true, force: true }));
 Object.assign(process.env, {
   XDG_RUNTIME_DIR: root,
   XDG_CONFIG_HOME: path.join(root, "config"),
+  XDG_STATE_HOME: path.join(root, "state"),
   ZEN_MCP_CHANNEL: "0",
 });
 delete process.env.ZEN_MCP_SOCKET;
 delete process.env.ZEN_MCP_BROWSER;
 delete process.env.ZEN_MCP_PROFILE;
+delete process.env.ZEN_MCP_BROWSER_MODE;
 
 const { browserExecutable, createBrowserLauncher } = await import("../dist/launch.js");
 const { BrowserResolver } = await import("../dist/instances.js");
@@ -268,3 +270,111 @@ for (const { action, value, expected, grant } of [
     }
   });
 }
+
+test("dedicated launches prepare the chosen profile and pass isolation flags and launch identity", async () => {
+  const { agentProfile, profileOwner, TEMPORARY_DIR } = await import("../dist/profiles.js");
+  configure({ mode: "ask", launch: "allow" });
+  for (const mode of ["agent", "scratch", "autonomous", "autonomous-agent"]) {
+    const temporary = mode === "scratch" || mode === "autonomous";
+    const headless = mode.startsWith("autonomous");
+    let child;
+    let request;
+    const launch = createBrowserLauncher({
+      start(file, args, options) {
+        request = { file, args, env: options.env };
+        return (child = Object.assign(new EventEmitter(), {
+          pid: process.pid,
+          exitCode: null,
+          signalCode: null,
+          unref() {},
+        }));
+      },
+    });
+    const readonly = await launch(
+      { browser: zen.dir, profile: "/ignored/user-profile", browserMode: mode },
+      async () =>
+        request
+          ? [
+              {
+                ...entry,
+                browserMode: mode,
+                launchedByMcp: true,
+                profileDir: request.args[1],
+                profileOwner,
+              },
+            ]
+          : [],
+    );
+    const dir = readonly.profileDir;
+    if (temporary) assert.equal(path.dirname(dir), TEMPORARY_DIR);
+    else assert.equal(dir, agentProfile(zen.dir));
+    assert.equal(request.file, path.join(zen.dir, "zen"));
+    assert.deepEqual(request.args, [
+      "--profile",
+      dir,
+      "--new-instance",
+      "--no-remote",
+      ...(headless ? ["--headless"] : []),
+    ]);
+    assert.equal(request.env.ZEN_MCP_BROWSER_MODE, mode);
+    assert.equal(request.env.ZEN_MCP_LAUNCHED, "1");
+    assert.equal(request.env.ZEN_MCP_LAUNCHED_PROFILE, dir);
+    assert.equal(request.env.ZEN_MCP_PROFILE_OWNER, temporary ? profileOwner : undefined);
+    assert.match(fs.readFileSync(path.join(dir, "user.js"), "utf8"), /zen.welcome-screen.seen/);
+    assert.match(fs.readFileSync(path.join(dir, "user.js"), "utf8"), /dataSubmissionEnabled", false/);
+    child.emit("exit");
+    assert.equal(fs.existsSync(dir), !temporary);
+  }
+});
+
+test("orphan sweep removes dead temporary profiles and skips live owners, browsers and other folders", async () => {
+  const { createTemporaryProfile, recordTemporaryBrowser, sweepTemporaryProfiles, TEMPORARY_DIR } =
+    await import("../dist/profiles.js");
+  const liveOwner = createTemporaryProfile();
+  const liveBrowser = path.join(TEMPORARY_DIR, "2147483647-active");
+  const orphan = path.join(TEMPORARY_DIR, "2147483647-orphan");
+  const starting = path.join(TEMPORARY_DIR, "2147483647-justnw");
+  const unrelated = path.join(TEMPORARY_DIR, "custom");
+  for (const dir of [liveBrowser, orphan, starting, unrelated]) fs.mkdirSync(dir);
+  recordTemporaryBrowser(liveBrowser, process.pid);
+  recordTemporaryBrowser(orphan, 2147483647);
+  sweepTemporaryProfiles();
+  assert(!fs.existsSync(orphan));
+  for (const dir of [liveOwner, liveBrowser, starting, unrelated]) assert(fs.existsSync(dir));
+  const before = new Date(Date.now() - 65_000);
+  fs.utimesSync(starting, before, before);
+  sweepTemporaryProfiles();
+  assert(!fs.existsSync(starting));
+});
+
+test("launch rules also gate autonomous startup before a profile is created", async () => {
+  configure({ mode: "ask" });
+  const { launch, calls } = launcher();
+  await assert.rejects(
+    launch({ browser: zen.dir, browserMode: "autonomous" }, async () => []),
+    /cannot ask for launch approval/,
+  );
+  configure({ mode: "custom", launch: "allow" }, { base: "ask", rules: { "browser.launch": "deny" } });
+  await assert.rejects(
+    launch({ browser: zen.dir, browserMode: "autonomous-agent" }, async () => []),
+    /denied by the user's browser.launch permission/,
+  );
+  assert.equal(calls.length, 0);
+});
+
+test("reset checks Gecko's locks even without a bridge and only removes the chosen agent profile", async () => {
+  const { agentProfile, prepareProfile } = await import("../dist/profiles.js");
+  const { resetAgentProfile } = await import("../dist/launch.js");
+  const profile = agentProfile(zen.dir);
+  const other = agentProfile(firefox.dir);
+  prepareProfile(profile);
+  prepareProfile(other);
+  const lock = path.join(profile, "lock");
+  fs.symlinkSync(`127.0.0.1:+${process.pid}`, lock);
+  await assert.rejects(resetAgentProfile(zen.dir), /Close the agent browser/);
+  assert(fs.existsSync(profile));
+  fs.unlinkSync(lock);
+  assert.equal(await resetAgentProfile(zen.dir), profile);
+  assert(!fs.existsSync(profile));
+  assert(fs.existsSync(other));
+});

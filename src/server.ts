@@ -4,8 +4,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { z } from "zod";
-import { call, subscribe } from "./zen.ts";
-import { browserResolver, deliveryScope } from "./instances.ts";
+import { call, leaseProfile, subscribe } from "./zen.ts";
+import { browserResolver, deliveryScope, type Selection } from "./instances.ts";
+import { sweepTemporaryProfiles } from "./profiles.ts";
 import { SERVER_NAME, VERSION } from "./paths.ts";
 import { syncBrowserFiles } from "./install.ts";
 import { createBrowserLauncher, type LaunchApproval } from "./launch.ts";
@@ -213,8 +214,32 @@ const callWithDelivery: typeof call = async (...args) => {
   }
 };
 export async function serve(launch = createBrowserLauncher()) {
+  sweepTemporaryProfiles();
+  let lease: ReturnType<typeof leaseProfile> | undefined;
+  let closing = false;
+  async function keepProfileOpen(target?: Selection) {
+    if (closing) throw new Error("The MCP client disconnected.");
+    if (!target?.instance?.launchedByMcp || target.instance.browserMode === "together") return;
+    const { instance } = target;
+    if (lease?.target.instance?.pid !== instance.pid || lease?.target.instance?.startedAt !== instance.startedAt) {
+      lease?.close();
+      lease = leaseProfile(target);
+    }
+    const current = lease!;
+    try {
+      await current.connected;
+    } catch (error) {
+      if (lease === current) lease = undefined;
+      current.close();
+      throw error;
+    }
+  }
+
   const server = createServer(
-    callWithDelivery,
+    async (...args) => {
+      await keepProfileOpen(args[5]);
+      return callWithDelivery(...args);
+    },
     async ({ threadId, label }) => {
       const change = browserResolver.browserChange(await browserResolver.resolve());
       if (change) throw new Error(change);
@@ -223,6 +248,10 @@ export async function serve(launch = createBrowserLauncher()) {
     launch,
   );
   server.server.oninitialized = () => {
+    void browserResolver
+      .resolve()
+      .then(keepProfileOpen)
+      .catch(() => {});
     const agent = identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT);
     // Codex's MCP process lives in a background service, independent of conversations;
     // codex-watch connects Codex conversations, and a process session would mislead in menus.
@@ -248,10 +277,19 @@ export async function serve(launch = createBrowserLauncher()) {
     }
   }, 15_000).unref();
   // stdin closes when Claude Code exits; the browser connection must not keep the process alive.
-  process.stdin.on("close", () => {
+  const shutdown = async (code: number) => {
+    if (closing) return;
+    closing = true;
     ownerSubscription?.close();
-    process.exit(0);
-  });
+    const quitRequested = lease?.close(true);
+    await launch.close(quitRequested);
+    process.exit(code);
+  };
+  server.server.onclose = () => void shutdown(0);
+  process.stdin.once("end", () => void shutdown(0));
+  process.stdin.once("close", () => void shutdown(0));
+  process.once("SIGTERM", () => void shutdown(143));
+  process.once("SIGINT", () => void shutdown(130));
 }
 
 // Directly during development: node src/server.ts

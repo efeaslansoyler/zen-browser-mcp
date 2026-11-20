@@ -189,6 +189,7 @@ test("browser selection survives CLI config writes and a browser-side permission
       encoding: "utf8",
     });
   cli("browser", " /opt/zen ", "--profile", " Profile 1 ");
+  cli("browser-mode", "agent");
   const bridge = config({
     normalizeConfig,
     configPath: file,
@@ -204,7 +205,61 @@ test("browser selection survives CLI config writes and a browser-side permission
     sites: { mode: "blocklist", blocklist: [], allowlist: [] },
     browser: "/opt/zen",
     profile: "Profile 1",
+    browserMode: "agent",
   });
   cli("browser", "clear");
   assert.match(cli(), /browser: \(automatic\)/);
+});
+
+test("browser mode precedence and profile isolation apply before focus", async (t) => {
+  const { agentProfile, profileOwner, TEMPORARY_DIR } = await import("../dist/profiles.js");
+  const { resolver, instance, listen, legacy } = fixture(t);
+  const user = await instance(1);
+  const firefox = await instance(2, {
+    browser: "Firefox",
+    installationDir: "/opt/firefox",
+    browserMode: "autonomous-agent",
+    profileDir: agentProfile("/opt/firefox"),
+  });
+  const agent = await instance(3, {
+    browserMode: "agent",
+    launchedByMcp: false,
+    profileDir: agentProfile("/opt/zen"),
+  });
+  const scratch = await instance(4, {
+    browserMode: "scratch",
+    launchedByMcp: true,
+    profileOwner,
+    profileDir: path.join(TEMPORARY_DIR, "owned"),
+  });
+  const autonomous = await instance(5, {
+    browserMode: "autonomous",
+    launchedByMcp: true,
+    profileOwner,
+    profileDir: path.join(TEMPORARY_DIR, "headless"),
+  });
+  await instance(6, {
+    browserMode: "scratch",
+    launchedByMcp: true,
+    profileOwner: "another MCP process",
+    profileDir: path.join(TEMPORARY_DIR, "other"),
+  });
+  await instance(7, { profileDir: agentProfile("/opt/zen") });
+  await instance(8, { browserMode: "scratch", profileOwner });
+  assert.equal((await resolver().resolve()).socket, user.socket);
+  const config = () => ({ browser: "Zen", profile: "Missing", browserMode: "autonomous-agent" });
+  assert.equal((await resolver({ config }).resolve()).socket, agent.socket);
+  const env = { ZEN_MCP_BROWSER_MODE: "autonomous", ZEN_MCP_PROFILE: "Also missing" };
+  assert.equal((await resolver({ config, env }).resolve()).socket, autonomous.socket);
+  const cli = resolver({ config, env });
+  cli.flags = parseBrowserFlags(["--browser-mode", "scratch"]);
+  assert.equal((await cli.resolve()).socket, scratch.socket);
+  const firefoxClient = resolver({ config });
+  firefoxClient.flags = parseBrowserFlags(["--browser-mode", "agent", "--browser", "Firefox"]);
+  assert.equal((await firefoxClient.resolve()).socket, firefox.socket);
+  assert.throws(() => parseBrowserFlags(["--browser-mode", "unsupported"]), /browserMode must be/);
+
+  await scratch.close();
+  await listen(legacy);
+  await assert.rejects(resolver({ env: { ZEN_MCP_BROWSER_MODE: "scratch" } }).resolve(), /scratch.*not running/);
 });

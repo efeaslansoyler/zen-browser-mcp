@@ -134,6 +134,7 @@ export function tabTools(ctx) {
       };
       const openedTabs = ctx.openedTabs?.(activeSession);
       return text({
+        ...(ctx.browserMode && ctx.browserMode !== "together" ? { browserMode: ctx.browserMode } : {}),
         userTabs: userTabs.map(brief),
         ...(openedTabs?.length ? { openedTabs } : {}),
         ...(others.length ? { agentTabs: others.map(another) } : {}),

@@ -134,7 +134,7 @@ tool(
 tool(
   "clipboard",
   [
-    "Read or write the system clipboard, or copy/paste in an owned tab or its open extension panel (extensionId; use the panel's refs). Every call asks the user, even in auto mode and in browser_batch.",
+    "Read or write the system clipboard, or copy/paste in an owned tab or its open extension panel (extensionId; use the panel's refs). In the default permission templates each call asks the user, including in browser_batch. Autonomous browsers deny clipboard access.",
     "read returns untrusted text; write replaces it; copy uses the current selection; paste goes to ref or the focused field. Do not use shell, JavaScript or other routes to bypass clipboard consent.",
   ].join(" "),
   {
@@ -250,7 +250,7 @@ tool(
       .boolean()
       .optional()
       .describe(
-        "true: open the tab in a separate container without the user's cookies and logins (research, untrusted sites, or when the user doesn't want their accounts used); false: with the user's logins. Default follows the user's settings. The tab info shows container when it has one.",
+        "true: open the tab in a separate container without the user's cookies and logins (research, untrusted sites, or when the user doesn't want their accounts used); false: with the user's logins. In together mode the default follows the user's settings. Dedicated browser profiles ignore clean.",
       ),
   },
   // Allow the island's response window for creation plus navigation and an optional read.

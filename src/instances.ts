@@ -5,10 +5,12 @@ import { setTimeout as sleep } from "node:timers/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { BROWSER_MODES, isTemporaryMode, parseBrowserMode, type BrowserMode } from "../browser/SiteRules.sys.mjs";
+import { agentProfile, alive, isManagedProfile, profileOwner } from "./profiles.ts";
 import { readConfig } from "./config.ts";
 import { INSTANCES_DIR, LEGACY_SOCKET, PACKAGE } from "./paths.ts";
 
-export type BrowserChoice = { browser?: string; profile?: string };
+export type BrowserChoice = { browser?: string; profile?: string; browserMode?: BrowserMode };
 
 type Metadata = {
   browser: string;
@@ -16,6 +18,9 @@ type Metadata = {
   profileDir: string;
   profileName?: string;
   pid: number;
+  browserMode?: BrowserMode;
+  launchedByMcp?: boolean;
+  profileOwner?: string;
   bridgeVersion: string;
   bridgeGeneration: number;
   startedAt: number;
@@ -33,20 +38,14 @@ function validMetadata(entry: Metadata | null): entry is Metadata {
       (value) => typeof value === "string" && value.length > 0,
     ) &&
     (entry.profileName === undefined || typeof entry.profileName === "string") &&
+    (entry.browserMode === undefined || BROWSER_MODES.includes(entry.browserMode)) &&
+    (entry.launchedByMcp === undefined || typeof entry.launchedByMcp === "boolean") &&
+    (entry.profileOwner === undefined || typeof entry.profileOwner === "string") &&
     Number.isSafeInteger(entry.pid) &&
     entry.pid > 0 &&
     entry.pid <= 0x7fffffff &&
     [entry.startedAt, entry.focusedAt, entry.bridgeGeneration].every(Number.isFinite)
   );
-}
-
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
 }
 
 const lstat = (file: string) => fs.lstatSync(file, { throwIfNoEntry: false });
@@ -124,9 +123,12 @@ export function parseBrowserFlags(args: string[]): BrowserChoice {
   for (let i = 0; i < args.length; i += 2) {
     const flag = args[i];
     const value = args[i + 1]?.trim();
-    if ((flag !== "--browser" && flag !== "--profile") || !value || value.startsWith("--"))
-      throw new Error("Use: zen-browser-mcp [serve|doctor] [--browser <name|dir>] [--profile <name|dir>]");
-    choice[flag === "--browser" ? "browser" : "profile"] = value;
+    if (!["--browser", "--profile", "--browser-mode"].includes(flag) || !value || value.startsWith("--"))
+      throw new Error(
+        "Use: zen-browser-mcp [serve|doctor] [--browser <name|dir>] [--profile <name|dir>] [--browser-mode <mode>]",
+      );
+    if (flag === "--browser-mode") choice.browserMode = parseBrowserMode(value);
+    else choice[flag === "--browser" ? "browser" : "profile"] = value;
   }
   return choice;
 }
@@ -152,14 +154,26 @@ export function matchesProfile(entry: Instance, profile?: string) {
   return !profile || (dir ? canonicalPath(entry.profileDir) === dir : profileLabel(entry) === profile);
 }
 
+export function matchesMode(entry: Instance, mode: BrowserMode = "together") {
+  const profile = canonicalPath(entry.profileDir);
+  const actual = entry.browserMode ?? "together";
+  if (mode === "together") return actual === mode && !isManagedProfile(profile);
+  if (isTemporaryMode(mode)) return actual === mode && entry.launchedByMcp && entry.profileOwner === profileOwner;
+  return (
+    (actual === "agent" || actual === "autonomous-agent") &&
+    profile === agentProfile(canonicalPath(entry.installationDir))
+  );
+}
+
 function selectInstance(instances: Instance[], choice: BrowserChoice, source: string) {
-  const { browser, profile } = choice;
+  const { browser, profile, browserMode } = choice;
   const installation = browser && installationDirectory(browser);
   const matching = instances.filter(
     (entry) =>
       (!browser ||
         entry.browser.toLowerCase() === browser.toLowerCase() ||
         canonicalPath(entry.installationDir) === installation) &&
+      matchesMode(entry, browserMode) &&
       matchesProfile(entry, profile),
   );
   const instance = matching.sort(
@@ -193,6 +207,7 @@ export class BrowserResolver {
   private pendingTool?: Promise<Selection>;
   private previous?: Selection;
   private deliveryProfile?: Instance;
+  private mode?: BrowserMode;
 
   private readonly options: {
     dir: string;
@@ -233,8 +248,26 @@ export class BrowserResolver {
     return (this.selected = next);
   }
 
+  choice() {
+    const { env, config } = this.options;
+    const browser = this.flags.browser ?? env.ZEN_MCP_BROWSER?.trim();
+    const profile = this.flags.profile ?? env.ZEN_MCP_PROFILE?.trim();
+    const mode = this.flags.browserMode ?? env.ZEN_MCP_BROWSER_MODE?.trim();
+    const settings = config();
+    const browserMode = (this.mode ??= mode ? parseBrowserMode(mode) : (settings.browserMode ?? "together"));
+    const overridden = browser || (browserMode === "together" && profile);
+    return {
+      choice: {
+        browser: overridden ? browser : settings.browser,
+        profile: browserMode === "together" ? (overridden ? profile : settings.profile) : undefined,
+        browserMode,
+      },
+      source: overridden ? "MCP client override" : "config.json",
+    };
+  }
+
   private async select(): Promise<Selection | MissingSelection> {
-    const { legacy, env, config } = this.options;
+    const { legacy } = this.options;
     const override = this.override;
     if (override) return { socket: override, reason: "ZEN_MCP_SOCKET" };
     const current = this.selected;
@@ -260,13 +293,10 @@ export class BrowserResolver {
       return (this.selected = { socket: instance.socket, instance, reason: "delivery profile" });
     }
 
-    const browser = this.flags.browser ?? env.ZEN_MCP_BROWSER?.trim();
-    const profile = this.flags.profile ?? env.ZEN_MCP_PROFILE?.trim();
-    const choice = browser || profile ? { browser, profile } : config();
-    const source = browser || profile ? "MCP client override" : "config.json";
+    const { choice, source } = this.choice();
     const next = selectInstance(instances, choice, source);
     if (next) return this.remember(next);
-    if (!choice.browser && !choice.profile && (await listening(legacy)))
+    if (choice.browserMode === "together" && !choice.browser && !choice.profile && (await listening(legacy)))
       return this.remember({ socket: legacy, reason: "legacy socket fallback" });
     return { choice, source };
   }
@@ -278,9 +308,16 @@ export class BrowserResolver {
   async resolve(): Promise<Selection> {
     const next = await this.probe();
     if ("socket" in next) return next;
-    const { browser, profile } = next.choice;
-    if (!browser && !profile) return { socket: this.options.legacy, reason: "legacy socket fallback" };
-    const target = [browser && `browser "${browser}"`, profile && `profile "${profile}"`].filter(Boolean).join(", ");
+    const { browser, profile, browserMode } = next.choice;
+    if (!browser && !profile && browserMode === "together")
+      return { socket: this.options.legacy, reason: "legacy socket fallback" };
+    const target = [
+      browser && `browser "${browser}"`,
+      profile && `profile "${profile}"`,
+      browserMode !== "together" && `${browserMode} browser mode`,
+    ]
+      .filter(Boolean)
+      .join(", ");
     throw new Error(
       `The selected ${target} (${next.source}) is not running. Open it, or check with \`npx ${PACKAGE} doctor\`.`,
     );

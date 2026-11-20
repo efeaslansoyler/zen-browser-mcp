@@ -7,7 +7,13 @@ import { L } from "./i18n.ts";
 import { CONFIG_FILE, PACKAGE, PERMISSIONS_FILE } from "./paths.ts";
 import { examplePermissions, parsePermissions, ruleOf } from "../browser/Policy.sys.mjs";
 
-import { normalizeConfig, normalizeDomain, type Config } from "../browser/SiteRules.sys.mjs";
+import {
+  BROWSER_MODES,
+  normalizeConfig,
+  normalizeDomain,
+  parseBrowserMode,
+  type Config,
+} from "../browser/SiteRules.sys.mjs";
 
 export function readConfig(): Config {
   try {
@@ -113,6 +119,7 @@ export function configCommand(args: string[]) {
     console.log(L(`mode: ${config.mode}  (${en})`, `mod: ${config.mode}  (${tr})`));
     printSites(config.sites);
     console.log(`browser: ${config.browser ?? "(automatic)"}${config.profile ? ` / ${config.profile}` : ""}`);
+    console.log(`browserMode: ${config.browserMode ?? "together"}`);
     console.log(`launch: ${config.launch ?? "default (permission template)"}`);
     console.log(
       L(
@@ -128,10 +135,20 @@ export function configCommand(args: string[]) {
     );
     console.log(
       L(
-        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
-        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
+        `\nUsage:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config browser-mode [mode]\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <domain>…\n  npx ${PACKAGE} config workspace <name>|current\n  npx ${PACKAGE} config container <name>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
+        `\nKullanım:\n  npx ${PACKAGE} config mode ask|auto|custom\n  npx ${PACKAGE} config browser-mode [mode]\n  npx ${PACKAGE} config permissions [init [ask|auto]]\n  npx ${PACKAGE} config launch [default|ask|allow|deny]\n  npx ${PACKAGE} config site [list] | mode blocklist|allowlist\n  npx ${PACKAGE} config site block|unblock|allow|disallow <alan-adı>…\n  npx ${PACKAGE} config workspace <ad>|current\n  npx ${PACKAGE} config container <ad>|off\n  npx ${PACKAGE} config browser <name|dir> [--profile <name|dir>] | clear`,
       ),
     );
+    return;
+  }
+  if (cmd === "browser-mode") {
+    if (rest.length > 1) throw new Error(`Use: config browser-mode [${BROWSER_MODES.join("|")}]`);
+    if (!rest.length) console.log(`browserMode: ${config.browserMode ?? "together"}`);
+    else {
+      const browserMode = parseBrowserMode(rest[0]);
+      writeConfig({ ...config, browserMode });
+      console.log(`✓ browserMode: ${browserMode}`);
+    }
     return;
   }
   if (cmd === "browser") {

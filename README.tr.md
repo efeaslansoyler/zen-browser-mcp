@@ -51,12 +51,12 @@ ile `application.ini` dosyasının bulunduğu klasörü belirt.
 
 [Browser and profile selection](docs/permissions.md#browser-and-profile-selection)
 
-Birden fazla browser veya profile açıksa yeni MCP session en son focus alanı
-kullanır. Bir MCP client için seçimi `--browser <name|dir>` ve
+Default `together` mode'unda yeni MCP session en son focus alan kullanıcı
+profile'ını kullanır. Bir MCP client için seçimi `--browser <name|dir>` ve
 `--profile <name|dir>` server argümanlarıyla değiştirebilirsin.
 Linux ve macOS'ta seçili browser kapalıysa bir tool çağrısı onu açabilir.
-Seçim otomatikse ve açık browser yoksa bulunan ilk browser (önce Zen) kendi
-default profile'ıyla açılır. Auto mode açılışa izin verir. Ask mode, form
+Seçim otomatikse ve eşleşen browser yoksa bulunan ilk browser (önce Zen)
+açılır. `together` mode'unda kendi default profile'ı kullanılır. Auto mode açılışa izin verir. Ask mode, form
 elicitation destekleyen MCP client'ta onay ister.
 
 ```sh
@@ -67,6 +67,31 @@ node dist/cli.js doctor
 ```
 
 [Browser startup and permissions](docs/permissions.md#on-demand-browser-startup)
+
+## Browser mode seçenekleri
+
+| Mode | Profile | Pencere |
+|---|---|---|
+| `together` (default) | Kendi profile'ın | Görünür |
+| `agent` | Login'leri saklayan ortak agent profile'ı | Görünür |
+| `scratch` | Bu MCP process'ine ait geçici profile | Görünür |
+| `autonomous` | Bu MCP process'ine ait geçici profile | Headless |
+| `autonomous-agent` | `agent` ile aynı kalıcı profile | Headless |
+
+Default mode'u `npx zen-browser-mcp config browser-mode agent` ile ayarla. Tek bir
+client için MCP server argümanlarına `--browser-mode <mode>` ekle veya server
+environment'ında `ZEN_MCP_BROWSER_MODE` kullan. Değişiklikten sonra client'ı yeniden
+bağla. Browser seçimi her mode'da, profile seçimi `together` mode'unda geçerli.
+
+Kalıcı profile zaten açıksa iki mode da çalışan instance'ı mevcut mode'uyla kullanır.
+`agent` ile login olduktan sonra o browser'ı kapatıp `autonomous-agent` ile devam
+edebilirsin. Autonomous mode'lar island'da onay gerektiren işlemlere izin verir,
+sistem clipboard erişimini reddeder ve custom `deny` kurallarıyla site kurallarını
+uygular. [Autonomous mode permissions](docs/permissions.md#autonomous-browser-modes)
+
+`npx zen-browser-mcp doctor` agent profile'ın konumunu gösterir. Login ve site
+verilerini silmek için agent browser'ını kapatıp
+`npx zen-browser-mcp reset-agent-profile --browser <name|dir>` çalıştır.
 
 ## Kullanım
 

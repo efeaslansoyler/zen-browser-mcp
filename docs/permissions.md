@@ -45,6 +45,21 @@ Use `init ask` to generate rules from the ask template. The file accepts
 the selected base. An invalid file fails closed. A custom allow rule can
 remove consent for a protected action such as clipboard access.
 
+## Autonomous browser modes
+
+When the MCP launcher starts the bridge in `autonomous` or `autonomous-agent`,
+every bridge rule that resolves to `ask` becomes `allow`. This applies to
+the built-in templates and custom rules, including JavaScript and recognized
+form submission. Custom denials and site rules keep their effect. The system
+clipboard is always denied, including clipboard shortcuts routed through it.
+`ask_user`, `hand_to_user` and `show_me` immediately return
+`no user is present (autonomous browser mode)`.
+
+`browser.launch` is decided by the MCP server and can still ask in the MCP client.
+If a persistent agent profile is already open, the server reuses the bridge and
+its existing permission behavior. The `browserMode` field in `tabs_context_mcp`
+reports the running mode.
+
 ## Site rules
 
 The blocklist allows sites except those listed. The allowlist allows only
@@ -77,7 +92,7 @@ state. See [architecture](architecture.md#permissions) for enforcement details.
 The optional `browser` and `profile` keys in `config.json` choose the browser
 for new MCP sessions. Use an application name or the installation directory
 containing `application.ini`. Use a registered profile name or an absolute
-profile directory. For already-running instances without a registered profile
+profile directory. The profile selector applies in `together` mode. For already-running instances without a registered profile
 name, the directory's basename also matches. Omit the profile to start the
 browser with its own default. Permission mode and site rules apply across the
 installed bridges.

@@ -48,19 +48,44 @@ absolute path to `dist/cli.js` as its first argument. Check the setup with
 `node dist/cli.js doctor`. If the installer cannot find your browser, pass
 `--browser /path/to/install` with the folder containing `application.ini`.
 
-If several browsers or profiles are running, new MCP sessions use the most
-recently focused one. To choose a default, run
+In the default `together` mode, new MCP sessions use the most recently focused
+user profile. To choose a default, run
 `node dist/cli.js config browser Zen --profile Default`. One client can
 override that choice with the server arguments `--browser` and `--profile`.
 Run `node dist/cli.js doctor` to see the running instances and the selection.
 
 When the selected browser is closed, a tool call can open it on demand on Linux
-and macOS. With automatic selection and no live browser, the server opens the
-first browser it finds (Zen first) with its default profile. Auto mode allows
+and macOS. With automatic selection and no matching browser, the server opens
+the first browser it finds (Zen first). In `together` it uses the browser's default profile. Auto mode allows
 startup, and ask mode prompts in MCP clients that support form elicitation.
 Use `node dist/cli.js config launch allow|ask|deny` to set a preference,
 or `config launch default` to follow the active permission template.
 See [browser startup and permissions](docs/permissions.md#on-demand-browser-startup).
+
+## Browser modes
+
+| Mode | Profile | Window |
+|---|---|---|
+| `together` (default) | Your own profile | Visible |
+| `agent` | Shared agent profile with persistent logins | Visible |
+| `scratch` | Temporary profile for this MCP process | Visible |
+| `autonomous` | Temporary profile for this MCP process | Headless |
+| `autonomous-agent` | The same persistent profile as `agent` | Headless |
+
+Set the default with `npx zen-browser-mcp config browser-mode agent`. For one client,
+pass `--browser-mode <mode>` in its MCP server arguments or set `ZEN_MCP_BROWSER_MODE`
+in its server environment. Reconnect the client to apply a change. The browser
+selector applies to every mode. The profile selector applies to `together`.
+
+If the persistent profile is already open, both persistent modes reuse it in its
+current mode. Use `agent` to sign in, then close that browser before starting
+`autonomous-agent` for unattended work. The autonomous modes allow operations that
+would ask on the island, deny system clipboard access and retain custom denials and
+site rules. See [autonomous permissions](docs/permissions.md#autonomous-browser-modes).
+
+`npx zen-browser-mcp doctor` shows the agent profile location. To erase its logins and
+site data, close the agent browser and run
+`npx zen-browser-mcp reset-agent-profile --browser <name|dir>`.
 
 ## Use it
 

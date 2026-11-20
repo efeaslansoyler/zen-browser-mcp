@@ -12,7 +12,7 @@ globalThis.Services = {
   io: { newURI: (url) => ({ host: new URL(url).hostname }) },
 };
 
-function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", answer } = {}) {
+function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", answer, autonomous, custom } = {}) {
   const settings = normalizeConfig({ mode, sites });
   const prompts = [],
     effects = [];
@@ -26,6 +26,8 @@ function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", an
   const access = new TabAccess();
   access.join(1, "test-session");
   const context = bridgeContext({
+    autonomous,
+    readPermissions: () => custom,
     framesOf: () => [],
     access,
     browserFor: (_call, id) => {
@@ -363,4 +365,42 @@ test("an allowlist keeps agents on the listed sites", async () => {
   assert.match(result[0].text, /elsewhere\.test is not on the user's allowlist/);
   assert.deepEqual(h.effects, ["here"]);
   assert.equal(h.browser.currentURI.host, "ordinary.test");
+});
+
+test("autonomous permissions preserve deny rules and site restrictions", async () => {
+  for (const mode of ["auto", "ask", "custom"]) {
+    const custom = policy.parsePermissions(
+      JSON.stringify({
+        base: "ask",
+        rules: { javascript_tool: "ask", submit: "deny", "clipboard.read": "allow" },
+      }),
+    );
+    const h = harness({ mode, autonomous: true, custom });
+    assert.equal(h.context.rule("javascript_tool"), "allow");
+    assert.equal(h.context.rule("submit"), mode === "custom" ? "deny" : "allow");
+    assert.throws(() => h.context.gate("clipboard.read"), /clipboard.read/);
+    assert(!(await h.batch([h.action("javascript_tool", { text: "runs" })])).isError);
+    h.context.query = async () => ({ value: { submit: true } });
+    h.context.frameOf = () => null;
+    const submit = await h.batch([h.action("computer", { action: "mouse_down", ref: "ref_1" })]);
+    assert.equal(!!submit.isError, mode === "custom", submit[0]?.text);
+    if (mode === "custom") assert.match(submit[0].text, /settings don't allow this \(submit\)/);
+    assert.deepEqual(h.prompts, []);
+    for (const tool of ["hand_to_user", "ask_user", "show_me"]) {
+      let reply;
+      h.context.tools[tool] ??= () => assert.fail("user-only tool must not run");
+      h.context.reply = (_transport, _output, value) => (reply = value);
+      await h.context.handle(JSON.stringify({ tool, args: { tabId: 999 }, session: "test-session" }));
+      assert.deepEqual(reply, { ok: false, error: "no user is present (autonomous browser mode)" });
+      const batch = await h.batch([h.action(tool)]);
+      assert(batch.isError);
+      assert.match(batch[0].text, /no user is present/);
+    }
+  }
+  for (const sites of [{ blocklist: ["ordinary.test"] }, { mode: "allowlist", allowlist: ["other.test"] }]) {
+    const h = harness({ mode: "ask", autonomous: true, sites });
+    assert((await h.batch([h.action("javascript_tool")])).isError);
+    assert.deepEqual(h.effects, []);
+    assert.deepEqual(h.prompts, []);
+  }
 });

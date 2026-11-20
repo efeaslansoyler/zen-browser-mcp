@@ -194,6 +194,16 @@ export function ruleOf(key, mode = "auto", custom = null) {
   return operation[mode === "ask" ? "ask" : "auto"];
 }
 
+export function autonomousRule(key, rule) {
+  if (key.startsWith("clipboard.")) return "deny";
+  return rule === "ask" ? "allow" : rule;
+}
+
+export function assertUserPresent(autonomous, tool) {
+  if (autonomous && (tool === "ask_user" || tool === "hand_to_user" || tool === "show_me"))
+    throw new Error("no user is present (autonomous browser mode)");
+}
+
 // permissions.jsonc: { "base": "ask" | "auto", "rules": { "<operation>": "allow" | "ask" | "deny" } }
 // with // and /* */ comments and trailing commas. Unknown operations or rules are errors, so a
 // typo never silently leaves the default in place.
@@ -250,6 +260,8 @@ export function examplePermissions(base = "auto") {
     '//   "allow"  the agent does it without asking',
     '//   "ask"    you approve it on the island, or in the MCP client for browser.launch',
     '//   "deny"   the agent is refused',
+    "// Autonomous browsers allow ask rules inside the bridge, deny system clipboard access,",
+    "// and keep custom deny and site rules. Startup approval still happens in the MCP client.",
     "// Delete a line to keep the base template's rule. The comment after each line shows the",
     "// built-in rules as (ask template / auto template).",
     "//",

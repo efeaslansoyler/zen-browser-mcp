@@ -6,6 +6,8 @@ import { skillStatus } from "./skill.ts";
 import { claudeHookInstalled, claudeSettingsFile } from "./hooks.ts";
 import { openCodePluginFile, openCodePluginInstalled } from "./opencode.ts";
 import { findBrowsers, installedVersion, loaderStatus, unsupportedInstalls } from "./install.ts";
+import { installationFor } from "./launch.ts";
+import { agentProfile, PROFILES_DIR } from "./profiles.ts";
 import { readConfig, readPermissions } from "./config.ts";
 import { CONFIG_FILE, DATA_DIR, LOG_FILE, PACKAGE, PERMISSIONS_FILE, SERVER_NAME, VERSION } from "./paths.ts";
 import { call } from "./zen.ts";
@@ -82,10 +84,24 @@ export async function doctor() {
 
   try {
     const instances = await browserResolver.list();
+    const { choice } = browserResolver.choice();
+    console.log(`Browser mode: ${choice.browserMode}`);
     if (instances.length) console.log("Running browser instances:");
     for (const entry of instances)
-      console.log(`  ${instanceLabel(entry)} (pid ${entry.pid}) — ${entry.installationDir} — ${entry.profileDir}`);
-    const { socket, instance, reason } = await browserResolver.resolve();
+      console.log(
+        `  ${instanceLabel(entry)} (pid ${entry.pid}) — ${entry.browserMode ?? "together"} — ${entry.installationDir} — ${entry.profileDir}`,
+      );
+    const selected = await browserResolver.resolve().catch(() => undefined);
+    let installation = selected?.instance?.installationDir;
+    if (!installation) {
+      try {
+        installation = installationFor(choice.browser, () => browsers).dir;
+      } catch {}
+    }
+    console.log(
+      `Agent profile: ${installation ? agentProfile(installation) : path.join(PROFILES_DIR, "<installation>", "agent")}`,
+    );
+    const { socket, instance, reason } = selected ?? (await browserResolver.resolve());
     console.log(`Selected: ${instance ? `${instanceLabel(instance)} (pid ${instance.pid})` : socket} (${reason})`);
     const [reply] = await call("ping", {}, 5000);
     const info = JSON.parse(reply.type === "text" ? reply.text : "{}");
