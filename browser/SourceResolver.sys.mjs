@@ -1,7 +1,8 @@
 // Source locations for picked elements: turns the raw hints the picker collects (stack
 // strings, framework metadata) into project files and lines through the page's source maps.
 //
-// It fetches only from the picked page's origin and only when the site rules allow that host.
+// It fetches only from the picked page's origin (including Next.js's dev source map endpoint for
+// server components) and only when the site rules allow that host.
 // Anything missing, failing or slower than the budget makes the result "unknown".
 // env: { fetchText(url): Promise<string>, siteAllowed(host), sleep(ms), budgetMs }
 
@@ -52,34 +53,35 @@ export class SourceResolver {
 
   // A generated stack frame → its original position, or null.
   async #mapFrame({ url, line, column }, origin, maps) {
+    // React's stand-in for a server component frame: the server file at its own position.
+    const server = /^(?:rsc|about):\/\/React\/[^/]+\/(.+)\?\d+$/.exec(url);
     let script;
     try {
-      script = new URL(url);
+      script = server ? null : new URL(url);
     } catch {
       return null;
     }
-    if (script.origin !== origin) return null;
-    const { map, position } = await this.#lookup(maps, script.href, () => this.#loadMap(script, origin), line, column);
-    if (!position) return null;
-    const original = sourcePath(map, position);
-    return {
-      file: projectPath(original, map.url, script),
-      original,
-      line: position.line + 1,
-      column: position.column + 1,
-      content: map.sourcesContent?.[position.source] ?? null,
-    };
-  }
-
-  // A cached map and the original position of a 1-based generated line and column.
-  async #lookup(maps, key, load, line, column) {
+    if (script && script.origin !== origin) return null;
+    const key = script?.href ?? url;
     if (!maps.has(key))
       maps.set(
         key,
-        load().catch(() => null),
+        (server ? this.#loadServerMap(decodeURI(server[1]), origin) : this.#loadMap(script, origin)).catch(() => null),
       );
     const map = await maps.get(key);
-    return { map, position: map && originalPosition(map, line - 1, Math.max(0, column - 1)) };
+    const found = map && originalPosition(map, line - 1, column - 1);
+    if (!found) return null;
+    const { section, position } = found;
+    const original =
+      (section.sourceRoot ? section.sourceRoot.replace(/\/?$/, "/") : "") + section.sources[position.source];
+    return {
+      file: projectPath(original, section.url, script),
+      original,
+      line: position.line + 1,
+      column: position.column + 1,
+      content: section.sourcesContent?.[position.source] ?? null,
+      next: Boolean(server) || script.pathname.startsWith("/_next/"),
+    };
   }
 
   async #loadMap(script, origin) {
@@ -94,15 +96,15 @@ export class SourceResolver {
     if (url.protocol === "data:") json = decodeDataURL(url.href);
     else if (url.origin === origin) json = await this.env.fetchText(url.href);
     else return null;
-    const map = JSON.parse(json);
-    if (!map?.mappings || !Array.isArray(map.sources)) return null;
-    return {
-      url: url.protocol === "data:" ? script?.href : url.href,
-      sourceRoot: map.sourceRoot || "",
-      sources: map.sources,
-      sourcesContent: map.sourcesContent,
-      lines: decodeMappings(map.mappings),
-    };
+    return parseMap(json, url.protocol === "data:" ? script?.href : url.href);
+  }
+
+  // Next.js dev servers serve server bundle maps at /__nextjs_source-map?filename=… (the URL its own
+  // findSourceMapURL gives React).
+  async #loadServerMap(filename, origin) {
+    const url = new URL("/__nextjs_source-map", origin);
+    url.searchParams.set("filename", filename);
+    return parseMap(await this.env.fetchText(url.href), url.href);
   }
 
   // Each matched rule's file and line. Lines inside an injected <style> are only a place in the
@@ -112,7 +114,8 @@ export class SourceResolver {
       rules.slice(0, MAX_CSS_RULES).map(async ({ sheet: index, selector, line, column }) => {
         const sheet = sheets[index] ?? {};
         if (sheet.kind === "link") {
-          const position = await this.#mapFrame({ url: sheet.href, line, column }, page.origin, maps).catch(() => null);
+          const frame = { url: sheet.href, line, column: Math.max(1, column) };
+          const position = await this.#mapFrame(frame, page.origin, maps).catch(() => null);
           if (position)
             return { selector, kind: "file", file: position.file, original: position.original, line: position.line };
           return { selector, kind: "file", file: servedFile(sheet.href, page), line };
@@ -131,15 +134,17 @@ export class SourceResolver {
   async #mapStyle({ map: comment, devId }, line, column, page, maps) {
     const url = new URL(comment, page);
     if (url.protocol !== "data:" && url.origin !== page.origin) return null;
-    const { map, position } = await this.#lookup(
-      maps,
-      url.href,
-      () => this.#parseMap(url, null, page.origin),
-      line,
-      column,
-    );
-    if (!position) return null;
-    const original = sourcePath(map, position);
+    if (!maps.has(url.href))
+      maps.set(
+        url.href,
+        this.#parseMap(url, null, page.origin).catch(() => null),
+      );
+    const map = await maps.get(url.href);
+    const found = map && originalPosition(map, line - 1, Math.max(0, column - 1));
+    if (!found) return null;
+    const { section, position } = found;
+    const original =
+      (section.sourceRoot ? section.sourceRoot.replace(/\/?$/, "/") : "") + section.sources[position.source];
     let file = original;
     if (original.startsWith("file://")) file = decodeURIComponent(new URL(original).pathname);
     else if (devId && !/^([a-z]+:|\/)/i.test(original))
@@ -151,13 +156,30 @@ export class SourceResolver {
   }
 }
 
-const sourcePath = (map, position) =>
-  (map.sourceRoot ? map.sourceRoot.replace(/\/?$/, "/") : "") + map.sources[position.source];
-
 // A stylesheet without a map: its served path on the page's origin, else its URL.
 function servedFile(href, page) {
   const url = new URL(href);
   return url.origin === page.origin ? decodeURIComponent(url.pathname).slice(1) : href;
+}
+
+// A source map, or an index map of sections (Turbopack), as sections with decoded mappings.
+function parseMap(json, url) {
+  const map = JSON.parse(json);
+  const parts = Array.isArray(map?.sections) ? map.sections : [{ offset: { line: 0, column: 0 }, map }];
+  const sections = [];
+  for (const { offset, map: part } of parts) {
+    if (!part?.mappings || !Array.isArray(part.sources)) continue;
+    sections.push({
+      line: offset?.line ?? 0,
+      column: offset?.column ?? 0,
+      url,
+      sourceRoot: part.sourceRoot || "",
+      sources: part.sources,
+      sourcesContent: part.sourcesContent,
+      lines: decodeMappings(part.mappings),
+    });
+  }
+  return sections.length ? sections : null;
 }
 
 // React 19 owner stacks: the element's JSX call site, then where each owner component was
@@ -172,9 +194,9 @@ async function resolveReact19({ element, owners = [] }, { mapFrame }) {
     if (site) chain.push({ role: "component", name: owner.name, ...site });
   }
   return {
-    framework: "React",
+    framework: chain.some((link) => link.next) ? "Next.js" : "React",
     precision: "element",
-    chain: chain.map(({ content, ...link }) => link),
+    chain: chain.map(({ content, next, ...link }) => link),
     snippet: snippet(own),
   };
 }
@@ -212,8 +234,15 @@ function snippet({ file, line, content }) {
 }
 
 // A path the agent can open from the project root when the map reveals one, else the original.
-// Dev servers serve project files at their project path (Vite: /src/App.tsx).
+// Dev servers serve project files at their project path (Vite: /src/App.tsx); bundlers name them
+// turbopack:///[project]/app/page.tsx or webpack://_N_E/./app/page.tsx.
 function projectPath(original, mapUrl, script) {
+  const bundled =
+    /^(?:turbopack:\/\/\/\[project\]\/|webpack:\/\/[^/]*\/\.\/|webpack-internal:\/\/\/(?:\([^)]*\)\/)?\.\/)(.+)$/.exec(
+      original,
+    );
+  if (bundled) return bundled[1];
+  if (!script) return original;
   const served = decodeURIComponent(script.pathname);
   const absolute = original.startsWith("file://") ? decodeURIComponent(new URL(original).pathname) : original;
   if (absolute.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(absolute)) {
@@ -291,11 +320,15 @@ function decodeMappings(mappings) {
   return lines;
 }
 
-function originalPosition(map, line, column) {
+// Sections are sorted; the last one starting at or before the position holds it.
+function originalPosition(sections, line, column) {
+  const section = sections.findLast((s) => s.line < line || (s.line === line && s.column <= column));
+  if (!section) return null;
+  if (line === section.line) column -= section.column;
   let found = null;
-  for (const segment of map.lines[line] ?? []) {
+  for (const segment of section.lines[line - section.line] ?? []) {
     if (segment[0] > column) break;
     found = segment;
   }
-  return found && { source: found[1], line: found[2], column: found[3] };
+  return found && { section, position: { source: found[1], line: found[2], column: found[3] } };
 }

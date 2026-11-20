@@ -298,3 +298,111 @@ test("CSS rules survive an unresolved element location, and the site rules still
   const blocked = resolver({ siteAllowed: () => false });
   assert.equal(await blocked.sources.resolve(hintsWithCss, { pageUrl: `${ORIGIN}/`, document: {} }), "unknown");
 });
+
+// A Next.js app-router dev server (Turbopack). Server components reach the browser as React's fake
+// "rsc://React/<env>/<server file>?<n>" frames at the server chunk's own line and column; their
+// maps come from the dev endpoint, as index maps with sources under turbopack:///[project]/.
+const NEXT = "http://localhost:3000";
+const SERVER_CHUNK = "file:///home/dev/shop/.next/server/chunks/ssr/[root-of-the-server]__abc._.js";
+const CLIENT_CHUNK = `${NEXT}/_next/static/chunks/app_counter_tsx_1f2e._.js`;
+const NEXT_PAGE = Array.from({ length: 12 }, (_, i) => `// page.tsx line ${i + 1}`);
+NEXT_PAGE[6] = '      <h1 className="title">Shop</h1>';
+const NEXT_COUNTER = Array.from({ length: 12 }, (_, i) => `// counter.tsx line ${i + 1}`);
+const indexMap = (offset, map) =>
+  JSON.stringify({
+    version: 3,
+    sections: [
+      {
+        offset: { line: 0, column: 0 },
+        map: JSON.parse(
+          sourceMap({ sources: ["turbopack:///[project]/node_modules/next/x.js"], lines: [[[0, 0, 0, 0]]] }),
+        ),
+      },
+      { offset, map: JSON.parse(map) },
+    ],
+  });
+const nextEndpoint = (filename) => `${NEXT}/__nextjs_source-map?filename=${encodeURIComponent(filename)}`;
+const nextFiles = {
+  [nextEndpoint(SERVER_CHUNK)]: indexMap(
+    { line: 40, column: 0 },
+    // section line 3, column 7 (zero-based) → page.tsx line 7, column 7
+    sourceMap({
+      sources: ["turbopack:///[project]/app/page.tsx"],
+      sourcesContent: [NEXT_PAGE.join("\n")],
+      lines: [[], [], [], [[6, 0, 6, 6]]],
+    }),
+  ),
+  [CLIENT_CHUNK]: "(globalThis.TURBOPACK = []).push([]);\n//# sourceMappingURL=app_counter_tsx_1f2e._.js.map\n",
+  [`${CLIENT_CHUNK}.map`]: indexMap(
+    { line: 10, column: 0 },
+    // section line 2, column 4 → counter.tsx line 9, column 5
+    sourceMap({
+      sources: ["turbopack:///[project]/app/counter.tsx"],
+      sourcesContent: [NEXT_COUNTER.join("\n")],
+      lines: [[], [], [[4, 0, 8, 4]]],
+    }),
+  ),
+};
+const rsc = (name, line, column, scheme = "rsc") =>
+  frame(name, `${scheme}://React/Server/${encodeURI(SERVER_CHUNK)}?7`, line, column);
+
+function nextResolver(served = nextFiles) {
+  return resolver({
+    fetchText: async (url) => {
+      if (!(url in served)) throw new Error(`404 ${url}`);
+      return served[url];
+    },
+  }).sources;
+}
+
+test("a Next.js server component frame resolves through the dev source map endpoint", async () => {
+  const result = await nextResolver().resolve(
+    { react19: { element: stack(rsc("Page", 44, 8)), owners: [] } },
+    { pageUrl: `${NEXT}/shop`, document: {} },
+  );
+  assert.equal(result.framework, "Next.js");
+  assert.deepEqual(result.chain, [
+    { role: "element", file: "app/page.tsx", original: "turbopack:///[project]/app/page.tsx", line: 7, column: 7 },
+  ]);
+  assert.deepEqual(result.snippet, { file: "app/page.tsx", line: 7, start: 4, lines: NEXT_PAGE.slice(3, 11) });
+});
+
+test("newer React's about://React/ server frames and Next.js client chunks resolve as well", async () => {
+  const result = await nextResolver().resolve(
+    {
+      react19: {
+        element: stack(frame("Counter", CLIENT_CHUNK, 13, 5)),
+        owners: [{ name: "Counter", stack: stack(rsc("Page", 44, 8, "about")) }],
+      },
+    },
+    { pageUrl: `${NEXT}/`, document: {} },
+  );
+  assert.equal(result.framework, "Next.js");
+  assert.deepEqual(result.chain, [
+    {
+      role: "element",
+      file: "app/counter.tsx",
+      original: "turbopack:///[project]/app/counter.tsx",
+      line: 9,
+      column: 5,
+    },
+    {
+      role: "component",
+      name: "Counter",
+      file: "app/page.tsx",
+      original: "turbopack:///[project]/app/page.tsx",
+      line: 7,
+      column: 7,
+    },
+  ]);
+});
+
+test("a missing or failing Next.js dev endpoint yields unknown", async () => {
+  const hintsOf = { react19: { element: stack(rsc("Page", 44, 8)), owners: [] } };
+  for (const body of [undefined, "", "<!DOCTYPE html><h1>404</h1>", '{"error":"boom"}']) {
+    const served = { ...nextFiles };
+    if (body === undefined) delete served[nextEndpoint(SERVER_CHUNK)];
+    else served[nextEndpoint(SERVER_CHUNK)] = body;
+    assert.equal(await nextResolver(served).resolve(hintsOf, { pageUrl: `${NEXT}/`, document: {} }), "unknown");
+  }
+});

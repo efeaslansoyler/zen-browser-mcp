@@ -66,7 +66,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `TabActivity.sys.mjs` | In shared tabs: which session acted when, and whether it could change the page (for `meanwhile` and `pageChanged`) |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
-| `SourceResolver.sys.mjs` | Source locations for picks: maps the picker's raw hints (React 19 owner stacks, matched CSS rules) through the page's same-origin source maps, cached per document, within a time budget |
+| `SourceResolver.sys.mjs` | Source locations for picks: maps the picker's raw hints (React 19 owner stacks, matched CSS rules) through the page's same-origin source maps and Next.js's dev source map endpoint, cached per document, within a time budget |
 | `Recordings.sys.mjs` | "Show me once": publishes the recorded tabs to content processes, cleans and collects their steps, screenshots each step |
 | `Demonstrations.sys.mjs` | "Show me once" end to end: record, review, save; `show_me`, and "Record steps for an agent…" in the page menu with sending to a session |
 | `RecordingReview.sys.mjs` | The island's review after a recording: name, delete steps, values that change every time, Play |
