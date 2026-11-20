@@ -9,7 +9,6 @@
 const SNIPPET_BEFORE = 3;
 const SNIPPET_AFTER = 4;
 const MAX_COMPONENTS = 3;
-const MAX_CSS_RULES = 8;
 
 // One resolver per hint kind; each returns a location or null.
 const FRAMEWORKS = [
@@ -79,8 +78,7 @@ export class SourceResolver {
     const found = map && originalPosition(map, line - 1, column - 1);
     if (!found) return null;
     const { section, position } = found;
-    const original =
-      (section.sourceRoot ? section.sourceRoot.replace(/\/?$/, "/") : "") + section.sources[position.source];
+    const original = sourcePath(section, position);
     return {
       file: projectPath(original, section.url, script),
       original,
@@ -93,7 +91,7 @@ export class SourceResolver {
 
   async #loadMap(script, origin) {
     const text = await this.env.fetchText(script.href);
-    const comment = [...text.matchAll(/[#@]\s*sourceMappingURL=(\S+)/g)].at(-1)?.[1];
+    const comment = [...text.matchAll(/[#@]\s*sourceMappingURL=(\S+?)(?=\*\/|\s|$)/g)].at(-1)?.[1];
     if (!comment) return null;
     return this.#parseMap(new URL(comment, script), script, origin);
   }
@@ -118,7 +116,7 @@ export class SourceResolver {
   // project after a CSS source map maps them; rules made by script have no place at all.
   #cssRules({ sheets = [], rules = [] }, page, maps) {
     return Promise.all(
-      rules.slice(0, MAX_CSS_RULES).map(async ({ sheet: index, selector, line, column }) => {
+      rules.map(async ({ sheet: index, selector, line, column }) => {
         const sheet = sheets[index] ?? {};
         if (sheet.kind === "link") {
           const frame = { url: sheet.href, line, column: Math.max(1, column) };
@@ -150,8 +148,7 @@ export class SourceResolver {
     const found = map && originalPosition(map, line - 1, Math.max(0, column - 1));
     if (!found) return null;
     const { section, position } = found;
-    const original =
-      (section.sourceRoot ? section.sourceRoot.replace(/\/?$/, "/") : "") + section.sources[position.source];
+    const original = sourcePath(section, position);
     let file = original;
     if (original.startsWith("file://")) file = decodeURIComponent(new URL(original).pathname);
     else if (devId && !/^([a-z]+:|\/)/i.test(original))
@@ -162,6 +159,9 @@ export class SourceResolver {
     return { file, original, line: position.line + 1 };
   }
 }
+
+const sourcePath = ({ sourceRoot, sources }, { source }) =>
+  (sourceRoot ? sourceRoot.replace(/\/?$/, "/") : "") + sources[source];
 
 // A stylesheet without a map: its served path on the page's origin, else its URL.
 function servedFile(href, page) {
@@ -221,7 +221,7 @@ function resolveReact18({ element, owners = [] }) {
 
 // Svelte columns are zero-based.
 function resolveSvelte({ element, parents = [] }) {
-  const place = (loc) => userPlace(loc?.file, loc?.line, loc?.column + 1);
+  const place = (loc) => userPlace(loc?.file, loc?.line, Number.isInteger(loc?.column) ? loc.column + 1 : null);
   return elementChain(
     "Svelte",
     place(element),

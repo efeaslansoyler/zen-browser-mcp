@@ -70,6 +70,19 @@ test("Svelte element metadata gives the element and the component call sites abo
   });
 });
 
+test("Svelte metadata without a column keeps the line only", async () => {
+  const result = await resolve({
+    svelte: {
+      element: { file: "src/lib/Card.svelte", line: 12, column: null },
+      parents: [{ name: "Card", file: "src/routes/+page.svelte", line: 8, column: null }],
+    },
+  });
+  assert.deepEqual(result.chain, [
+    { role: "element", file: "src/lib/Card.svelte", line: 12 },
+    { role: "component", name: "Card", file: "src/routes/+page.svelte", line: 8 },
+  ]);
+});
+
 test("Astro dev source attributes give the element's file and line", async () => {
   assert.deepEqual(await resolve({ astro: { file: "/home/dev/site/src/pages/index.astro", loc: "5:17" } }), {
     framework: "Astro",

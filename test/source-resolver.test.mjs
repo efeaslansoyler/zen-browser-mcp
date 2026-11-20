@@ -207,6 +207,7 @@ files[`${ORIGIN}/assets/site.css.map`] = sourceMap({
   lines: [[], [[0, 0, 40, 0]]],
 });
 files[`${ORIGIN}/assets/plain.css`] = ".a{}\n";
+files[`${ORIGIN}/assets/tight.css`] = ".a{}\n.b{}\n/*# sourceMappingURL=site.css.map*/\n";
 
 const css = (sheets, rules) => ({ css: { sheets, rules } });
 const rule = (sheet, selector, line, column = 1) => ({ sheet, selector, line, column });
@@ -249,8 +250,9 @@ test("linked stylesheets map through their own source map or keep the served fil
         { kind: "link", href: `${ORIGIN}/assets/site.css` },
         { kind: "link", href: `${ORIGIN}/assets/plain.css` },
         { kind: "link", href: "https://cdn.example/lib.css" },
+        { kind: "link", href: `${ORIGIN}/assets/tight.css` },
       ],
-      [rule(0, ".b", 2), rule(1, ".a", 1), rule(2, ".lib", 7)],
+      [rule(0, ".b", 2), rule(1, ".a", 1), rule(2, ".lib", 7), rule(3, ".b", 2)],
     ),
     { pageUrl: `${ORIGIN}/`, document: {} },
   );
@@ -258,6 +260,7 @@ test("linked stylesheets map through their own source map or keep the served fil
     { selector: ".b", kind: "file", file: "src/styles/site.scss", original: "../src/styles/site.scss", line: 41 },
     { selector: ".a", kind: "file", file: "assets/plain.css", line: 1 },
     { selector: ".lib", kind: "file", file: "https://cdn.example/lib.css", line: 7 },
+    { selector: ".b", kind: "file", file: "src/styles/site.scss", original: "../src/styles/site.scss", line: 41 },
   ]);
   assert(!fetched.some((url) => url.startsWith("https://cdn.example")));
 });

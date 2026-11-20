@@ -567,8 +567,7 @@ export class Island {
         send.textContent = L("Sending…", "Gönderiliyor…");
         note.disabled = true;
         for (const field of fields) field.disabled = true;
-        if (fields.length) this.#actions.send(value, this.#pick.targetId, notes);
-        else this.#actions.send(value, this.#pick.targetId);
+        this.#actions.send(value, this.#pick.targetId, notes);
       } else note.focus();
     };
     send.addEventListener("click", submit);

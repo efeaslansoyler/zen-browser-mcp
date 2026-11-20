@@ -129,7 +129,7 @@ test("island switches clients, confirmation, pause and Claude selection without 
     note.value = "Change this button";
     sendButton.listeners.get("click")();
     sendButton.listeners.get("click")();
-    assert.deepEqual(sent, [["Change this button", "claude-session"]]);
+    assert.deepEqual(sent, [["Change this button", "claude-session", []]]);
     assert.equal(select.disabled, true);
     island.sent("Queued");
     expectTheme("Claude", "#d97757");
@@ -349,7 +349,7 @@ test("a multi-element pick's note step has a general field and one numbered fiel
     assert.equal(rows().length, 0, "a single pick keeps only today's field");
     general.value = "Change it";
     sendButton.listeners.get("click")();
-    assert.deepEqual(sent.pop(), ["Change it", ""]);
+    assert.deepEqual(sent.pop(), ["Change it", "", []]);
     island.destroy();
   } finally {
     globalThis.Services = originalServices;

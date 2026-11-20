@@ -354,10 +354,10 @@ function sheetHint(sheet) {
   const owner = sheet.ownerNode;
   if (!owner) return { kind: "constructed" };
   const devId = owner.getAttribute?.("data-vite-dev-id") || null;
-  const text = String(owner.textContent ?? "");
+  const css = String(owner.textContent ?? "");
   // CSS-in-JS libraries insert rules into an empty <style> through the CSSOM
-  if (!text.trim()) return { kind: "script", devId };
-  const map = [...text.matchAll(/\/\*[#@]\s*sourceMappingURL=(\S+?)\s*\*\//g)].at(-1)?.[1];
+  if (!css.trim()) return { kind: "script", devId };
+  const map = [...css.matchAll(/\/\*[#@]\s*sourceMappingURL=(\S+?)\s*\*\//g)].at(-1)?.[1];
   return { kind: "style", devId, map: map && map.length <= MAX_CSS_MAP ? map : null };
 }
 

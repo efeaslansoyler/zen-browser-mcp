@@ -128,12 +128,19 @@ export class Picks {
     this.env.island?.compose(current.browser, label, targets, current.targetId, infos.length);
   }
 
-  // The element's source location: undefined without hints, else a location or "unknown".
+  // The element's source location and CSS rules: undefined without hints; { unknown: true, … }
+  // only when framework hints could not be resolved.
   source(current, info) {
-    if (!info.sourceHints || !this.env.sources) return undefined;
+    const hints = info.sourceHints;
+    if (!hints || !this.env.sources) return undefined;
+    const framework = Object.keys(hints).some((key) => key !== "css");
     return this.env.sources
-      .resolve(info.sourceHints, { pageUrl: info.url, document: current.document })
-      .catch(() => "unknown");
+      .resolve(hints, { pageUrl: info.url, document: current.document })
+      .catch(() => "unknown")
+      .then((source) => {
+        const found = source === "unknown" ? {} : source;
+        return framework && !found.chain ? { unknown: true, ...found } : found;
+      });
   }
 
   // the target session changed on the island
@@ -169,12 +176,20 @@ export class Picks {
     }
     current.sending = true;
     const { content, meta } = this.message(current, note, targetId, elementNotes);
+    const notes = current.items?.length > 1 ? current.items.map((_, i) => elementNotes[i]?.trim() ?? "") : [];
     // Pin to the user's selected destination. Never reroute if it disconnects.
     const target = targetId ? this.env.targets().find((t) => t.id === targetId) : null;
     this.env.pickedTabs.add(current.browser.browserId);
     let status = "missing";
     try {
-      if (targetId) status = await this.env.inbox.send(targetId, { kind: "pick", content, meta, note });
+      if (targetId)
+        status = await this.env.inbox.send(targetId, {
+          kind: "pick",
+          content,
+          meta,
+          note,
+          ...(notes.some(Boolean) && { elementNotes: notes }),
+        });
     } catch (e) {
       this.env.logError("pick delivery", e);
     }
@@ -224,7 +239,7 @@ export class Picks {
     );
     if (info.text) lines.push(`Text: "${info.text}"`);
     if (shot) lines.push(`Screenshot: ${shot}`);
-    if (source && !source.chain) lines.push("Source: unknown");
+    if (source?.unknown) lines.push("Source: unknown");
     if (source?.chain) lines.push(...sourceLines(source));
     if (source?.cssRules?.length) lines.push(...cssLines(source.cssRules));
     if (source?.chain) {
@@ -331,11 +346,14 @@ export class Picks {
   }
 }
 
+// The map's own path only when it says more than the project path.
+const originalNote = ({ file, original }) =>
+  original && original !== file && !file.endsWith(`/${original}`) ? ` (${original})` : "";
+
 // The source location and snippet of a picked element, for the agent.
 function sourceLines({ framework, precision, chain, snippet }) {
-  // the map's own path only when it says more than the project path
-  const place = ({ file, original, line, column }) =>
-    `${file}${line ? `:${line}` : ""}${line && column ? `:${column}` : ""}${original && original !== file && !file.endsWith(`/${original}`) ? ` (${original})` : ""}`;
+  const place = (link) =>
+    `${link.file}${link.line ? `:${link.line}` : ""}${link.line && link.column ? `:${link.column}` : ""}${originalNote(link)}`;
   const lines = [`Source (${framework}, ${precision}-level):`];
   for (const link of chain)
     if (link.role === "element") lines.push(`  element: ${place(link)}`);
@@ -360,8 +378,7 @@ function sourceLines({ framework, precision, chain, snippet }) {
 
 function cssLines(rules) {
   const place = (rule) => {
-    if (rule.kind === "file")
-      return `${rule.file}:${rule.line}${rule.original && rule.original !== rule.file && !rule.file.endsWith(`/${rule.original}`) ? ` (${rule.original})` : ""}`;
+    if (rule.kind === "file") return `${rule.file}:${rule.line}${originalNote(rule)}`;
     if (rule.kind === "unmapped")
       return `${rule.file} (Vite dev style without a CSS source map; line ${rule.line} of the injected CSS)`;
     if (rule.kind === "inline") return `an inline <style> of the page, line ${rule.line} of that element`;

@@ -22,13 +22,20 @@ export class Inbox {
 
   // Returns "sent" (pushed now), "waiting" (goes with the next tool result or prompt) or
   // "missing" (no such session).
-  async send(session, { kind, content, meta = {}, note = "" }) {
+  // elementNotes: a multi-element pick's notes per element, for clients that show them apart
+  async send(session, { kind, content, meta = {}, note = "", elementNotes }) {
     if (!this.env.known(session)) return "missing";
     const sub = this.env.endpoint(session);
     if (sub) {
       let ok = false;
       try {
-        ok = await this.env.deliver(sub, { event: "channel", content, meta, note });
+        ok = await this.env.deliver(sub, {
+          event: "channel",
+          content,
+          meta,
+          note,
+          ...(elementNotes && { elementNotes }),
+        });
       } catch {}
       if (ok) return "sent";
     }

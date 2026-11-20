@@ -64,7 +64,7 @@ Shift-click also works) up to eight elements and press Enter. A bar at the
 bottom of the page lists every picker key and how many elements are selected.
 Add a note and choose a destination. A multi-element pick also has an optional
 note per numbered element; the agent reads each one at the top of that
-element's context. The pick can include
+element's context (Codex reads them with the general note). The pick can include
 the page URL, selector, visible crop, styles and component context. A pick
 does not grant live access to its source tab.
 
@@ -76,8 +76,8 @@ few lines of the original source from the page's source maps (for Next.js
 server components, from its dev server's `/__nextjs_source-map` endpoint). The
 HTML is then shortened. Source maps are read only from the page's own origin,
 only when your site rules allow it, and within two seconds; otherwise the pick says
-`Source: unknown` and keeps its full content. Production pages and stacks without such metadata
-send the same pick as before, plus the CSS rules below.
+`Source: unknown` and keeps its full HTML. Production pages and stacks without such metadata
+get no `Source:` line: the pick has the full HTML and the CSS rules below.
 
 Other stacks give the location their development build records, without a
 snippet. The pick names the framework and whether the location points at the

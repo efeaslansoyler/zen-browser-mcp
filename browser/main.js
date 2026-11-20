@@ -530,9 +530,22 @@ function logError(where, e) {
         fetchText: async (url) => {
           const win = Services.wm.getMostRecentWindow("navigator:browser");
           const response = await win.fetch(url, { credentials: "omit", redirect: "error" });
-          if (!response.ok || Number(response.headers.get("content-length")) > 50e6)
+          const max = 50e6;
+          if (!response.ok || Number(response.headers.get("content-length")) > max)
             throw new Error(`HTTP ${response.status}`);
-          return response.text();
+          const reader = response.body.getReader();
+          const decoder = new win.TextDecoder();
+          let text = "",
+            size = 0;
+          for (let chunk; !(chunk = await reader.read()).done;) {
+            size += chunk.value.byteLength;
+            if (size > max) {
+              reader.cancel().catch(() => {});
+              throw new Error("Response too large");
+            }
+            text += decoder.decode(chunk.value, { stream: true });
+          }
+          return text + decoder.decode();
         },
       }),
     });
