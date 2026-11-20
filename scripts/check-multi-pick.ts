@@ -226,7 +226,7 @@ try {
   await until(() => chrome("!h.pick"), "Escape did not cancel all picks.");
   console.log("✓ Eight-item limit, Backspace and Escape clean up correctly");
 
-  const tabCount = () => chrome(`h.findTab(${tabId}).ownerGlobal.gBrowser.tabs.length`);
+  const tabCount = () => chrome(`h.findTab(${tabId}).linkedBrowser.ownerDocument.defaultView.gBrowser.tabs.length`);
   const tabsBefore = await tabCount();
   await start();
   await command("computer", { tabId, action: "left_click", ref: linkRef, text: toggle });

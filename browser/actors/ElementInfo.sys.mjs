@@ -328,7 +328,7 @@ const MAX_CSS_MAP = 4e6;
 export function cssHints(el, inspector) {
   if (!inspector) return null;
   try {
-    const all = inspector.getCSSStyleRules(el);
+    const all = (inspector.getMatchingCSSRules ?? inspector.getCSSStyleRules)(el);
     const sheets = [],
       index = new Map(),
       rules = [];

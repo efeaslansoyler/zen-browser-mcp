@@ -86,7 +86,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   click whose `detail` is 0 (so do Space and Enter on a focused button).
 - Hyprland suspends windows on hidden workspaces (`document.hidden`, no focus, no APZ
   scrolling); that's why input is never sent at the window level.
-- `InspectorUtils.getCSSStyleRules(el)` lists matched rules in cascade order (least specific
+- `InspectorUtils` exists only on window globals; actor modules get it from a system sandbox
+  with `wantGlobalProperties: ["InspectorUtils"]`. Current Gecko calls the matched-rules method
+  `getMatchingCSSRules` (older builds: `getCSSStyleRules`). It lists matched rules in cascade order (least specific
   first) and includes user-agent and user sheets; keep `parentStyleSheet.parsingMode ===
   "author"`. `getRuleLine` counts a parser-inserted `<style>`'s rules from the top of the HTML
   document; `getRelativeRuleLine` counts from the start of the `<style>`, which is what its own

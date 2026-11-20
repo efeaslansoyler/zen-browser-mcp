@@ -22,6 +22,13 @@ const { Recorder } = load("./Recorder.sys.mjs");
 const { WebVitals } = load("./WebVitals.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
+// InspectorUtils is exposed only to window globals, not to module scope; DevTools gets it the same way.
+let inspector;
+const inspectorUtils = () =>
+  (inspector ??= Cu.Sandbox(Services.scriptSecurityManager.getSystemPrincipal(), {
+    wantGlobalProperties: ["InspectorUtils"],
+  }).InspectorUtils);
+
 // Text the user sees (cursor label, element descriptions) follows the browser language;
 // messages to agents are always English.
 const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
@@ -54,7 +61,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     eventUtils: () => this.#eu(),
     contextTarget: () => this.#contextTarget?.deref(),
     unwrap: (value) => Cu.waiveXrays(value),
-    inspector: () => globalThis.InspectorUtils,
+    inspector: () => inspectorUtils(),
     applyTheme,
     mousePath,
     typingPlan,

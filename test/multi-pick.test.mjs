@@ -95,9 +95,12 @@ function harness({ locale = "en", os = "Linux", inspector } = {}) {
     },
   };
   const Actor = loadActor({
-    Services: { locale: { appLocaleAsBCP47: locale }, appinfo: { OS: os } },
-    Cu: { waiveXrays: (value) => value },
-    InspectorUtils: inspector,
+    Services: {
+      locale: { appLocaleAsBCP47: locale },
+      appinfo: { OS: os },
+      scriptSecurityManager: { getSystemPrincipal: () => ({}) },
+    },
+    Cu: { waiveXrays: (value) => value, Sandbox: () => ({ InspectorUtils: inspector }) },
   });
   const actor = new Actor();
   actor.document = document;
@@ -394,7 +397,7 @@ test("matched author CSS rules are collected most specific first, bounded, witho
     rule("html", sheet("user"), 1),
   ];
   const inspector = {
-    getCSSStyleRules: (el) => (el.id === "element-0" ? rules : []),
+    getMatchingCSSRules: (el) => (el.id === "element-0" ? rules : []),
     getRelativeRuleLine: (r) => r.line,
     getRuleColumn: (r) => r.column,
   };
@@ -423,7 +426,7 @@ test("matched author CSS rules are collected most specific first, bounded, witho
 
 test("an element styled only by the browser carries no CSS hints", async () => {
   const inspector = {
-    getCSSStyleRules: () => [{ selectorText: "button", parentStyleSheet: { parsingMode: "agent" } }],
+    getMatchingCSSRules: () => [{ selectorText: "button", parentStyleSheet: { parsingMode: "agent" } }],
     getRelativeRuleLine: () => 1,
     getRuleColumn: () => 1,
   };
