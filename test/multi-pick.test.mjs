@@ -328,6 +328,33 @@ test("a React 19 element carries its owner stacks as raw source hints", async ()
   });
 });
 
+test("server component owners from the RSC payload carry their owner stacks as hints", async () => {
+  const h = harness();
+  function Counter() {}
+  // React's ReactComponentInfo for server components: name, env, owner, debugStack
+  const layout = { name: "RootLayout", env: "Server", owner: null, debugStack: { stack: "rsc-layout" } };
+  const page = { name: "Page", env: "Server", owner: layout, debugStack: { stack: "rsc-page" } };
+  const counter = { type: Counter, _debugStack: { stack: "client-counter" }, _debugOwner: page };
+  h.nodes[0]["__reactFiber$x1"] = {
+    type: "button",
+    _debugStack: { stack: "client-button" },
+    _debugOwner: counter,
+    return: counter,
+  };
+  const pending = h.send("pick_start");
+  h.click(0);
+  assert.deepEqual((await pending).sourceHints, {
+    react19: {
+      element: "client-button",
+      owners: [
+        { name: "Counter", stack: "client-counter" },
+        { name: "Page", stack: "rsc-page" },
+        { name: "RootLayout", stack: "rsc-layout" },
+      ],
+    },
+  });
+});
+
 test("elements without dev-mode metadata carry no source hints", async () => {
   const h = harness();
   h.nodes[0]["__reactFiber$x1"] = { type: "button", _debugOwner: null, return: null };

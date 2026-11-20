@@ -206,16 +206,22 @@ const ownerName = (fiber) => {
 function react19Hints(el, unwrap) {
   const raw = unwrap(el);
   const key = fiberKey(raw);
-  const stackOf = (fiber) => {
-    const stack = fiber?._debugStack?.stack;
+  // Server components (React Server Components payload) own elements as ReactComponentInfo:
+  // { name, env, owner, debugStack } instead of a fiber.
+  const stackOf = (owner) => {
+    const stack = (owner?._debugStack ?? owner?.debugStack)?.stack;
     return typeof stack === "string" ? truncate(stack, MAX_STACK) : null;
   };
   const element = key && stackOf(raw[key]);
   if (!element) return null;
   const owners = [];
-  for (let owner = raw[key]._debugOwner; owner && owners.length < MAX_OWNERS; owner = owner._debugOwner) {
+  for (
+    let owner = raw[key]._debugOwner;
+    owner && owners.length < MAX_OWNERS;
+    owner = owner.type !== undefined ? owner._debugOwner : owner.owner
+  ) {
     const stack = stackOf(owner);
-    const name = ownerName(owner);
+    const name = owner.type === undefined ? text(owner.name) : ownerName(owner);
     if (stack && name) owners.push({ name, stack });
   }
   return { element, owners };
