@@ -14,6 +14,7 @@ to install and connect your MCP client.
 | [Gecko pitfalls](gecko-pitfalls.md) | Browser behavior to check before debugging |
 | [Feature comparison](feature-comparison.md) | Shared-browser tools, Gecko alternatives and general automation |
 | [Browser token benchmark](browser-benchmark.md) | Reproducible Codex runs on the same Zen build, with per-attempt data |
+| [Versions and releases](releasing.md) | Changelog rules, choosing the next version and the release steps |
 
 See [Contributing](../CONTRIBUTING.md) for development setup, tests and live
 fixtures.

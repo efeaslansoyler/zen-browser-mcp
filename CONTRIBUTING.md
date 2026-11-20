@@ -162,3 +162,9 @@ Codex's shell sandbox may block Unix sockets; see [docs/codex.md](docs/codex.md#
   in logs or task notes.
 - Keep server `instructions` short; put tool details in tool descriptions.
 - Record new Gecko surprises in [docs/gecko-pitfalls.md](docs/gecko-pitfalls.md).
+
+## Changelog and releases
+
+Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) with every visible change,
+in the same commit. [docs/releasing.md](docs/releasing.md) has the rules, how the next version
+is chosen and the release steps.

@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, a minor version may
 change tool names, parameters or results.
 
+## [Unreleased]
+
 ## [0.1.0] - Unreleased
 
 The first public release. Agents (Claude Code, Codex and other MCP clients) use your own Zen or
@@ -35,8 +37,13 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   `tab_work` notes tell the others what each is doing. `request_tab` also asks the user for one
   of their own tabs.
 - **Element picks**: pick one or more elements on any page (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>
-  or the context menu), write a note and send them to any connected session, with selector,
-  styles, a screenshot and the React/Vue component chain.
+  or the context menu; Shift- or Ctrl/Cmd-click adds elements, a hint bar lists the gestures),
+  write a note for the whole pick and for each element, and send them to any connected session
+  with selector, styles, a screenshot and the component chain.
+- **Source locations in picks**: on local dev servers a pick names the file and line that
+  rendered the element (React 19 and 18, Next.js app router with Turbopack or webpack, Svelte,
+  Astro) or its component file (Vue, Angular), through the page's own source maps, plus the
+  author CSS rules that style it.
 - **Delivery to every client**: picks and recipes are pushed when the client has a way in
   (Claude Code channels, `codex queue`, `t3 thread send` in T3 Code, a plugin in OpenCode).
   Otherwise they wait and arrive once, with the session's next tool result or, with
@@ -58,9 +65,22 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 - **Inspection**: React component trees and `axe-core` accessibility audits, run locally.
 - **Per-tab emulation**: viewport, device presets, DPR, touch and color scheme.
 - **Extensions**: agents can open and use real extension toolbar panels.
+- **More page tools**: `navigate` reloads (optionally bypassing the cache), `save_pdf` prints an
+  agent tab to a local PDF, `record` saves a short WebM of a tab, `cookies` and `storage` read
+  and write site data in agent browser modes, and `network_control` blocks, mocks or takes
+  offline the requests of an agent-opened tab.
+- **Open and read in one call**: `tabs_create_mcp` with a `url` and `read` returns the loaded
+  page's refs, so a new page costs one tool call.
 - **Downloads and page watches** that report to events files, so agents can keep working
   instead of blocking.
 - **Zen workspaces**: agent tabs can open in a chosen workspace.
+- **Several browsers**: every running browser has its own private socket; the server picks one
+  by client flag (`--browser`, `--profile`), environment, `config browser` or the most recently
+  focused, and `browser.launch` starts the chosen browser on demand (asked in the ask template).
+- **Browser modes**: `together` (the user's profile), `agent` (a persistent profile only agents
+  use), `scratch` (a temporary profile), and headless `autonomous` and `autonomous-agent` for
+  unattended work, where ask rules become allow, the system clipboard is denied and custom
+  denials and site rules still apply.
 - **Clean tabs**: `tabs_create_mcp` with `clean: true` (or `config container`) opens agent tabs in
   a separate container without the user's cookies and logins.
 - **Compact reads**: `read_page` and `get_page_text` can return diffs against an earlier
@@ -69,8 +89,9 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
   request filters, verified opener notices, redacted cross-host HAR export, and local Web Vitals.
 - **Browser compatibility**: Gecko ESR SessionStore fallback, pending native download status
   and clearer errors when browser dialogs block emulation or extension actions.
-- **CLI**: `install`, `uninstall`, `doctor`, `config` (mode, permissions, sites), `skill`, `hooks`, `codex-hooks` and `recipes`; the browser
-  side updates itself when the package version changes.
+- **CLI**: `install`, `uninstall`, `doctor`, `config` (mode, permissions, sites, browser, browser
+  mode, launch), `reset-agent-profile`, `skill`, `hooks`, `codex-hooks` and `recipes`; the
+  browser side updates itself when the package version changes.
 - **Agent skill** (`skills/zen-browser`) for Claude Code and Codex: which tool to use when, from
   choosing the user's open tab to handing over logins. Short server instructions point the same
   way for every client.
@@ -80,6 +101,17 @@ Firefox-based browser: your tabs and logins, real input, and an island that show
 
 These stages were never published; they are listed so the history is readable. Details are in
 the commit log.
+
+### 2026-11-20
+
+- A Codex behavior and token eval on an isolated Zen; shorter tool descriptions and server
+  instructions, trimmed tab results and the one-call open-and-read path came out of it.
+- Several browser instances with their own sockets, on-demand launch and the browser modes.
+- Reload, PDF, tab recording, site data and network control tools.
+- Source locations and CSS rules in picks, per-element notes and Ctrl/Cmd-click picking.
+- An isolated sandbox browser for live checks, and fixes from an architecture and test review:
+  custom rules for every listed operation, queued calls refused when the bridge stops, and agent
+  tabs that wait for a starting window.
 
 ### 2026-11-19
 
@@ -144,4 +176,5 @@ the commit log.
 - Auto/ask modes, sensitive sites, the activity log, the CLI and package layout, README and
   MIT license.
 
+[Unreleased]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/efeaslansoyler/zen-browser-mcp/releases/tag/v0.1.0

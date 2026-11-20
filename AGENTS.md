@@ -21,6 +21,10 @@ edit/test loop.
 - Keep docs current instead of appending dated logs: update the relevant page, delete what
   became wrong. Commit messages carry the history.
 - Don't push, publish or rename without the user asking.
+- A commit that changes what users or agents see adds a line under `## [Unreleased]` in
+  [CHANGELOG.md](CHANGELOG.md) in the same commit. Never change the version, tag or release
+  unless the user asks; then follow [docs/releasing.md](docs/releasing.md), which also says
+  what counts as visible and how the version is chosen.
 
 ## Agent skills
 
