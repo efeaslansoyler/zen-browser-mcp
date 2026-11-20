@@ -348,7 +348,7 @@ export class Picks {
 
 // The map's own path only when it says more than the project path.
 const originalNote = ({ file, original }) =>
-  original && original !== file && !file.endsWith(`/${original}`) ? ` (${original})` : "";
+  original && ![file, `file://${file}`].includes(original) && !file.endsWith(`/${original}`) ? ` (${original})` : "";
 
 // The source location and snippet of a picked element, for the agent.
 function sourceLines({ framework, precision, chain, snippet }) {

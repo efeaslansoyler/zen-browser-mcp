@@ -59,8 +59,11 @@ export class SourceResolver {
 
   // A generated stack frame → its original position, or null.
   async #mapFrame({ url, line, column }, origin, maps) {
-    // React's stand-in for a server component frame: the server file at its own position.
-    const server = /^(?:rsc|about):\/\/React\/[^/]+\/(.+)\?\d+$/.exec(url);
+    // React's stand-in for a server component frame (the server file at its own position) and
+    // webpack's eval'd dev modules: Next.js's dev endpoint serves the maps of both.
+    const server = url.startsWith("webpack-internal:///")
+      ? url
+      : /^(?:rsc|about):\/\/React\/[^/]+\/(.+)\?\d+$/.exec(url)?.[1];
     let script;
     try {
       script = server ? null : new URL(url);
@@ -72,7 +75,7 @@ export class SourceResolver {
     if (!maps.has(key))
       maps.set(
         key,
-        (server ? this.#loadServerMap(decodeURI(server[1]), origin) : this.#loadMap(script, origin)).catch(() => null),
+        (server ? this.#loadServerMap(decodeURI(server), origin) : this.#loadMap(script, origin)).catch(() => null),
       );
     const map = await maps.get(key);
     const found = map && originalPosition(map, line - 1, column - 1);
@@ -316,13 +319,13 @@ function snippet({ file, line, content }) {
 // turbopack:///[project]/app/page.tsx or webpack://_N_E/./app/page.tsx.
 function projectPath(original, mapUrl, script) {
   const bundled =
-    /^(?:turbopack:\/\/\/\[project\]\/|webpack:\/\/[^/]*\/\.\/|webpack-internal:\/\/\/(?:\([^)]*\)\/)?\.\/)(.+)$/.exec(
+    /^(?:turbopack:\/\/\/\[project\]\/|webpack:\/\/(?:[^/]*\/)?\.\/|webpack-internal:\/\/\/(?:\([^)]*\)\/)?\.\/)(.+)$/.exec(
       original,
     );
   if (bundled) return bundled[1];
-  if (!script) return original;
-  const served = decodeURIComponent(script.pathname);
   const absolute = original.startsWith("file://") ? decodeURIComponent(new URL(original).pathname) : original;
+  if (!script) return absolute;
+  const served = decodeURIComponent(script.pathname);
   if (absolute.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(absolute)) {
     const normalized = absolute.replaceAll("\\", "/");
     return normalized.endsWith(served) && served.length > 1 ? served.slice(1) : absolute;

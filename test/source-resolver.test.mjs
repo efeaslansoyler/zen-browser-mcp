@@ -409,3 +409,42 @@ test("a missing or failing Next.js dev endpoint yields unknown", async () => {
     assert.equal(await nextResolver(served).resolve(hintsOf, { pageUrl: `${NEXT}/`, document: {} }), "unknown");
   }
 });
+
+test("Next.js maps with file:// sources give plain absolute paths", async () => {
+  const served = {
+    ...nextFiles,
+    [nextEndpoint(SERVER_CHUNK)]: indexMap(
+      { line: 40, column: 0 },
+      sourceMap({
+        sources: ["file:///home/dev/shop/app/page.tsx"],
+        sourcesContent: [NEXT_PAGE.join("\n")],
+        lines: [[], [], [], [[6, 0, 6, 6]]],
+      }),
+    ),
+  };
+  const result = await nextResolver(served).resolve(
+    { react19: { element: stack(rsc("Page", 44, 8)), owners: [] } },
+    { pageUrl: `${NEXT}/shop`, document: {} },
+  );
+  assert.equal(result.chain[0].file, "/home/dev/shop/app/page.tsx");
+  assert.equal(result.snippet.file, "/home/dev/shop/app/page.tsx");
+});
+
+test("Next.js webpack dev client frames resolve through the dev source map endpoint", async () => {
+  const module = "webpack-internal:///(app-pages-browser)/./app/counter.tsx";
+  const served = {
+    [`${NEXT}/__nextjs_source-map?${new URLSearchParams({ filename: module })}`]: sourceMap({
+      sources: ["webpack://./app/counter.tsx"],
+      sourcesContent: [NEXT_COUNTER.join("\n")],
+      lines: [[], [], [[4, 0, 8, 4]]],
+    }),
+  };
+  const result = await nextResolver(served).resolve(
+    { react19: { element: stack(frame("Counter", module, 3, 5)), owners: [] } },
+    { pageUrl: `${NEXT}/`, document: {} },
+  );
+  assert.equal(result.framework, "Next.js");
+  assert.deepEqual(result.chain, [
+    { role: "element", file: "app/counter.tsx", original: "webpack://./app/counter.tsx", line: 9, column: 5 },
+  ]);
+});
