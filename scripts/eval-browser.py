@@ -379,7 +379,12 @@ def grade(fixture, answer, steps, attempted, download_sha=None):
         ):
             behavior.append("REOPENED_TAB")
     elif scenario == "lookup":
-        reads = [step.text for step in successful if step.name in READS]
+        reads = [
+            step.text
+            for step in successful
+            if step.name in READS
+            or (step.name in {"tabs_create_mcp", "navigate"} and step.args.get("read"))
+        ]
         if not (
             any("FN-274" in result for result in reads)
             and any(re.search(r"\b38\b", result) for result in reads)
@@ -993,6 +998,19 @@ def trial(args, scenario, repeat):
                             if step.ok
                             and step.name == "navigate"
                             and step.args.get("url") == fixture.url
+                        ),
+                        None,
+                    )
+                if fixture.tab_id is None:
+                    # tabs_create_mcp with url opens the fixture directly and reports the new tab ID.
+                    fixture.tab_id = next(
+                        (
+                            int(match.group(1))
+                            for step in steps
+                            if step.ok
+                            and step.name == "tabs_create_mcp"
+                            and step.args.get("url") == fixture.url
+                            and (match := re.search(r'"tabId":\s*(\d+)', step.text))
                         ),
                         None,
                     )
