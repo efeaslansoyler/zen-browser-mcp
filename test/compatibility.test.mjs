@@ -69,7 +69,7 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
     await client.connect(clientTransport);
     try {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 33);
+      assert.equal(tools.length, 38);
       const computer = tools.find((t) => t.name === "computer");
       const schema = computer.inputSchema;
       for (const key of ["coordinate", "start_coordinate"]) {
@@ -119,7 +119,7 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         tabs_context_mcp: {},
         tabs_create_mcp: { url: "https://example.test", clean: true, read: "all" },
         tabs_close_mcp: { tabId: 1 },
-        navigate: { tabId: 1, url: "back", read: "interactive" },
+        navigate: { tabId: 1, url: "reload", bypass_cache: true, read: "interactive" },
         computer: { tabId: 1, action: "screenshot", scale: 0.5 },
         read_page: { tabId: 1 },
         find: { tabId: 1, query: "Submit" },
@@ -140,6 +140,11 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         read_network_requests: { tabId: 1 },
         web_vitals: { tabId: 1 },
         network_capture: { tabId: 1, action: "status" },
+        save_pdf: { tabId: 1 },
+        record: { tabId: 1, action: "start", duration: 5 },
+        cookies: { tabId: 1, action: "list", url: "https://example.test/" },
+        storage: { tabId: 1, action: "get", area: "session", key: "fixture" },
+        network_control: { tabId: 1, action: "mock", urlPattern: "/api/", body: "fixture", status: 418 },
         javascript_tool: { tabId: 1, action: "javascript_exec", text: "document.title" },
         browser_batch: { actions: [{ name: "get_page_text", input: { tabId: 1 } }] },
       };

@@ -39,6 +39,19 @@ are separate decisions.
   inspection, and download tracking. See [browser diagnostics](browser-diagnostics-plan.md)
   and the [tested browser builds](browser-compatibility.md).
 
+## Agent-browser capabilities
+
+| Capability | zen-browser-mcp |
+|---|---|
+| Reload | `navigate` supports reload, cache bypass and an optional page read. |
+| PDF | `save_pdf` prints through Gecko, including headless profiles. |
+| Video | `record` captures a short silent tab video with ffmpeg. |
+| Cookies and storage | `cookies` and `storage` work in dedicated agent profiles. |
+| Request mocking and offline | `network_control` operates on agent-opened tabs with Gecko's HTTP hooks. |
+| Trace/profiler and pushstate | Outside the scope of these tools. |
+
+See [browser diagnostics](browser-diagnostics-plan.md) for arguments and limits.
+
 ## Token benchmark
 
 See [the Codex and Zen benchmark](browser-benchmark.md) for measured usage on

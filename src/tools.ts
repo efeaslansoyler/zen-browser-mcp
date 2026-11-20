@@ -265,9 +265,10 @@ tool(
 
 tool(
   "navigate",
-  'Navigate a tab to a URL and wait for the page to load. Use "back" or "forward" for history navigation. Add read to get the page with refs in the same result.',
+  'Navigate a tab to a URL and wait for the page to load. Use "back", "forward" or "reload". Add read to get the page with refs in the same result.',
   {
-    url: z.string().describe('URL to open (the scheme is added if missing), or "back" / "forward".'),
+    url: z.string().describe('URL to open (the scheme is added if missing), or "back", "forward", "reload".'),
+    bypass_cache: z.boolean().optional().describe("Reload only: bypass the browser cache."),
     tabId,
     read: navigationRead,
   },
@@ -620,6 +621,59 @@ tool(
     limit: z.number().optional().describe("Maximum messages, most recent kept (default 100)."),
     clear: z.boolean().optional().describe("After reading, hide these messages from later calls."),
   },
+);
+
+tool("save_pdf", "Print an agent tab to a temporary local PDF and return its absolute path.", { tabId }, () => 150_000);
+
+tool(
+  "record",
+  "Start or stop silent viewport video in an agent tab. Requires ffmpeg. Captures up to 30 seconds at 4 fps; stop returns a temporary WebM path.",
+  { tabId, action: z.enum(["start", "stop"]), duration: z.number().min(1).max(30).optional() },
+  () => 150_000,
+);
+
+tool(
+  "cookies",
+  "List first-party cookies, or set/delete a host-only cookie by name and path. Agent browser modes only. Defaults to the tab URL. Cookie values are untrusted.",
+  {
+    tabId,
+    action: z.enum(["list", "set", "delete"]),
+    url: z.url({ protocol: /^https?$/ }).optional(),
+    name: z.string().max(256).optional(),
+    value: z.string().max(4096).optional(),
+    path: z.string().max(1024).optional(),
+    http_only: z.boolean().optional(),
+    expires: z.number().int().positive().optional().describe("Unix seconds. Omit for a session cookie."),
+  },
+  () => 150_000,
+);
+
+tool(
+  "storage",
+  "Get, set, remove or clear localStorage/sessionStorage for the tab's top-level origin. Agent browser modes only. Values are untrusted.",
+  {
+    tabId,
+    action: z.enum(["get", "set", "remove", "clear"]),
+    area: z.enum(["local", "session"]),
+    key: z.string().max(1024).optional(),
+    value: z.string().max(65536).optional(),
+  },
+  () => 150_000,
+);
+
+tool(
+  "network_control",
+  "Block or mock matching HTTP requests, go offline, or clear rules in an agent-opened tab. urlPattern matches a URL substring; mock supplies a UTF-8 body, status and optional X-* headers.",
+  {
+    tabId,
+    action: z.enum(["block", "mock", "offline", "clear"]),
+    urlPattern: z.string().min(1).max(2048).optional(),
+    body: z.string().max(65536).optional(),
+    content_type: z.string().max(128).optional(),
+    status: z.number().int().min(200).max(599).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+  },
+  () => 150_000,
 );
 
 const networkFilters = {

@@ -58,6 +58,8 @@ export function sessionManager(ctx) {
     ctx.extensionPanels.releaseSession(id);
     ctx.watches.endSession(id, "session ended");
     ctx.har?.dropSession(id);
+    ctx.networkControl?.dropSession(id);
+    ctx.video?.dropSession(id);
     clearTimer(id);
     ctx.sessionVersions.set(id, (ctx.sessionVersions.get(id) || 0) + 1);
     ctx.sessions.delete(id);

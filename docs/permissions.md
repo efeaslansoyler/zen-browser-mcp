@@ -21,7 +21,7 @@ Change mode from the island, **Agent settings** in the tab menu, or
 
 | Mode | Behavior |
 |---|---|
-| `auto` (default) | Allows ordinary navigation and input. Asks for recognized form submissions and secret fields, uploads, arbitrary page JavaScript, clipboard use, HAR start/attach, user-tab access, and other protected actions. |
+| `auto` (default) | Allows ordinary navigation and input. Asks for recognized form submissions and secret fields, uploads, arbitrary page JavaScript, clipboard use, HAR start/attach, network control, user-tab access, and other protected actions. |
 | `ask` | Also asks before navigation, clicks, typing and similar page actions. Read-only operations and communication with the user remain available. |
 | `custom` | Uses the base mode and per-operation rules in `permissions.jsonc`. |
 
@@ -59,6 +59,21 @@ clipboard is always denied, including clipboard shortcuts routed through it.
 If a persistent agent profile is already open, the server reuses the bridge and
 its existing permission behavior. The `browserMode` field in `tabs_context_mcp`
 reports the running mode.
+
+## PDF, video, site data and network rules
+
+- `save_pdf` and `record.start` / `record.stop` follow the same allow rules as
+  screenshots in both templates. Both require access to the tab.
+- `cookies.list` and `storage.get` allow in both templates. Cookie writes and
+  deletion and Web Storage writes, removals and clears ask in the ask template
+  and allow in auto. These tools require an agent browser mode. Cookie calls
+  check the tab and the requested URL against the site rules. Web Storage
+  applies to the tab's top-level origin. Values are untrusted page data.
+- All four `network_control` actions ask in both templates and work only on
+  tabs opened by an agent. A tab offered by the user via handoff is ineligible.
+  Rules affect the whole agent tab if sessions share it. Closing or taking back
+  the tab, ending the rule owner's session, the island Stop control, and bridge
+  reload clear those rules.
 
 ## Site rules
 

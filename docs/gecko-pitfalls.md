@@ -86,6 +86,16 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 
 ## Network and downloads
 
+- On Gecko builds with native response overrides, `http-on-before-connect`
+  can call `nsIHttpChannelInternal.setResponseOverride` with an
+  `nsIReplacedHttpResponse`. This supplies body, headers and status without
+  contacting the origin. `responseBody` is an `ACString` and needs UTF-8 bytes.
+  The service-worker interception decision precedes this hook. Returning
+  `data:` or `blob:` through `redirectTo` changes URL/origin handling and
+  does not supply an HTTP status or headers at the original URL.
+  [Gecko's DevTools override](https://searchfox.org/firefox-main/source/devtools/shared/network-observer/NetworkOverride.sys.mjs)
+- Use the channel's browsing context to scope HTTP cancellation to a tab.
+  `Services.io.offline` changes network state for the whole browser.
 - An `nsITraceableChannel` listener sees bodies before content decoding: they arrive gzip/br
   encoded. Decode with `DecompressionStream` (`br` is spelled `"brotli"`).
 - `DownloadSource.browsingContextId` may be a subframe; use its `top.browserId` (and the
@@ -95,6 +105,23 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   owner window and its selected tab can be unrelated to the download source.
 - While a download is being canceled with `finalize(true)`, Gecko briefly reports
   `canceled` with partial data, which looks like `paused`.
+
+## Cookie expiry
+
+- `nsICookieManager.add` and `nsICookie.expiry` use Unix seconds on Gecko 141
+  and earlier and milliseconds on Gecko 142 and later. Use the Gecko
+  platform version, since Zen and other derivatives report their own app
+  versions. [Gecko's expiry change](https://bugzilla.mozilla.org/show_bug.cgi?id=1972757)
+
+## Printing and capture
+
+- Use fresh print settings with PDF output and `kOutputDestinationFile`, then
+  await `BrowsingContext.print`. It works in headless Zen and resolves
+  without page-count metadata. Clearing header and footer strings prevents
+  the default URL/date headers.
+- Low-scale `drawSnapshot` can capture video frames without changing screenshot
+  coordinates or using a screen recorder. Keep each capture serial and
+  resize into bounded frames before handing them to the encoder.
 
 ## Browser UI and session store
 

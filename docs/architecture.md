@@ -72,7 +72,9 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `Recipes.sys.mjs` | Saved recordings (`~/.local/state/zen-mcp/recipes/<id>/`), their text for agents, the `recipes` tool; the CLI uses it too |
 | `SiteRules.sys.mjs` | Config normalization and domain matching for blocklists and allowlists |
 | `Cancellation.sys.mjs` | Real Stop: cancels waits, typing, drags and navigation in flight |
-| `NetworkLog.sys.mjs`, `HarCapture.sys.mjs`, `DownloadLog.sys.mjs` | Tab network logs, redacted HAR lifecycle and download tracking |
+| `NetworkLog.sys.mjs`, `NetworkControl.sys.mjs`, `HarCapture.sys.mjs`, `DownloadLog.sys.mjs` | Tab network logs, in-memory HTTP rules, redacted HAR lifecycle and download tracking |
+| `Artifacts.sys.mjs`, `TabVideo.sys.mjs` | Silent PDF printing, bounded tab snapshots encoded by a bridge-side ffmpeg subprocess, private file expiry |
+| `AgentData.sys.mjs` | Agent-mode first-party cookies through the Gecko cookie service and top-level Web Storage through a dedicated page actor query |
 | `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
 | `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe. Its one message to the parent is a recorded step |
 | `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |

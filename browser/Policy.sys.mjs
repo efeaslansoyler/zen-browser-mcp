@@ -22,6 +22,11 @@ export const SECTIONS = [
       ["find", A, A, "Find elements on a page by description."],
       ["get_page_text", A, A, "Read a page's text."],
       ["computer.screenshot", A, A, "Take screenshots of a page."],
+      ["save_pdf", A, A, "Print an agent tab to a temporary local PDF."],
+      ["record.start", A, A, "Start a short silent video of an agent tab."],
+      ["record.stop", A, A, "Save a local video of an agent tab."],
+      ["cookies.list", A, A, "Read first-party cookies in an agent browser profile."],
+      ["storage.get", A, A, "Read a value from the tab's local or session storage in an agent browser profile."],
       ["computer.scroll", A, A, "Scroll a page or scroll an element into view."],
       ["computer.hover", A, A, "Move the pointer over an element (can open hover menus)."],
       ["computer.wait", A, A, "Wait a moment."],
@@ -69,7 +74,7 @@ export const SECTIONS = [
   [
     "Acting on pages",
     [
-      ["navigate", Q, A, "Go to an address, back or forward."],
+      ["navigate", Q, A, "Go to an address, reload, or go back or forward."],
       ["computer.click", Q, A, "Click, right-click, double- or triple-click."],
       ["computer.drag", Q, A, "Drag, press or release a mouse button, move with a button held."],
       ["computer.type", Q, A, "Type text into the focused field."],
@@ -79,6 +84,11 @@ export const SECTIONS = [
       ["extensions.open", Q, A, "Open an extension's toolbar panel."],
       ["react", Q, A, "Inspect React components (and their props) with code run in the page."],
       ["accessibility", Q, A, "Run local axe accessibility checks with code run in the page."],
+      ["cookies.set", Q, A, "Set a host-only cookie in an agent browser profile."],
+      ["cookies.delete", Q, A, "Delete a host-only cookie in an agent browser profile."],
+      ["storage.set", Q, A, "Set a value in the tab's local or session storage."],
+      ["storage.remove", Q, A, "Remove a value from the tab's local or session storage."],
+      ["storage.clear", Q, A, "Clear the tab's local or session storage."],
     ],
   ],
   [
@@ -94,6 +104,10 @@ export const SECTIONS = [
       ["javascript_tool", Q, Q, "Run any JavaScript in the page: it can read everything on the page and act as you."],
       ["network_capture.start", Q, Q, "Start recording network traffic for a local HAR."],
       ["network_capture.attach", Q, Q, "Include an owned tab in the HAR capture."],
+      ["network_control.block", Q, Q, "Block matching HTTP requests in an agent-opened tab."],
+      ["network_control.mock", Q, Q, "Replace matching HTTP responses in an agent-opened tab."],
+      ["network_control.offline", Q, Q, "Simulate offline HTTP requests in an agent-opened tab."],
+      ["network_control.clear", Q, Q, "Clear the HTTP rules in an agent-opened tab."],
       ["file_upload", Q, Q, "Upload files from your computer to a page."],
       ["handle_dialog.accept", Q, Q, 'Accept a page\'s confirm or prompt ("Delete this?" → OK).'],
       ["extensions.act", Q, Q, "Click or type inside an extension's panel (password managers, wallets…)."],
@@ -152,7 +166,11 @@ export function operationOf(tool, args = {}) {
 function operationKey(tool, args) {
   switch (tool) {
     case "network_capture":
-      return `network_capture.${args.action}`;
+    case "network_control":
+    case "cookies":
+    case "storage":
+    case "record":
+      return `${tool}.${args.action}`;
     case "browser_batch":
       return null;
     case "computer":

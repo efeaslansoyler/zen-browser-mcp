@@ -16,6 +16,7 @@ export function activity(ctx) {
         navigate: () => {
           if (args.url === "back") return L("going back", "geri gidiyor");
           if (args.url === "forward") return L("going forward", "ileri gidiyor");
+          if (args.url === "reload") return "reloading the page";
           try {
             host = Services.uriFixup.getFixupURIInfo(args.url).preferredURI.host;
           } catch {}
@@ -47,6 +48,11 @@ export function activity(ctx) {
         read_console_messages: () => L("reading the console", "konsolu okuyor"),
         web_vitals: () => L("reading page performance", "sayfa performansına bakıyor"),
         network_capture: () => L("managing a HAR capture", "HAR kaydını yönetiyor"),
+        network_control: () => `changing tab network rules (${args.action})`,
+        cookies: () => `accessing profile cookies (${args.action})`,
+        storage: () => `accessing page storage (${args.action})`,
+        save_pdf: () => "printing the page to PDF",
+        record: () => `${args.action === "start" ? "starting" : "saving"} a tab video`,
         read_network_requests: () => L("checking network requests", "ağ isteklerine bakıyor"),
         handle_dialog: () => L("answering a dialog", "diyaloğu cevaplıyor"),
         ask_user: () => L("asks you", "sana soruyor"),

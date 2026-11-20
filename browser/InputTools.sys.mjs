@@ -39,16 +39,21 @@ export function inputTools(ctx) {
     waitForLoad,
   } = ctx;
   return {
-    async navigate({ url, tabId, read }, call) {
+    async navigate({ url, tabId, read, bypass_cache }, call) {
+      if (bypass_cache !== undefined && (url !== "reload" || typeof bypass_cache !== "boolean"))
+        throw new Error("bypass_cache is a boolean for reload only.");
       if (read != null && read !== "all" && read !== "interactive")
         throw new Error('read must be "all" or "interactive".');
       const browser = browserFor(call, tabId);
       releaseInputs(browser);
       const from = ctx.hostOf(browser);
-      const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
+      const loaded = waitForLoad(browser, 20000, ["back", "forward", "reload"].includes(url) ? null : url);
       if (url === "back") browser.goBack();
       else if (url === "forward") browser.goForward();
-      else {
+      else if (url === "reload") {
+        if (bypass_cache) browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+        else browser.reload();
+      } else {
         browser.fixupAndLoadURIString(url, {
           triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
         });

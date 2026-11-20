@@ -21,6 +21,7 @@ export function toolRunner(ctx) {
   // Batch grants cover only listed actions on the unchanged document/site/policy.
   async function runTool(call, tool, args, { approvals, steps = [{ tool, args }] } = {}) {
     const { access, state } = ctx;
+    ctx.assertAgentDataMode?.(ctx.browserMode, tool);
     if (ctx.autonomous) {
       ctx.policy.assertUserPresent(true, tool);
       if (tool === "clipboard") ctx.gate(ctx.policy.operationOf(tool, args));
@@ -62,9 +63,10 @@ export function toolRunner(ctx) {
       if (browser && !cleanup) {
         ctx.assertSiteAccess(browser);
         // a navigation is checked against where it goes: leaving a held site is fine
-        if (tool !== "navigate" || ["back", "forward"].includes(args.url)) ctx.assertNotHeld(args.tabId, call.session);
+        if (tool !== "navigate" || ["back", "forward", "reload"].includes(args.url))
+          ctx.assertNotHeld(args.tabId, call.session);
         else ctx.assertNotHeld(args.tabId, call.session, null, { site: false });
-        if (tool === "navigate" && !["back", "forward"].includes(args.url)) {
+        if (tool === "navigate" && !["back", "forward", "reload"].includes(args.url)) {
           const destination = Services.uriFixup.getFixupURIInfo(
             args.url,
             Services.uriFixup.FIXUP_FLAG_FIX_SCHEME_TYPOS,
@@ -347,6 +349,11 @@ export function batchTool(ctx) {
           for (const action of actions.slice(i)) {
             if (action.input?.tabId !== input.tabId) continue;
             if (!tools[action.name] || action.name === "browser_batch") break;
+            try {
+              ctx.assertAgentDataMode?.(ctx.browserMode, action.name);
+            } catch {
+              break;
+            }
             steps.push({ tool: action.name, args: action.input });
             // Never ask for destination-page actions before navigating there.
             if (action.name === "navigate") break;

@@ -94,9 +94,67 @@ Times are in milliseconds and CLS is unitless. These are local tab
 measurements. See the [compatibility matrix](browser-compatibility.md)
 for observed metric support.
 
+## Reload, PDF and tab video
+
+- Call `navigate` with `url: "reload"` to reload the current page. Add
+  `bypass_cache: true` for a Gecko cache bypass or `read: "interactive"` /
+  `read: "all"` for page refs after loading.
+- `save_pdf` uses Gecko's print layout, including print CSS. It returns the
+  absolute path and byte count. Gecko's print-to-file API does not return a
+  page count.
+- `record` takes `action: "start"` and an optional `duration` of 1–30 seconds,
+  defaulting to 30. It samples only the tab viewport at up to four frames per
+  second and uses ffmpeg on the bridge process's PATH to encode a silent
+  640 × 360 WebM. A slow frame can reduce the capture rate. The bridge holds
+  at most two recordings and 16 MiB of frame data per recording. Output is
+  capped at approximately 16 MiB. `stop` returns the path, frame count, and
+  capture timing. The duration or size limit, tab close, access loss, session
+  end and island Stop also end capture. The path returned by `start` becomes
+  usable after encoding completes.
+
+PDF and video files are private and retained for about five minutes in
+`$XDG_RUNTIME_DIR/zen-mcp-artifacts/`. Copy them elsewhere to keep them.
+The tools choose the filename and directory.
+
+## Cookies and Web Storage
+
+In an agent browser mode, `cookies` lists first-party cookies for the current
+HTTP(S) host or an explicit allowed `url`, including matching domain cookies
+and HttpOnly cookies. It returns up to 100 entries. `set` and `delete` target
+host-only cookies by name and path (default `/`). HTTPS writes are Secure.
+Writes default to SameSite=Lax and session lifetime. Set `expires` to Unix
+seconds for a persistent cookie and `http_only: true` for HttpOnly. The tool
+uses the tab's origin attributes and handles first-party, unpartitioned jars.
+
+`storage` supports `get`, `set`, `remove` and `clear` for a tab's top-level
+origin. Select `area: "local"` for localStorage or `area: "session"` for
+sessionStorage. `get` returns `null` for a missing key. Values from either
+tool are untrusted.
+
+## Per-tab HTTP control
+
+Call `network_control` on an agent-opened HTTP(S) tab. `block` and `mock` match
+a literal, case-sensitive `urlPattern` substring. The latest matching rule
+wins. A tab holds up to 32 rules, and a new rule with the same pattern
+replaces the earlier one. `offline` cancels any HTTP(S) channel Gecko attributes
+to this tab, ahead of other rules. `clear` removes both kinds of state. A
+top-level HTTP(S) navigation to another origin clears the rules. Tab close,
+release, owner disconnect, Stop and bridge reload clear them too.
+
+`mock` returns a synthetic HTTP response at the original URL before the
+request reaches the server. Set a UTF-8 `body` of up to 65,536 characters,
+a MIME type via `content_type` (default `text/plain`), an HTTP `status` of
+200–299 or 400–599 (default 200), and optional `X-*` response headers.
+Gecko builds without its native HTTP response override reject `mock`.
+Browser state headers, redirects, and binary bodies are outside the tool's
+scope. Offline simulation does not change `navigator.onLine` or emit offline
+events. These rules work on future observable channels, so existing
+connections, in-memory resource hits and service-worker responses may bypass
+them. Use a fresh request when checking a rule.
+
 ## Verification
 
-The live fixtures are [screenshots](../scripts/check-screenshots.ts),
+The live fixtures include [agent tools](../scripts/check-agent-tools.ts), [screenshots](../scripts/check-screenshots.ts),
 [page read diffs](../scripts/check-read-diff.ts),
 [network and HAR](../scripts/check-network-diagnostics.ts),
 [opened tabs](../scripts/check-opened-tabs.ts),

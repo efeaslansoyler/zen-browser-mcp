@@ -262,6 +262,8 @@ export function tabs(ctx) {
     ctx.access.leave(id, session);
     ctx.visualBaselines?.clear(id, session);
     ctx.har?.dropTab(id, session);
+    ctx.networkControl?.dropTab(id, session);
+    ctx.video?.dropTab(id, session);
     if (ctx.heldInputFrames.get(id)?.session === session) ctx.releaseInputs(id);
     ctx.browserSettings.restoreTab(id, session);
     ctx.extensionPanels.releaseTab(id, session);
@@ -281,6 +283,8 @@ export function tabs(ctx) {
     ctx.readSnapshots.clearTab(id);
     ctx.visualBaselines?.clear(id);
     ctx.har?.dropTab(id);
+    ctx.networkControl?.dropTab(id);
+    ctx.video?.dropTab(id);
     if (cancel) ctx.cancelTabWork(id);
     ctx.state.scale.delete(id);
     ctx.network.delete(id);

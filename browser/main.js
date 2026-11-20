@@ -167,6 +167,10 @@ function logError(where, e) {
     const { ReviewModel } = load("RecordingReview");
     const { Demonstrations, demonstrationTools } = load("Demonstrations");
     const { NetworkLog } = load("NetworkLog");
+    const { NetworkControl, networkControlTool } = load("NetworkControl");
+    const { agentDataTools, assertAgentDataMode } = load("AgentData");
+    const { Artifacts, pagePDF } = load("Artifacts");
+    const { TabVideo, videoEnvironment, recordTool } = load("TabVideo");
     const { EventFiles } = load("EventFiles");
     const { DownloadLog } = load("DownloadLog");
     const { Watches } = load("Watches");
@@ -552,6 +556,10 @@ function logError(where, e) {
       menuAgent,
     });
 
+    ctx.assertAgentDataMode = assertAgentDataMode;
+    ctx.artifacts = new Artifacts(`${zenMcpRuntimeDir()}/${zenMcpApp}-artifacts`, { setTimeout });
+    ctx.video = new TabVideo(videoEnvironment(ctx));
+    ctx.networkControl = new NetworkControl();
     // HTTP requests of agent tabs.
     const { HarCapture, validateHarProjection } = load("HarCapture");
     ctx.validateHarProjection = validateHarProjection;
@@ -572,6 +580,18 @@ function logError(where, e) {
         }
       },
       tracked: (browserId) => state.tabs.has(browserId),
+      control: (channel, id, topDocument) => {
+        if (!ctx.networkControl.has(id)) return null;
+        const tab = ctx.findTab(id);
+        if (tab?.getAttribute(MARK) !== "true") return null;
+        return ctx.networkControl.match(
+          id,
+          channel.URI.spec,
+          channel.URI.prePath,
+          tab.linkedBrowser.currentURI.prePath,
+          topDocument,
+        );
+      },
       // an allowlist only checks pages and frames: allowed sites load from other hosts (CDNs)
       blocked: (browserId, host, document) => {
         const call = [...ctx.calls].find((c) => c.tabs.has(browserId));
@@ -628,6 +648,8 @@ function logError(where, e) {
       readTools(ctx),
       inputTools(ctx),
       browserTools(ctx),
+      agentDataTools(ctx),
+      { save_pdf: pagePDF(ctx), record: recordTool(ctx), network_control: networkControlTool(ctx) },
       recipeTools(ctx),
       demonstrationTools(ctx),
     );
@@ -864,6 +886,7 @@ function logError(where, e) {
       if (state.paused) ctx.island.stopped();
       ctx.island.setMode(ctx.readConfig().mode);
       ctx.network.start();
+      ctx.artifacts.sweep().catch((e) => logError("exported files", e));
       // images of recordings that a reload or restart cut off (running ones stopped with stop())
       Promise.resolve()
         .then(() => ctx.recipes.io.remove(`${zenMcpRuntimeDir()}/${zenMcpApp}-recordings`))
@@ -978,6 +1001,8 @@ function logError(where, e) {
       ctx.island = null;
       ctx.tabMenu.destroy();
       ctx.network.stop();
+      ctx.networkControl.clear();
+      ctx.video.stopAll();
       ctx.har.dropAll();
       ctx.downloads.stop();
       ctx.watches.endAll("bridge reloaded");

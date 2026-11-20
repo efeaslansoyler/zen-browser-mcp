@@ -32,6 +32,8 @@ export function control(ctx) {
     ctx.releaseAllInputs();
     ctx.watches.endAll("stopped by the user");
     ctx.har?.dropAll();
+    ctx.networkControl?.clear();
+    ctx.video?.stopAll();
     ctx.extensionPanels.destroy();
     if (ctx.state.paused) return;
     ctx.state.paused = true;

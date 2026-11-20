@@ -61,6 +61,14 @@ export function permissions(ctx) {
         if (args.action === "form_input")
           return L(`fill extension field ${args.ref}`, `eklenti alanını doldurmak: ${args.ref}`);
         return null;
+      case "cookies":
+        if (args.action !== "set" && args.action !== "delete") return null;
+        try {
+          const uri = args.url === undefined ? browser.currentURI : Services.io.newURI(args.url);
+          return `${args.action} a host-only cookie for ${uri.host}`;
+        } catch {
+          return `${args.action} a host-only cookie`;
+        }
       case "network_capture":
         if (args.action === "start" && args.response_projection)
           return "start a HAR capture with selected response fields from one endpoint";

@@ -153,6 +153,29 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#input.state() };
         case "text":
           return this.#text();
+        case "agent_storage": {
+          const win = this.contentWindow;
+          if (this.document.nodePrincipal.originNoSuffix !== data.origin)
+            throw new Error("The storage origin changed.");
+          const storage = data.area === "local" ? win.localStorage : win.sessionStorage;
+          switch (data.action) {
+            case "get": {
+              const value = storage.getItem(data.key);
+              if (value?.length > 65536) throw new Error("Storage value exceeds 65536 characters.");
+              return { value };
+            }
+            case "set":
+              storage.setItem(data.key, data.value);
+              break;
+            case "remove":
+              storage.removeItem(data.key);
+              break;
+            case "clear":
+              storage.clear();
+              break;
+          }
+          return { value: true };
+        }
         case "eval":
           return { value: await this.#eval(data.code) };
         case "react": {

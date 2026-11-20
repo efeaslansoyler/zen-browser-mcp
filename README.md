@@ -101,8 +101,10 @@ site data, close the agent browser and run
   **Record steps for an agent…** to save a repeatable task as a recipe. See the
   [browser workflows guide](docs/browser-workflows.md) for delivery setup.
 
-The agent can also inspect pages and accessibility, compare screenshots, and
-collect network and performance diagnostics. See [browser diagnostics](docs/browser-diagnostics-plan.md)
+The agent can also inspect pages and accessibility, compare screenshots,
+print PDFs, record short tab videos, and collect network and performance
+diagnostics. HTTP rules apply to agent-opened tabs, and dedicated agent modes
+include cookie and Web Storage tools. See [browser diagnostics](docs/browser-diagnostics-plan.md)
 for tool usage and limits.
 
 ## More help

@@ -108,7 +108,9 @@ verilerini silmek için agent browser'ını kapatıp
   [tarayıcı iş akışları](docs/browser-workflows.md) sayfasında.
 
 Ajan sayfa yapısını ve erişilebilirliği inceleyebilir, ekran görüntülerini
-karşılaştırabilir, ağ ve performans verisi toplayabilir. Tool ayrıntıları
+karşılaştırabilir, PDF ve kısa tab videoları kaydedebilir, ağ ve performans
+verisi toplayabilir. HTTP kuralları ajanın açtığı tab’larda, cookie ve Web
+Storage tool’ları ayrı agent profillerinde çalışır. Tool ayrıntıları
 [tarayıcı tanılama kılavuzunda](docs/browser-diagnostics-plan.md).
 
 ## Daha fazla bilgi

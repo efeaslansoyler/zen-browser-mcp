@@ -11,6 +11,7 @@ const MAX_UPLOAD_TEXT = 64 * 1024;
 const SECRET_HEADERS = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"]);
 const TOPICS = [
   "http-on-modify-request",
+  "http-on-before-connect",
   "http-on-examine-response",
   "http-on-examine-cached-response",
   "http-on-examine-merged-response",
@@ -74,6 +75,35 @@ export class NetworkLog {
     if (topic === "http-on-modify-request" && this.env.blocked(browserId, channel.URI.host, document)) {
       channel.cancel(Cr.NS_ERROR_ABORT);
       return;
+    }
+    // The native response override runs before the cache/network connection, preserving
+    // the HTTP URL, principal and status. No response-stream or redirect shims are needed.
+    if (topic === "http-on-modify-request" || topic === "http-on-before-connect") {
+      const rule = this.env.control?.(channel, browserId, type === "document" && !bc.parent);
+      if (topic === "http-on-before-connect") {
+        if (rule?.action === "mock") {
+          try {
+            const response = Cc["@mozilla.org/network/replaced-http-response;1"].createInstance(
+              Ci.nsIReplacedHttpResponse,
+            );
+            const bytes = new TextEncoder().encode(rule.body);
+            let body = "";
+            for (let i = 0; i < bytes.length; i += 8192) body += String.fromCharCode(...bytes.subarray(i, i + 8192));
+            response.responseBody = body;
+            response.responseStatus = rule.status;
+            response.responseStatusText = rule.status < 300 ? "OK" : "Mocked";
+            response.setResponseHeader("Content-Type", `${rule.content_type}; charset=utf-8`, false);
+            for (const [name, value] of rule.headers) response.setResponseHeader(name, value, false);
+            channel.QueryInterface(Ci.nsIHttpChannelInternal).setResponseOverride(response);
+          } catch {
+            // A configured mock must never fall through and send the real request.
+            channel.cancel(Cr.NS_ERROR_ABORT);
+          }
+        }
+        return;
+      }
+      if (rule?.action === "block") channel.cancel(Cr.NS_ERROR_ABORT);
+      if (rule?.action === "offline") channel.cancel(Cr.NS_ERROR_OFFLINE);
     }
     this.env.capture?.(channel, browserId, type, topic);
     let log = this.logs.get(browserId);

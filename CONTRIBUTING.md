@@ -64,6 +64,7 @@ real MCP server, open and close only their own tabs, and restore anything they c
 
 | Script | Covers |
 |---|---|
+| `check-agent-tools.ts <Zen binary>` | Headless reload, PDF, video playback and capture overhead, isolated site data, scoped HTTP control |
 | `check-browser-modes.ts <Zen binary>` | Separate profiles, unattended permissions, temporary cleanup, and persistent cookie reuse after the two-minute idle grace period |
 | `check-launch.ts <Zen binary>` | On-demand launch from a real stdio MCP tool call, denial, shared startup and process detachment |
 | `check-instances.ts <Zen binary>` | Two disposable headless profiles, socket discovery, selection, reload, failover and crash cleanup |
@@ -124,6 +125,10 @@ To try risky changes on a copy:
    the visible modes headless in its spawn callback, preserving their profile and
    permission behavior. It waits about two minutes for the real idle shutdown.
    Both checks clean up detached browsers and their fixtures.
+   `check-agent-tools.ts <copy>/zen` uses that same isolated setup and starts
+   its own headless together and agent profiles on pinned sockets. Use a
+   fresh state directory. It checks for ffmpeg and skips video playback when
+   ffmpeg is absent.
 5. Serve test pages with `python3 -m http.server 8765`.
 6. For console errors add `--marionette --remote-allow-system-access` and read
    `Services.console.getMessageArray()`.
