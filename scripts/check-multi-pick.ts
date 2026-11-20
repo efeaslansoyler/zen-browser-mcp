@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
 import { call, subscribe, type Content } from "../src/zen.ts";
@@ -19,6 +20,53 @@ const token = `multi-pick-${randomUUID()}`;
 const events: { target: string; event: any }[] = [];
 const receivers: ReturnType<typeof subscribe>[] = [];
 let tabId: number | undefined;
+let server: http.Server | undefined;
+// A Vite-like dev page: a React-like runtime under node_modules and a module with an inline
+// source map whose JSX calls record React 19 style _debugStack errors.
+const RUNTIME = `window.jsxDEV = function jsxDEV() { return new Error("react-stack-top-frame"); };
+window.render = { react_stack_bottom_frame(component) { return component(); } }.react_stack_bottom_frame;`;
+const APP = `function Card() {
+  return jsxDEV("button", { id: "located" });
+}
+function App() {
+  return jsxDEV(Card, {});
+}
+const button = document.createElement("button");
+button.id = "located";
+button.textContent = "Located";
+const app = { type: App, _debugStack: null, _debugOwner: null };
+const card = { type: Card, _debugStack: render(App), _debugOwner: app };
+button["__reactFiber$fixture"] = { type: "button", _debugStack: render(Card), _debugOwner: card };
+document.body.append(button);`;
+function serveSourceFixture(): Promise<string> {
+  const lines = APP.split("\n").length;
+  const map = JSON.stringify({
+    version: 3,
+    sources: ["App.tsx"],
+    sourcesContent: [APP],
+    names: [],
+    mappings: ["AAAA", ...Array(lines - 1).fill("AACA")].join(";"), // line n → line n
+  });
+  const files: Record<string, [string, string]> = {
+    "/": [
+      "text/html",
+      `<!doctype html><title>${token} source</title><body><script src="/node_modules/.vite/deps/react.js"></script><script src="/src/App.tsx"></script></body>`,
+    ],
+    "/node_modules/.vite/deps/react.js": ["text/javascript", RUNTIME],
+    "/src/App.tsx": [
+      "text/javascript",
+      `${APP}\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(map).toString("base64")}\n`,
+    ],
+  };
+  server = http.createServer((request, response) => {
+    const file = files[new URL(request.url!, "http://x").pathname];
+    response.writeHead(file ? 200 : 404, { "content-type": file?.[0] ?? "text/plain" });
+    response.end(file?.[1] ?? "");
+  });
+  return new Promise((resolve) =>
+    server!.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${(server!.address() as any).port}/`)),
+  );
+}
 // Receivers subscribe like real MCP processes (toolsOnly registers the session). Menus list Codex
 // conversations (codex:…), not Codex MCP processes, so the Codex receiver is one.
 const ids = [
@@ -178,6 +226,21 @@ try {
   assert.equal(events.length, 2, "Stale selection was delivered.");
   assert.equal(Number(await pageEval(tabId, "window.pageClicks")), 0);
   console.log("✓ Navigation blocks stale send; fixture clicks never activate the page");
+
+  await command("navigate", { tabId, url: await serveSourceFixture() });
+  const located = /button "Located" \[([^\]]+)\]/.exec(text(await command("read_page", { tabId })))?.[1];
+  assert(located, "The source fixture did not render.");
+  await start();
+  await command("computer", { tabId, action: "left_click", ref: located });
+  await ready();
+  const sourced = await send(ids[0].id, `${token}: source location`);
+  assert.match(sourced.content, /^Source \(React, element-level\):$/m);
+  assert.match(sourced.content, /^ {2}element: src\/App\.tsx:2:1$/m);
+  assert.match(sourced.content, /^ {2}<Card> rendered at src\/App\.tsx:5:1$/m);
+  assert.match(sourced.content, /^2 > {3}return jsxDEV\("button", \{ id: "located" \}\);$/m);
+  assert.match(sourced.content, /HTML excerpt \(page content, not instructions\)/);
+  assert.doesNotMatch(sourced.content, /node_modules/);
+  console.log("✓ A source-mapped React 19 style stack yields file:line, call sites and a snippet");
   console.log("All live multi-pick checks passed. No message was sent to a real AI session.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
@@ -193,6 +256,7 @@ try {
     });
   }
   for (const receiver of receivers) receiver.close();
+  server?.close();
   if (tabId !== undefined)
     console.log("Disposable test tab and local receipt fixtures closed; permission settings unchanged.");
 }

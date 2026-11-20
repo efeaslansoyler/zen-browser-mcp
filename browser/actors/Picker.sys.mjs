@@ -275,7 +275,7 @@ export class Picker {
   // Context for the agent: enough to find the right place in the code, whatever the page size.
   #info(el) {
     const { elementLabel, roleOf, accessibleName, clean, truncate } = this.env.reader;
-    const { cssPath, pickStyles, componentChain } = this.env.info;
+    const { cssPath, pickStyles, componentChain, sourceHints } = this.env.info;
     const doc = this.env.document();
     const win = this.env.window();
     const r = el.getBoundingClientRect();
@@ -298,6 +298,7 @@ export class Picker {
       },
       styles: pickStyles(el, win),
       components: componentChain(el, this.env.unwrap),
+      sourceHints: sourceHints(el, this.env.unwrap),
     };
   }
 }

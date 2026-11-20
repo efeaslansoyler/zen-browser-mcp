@@ -3,6 +3,10 @@
 // console arguments and evaluated values. unwrap is Cu.waiveXrays: page objects are read
 // without Xrays.
 
+// Owner stacks: enough frames to reach React's bottom frame; library owners are skipped later.
+const MAX_STACK = 4000;
+const MAX_OWNERS = 12;
+
 const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 // React/Next.js internals: noise in a component chain
@@ -129,19 +133,13 @@ const isInternal = (name) => /^__.*__$/.test(name);
 export function componentChain(el, unwrap) {
   try {
     const raw = unwrap(el);
-    const key = Object.keys(raw).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+    const key = fiberKey(raw);
     if (key) {
       const names = [];
       for (let fiber = raw[key]; fiber && names.length < 8; fiber = fiber.return) {
         const type = fiber.type;
         if (!type || typeof type === "string") continue;
-        const name =
-          type.displayName ||
-          type.name ||
-          type.render?.displayName ||
-          type.render?.name ||
-          type.type?.displayName ||
-          type.type?.name;
+        const name = componentName(type);
         if (
           typeof name === "string" &&
           name &&
@@ -167,6 +165,40 @@ export function componentChain(el, unwrap) {
       }
       return names.length ? { framework: "Vue", chain: names.reverse(), file } : null;
     }
+  } catch {}
+  return null;
+}
+
+const componentName = (type) =>
+  type.displayName ||
+  type.name ||
+  type.render?.displayName ||
+  type.render?.name ||
+  type.type?.displayName ||
+  type.type?.name;
+
+const fiberKey = (raw) =>
+  Object.keys(raw).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+
+// Unresolved hints for the source resolver: React 19 keeps the JSX call site of every element and
+// owner component in _debugStack (an Error); the parent maps these stacks through source maps.
+export function sourceHints(el, unwrap) {
+  try {
+    const raw = unwrap(el);
+    const key = fiberKey(raw);
+    const stackOf = (fiber) => {
+      const stack = fiber?._debugStack?.stack;
+      return typeof stack === "string" ? truncate(stack, MAX_STACK) : null;
+    };
+    const element = key && stackOf(raw[key]);
+    if (!element) return null;
+    const owners = [];
+    for (let owner = raw[key]._debugOwner; owner && owners.length < MAX_OWNERS; owner = owner._debugOwner) {
+      const stack = stackOf(owner);
+      const name = owner.type && typeof owner.type !== "string" ? componentName(owner.type) : null;
+      if (stack && typeof name === "string" && name) owners.push({ name, stack });
+    }
+    return { react19: { element, owners } };
   } catch {}
   return null;
 }

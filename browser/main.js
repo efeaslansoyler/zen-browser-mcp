@@ -162,6 +162,7 @@ function logError(where, e) {
     const { Channels, ascii } = load("Channels");
     const { Inbox, inboxText, sendTargets, sentNotice } = load("Inbox");
     const { Picks } = load("Picks");
+    const { SourceResolver } = load("SourceResolver");
     const { Recordings, RECORDING_KEY, STEP_TOPIC, captureStep } = load("Recordings");
     const { Recipes, recipeTools, geckoIO, originOf } = load("Recipes");
     const { ReviewModel } = load("RecordingReview");
@@ -521,6 +522,19 @@ function logError(where, e) {
       copy: (value) => Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value),
       paintIcon: paintMenuIcon,
       menuAgent,
+      // Source maps of the picked page; the resolver allows only its origin.
+      sources: new SourceResolver({
+        siteAllowed: (host) => ctx.siteAllowed(host),
+        sleep: (ms) => ctx.sleep(ms),
+        budgetMs: 2000,
+        fetchText: async (url) => {
+          const win = Services.wm.getMostRecentWindow("navigator:browser");
+          const response = await win.fetch(url, { credentials: "omit", redirect: "error" });
+          if (!response.ok || Number(response.headers.get("content-length")) > 50e6)
+            throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        },
+      }),
     });
 
     // "Show me once": the user's steps in a recorded tab, saved as recipes.

@@ -64,6 +64,15 @@ and press Enter. Add a note and choose a destination. The pick can include
 the page URL, selector, visible crop, styles and component context. A pick
 does not grant live access to its source tab.
 
+On a development page of a React 19 app (for example Vite), each element also
+carries its **source location**: the file and line of its JSX, the call sites
+of up to three components above it (code in `node_modules` is skipped), and a
+few lines of the original source from the page's source maps. The HTML is then
+shortened. Source maps are read only from the page's own origin, only when your
+site rules allow it, and within two seconds; otherwise the pick says
+`Source: unknown` and keeps its full content. Production pages and other stacks
+send the same pick as before.
+
 The destination menu shows whether delivery is immediate, follows your next
 message, or waits for the next browser tool call:
 

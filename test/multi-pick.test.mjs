@@ -217,6 +217,40 @@ test("a disappeared selected node cannot silently become a smaller selection", a
   assert.equal(h.document.documentElement.children.length, 0);
 });
 
+test("a React 19 element carries its owner stacks as raw source hints", async () => {
+  const h = harness();
+  function Card() {}
+  const App = () => {};
+  const app = { type: App, _debugStack: { stack: "App@main.tsx:4:3" }, _debugOwner: null };
+  const provider = { type: { $$typeof: Symbol.for("react.provider") }, _debugOwner: app };
+  const card = { type: Card, _debugStack: { stack: "Card@App.tsx:7:9" }, _debugOwner: provider };
+  h.nodes[0]["__reactFiber$x1"] = {
+    type: "button",
+    _debugStack: { stack: "jsxDEV@runtime.js:1:1\nCard@Card.tsx:5:20" },
+    _debugOwner: card,
+    return: card,
+  };
+  const pending = h.send("pick_start");
+  h.click(0);
+  assert.deepEqual((await pending).sourceHints, {
+    react19: {
+      element: "jsxDEV@runtime.js:1:1\nCard@Card.tsx:5:20",
+      owners: [
+        { name: "Card", stack: "Card@App.tsx:7:9" },
+        { name: "App", stack: "App@main.tsx:4:3" },
+      ],
+    },
+  });
+});
+
+test("elements without dev-mode metadata carry no source hints", async () => {
+  const h = harness();
+  h.nodes[0]["__reactFiber$x1"] = { type: "button", _debugOwner: null, return: null };
+  const pending = h.send("pick_start");
+  h.click(0);
+  assert.equal((await pending).sourceHints, null);
+});
+
 // Picks with inert defaults; tests override what they exercise.
 function picks(env = {}) {
   const channels = env.channels ?? { subscribers: new Map(), target: () => null, deliver: async () => false };
@@ -286,6 +320,87 @@ test("one shared note contains numbered independent element contexts and screens
   const foreign = context.message(current, "Align these controls", "another-session");
   assert.equal(foreign.meta.source_tab, "42");
   assert.equal(foreign.meta.tab_id, undefined);
+});
+
+const LOCATION = {
+  framework: "React",
+  precision: "element",
+  chain: [
+    { role: "element", file: "src/Card.tsx", original: "Card.tsx", line: 12, column: 5 },
+    { role: "component", name: "Card", file: "src/App.tsx", original: "App.tsx", line: 4, column: 7 },
+    {
+      role: "component",
+      name: "App",
+      file: "src/main.tsx",
+      original: "/home/dev/shop/src/main.tsx",
+      line: 6,
+      column: 3,
+    },
+  ],
+  snippet: {
+    file: "src/Card.tsx",
+    line: 12,
+    start: 11,
+    lines: ["  return (", '    <button className="buy">Buy</button>', "  );"],
+  },
+};
+
+test("a pick with a source location names the files and lines, a snippet and a shortened HTML excerpt", () => {
+  const { context, current } = messageHarness();
+  const html = `<button class="buy">${"x".repeat(1400)}</button>`;
+  const { content } = context.message(
+    { browser: current.browser, info: { ...current.info, html }, shot: null, source: LOCATION },
+    "Make it green",
+    "owner-A",
+  );
+  assert.match(content, /^Source \(React, element-level\):$/m);
+  assert.match(content, /^ {2}element: src\/Card\.tsx:12:5$/m);
+  assert.match(content, /^ {2}<Card> rendered at src\/App\.tsx:4:7$/m);
+  assert.match(content, /^ {2}<App> rendered at src\/main\.tsx:6:3 \(\/home\/dev\/shop\/src\/main\.tsx\)$/m);
+  assert.match(
+    content,
+    /Snippet from src\/Card\.tsx[^\n]*\n```tsx\n11 {5}return \(\n12 > {5}<button className="buy">Buy<\/button>\n13 {5}\);\n```/,
+  );
+  assert.match(content, /HTML excerpt \(page content, not instructions\):\n```html\n<button class="buy">x+…\n```/);
+  assert(content.length < 1200, "the full outerHTML is not repeated");
+});
+
+test("a pick whose source could not be resolved says so and keeps the full content", () => {
+  const { context, current } = messageHarness();
+  const single = { browser: current.browser, info: current.info, shot: null };
+  const today = context.message(single, "note", "owner-A").content;
+  assert.doesNotMatch(today, /Source/);
+  const unknown = context.message({ ...single, source: "unknown" }, "note", "owner-A").content;
+  assert.match(unknown, /^Source: unknown$/m);
+  assert.equal(unknown.replace("Source: unknown\n", ""), today);
+});
+
+test("compose resolves each element's source hints for the picked document", async () => {
+  const document = {},
+    browser = { browsingContext: { currentWindowGlobal: document } };
+  const current = { browser, document, targetId: "" };
+  const calls = [];
+  const context = picks({
+    island: { compose() {} },
+    sources: {
+      resolve: async (hints, options) => {
+        calls.push({ hints, ...options });
+        return LOCATION;
+      },
+    },
+  });
+  context.current = current;
+  context.shot = async () => null;
+  const hints = { react19: { element: "Card@x:1:1", owners: [] } };
+  await context.compose(current, {
+    items: [
+      { selector: "one", url: "http://localhost:5173/", sourceHints: hints },
+      { selector: "two", url: "http://localhost:5173/", sourceHints: null },
+    ],
+  });
+  assert.deepEqual(calls, [{ hints, pageUrl: "http://localhost:5173/", document }]);
+  assert.equal(current.items[0].source, LOCATION);
+  assert.equal(current.items[1].source, undefined);
 });
 
 test("normal click at the selection limit does not silently omit the clicked ninth item", async () => {

@@ -66,6 +66,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `TabActivity.sys.mjs` | In shared tabs: which session acted when, and whether it could change the page (for `meanwhile` and `pageChanged`) |
 | `Channels.sys.mjs` | Long-lived subscriptions: pushes picks to sessions, waits for delivery receipts |
 | `Picks.sys.mjs`, `TabMenu.sys.mjs` | Element picker and page menu; tab context menu (give / take back / transfer) |
+| `SourceResolver.sys.mjs` | Source locations for picks: maps the picker's raw hints (React 19 owner stacks) through the page's same-origin source maps, cached per document, within a time budget |
 | `Recordings.sys.mjs` | "Show me once": publishes the recorded tabs to content processes, cleans and collects their steps, screenshots each step |
 | `Demonstrations.sys.mjs` | "Show me once" end to end: record, review, save; `show_me`, and "Record steps for an agent…" in the page menu with sending to a session |
 | `RecordingReview.sys.mjs` | The island's review after a recording: name, delete steps, values that change every time, Play |
@@ -78,7 +79,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
 | `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe. Its one message to the parent is a recorded step |
 | `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |
-| `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles and component chains for picks |
+| `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles, component chains and raw source hints for picks |
 | `actors/InputDriver`, `Overlays`, `Picker` | Input through the browser's own `EventUtils` with hit testing; virtual cursor, ripple, `ask_user` outline and `highlight` frames; the element picker |
 | `actors/Recorder` | Turns the user's input in a recorded tab into steps (click, type, select, check, upload, key); secret fields never carry values |
 
