@@ -113,15 +113,7 @@ export function tabTools(ctx) {
       let tabs = agentTabs.filter((tab) => access.has(tab.linkedBrowser.browserId, activeSession));
       if (!tabs.length && createIfEmpty) tabs = [await ctx.createTab(activeSession)];
       const others = agentTabs.filter((tab) => !access.has(tab.linkedBrowser.browserId, activeSession));
-      const userTabs = ctx
-        .browserWindows()
-        .flatMap(ctx.windowTabs)
-        // Zen's hidden empty-tab placeholder in each workspace is not a user tab.
-        .filter(
-          (tab) =>
-            tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !access.shared(tab.linkedBrowser.browserId),
-        )
-        .map(ctx.describeTab);
+      const userTabs = ctx.userTabs().map((tab) => ctx.describeTab(tab));
       const { id, name } = ctx.sessions.get(activeSession) ?? {};
       const recipes = await recipesFor([...tabs.map(ctx.describeTab), ...userTabs]);
       // a shared tab lists every member with its task note; a tab of one's own needs none

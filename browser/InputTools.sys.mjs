@@ -44,6 +44,7 @@ export function inputTools(ctx) {
         throw new Error('read must be "all" or "interactive".');
       const browser = browserFor(call, tabId);
       releaseInputs(browser);
+      const from = ctx.hostOf(browser);
       const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
       if (url === "back") browser.goBack();
       else if (url === "forward") browser.goForward();
@@ -56,6 +57,16 @@ export function inputTools(ctx) {
       assertSiteAccess(browser);
       const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
       const result = text(describeTab(tab, call.session));
+      // An agent tab that arrives on a site the user has open: the task may be about their page.
+      const host = ctx.hostOf(browser);
+      const sameSite = host !== from && tab.getAttribute(ctx.MARK) !== "user" ? ctx.userTabsOn(host) : [];
+      if (sameSite.length)
+        result.push(
+          ...text({
+            userTabsOnThisSite: sameSite,
+            note: "The user already has this site open. If the task is about one of these pages, call request_tab on it instead of working here.",
+          }),
+        );
       if (read != null) {
         // Apply the destination document's own read permission, even if navigation was approved.
         try {

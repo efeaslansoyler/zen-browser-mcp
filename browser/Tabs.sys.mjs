@@ -135,6 +135,26 @@ export function tabs(ctx) {
     return tab.linkedBrowser;
   }
 
+  // The user's own tabs: not shared with an agent, and not Zen's hidden empty-tab placeholder.
+  function userTabs() {
+    return ctx
+      .browserWindows()
+      .flatMap(ctx.windowTabs)
+      .filter(
+        (tab) =>
+          tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !ctx.access.shared(tab.linkedBrowser.browserId),
+      );
+  }
+
+  // The user's tabs on a host, for an agent that just opened that site in a tab of its own.
+  function userTabsOn(host) {
+    if (!host || !ctx.siteAllowed(host)) return [];
+    return userTabs()
+      .filter((tab) => ctx.hostOf(tab.linkedBrowser) === host)
+      .slice(0, 3)
+      .map((tab) => ({ tabId: tab.linkedBrowser.browserId, title: tab.linkedBrowser.contentTitle || tab.label }));
+  }
+
   // viewer: the calling session; a tab only it works in needs no members list.
   function describeTab(tab, viewer) {
     const b = tab.linkedBrowser;
@@ -348,6 +368,8 @@ export function tabs(ctx) {
     watchTabOpens,
     openedTabs,
     liveTabs,
+    userTabs,
+    userTabsOn,
     browserFor,
     describeTab,
     createTab,

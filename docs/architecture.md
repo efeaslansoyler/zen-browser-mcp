@@ -94,6 +94,8 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   `tabs_context_mcp` also lists the tabs other sessions work in (`agentTabs`) and the user's
   other tabs (`userTabs`, metadata only). `request_tab` joins an agent tab (rule
   `request_tab.agent_tab`: free in auto, asks in ask) or asks for a user tab in the island.
+  When an agent tab arrives on a site the user has open, the navigation result lists those
+  user tabs (`userTabsOnThisSite`) and points to `request_tab`.
 - A session is *live* while it holds a lifecycle subscription: Claude's MCP process opens one
   at initialize, Codex conversations through `codex-watch`. Menus ("Give to session",
   pick targets) list live sessions only, named by conversation title. When the last
@@ -216,7 +218,9 @@ entry and its ordinary progress and result.
 
 ## Page watches
 
-`wait_for` blocks the agent for at most 60 s. For longer waits and for following changes,
+`wait_for` blocks the agent for at most 60 s. The third identical page read in a row
+(`read_page`, `find`, `get_page_text`, a screenshot or `javascript_tool`) gets a note pointing
+to `wait_for`, `watch` and `downloads` instead of polling. For longer waits and for following changes,
 `watch` starts a background check on an agent tab (`Watches.sys.mjs`): text or a selector
 appearing or disappearing, or every change of a selector's text. Results go to
 `$XDG_RUNTIME_DIR/zen-mcp-watch/<id>-<time>.jsonl` (`started`, `matched`/`changed`, and a final

@@ -103,6 +103,12 @@ export function toolRunner(ctx) {
         if (openedTabs?.length) result.push(...ctx.text({ openedTabs }));
       }
       if (tool === "navigate" && browser) entry.to = browser.currentURI?.spec;
+      if (browser && repeatedRead(call, tool, args) === 3)
+        result.push(
+          ...ctx.text(
+            "The same read of this tab 3 times in a row. To wait for a change, use wait_for (text or selector, up to 60 s), or watch for longer; for files, the downloads tool.",
+          ),
+        );
       return result;
     } catch (e) {
       if (browser) ctx.releaseInputs(browser);
@@ -113,6 +119,19 @@ export function toolRunner(ctx) {
       if (tool !== "browser_batch") ctx.logActivity(entry);
       if (browser && ran && !cleanup) noteActivity(call, tool, args);
     }
+  }
+
+  // How many times in a row the session made this same page read (polling); 0 for other calls.
+  const lastCalls = new WeakMap(); // session info → { signature, count }
+  function repeatedRead(call, tool, args) {
+    const info = ctx.sessions.get(call.session);
+    if (!info) return 0;
+    const read = PAGE_READS.has(ctx.policy.operationOf(tool, args)) || tool === "javascript_tool";
+    const signature = JSON.stringify([tool, args]);
+    const last = lastCalls.get(info);
+    const count = read && last?.signature === signature ? last.count + 1 : 1;
+    lastCalls.set(info, { signature, count });
+    return read ? count : 0;
   }
 
   // Reads that give fresh refs: after one, the caller's view of the page is current again.

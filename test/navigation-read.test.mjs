@@ -6,7 +6,7 @@ import { readTools } from "../browser/ReadTools.sys.mjs";
 import { normalizeConfig } from "../browser/SiteRules.sys.mjs";
 import { bridgeContext } from "./support/bridge.mjs";
 
-function harness({ sites, rules = {}, redirect, waitForLoad = async () => {} } = {}) {
+function harness({ sites, rules = {}, redirect, waitForLoad = async () => {}, userTabs = [] } = {}) {
   const loads = [];
   const reads = [];
   const prompts = [];
@@ -22,7 +22,7 @@ function harness({ sites, rules = {}, redirect, waitForLoad = async () => {} } =
   const ctx = bridgeContext({
     createTab: async (session, { clean }) => {
       const browserId = tabs.size + 1;
-      const tab = { clean };
+      const tab = { clean, getAttribute: () => "true", hasAttribute: () => false };
       const load = (url) => {
         loads.push(url);
         setDocument(redirect ?? url);
@@ -48,6 +48,8 @@ function harness({ sites, rules = {}, redirect, waitForLoad = async () => {} } =
       return tab;
     },
     restoreMark() {},
+    browserWindows: () => [{ gBrowser: { tabs: [...tabs.values(), ...userTabs] } }],
+    windowTabs: (win) => win.gBrowser.tabs,
     findTab: (id) => tabs.get(id),
     describeTab: ({ linkedBrowser }) => ({ tabId: linkedBrowser.browserId, url: linkedBrowser.currentURI.spec }),
     describeAction: (tool) => tool,
@@ -171,4 +173,37 @@ test("a second navigation queues behind the new tab's load and read", async () =
   assert.equal((await second).ok, true);
   assert.deepEqual(h.loads, ["example.test/first", "example.test/second"]);
   assert.equal(h.reads[0].url, "https://example.test/first");
+});
+
+test("an agent tab that opens a site the user has open points to the user's tab", async () => {
+  const userTab = (browserId, url, title) => ({
+    hasAttribute: () => false,
+    linkedBrowser: { browserId, currentURI: { spec: url }, contentTitle: title },
+  });
+  const h = harness({
+    userTabs: [userTab(90, "https://video.test/watch?v=1", "My video"), userTab(91, "https://other.test/", "Other")],
+  });
+  const opened = await h.tool("tabs_create_mcp", { url: "https://video.test/" });
+  assert.equal(opened.ok, true, opened.error);
+  const hint = JSON.parse(opened.content.at(-1).text);
+  assert.deepEqual(hint.userTabsOnThisSite, [{ tabId: 90, title: "My video" }]);
+  assert.match(hint.note, /request_tab/);
+  const tabId = JSON.parse(opened.content[0].text).tabId;
+  const again = await h.tool("navigate", { tabId, url: "https://video.test/other" });
+  assert.equal(again.content.length, 1, "Moving within the same site does not repeat the hint");
+  const elsewhere = await h.tool("navigate", { tabId, url: "https://news.test/" });
+  assert.equal(elsewhere.content.length, 1, "No hint when the user has no tab on the site");
+});
+
+test("the same page read three times in a row suggests wait_for once", async () => {
+  const h = harness();
+  const { tabId } = JSON.parse((await h.tool("tabs_create_mcp", { url: "https://example.test/" })).content[0].text);
+  const read = () => h.tool("read_page", { tabId, filter: "interactive" });
+  const hinted = (result) => result.content.some((c) => /wait_for/.test(c.text));
+  assert.equal(hinted(await read()), false);
+  assert.equal(hinted(await read()), false);
+  assert.equal(hinted(await read()), true);
+  assert.equal(hinted(await read()), false, "The hint comes once per streak");
+  await h.tool("navigate", { tabId, url: "https://example.test/next" });
+  assert.equal(hinted(await read()), false, "Another call ends the streak");
 });
