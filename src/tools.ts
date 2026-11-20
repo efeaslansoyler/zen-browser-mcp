@@ -39,7 +39,7 @@ function consentTimeout(name: string, args: any): number | undefined {
   return undefined;
 }
 
-const tabId = z.number().describe("Tab ID to act on. Use tabs_context_mcp first if you don't have a valid tab ID.");
+const tabId = z.number().describe("Tab ID from tabs_context_mcp.");
 
 const inputOptions = {
   if_changed: z
