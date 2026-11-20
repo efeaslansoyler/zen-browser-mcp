@@ -203,6 +203,47 @@ export function sourceHints(el, unwrap) {
   return null;
 }
 
+// Matched author CSS rules for the source resolver, most specific first. Gecko lists them in
+// cascade order; user-agent and user sheets are left out. A <style> keeps only its source map
+// comment (Vite's css.devSourcemap), not its text.
+const MAX_CSS_RULES = 8;
+const MAX_CSS_MAP = 4e6;
+export function cssHints(el, inspector) {
+  if (!inspector) return null;
+  try {
+    const all = inspector.getCSSStyleRules(el);
+    const sheets = [],
+      index = new Map(),
+      rules = [];
+    for (let i = all.length - 1; i >= 0 && rules.length < MAX_CSS_RULES; i--) {
+      const rule = all[i];
+      const sheet = rule.parentStyleSheet;
+      if (sheet?.parsingMode !== "author") continue;
+      if (!index.has(sheet)) index.set(sheet, sheets.push(sheetHint(sheet)) - 1);
+      rules.push({
+        sheet: index.get(sheet),
+        selector: truncate(String(rule.selectorText ?? ""), 200),
+        line: inspector.getRelativeRuleLine(rule),
+        column: inspector.getRuleColumn(rule),
+      });
+    }
+    return rules.length ? { sheets, rules } : null;
+  } catch {}
+  return null;
+}
+
+function sheetHint(sheet) {
+  if (sheet.href) return { kind: "link", href: sheet.href };
+  const owner = sheet.ownerNode;
+  if (!owner) return { kind: "constructed" };
+  const devId = owner.getAttribute?.("data-vite-dev-id") || null;
+  const text = String(owner.textContent ?? "");
+  // CSS-in-JS libraries insert rules into an empty <style> through the CSSOM
+  if (!text.trim()) return { kind: "script", devId };
+  const map = [...text.matchAll(/\/\*[#@]\s*sourceMappingURL=(\S+?)\s*\*\//g)].at(-1)?.[1];
+  return { kind: "style", devId, map: map && map.length <= MAX_CSS_MAP ? map : null };
+}
+
 // A console.* argument is a page object: try JSON without Xrays, fall back to String.
 export function formatArg(arg, unwrap) {
   if (typeof arg === "string") return arg;

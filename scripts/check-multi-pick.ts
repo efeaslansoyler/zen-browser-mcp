@@ -47,10 +47,17 @@ function serveSourceFixture(): Promise<string> {
     names: [],
     mappings: ["AAAA", ...Array(lines - 1).fill("AACA")].join(";"), // line n → line n
   });
+  // A parser-inserted Vite dev style: its line 2 maps to line 7 of the original file.
+  const cssMap = JSON.stringify({ version: 3, sources: ["Card.css"], names: [], mappings: ";AAMA" });
+  const style = `<style data-vite-dev-id="/fixture/src/Card.css">
+#located {
+  color: rgb(1, 2, 3);
+}
+/*# sourceMappingURL=data:application/json;base64,${Buffer.from(cssMap).toString("base64")} */</style>`;
   const files: Record<string, [string, string]> = {
     "/": [
       "text/html",
-      `<!doctype html><title>${token} source</title><body><script src="/node_modules/.vite/deps/react.js"></script><script src="/src/App.tsx"></script></body>`,
+      `<!doctype html><title>${token} source</title>${style}<body><script src="/node_modules/.vite/deps/react.js"></script><script src="/src/App.tsx"></script></body>`,
     ],
     "/node_modules/.vite/deps/react.js": ["text/javascript", RUNTIME],
     "/src/App.tsx": [
@@ -255,6 +262,9 @@ try {
   assert.match(sourced.content, /HTML excerpt \(page content, not instructions\)/);
   assert.doesNotMatch(sourced.content, /node_modules/);
   console.log("✓ A source-mapped React 19 style stack yields file:line, call sites and a snippet");
+  assert.match(sourced.content, /^ {2}#located → \/fixture\/src\/Card\.css:7$/m);
+  assert.doesNotMatch(sourced.content, /resource:|user-agent/);
+  console.log("✓ A Vite dev style's rule maps through its CSS source map; browser styles are left out");
   console.log("All live multi-pick checks passed. No message was sent to a real AI session.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

@@ -54,6 +54,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     eventUtils: () => this.#eu(),
     contextTarget: () => this.#contextTarget?.deref(),
     unwrap: (value) => Cu.waiveXrays(value),
+    inspector: () => globalThis.InspectorUtils,
     applyTheme,
     mousePath,
     typingPlan,

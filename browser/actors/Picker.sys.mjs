@@ -5,7 +5,7 @@
 // don't fire); mouse movement isn't, so hover menus stay open. Picked elements stay outlined
 // while the note is written; pick_end removes the outline.
 //
-// env: { document(), window(), agent(), applyTheme, contextTarget(), unwrap, L, mac(),
+// env: { document(), window(), agent(), applyTheme, contextTarget(), unwrap, inspector(), L, mac(),
 //        reader: the PageReader module, info: the ElementInfo module }
 
 // limits for the outerHTML and text sent for a picked element
@@ -300,10 +300,12 @@ export class Picker {
   // Context for the agent: enough to find the right place in the code, whatever the page size.
   #info(el) {
     const { elementLabel, roleOf, accessibleName, clean, truncate } = this.env.reader;
-    const { cssPath, pickStyles, componentChain, sourceHints } = this.env.info;
+    const { cssPath, pickStyles, componentChain, sourceHints, cssHints } = this.env.info;
     const doc = this.env.document();
     const win = this.env.window();
     const r = el.getBoundingClientRect();
+    const hints = sourceHints(el, this.env.unwrap);
+    const css = cssHints(el, this.env.inspector());
     return {
       url: doc.URL,
       title: doc.title,
@@ -323,7 +325,7 @@ export class Picker {
       },
       styles: pickStyles(el, win),
       components: componentChain(el, this.env.unwrap),
-      sourceHints: sourceHints(el, this.env.unwrap),
+      sourceHints: css ? { ...hints, css } : hints,
     };
   }
 }

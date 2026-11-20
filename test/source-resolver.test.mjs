@@ -188,3 +188,113 @@ test("hints without a known framework yield unknown", async () => {
   assert.equal(await sources.resolve({}, { pageUrl: `${ORIGIN}/`, document: {} }), "unknown");
   assert.deepEqual(fetched, []);
 });
+
+// CSS: a Vite dev style with and without a CSS source map, linked sheets, inline and script-made rules.
+const CARD_CSS = Array.from({ length: 30 }, (_, i) => `/* card.css line ${i + 1} */`);
+const cardCssMap = (sources) =>
+  `data:application/json;base64,${Buffer.from(
+    sourceMap({
+      sources,
+      sourcesContent: [CARD_CSS.join("\n")],
+      // injected line 3 → line 18; injected line 8, column 3 → line 25, column 1
+      lines: [[], [], [[0, 0, 17, 0]], [], [], [], [], [[2, 0, 24, 0]]],
+    }),
+  ).toString("base64")}`;
+files[`${ORIGIN}/assets/site.css`] = ".a{}\n.b{}\n/*# sourceMappingURL=site.css.map */\n";
+files[`${ORIGIN}/assets/site.css.map`] = sourceMap({
+  sources: ["../src/styles/site.scss"],
+  sourcesContent: ["// scss"],
+  lines: [[], [[0, 0, 40, 0]]],
+});
+files[`${ORIGIN}/assets/plain.css`] = ".a{}\n";
+
+const css = (sheets, rules) => ({ css: { sheets, rules } });
+const rule = (sheet, selector, line, column = 1) => ({ sheet, selector, line, column });
+
+test("Vite dev styles resolve to their original file, and to original lines with a CSS source map", async () => {
+  const devId = "/home/dev/shop/src/Card.css";
+  const { sources, fetched } = resolver();
+  const result = await sources.resolve(
+    css(
+      [
+        { kind: "style", devId, map: cardCssMap(["Card.css"]) },
+        { kind: "style", devId: "/home/dev/shop/src/Plain.css", map: null },
+        { kind: "style", devId: "/home/dev/shop/src/Abs.css", map: cardCssMap(["/home/dev/shop/src/theme/Abs.scss"]) },
+      ],
+      [rule(0, ".buy:hover", 8, 3), rule(0, ".buy", 3), rule(1, ".plain", 12), rule(2, ".abs", 3)],
+    ),
+    { pageUrl: `${ORIGIN}/`, document: {} },
+  );
+  assert.equal(result.chain, undefined);
+  assert.deepEqual(result.cssRules, [
+    { selector: ".buy:hover", kind: "file", file: devId, original: "Card.css", line: 25 },
+    { selector: ".buy", kind: "file", file: devId, original: "Card.css", line: 18 },
+    { selector: ".plain", kind: "unmapped", file: "/home/dev/shop/src/Plain.css", line: 12 },
+    {
+      selector: ".abs",
+      kind: "file",
+      file: "/home/dev/shop/src/theme/Abs.scss",
+      original: "/home/dev/shop/src/theme/Abs.scss",
+      line: 18,
+    },
+  ]);
+  assert.deepEqual(fetched, []);
+});
+
+test("linked stylesheets map through their own source map or keep the served file's line", async () => {
+  const { sources, fetched } = resolver();
+  const result = await sources.resolve(
+    css(
+      [
+        { kind: "link", href: `${ORIGIN}/assets/site.css` },
+        { kind: "link", href: `${ORIGIN}/assets/plain.css` },
+        { kind: "link", href: "https://cdn.example/lib.css" },
+      ],
+      [rule(0, ".b", 2), rule(1, ".a", 1), rule(2, ".lib", 7)],
+    ),
+    { pageUrl: `${ORIGIN}/`, document: {} },
+  );
+  assert.deepEqual(result.cssRules, [
+    { selector: ".b", kind: "file", file: "src/styles/site.scss", original: "../src/styles/site.scss", line: 41 },
+    { selector: ".a", kind: "file", file: "assets/plain.css", line: 1 },
+    { selector: ".lib", kind: "file", file: "https://cdn.example/lib.css", line: 7 },
+  ]);
+  assert(!fetched.some((url) => url.startsWith("https://cdn.example")));
+});
+
+test("inline and script-made rules are reported without invented files or lines", async () => {
+  const { sources } = resolver();
+  const result = await sources.resolve(
+    css(
+      [{ kind: "style", devId: null, map: null }, { kind: "script", devId: null }, { kind: "constructed" }],
+      [rule(0, "button", 3), rule(1, ".css-1x2y", 1), rule(2, ".adopted", 1)],
+    ),
+    { pageUrl: `${ORIGIN}/`, document: {} },
+  );
+  assert.deepEqual(result.cssRules, [
+    { selector: "button", kind: "inline", line: 3 },
+    { selector: ".css-1x2y", kind: "script" },
+    { selector: ".adopted", kind: "script" },
+  ]);
+});
+
+test("CSS rules accompany a resolved element location", async () => {
+  const { sources } = resolver();
+  const result = await sources.resolve(
+    { ...hints, ...css([{ kind: "link", href: `${ORIGIN}/assets/plain.css` }], [rule(0, ".a", 1)]) },
+    { pageUrl: `${ORIGIN}/`, document: {} },
+  );
+  assert.equal(result.chain[0].file, "src/Card.tsx");
+  assert.deepEqual(result.cssRules, [{ selector: ".a", kind: "file", file: "assets/plain.css", line: 1 }]);
+});
+
+test("CSS rules survive an unresolved element location, and the site rules still apply", async () => {
+  const hintsWithCss = {
+    react19: { element: stack(frame("Card", `${ORIGIN}/src/gone.js`, 1, 1)), owners: [] },
+    ...css([{ kind: "link", href: `${ORIGIN}/assets/plain.css` }], [rule(0, ".a", 1)]),
+  };
+  const result = await resolver().sources.resolve(hintsWithCss, { pageUrl: `${ORIGIN}/`, document: {} });
+  assert.deepEqual(result, { cssRules: [{ selector: ".a", kind: "file", file: "assets/plain.css", line: 1 }] });
+  const blocked = resolver({ siteAllowed: () => false });
+  assert.equal(await blocked.sources.resolve(hintsWithCss, { pageUrl: `${ORIGIN}/`, document: {} }), "unknown");
+});

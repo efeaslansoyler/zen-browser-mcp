@@ -75,7 +75,14 @@ few lines of the original source from the page's source maps. The HTML is then
 shortened. Source maps are read only from the page's own origin, only when your
 site rules allow it, and within two seconds; otherwise the pick says
 `Source: unknown` and keeps its full content. Production pages and other stacks
-send the same pick as before.
+send the same pick as before, plus the CSS rules below.
+
+Each element also lists up to eight CSS rules of the page that style it, most
+specific first, with their stylesheet file and line; browser default styles are
+left out. Vite dev styles name their original file; their lines are the
+original ones only with a CSS source map (Vite's `css.devSourcemap`), and
+otherwise the pick says the line is in the injected CSS. Rules from an inline
+`<style>` and rules created by script are reported as such, without a file.
 
 The destination menu shows whether delivery is immediate, follows your next
 message, or waits for the next browser tool call:

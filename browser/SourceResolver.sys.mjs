@@ -8,6 +8,7 @@
 const SNIPPET_BEFORE = 3;
 const SNIPPET_AFTER = 4;
 const MAX_COMPONENTS = 3;
+const MAX_CSS_RULES = 8;
 
 // One resolver per hint kind; each returns a location or null.
 const FRAMEWORKS = [["react19", resolveReact19]];
@@ -19,7 +20,8 @@ export class SourceResolver {
     this.env = env;
   }
 
-  // → "unknown" or { framework, precision, chain: [{ role, name?, file, original, line, column }], snippet }
+  // → "unknown" or { framework, precision, chain: [{ role, name?, file, original, line, column }], snippet,
+  //   cssRules? }; with CSS rules but no element location, just { cssRules }.
   async resolve(hints, { pageUrl, document }) {
     let page;
     try {
@@ -31,7 +33,7 @@ export class SourceResolver {
     let maps = this.#maps.get(document);
     if (!maps) this.#maps.set(document, (maps = new Map()));
     const context = { origin: page.origin, mapFrame: (frame) => this.#mapFrame(frame, page.origin, maps) };
-    const work = (async () => {
+    const located = (async () => {
       for (const [key, resolveHints] of FRAMEWORKS) {
         if (!hints?.[key]) continue;
         const location = await resolveHints(hints[key], context);
@@ -39,6 +41,12 @@ export class SourceResolver {
       }
       return "unknown";
     })().catch(() => "unknown");
+    const work = Promise.all([located, hints?.css ? this.#cssRules(hints.css, page, maps) : []]).then(
+      ([location, cssRules]) => {
+        if (!cssRules.length) return location;
+        return location === "unknown" ? { cssRules } : { ...location, cssRules };
+      },
+    );
     return Promise.race([work, this.env.sleep(this.env.budgetMs).then(() => "unknown")]);
   }
 
@@ -51,15 +59,9 @@ export class SourceResolver {
       return null;
     }
     if (script.origin !== origin) return null;
-    if (!maps.has(script.href))
-      maps.set(
-        script.href,
-        this.#loadMap(script, origin).catch(() => null),
-      );
-    const map = await maps.get(script.href);
-    const position = map && originalPosition(map, line - 1, column - 1);
+    const { map, position } = await this.#lookup(maps, script.href, () => this.#loadMap(script, origin), line, column);
     if (!position) return null;
-    const original = (map.sourceRoot ? map.sourceRoot.replace(/\/?$/, "/") : "") + map.sources[position.source];
+    const original = sourcePath(map, position);
     return {
       file: projectPath(original, map.url, script),
       original,
@@ -69,11 +71,25 @@ export class SourceResolver {
     };
   }
 
+  // A cached map and the original position of a 1-based generated line and column.
+  async #lookup(maps, key, load, line, column) {
+    if (!maps.has(key))
+      maps.set(
+        key,
+        load().catch(() => null),
+      );
+    const map = await maps.get(key);
+    return { map, position: map && originalPosition(map, line - 1, Math.max(0, column - 1)) };
+  }
+
   async #loadMap(script, origin) {
     const text = await this.env.fetchText(script.href);
     const comment = [...text.matchAll(/[#@]\s*sourceMappingURL=(\S+)/g)].at(-1)?.[1];
     if (!comment) return null;
-    const url = new URL(comment, script);
+    return this.#parseMap(new URL(comment, script), script, origin);
+  }
+
+  async #parseMap(url, script, origin) {
     let json;
     if (url.protocol === "data:") json = decodeDataURL(url.href);
     else if (url.origin === origin) json = await this.env.fetchText(url.href);
@@ -81,13 +97,67 @@ export class SourceResolver {
     const map = JSON.parse(json);
     if (!map?.mappings || !Array.isArray(map.sources)) return null;
     return {
-      url: url.protocol === "data:" ? script.href : url.href,
+      url: url.protocol === "data:" ? script?.href : url.href,
       sourceRoot: map.sourceRoot || "",
       sources: map.sources,
       sourcesContent: map.sourcesContent,
       lines: decodeMappings(map.mappings),
     };
   }
+
+  // Each matched rule's file and line. Lines inside an injected <style> are only a place in the
+  // project after a CSS source map maps them; rules made by script have no place at all.
+  #cssRules({ sheets = [], rules = [] }, page, maps) {
+    return Promise.all(
+      rules.slice(0, MAX_CSS_RULES).map(async ({ sheet: index, selector, line, column }) => {
+        const sheet = sheets[index] ?? {};
+        if (sheet.kind === "link") {
+          const position = await this.#mapFrame({ url: sheet.href, line, column }, page.origin, maps).catch(() => null);
+          if (position)
+            return { selector, kind: "file", file: position.file, original: position.original, line: position.line };
+          return { selector, kind: "file", file: servedFile(sheet.href, page), line };
+        }
+        if (sheet.kind !== "style") return { selector, kind: "script" };
+        const mapped = sheet.map && (await this.#mapStyle(sheet, line, column, page, maps).catch(() => null));
+        if (mapped) return { selector, kind: "file", ...mapped };
+        if (sheet.devId) return { selector, kind: "unmapped", file: sheet.devId, line };
+        return { selector, kind: "inline", line };
+      }),
+    );
+  }
+
+  // A <style>'s own map: inline (Vite) or a same-origin URL relative to the page. Relative
+  // sources sit next to the style's dev file.
+  async #mapStyle({ map: comment, devId }, line, column, page, maps) {
+    const url = new URL(comment, page);
+    if (url.protocol !== "data:" && url.origin !== page.origin) return null;
+    const { map, position } = await this.#lookup(
+      maps,
+      url.href,
+      () => this.#parseMap(url, null, page.origin),
+      line,
+      column,
+    );
+    if (!position) return null;
+    const original = sourcePath(map, position);
+    let file = original;
+    if (original.startsWith("file://")) file = decodeURIComponent(new URL(original).pathname);
+    else if (devId && !/^([a-z]+:|\/)/i.test(original))
+      file = decodeURIComponent(new URL(original, `file:///${devId.replace(/^\//, "")}`).pathname).replace(
+        /^\/(?=[a-zA-Z]:)/,
+        "",
+      );
+    return { file, original, line: position.line + 1 };
+  }
+}
+
+const sourcePath = (map, position) =>
+  (map.sourceRoot ? map.sourceRoot.replace(/\/?$/, "/") : "") + map.sources[position.source];
+
+// A stylesheet without a map: its served path on the page's origin, else its URL.
+function servedFile(href, page) {
+  const url = new URL(href);
+  return url.origin === page.origin ? decodeURIComponent(url.pathname).slice(1) : href;
 }
 
 // React 19 owner stacks: the element's JSX call site, then where each owner component was
