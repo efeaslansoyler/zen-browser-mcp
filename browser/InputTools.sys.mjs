@@ -39,7 +39,9 @@ export function inputTools(ctx) {
     waitForLoad,
   } = ctx;
   return {
-    async navigate({ url, tabId }, call) {
+    async navigate({ url, tabId, read }, call) {
+      if (read != null && read !== "all" && read !== "interactive")
+        throw new Error('read must be "all" or "interactive".');
       const browser = browserFor(call, tabId);
       releaseInputs(browser);
       const loaded = waitForLoad(browser, 20000, url === "back" || url === "forward" ? null : url);
@@ -53,7 +55,18 @@ export function inputTools(ctx) {
       await guard(loaded, call);
       assertSiteAccess(browser);
       const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
-      return text(describeTab(tab));
+      const result = text(describeTab(tab));
+      if (read != null) {
+        // Apply the destination document's own read permission, even if navigation was approved.
+        try {
+          result.push(...(await ctx.runTool(call, "read_page", { tabId, filter: read, max_chars: 8000 })));
+        } catch (e) {
+          if (!(e instanceof ctx.DialogOpen)) throw e;
+          ctx.showDialog(e.browser);
+          result.push(...text(e.message));
+        }
+      }
+      return result;
     },
 
     async computer(args, call) {

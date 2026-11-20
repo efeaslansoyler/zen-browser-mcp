@@ -66,14 +66,33 @@ try {
   assert(ready, "Read snapshot bridge did not reload.");
   const a = await connect("codex-mcp-client"),
     b = await connect("claude-code");
-  const first = JSON.parse(await tool(a, "tabs_create_mcp"));
+  const html = `<!doctype html><meta charset="utf-8"><title>Read diff fixture</title><h1>Read diff fixture</h1>
+    <script>for (let i = 0; i < 200; i++) document.write('<p id="row' + i + '">Row ' + i + ': stable visible fixture content.</p>');</script>
+    <div id="controls"></div>`;
+  const url = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+  const formUrl =
+    "data:text/html;charset=utf-8," +
+    encodeURIComponent(
+      '<label>Fixture name <input id="fixture-name"></label><button onclick="document.querySelector(\'#answer\').textContent=document.querySelector(\'#fixture-name\').value">Show name</button><p id="answer"></p>',
+    );
+  const opened = await tool(a, "tabs_create_mcp", { url: formUrl, read: "interactive" });
+  const first = JSON.parse(opened.split("\n", 1)[0]);
   tabs.add(first.tabId);
   const second = JSON.parse(await tool(b, "tabs_create_mcp"));
   tabs.add(second.tabId);
   const tabId = first.tabId;
-  const html = `<!doctype html><meta charset="utf-8"><title>Read diff fixture</title><h1>Read diff fixture</h1>${Array.from({ length: 200 }, (_, i) => `<p id="row${i}">Row ${i}: stable visible fixture content.</p>`).join("")}<div id="controls"></div>`;
-  const url = "data:text/html;charset=utf-8," + encodeURIComponent(html);
-  await tool(a, "navigate", { tabId, url });
+  assert.equal(first.url, formUrl);
+  const field = /textbox "Fixture name" \[([^\]]+)\]/.exec(opened)?.[1];
+  const button = /button "Show name" \[([^\]]+)\]/.exec(opened)?.[1];
+  assert(field && button, opened);
+  await tool(a, "form_input", { tabId, ref: field, value: "Name from embedded refs" });
+  await tool(a, "computer", { tabId, action: "left_click", ref: button });
+  assert.match(await tool(a, "get_page_text", { tabId }), /Name from embedded refs/);
+  const navigated = await tool(a, "navigate", { tabId, url, read: "all" });
+  assert.match(navigated, /heading "Read diff fixture"/);
+  assert.match(navigated, /Row 0: stable visible fixture content/);
+  assert.match(navigated, /truncated at 8000 characters/);
+  console.log("✓ Create and navigate return destination content with refs usable for form input and clicks");
   const page = (code: string) => pageEval(tabId, code);
   const read = (name: string, args: object = {}) => tool(a, name, { tabId, ...args });
   const fullText = await read("get_page_text", { diff: true });

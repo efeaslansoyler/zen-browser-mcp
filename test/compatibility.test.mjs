@@ -117,9 +117,9 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         extensions: { action: "list" },
         tab_work: { action: "list" },
         tabs_context_mcp: {},
-        tabs_create_mcp: {},
+        tabs_create_mcp: { url: "https://example.test", clean: true, read: "all" },
         tabs_close_mcp: { tabId: 1 },
-        navigate: { tabId: 1, url: "https://example.test" },
+        navigate: { tabId: 1, url: "back", read: "interactive" },
         computer: { tabId: 1, action: "screenshot", scale: 0.5 },
         read_page: { tabId: 1 },
         find: { tabId: 1, query: "Submit" },
@@ -150,6 +150,9 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         const result = await client.callTool({ name: tool.name, arguments: inputs[tool.name] });
         assert.equal(result.isError, undefined, tool.name);
         assert.deepEqual(received.at(-1)[3], identifyAgent(name));
+        if (["navigate", "tabs_create_mcp"].includes(tool.name)) {
+          assert.deepEqual(received.at(-1)[1], inputs[tool.name]);
+        }
       }
     } finally {
       await client.close();
@@ -200,6 +203,7 @@ test("server instructions keep the tool routing rules", async () => {
       "already open",
       "request_tab",
       "tabs_create_mcp only",
+      'read: "all" or "interactive"',
       "hand_to_user",
       "never ask for passwords or codes",
       "ask_user",

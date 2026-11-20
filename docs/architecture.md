@@ -112,7 +112,8 @@ line and, for acknowledged subscriptions, the client answers `{event: "delivery"
   `ask_user` can't). A call's result then says what the other members did there since the
   caller's last call (`meanwhile`: agent, task note, number of actions, how long ago; never
   values or page contents) and, until the caller reads the page again (`read_page`, `find`,
-  `get_page_text`, a screenshot), that another member may have changed it (`pageChanged`).
+  `get_page_text`, a screenshot, or a page read bundled with navigation), that another member
+  may have changed it (`pageChanged`).
 - `tab_work hold` keeps a tab to one member for 1–10 minutes (renewable) with a reason. The
   other sessions' calls in it are refused at once, before they wait for the tab's lock; with
   `noWorkaround` also their calls in any tab on the held tab's origin and navigations there

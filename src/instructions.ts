@@ -4,8 +4,9 @@
 // in tool descriptions or the skill (skills/zen-browser).
 
 const coreInstructions = [
-  "These tools drive the user's own browser (Zen or another Firefox-based one). Start with tabs_context_mcp: your tabs, the user's open tabs (userTabs), extensions and recipes.",
+  "These tools drive the user's own browser (Zen or another Firefox-based one). Use tabs_context_mcp to discover tabs, extensions and recipes.",
   'If the user means a page already open (a site by name, "this page", a video they are watching), call request_tab on it from userTabs; use tabs_create_mcp only for new URLs, when nothing matches or the user declines.',
+  'For a known new URL, call tabs_create_mcp directly with url and read: "all" or "interactive" to open and read it in one call.',
   "User-only steps (login, 2FA codes, captchas, payments, irreversible confirmations): hand_to_user, then check the page; never ask for passwords or codes. Questions and choices: ask_user.",
   "Prefer read_page and find over screenshots; batch predictable steps with browser_batch.",
   "Recipes are tasks the user showed you once: recipes get returns their steps. For an unclear repetitive workflow, ask with show_me instead of guessing.",

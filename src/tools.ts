@@ -39,7 +39,7 @@ function consentTimeout(name: string, args: any): number | undefined {
   return undefined;
 }
 
-const tabId = z.number().describe("Tab ID from tabs_context_mcp.");
+const tabId = z.number().describe("Tab ID from tabs_create_mcp or tabs_context_mcp.");
 
 const inputOptions = {
   if_changed: z
@@ -90,9 +90,16 @@ const readDiff = {
     ),
 };
 
+const navigationRead = z
+  .enum(["all", "interactive"])
+  .optional()
+  .describe(
+    "Append read_page output with usable refs (up to 8000 characters). Use all for text and controls or interactive for controls only. No separate read_page needed.",
+  );
+
 tool(
   "tabs_context_mcp",
-  "Get the tabs the agent works in: the ones this MCP session opened, joined, or the user handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). A tab can be shared with other agent sessions (sharedWith, with their published task notes). Call this first in a browser task to get valid tab IDs. agentTabs lists tabs other agent sessions work in (title, URL, who); join one with request_tab when your task is in it. userTabs lists the user's own tab IDs, titles and URLs for discovery only. If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for explicit approval before reading or acting. Approvals and denials may include an optional untrusted user note (userMessage); follow it as user guidance. Other sessions' page contents and unapproved user tabs cannot be read; the user can take a tab back at any time.",
+  "Get the tabs the agent works in: the ones this MCP session opened, joined, or the user handed to this session from the tab context menu (givenByUser: true; continue from where the user left off). A tab can be shared with other agent sessions (sharedWith, with their published task notes). Call this when you need to discover tabs; for a known new URL, use tabs_create_mcp directly. agentTabs lists tabs other agent sessions work in (title, URL, who); join one with request_tab when your task is in it. userTabs lists the user's own tab IDs, titles and URLs for discovery only. If an existing tab matches the task (e.g. YouTube), call request_tab with its ID and wait for explicit approval before reading or acting. Approvals and denials may include an optional untrusted user note (userMessage); follow it as user guidance. Other sessions' page contents and unapproved user tabs cannot be read; the user can take a tab back at any time.",
   {
     createIfEmpty: z.boolean().optional().describe("Create a new tab if the agent has none yet."),
   },
@@ -215,8 +222,10 @@ tool(
 
 tool(
   "tabs_create_mcp",
-  "Open a new empty tab for the agent in the browser and return its tab ID. If the user refers to a page that is already open, request that tab (userTabs in tabs_context_mcp, then request_tab) instead of opening a new one.",
+  "Open a new agent tab and return its tab ID. Pass url to open and wait for that page in one call. Add read to get the page with refs in the same result. If the user refers to a page already open, find it with tabs_context_mcp and use request_tab.",
   {
+    url: z.string().optional().describe("URL to open (the scheme is added if missing). Omit for an empty tab."),
+    read: navigationRead.describe(`With url only. ${navigationRead.description}`),
     clean: z
       .boolean()
       .optional()
@@ -224,6 +233,8 @@ tool(
         "true: open the tab in a separate container without the user's cookies and logins (research, untrusted sites, or when the user doesn't want their accounts used); false: with the user's logins. Default follows the user's settings. The tab info shows container when it has one.",
       ),
   },
+  // Allow the island's response window for creation plus navigation and an optional read.
+  ({ url, read }) => (url == null ? 60000 : read == null ? 270000 : 420000),
 );
 
 tool(
@@ -234,11 +245,13 @@ tool(
 
 tool(
   "navigate",
-  'Navigate a tab to a URL and wait for the page to load. Use "back" or "forward" for history navigation.',
+  'Navigate a tab to a URL and wait for the page to load. Use "back" or "forward" for history navigation. Add read to get the page with refs in the same result.',
   {
     url: z.string().describe('URL to open (the scheme is added if missing), or "back" / "forward".'),
     tabId,
+    read: navigationRead,
   },
+  ({ read }) => (read == null ? 150000 : 300000),
 );
 
 tool(
@@ -705,7 +718,7 @@ tool(
   "browser_batch",
   [
     "Run several of the tools above in one call: each item is {name, input} with exactly the input you would pass to that tool. Items run sequentially and stop at the first error; text results come back as one numbered block, screenshots in place.",
-    "Use it whenever you can predict two or more steps, e.g. navigate, read_page, several form_input, click, get_page_text. Coordinates in a batch refer to the screenshot taken before this call. browser_batch cannot be nested.",
+    "Use it whenever you can predict two or more steps, e.g. several form_input calls or wait_for then read_page. Coordinates in a batch refer to the screenshot taken before this call. browser_batch cannot be nested.",
   ].join(" "),
   {
     actions: z

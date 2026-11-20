@@ -153,8 +153,29 @@ export function tabTools(ctx) {
       });
     },
 
-    async tabs_create_mcp({ clean } = {}, call) {
-      return text(ctx.describeTab(await ctx.createTab(call.session, { clean })));
+    async tabs_create_mcp({ clean, url, read } = {}, call) {
+      if (read != null && url == null) throw new Error("read needs a url.");
+      if (url === "back" || url === "forward") throw new Error("A new tab needs a URL, not a history direction.");
+      const tab = await ctx.createTab(call.session, { clean });
+      if (url == null) return text(ctx.describeTab(tab));
+      const tabId = tab.linkedBrowser.browserId;
+      const key = `tab:${tabId}`;
+      // A batch may already hold this key. Never wait for a new key while holding
+      // the batch's other locks: a request ahead of us could be waiting on them.
+      let lock;
+      try {
+        if (!call.tabVersions.has(tabId)) {
+          if (ctx.locks.busy(key)) throw new Error("Another request is already using the new tab.");
+          lock = ctx.locks.acquire([key]);
+          await lock.ready;
+        }
+        return await ctx.runTool(call, "navigate", { tabId, url, read });
+      } catch (e) {
+        if (e instanceof ctx.DialogOpen || e instanceof ctx.Stopped) throw e;
+        throw new Error(`Opened tab ${tabId}. ${e?.message ?? e}`, { cause: e });
+      } finally {
+        lock?.release();
+      }
     },
 
     // A tab the agent opened is closed; a tab the user gave is not closed but given back. While

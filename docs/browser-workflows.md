@@ -35,6 +35,15 @@ tabs in a separate workspace. The equivalent CLI is
 
 ## Read and act on a page
 
+- For a known new URL, call `tabs_create_mcp` with `url` to open it and wait for load in
+  one call. Without `url`, it opens an empty tab. For an existing agent tab, use `navigate`
+  with a URL, `"back"`, or `"forward"`. Opening a new tab with a URL uses the same navigation
+  permissions and site rules. If navigation is refused after tab creation, the error includes
+  the new tab ID so the agent can close it.
+- Add `read: "all"` for text and controls or `read: "interactive"` for controls only.
+  The response contains tab metadata followed by the `read_page` output, capped at 8,000
+  characters, with refs ready for clicks and form input. The read uses the destination
+  page's permissions and leaves diff baselines alone. By default the result is tab metadata.
 - Use `read_page`, `find`, or `get_page_text` to understand a page. Prefer
   element refs for clicks and form actions. A covered-target error identifies
   the blocker when the browser can resolve it.
