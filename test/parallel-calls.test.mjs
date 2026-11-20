@@ -208,3 +208,14 @@ test("clipboard, browser settings and extensions take the exclusive lock through
   assert.deepEqual(replies[0], { ok: false, error: "clipboard failed" });
   assert(replies.slice(1).every((reply) => reply.ok && !reply.isError));
 });
+
+test("a call queued behind a cancelled one does not run after the bridge stops", async () => {
+  const h = harness();
+  const calls = [h.request("claude", { tabId: 1, name: "running" }), h.request("codex", { tabId: 1, name: "queued" })];
+  await tick();
+  h.context.cancelCalls();
+  await h.finish("running");
+  assert.deepEqual(h.started, ["running"]);
+  await Promise.all(calls);
+  assert(h.replies.every((reply) => !reply.ok || reply.isError));
+});

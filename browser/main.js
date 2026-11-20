@@ -950,7 +950,7 @@ function logError(where, e) {
       ctx.extensionPanels.destroy();
       ctx.tabWake.destroy();
       clearTimeout(sessionSweep);
-      for (const call of ctx.calls) call.cancel(new Stopped());
+      ctx.cancelCalls();
       ctx.picks.destroy();
       ctx.demonstrations.destroy();
       ctx.channels.closeAll();

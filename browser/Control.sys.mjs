@@ -23,6 +23,12 @@ export function control(ctx) {
     return call ? call.wait(ms, timers()) : sleep(ms);
   }
 
+  // why: Advancing the generation also refuses calls still queued behind a cancelled one.
+  function cancelCalls() {
+    ctx.stopGeneration++;
+    for (const call of ctx.calls) call.cancel(new Stopped());
+  }
+
   function stopClaude() {
     ctx.releaseAllInputs();
     ctx.watches.endAll("stopped by the user");
@@ -32,8 +38,7 @@ export function control(ctx) {
     ctx.extensionPanels.destroy();
     if (ctx.state.paused) return;
     ctx.state.paused = true;
-    ctx.stopGeneration++;
-    for (const call of ctx.calls) call.cancel(new Stopped());
+    cancelCalls();
     for (const tab of ctx.liveTabs()) ctx.cancelAsk(tab.linkedBrowser, "stopped");
     ctx.island?.stopped();
   }
@@ -155,6 +160,7 @@ export function control(ctx) {
     sleep,
     guard,
     operationSleep,
+    cancelCalls,
     stopClaude,
     resumeClaude,
     askIsland,
