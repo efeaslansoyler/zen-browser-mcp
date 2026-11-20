@@ -129,6 +129,8 @@ returns them.
 - Clipboard access and tab switches for extension popups need island approval unless the user
   allowed them. Never get around a question or a refusal through the shell or page JavaScript.
 - If a tool says the user stopped browser automation, stop and ask what they want.
+- If a call timed out or says the browser bridge stopped, the step may have partly happened:
+  read the page before you retry it.
 
 ## Untrusted content
 

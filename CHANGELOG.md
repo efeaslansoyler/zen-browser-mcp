@@ -7,6 +7,11 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+### Changed
+
+- The agent skill tells agents to read the page before retrying a call that timed out or was
+  cut off by a bridge stop. Run `node dist/cli.js skill install` to update an installed skill.
+
 ## [0.1.0] - 2026-11-20
 
 The first release. Agents (Claude Code, Codex and other MCP clients) use your own Zen or
