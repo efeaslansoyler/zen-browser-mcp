@@ -7,7 +7,7 @@ to install and connect your MCP client.
 |---|---|
 | [Browser workflows](browser-workflows.md) | Tabs, the island, sending picks, recording recipes, clipboard, extensions and downloads |
 | [Permissions and security](permissions.md) | Approval modes, custom rules, site lists and the local trust boundary |
-| [Browser diagnostics](browser-diagnostics-plan.md) | Page and screenshot diffs, inspection, network and HAR, and local Web Vitals |
+| [Browser diagnostics](browser-diagnostics.md) | Page and screenshot diffs, inspection, network and HAR, and local Web Vitals |
 | [Browser compatibility](browser-compatibility.md) | Tested Linux builds, results and observed limits |
 | [Codex integration](codex.md) | Conversation identity, hooks, pick delivery and socket access |
 | [Architecture](architecture.md) | MCP server, browser bridge, actors, transport, sessions and permissions |

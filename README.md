@@ -107,7 +107,7 @@ site data, close the agent browser and run
 The agent can also inspect pages and accessibility, compare screenshots,
 print PDFs, record short tab videos, and collect network and performance
 diagnostics. HTTP rules apply to agent-opened tabs, and dedicated agent modes
-include cookie and Web Storage tools. See [browser diagnostics](docs/browser-diagnostics-plan.md)
+include cookie and Web Storage tools. See [browser diagnostics](docs/browser-diagnostics.md)
 for tool usage and limits.
 
 ## More help

@@ -115,7 +115,7 @@ Ajan sayfa yapısını ve erişilebilirliği inceleyebilir, ekran görüntüleri
 karşılaştırabilir, PDF ve kısa tab videoları kaydedebilir, ağ ve performans
 verisi toplayabilir. HTTP kuralları ajanın açtığı tab’larda, cookie ve Web
 Storage tool’ları ayrı agent profillerinde çalışır. Tool ayrıntıları
-[tarayıcı tanılama kılavuzunda](docs/browser-diagnostics-plan.md).
+[tarayıcı tanılama kılavuzunda](docs/browser-diagnostics.md).
 
 ## Daha fazla bilgi
 

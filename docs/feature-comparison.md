@@ -36,7 +36,7 @@ are separate decisions.
   element back to a conversation or save steps as a recipe.
 - **Gecko diagnostics.** The bridge supports viewport diffs across deploys,
   full-page screenshots, redacted HAR, local Web Vitals, React and axe
-  inspection, and download tracking. See [browser diagnostics](browser-diagnostics-plan.md)
+  inspection, and download tracking. See [browser diagnostics](browser-diagnostics.md)
   and the [tested browser builds](browser-compatibility.md).
 
 ## Agent-browser capabilities
@@ -50,7 +50,7 @@ are separate decisions.
 | Request mocking and offline | `network_control` operates on agent-opened tabs with Gecko's HTTP hooks. |
 | Trace/profiler and pushstate | Outside the scope of these tools. |
 
-See [browser diagnostics](browser-diagnostics-plan.md) for arguments and limits.
+See [browser diagnostics](browser-diagnostics.md) for arguments and limits.
 
 ## Token benchmark
 
