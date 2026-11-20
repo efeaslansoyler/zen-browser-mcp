@@ -53,7 +53,7 @@ olarak `dist/cli.js` dosyasının tam yolunu ver. Kurulumu `node dist/cli.js doc
 ile kontrol edebilirsin. Installer tarayıcıyı bulamazsa `--browser /kurulum/yolu`
 ile `application.ini` dosyasının bulunduğu klasörü belirt.
 
-[Browser and profile selection](docs/permissions.md#browser-and-profile-selection)
+[Browser and profile selection](docs/browsers.md#which-browser-a-session-uses)
 
 Default `together` mode'unda yeni MCP session en son focus alan kullanıcı
 profile'ını kullanır. Bir MCP client için seçimi `--browser <name|dir>` ve
@@ -70,7 +70,7 @@ node dist/cli.js config launch default
 node dist/cli.js doctor
 ```
 
-[Browser startup and permissions](docs/permissions.md#on-demand-browser-startup)
+[Browser startup and permissions](docs/browsers.md#starting-the-browser-on-demand)
 
 ## Browser mode seçenekleri
 

@@ -1,6 +1,6 @@
 # Codex integration
 
-Use the Codex registration command in the [README](../README.md#install-from-source).
+Use the Codex registration command in [installation](installation.md#connect-your-mcp-client).
 This page covers how Zen MCP associates a tool call with a conversation and sends
 element picks back to Codex.
 

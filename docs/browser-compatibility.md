@@ -3,7 +3,7 @@
 Tested November 20, 2026 on Linux x86-64. The original matrix used `840d09c`, with recording
 checks added at `378033b`. Download tracking, native dialog handling, and the affected input,
 extension and clipboard checks were rechecked through `c5d6475`.
-For setup, see the [installation guide](../README.md#install-from-source).
+For setup, see the [installation guide](installation.md).
 
 | Browser | Package version | Build ID |
 | --- | --- | --- |

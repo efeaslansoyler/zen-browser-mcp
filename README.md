@@ -1,122 +1,93 @@
 # zen-browser-mcp
 
-[English](README.md) · [Türkçe](README.tr.md) · [MIT License](LICENSE)
+Let Claude Code, Codex and other MCP agents work in the browser you already use: your tabs,
+your logins, real input, and an island at the top of the window that shows what they do.
 
-An independent project, not affiliated with or endorsed by the Zen Browser team or Mozilla.
+[![CI](https://github.com/efeaslansoyler/zen-browser-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/efeaslansoyler/zen-browser-mcp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/efeaslansoyler/zen-browser-mcp)](https://github.com/efeaslansoyler/zen-browser-mcp/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Give Claude Code, Codex, or another MCP client access to your Zen or Firefox-based
-browser. The agent can read pages, click and type in its own tabs, and work in a
-tab you share. The island at the top of the browser shows what it is doing and
-lets you approve, take over, or stop the work.
+[English](README.md) · [Türkçe](README.tr.md)
 
-[![Demo of sharing page elements and recording a task in Zen](docs/media/demo.gif)](docs/media/demo.mp4)
+[![Sharing page elements with an agent and recording a task in Zen](docs/media/demo.gif)](docs/media/demo.mp4)
 
-> [!IMPORTANT]
-> The bridge runs with browser privileges and can work with your signed-in
-> accounts. Use it with clients you trust, and review what an agent asks to do.
-> The project has tests and has not undergone a security audit.
-> See [permissions and security](docs/permissions.md), and report vulnerabilities
-> privately as described in [SECURITY.md](SECURITY.md).
+## Why
 
-## Install from source
+- **Your own browser.** Agents open their own background tabs next to yours, or work in a tab
+  you share. No separate automation browser, no remote debugging port.
+- **You stay in control.** The island shows each agent's work. By default, form submissions,
+  password fields, uploads and page JavaScript wait for your approval, and **Stop** or **Take back**
+  ends an agent's work at once.
+- **The parts only you should do stay yours.** Agents hand you logins, 2FA and payments and
+  continue when you press **Done**, so credentials never pass through them.
+- **Point instead of describing.** Pick elements on any page and send them to a session with
+  a note. On a local dev server of a supported framework, the pick names the source file.
+- **Show a task once.** Record it in the browser; agents reuse it as a recipe.
+- **Several agents, several browsers.** Sessions share tabs and take turns. Works with Zen,
+  Firefox, LibreWolf, Floorp and Waterfox.
 
-You need Node.js 22 or newer, an MCP client, and a desktop browser installed in a
-folder the installer can write to. The installer targets Linux and macOS. The
-[compatibility matrix](docs/browser-compatibility.md) records tested Linux builds
-of Zen, Firefox, LibreWolf, Floorp, and Waterfox. Flatpak and Snap installations
-are unsupported.
+## Quick start
+
+You need Node.js 22+, Linux or macOS, and a Zen or Firefox-based browser installed in a
+folder you can write to.
 
 ```sh
 git clone https://github.com/efeaslansoyler/zen-browser-mcp.git
 cd zen-browser-mcp
-npm ci
-npm run build
+npm ci && npm run build
 node dist/cli.js install
 ```
 
-The installer adds an autoconfig loader to each browser installation it finds. It may
-request `sudo` for that step. Restart the browsers you want to use, then register the server with
-your client. Run one of these commands from the checkout:
+Restart the browser, then connect your client from the same folder:
 
 ```sh
-# Claude Code
-claude mcp add --scope user zen -- node "$PWD/dist/cli.js"
-
-# Codex
-codex mcp add zen -- node "$PWD/dist/cli.js"
+claude mcp add --scope user zen -- node "$PWD/dist/cli.js"   # Claude Code
+codex mcp add zen -- node "$PWD/dist/cli.js"                 # Codex
 ```
 
-For another MCP client, add a local stdio server with command `node` and the
-absolute path to `dist/cli.js` as its first argument. Check the setup with
-`node dist/cli.js doctor`. If the installer cannot find your browser, pass
-`--browser /path/to/install` with the folder containing `application.ini`.
+Ask your agent: *"Open example.com and tell me what the page says."* An agent tab opens and
+the island shows the work. To let it use a tab you already have open, right-click the tab
+and choose **Give to session…**, or approve the agent's request.
 
-In the default `together` mode, new MCP sessions use the most recently focused
-user profile. To choose a default, run
-`node dist/cli.js config browser Zen --profile Default`. One client can
-override that choice with the server arguments `--browser` and `--profile`.
-Run `node dist/cli.js doctor` to see the running instances and the selection.
+[Installation](docs/installation.md) covers other clients, `doctor`, updating and
+uninstalling.
 
-When the selected browser is closed, a tool call can open it on demand on Linux
-and macOS. With automatic selection and no matching browser, the server opens
-the first browser it finds (Zen first). In `together` it uses the browser's default profile. Auto mode allows
-startup, and ask mode prompts in MCP clients that support form elicitation.
-Use `node dist/cli.js config launch allow|ask|deny` to set a preference,
-or `config launch default` to follow the active permission template.
-See [browser startup and permissions](docs/permissions.md#on-demand-browser-startup).
+## How it works
 
-## Browser modes
+```
+MCP client ──stdio──▶ zen-browser-mcp ──local socket──▶ bridge inside the browser ──▶ pages
+```
 
-| Mode | Profile | Window |
-|---|---|---|
-| `together` (default) | Your own profile | Visible |
-| `agent` | Shared agent profile with persistent logins | Visible |
-| `scratch` | Temporary profile for this MCP process | Visible |
-| `autonomous` | Temporary profile for this MCP process | Headless |
-| `autonomous-agent` | The same persistent profile as `agent` | Headless |
+`install` adds a small autoconfig loader to the browser. It starts a bridge in the browser
+that listens on a private Unix socket; the MCP server your client runs talks to it. Input
+reaches pages as trusted events from the page's own process, so agents can work in background
+tabs while you use the browser.
 
-Set the default with `node dist/cli.js config browser-mode agent`. For one client,
-pass `--browser-mode <mode>` in its MCP server arguments or set `ZEN_MCP_BROWSER_MODE`
-in its server environment. Reconnect the client to apply a change. The browser
-selector applies to every mode. The profile selector applies to `together`.
+## Security
 
-If the persistent profile is already open, both persistent modes reuse it in its
-current mode. Use `agent` to sign in, then close that browser before starting
-`autonomous-agent` for unattended work. The autonomous modes allow operations that
-would ask on the island, deny system clipboard access and retain custom denials and
-site rules. See [autonomous permissions](docs/permissions.md#autonomous-browser-modes).
+The bridge runs with browser privileges and can act with your signed-in accounts. Use it with
+clients you trust and read what an agent asks before you approve it. The project has tests
+but no security audit. [Permissions and security](docs/permissions.md) explains the modes,
+site rules and trust boundary; report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md).
 
-`node dist/cli.js doctor` shows the agent profile location. To erase its logins and
-site data, close the agent browser and run
-`node dist/cli.js reset-agent-profile --browser <name|dir>`.
+## Documentation
 
-## Use it
+| Guide | What it covers |
+|---|---|
+| [Installation](docs/installation.md) | Requirements, clients, hooks and the skill, updating, uninstalling |
+| [Browser workflows](docs/browser-workflows.md) | Tabs and the island, sending elements, recipes, clipboard, extensions, downloads |
+| [Permissions and security](docs/permissions.md) | Approval modes, custom rules, site lists |
+| [Browsers, profiles and modes](docs/browsers.md) | Choosing a browser, agent and headless profiles, starting the browser on demand |
+| [Browser diagnostics](docs/browser-diagnostics.md) | Read diffs, screenshot baselines, network and HAR, Web Vitals, PDF and video |
+| [All documentation](docs/README.md) | Codex integration, compatibility, architecture, comparisons |
 
-- **Ask your agent to open a page.** Try “Open example.com and tell me what the
-  page says.” The agent opens its own tab and the island shows its activity.
-- **Work in a tab you already have open.** Right-click the tab and choose
-  **Give to session…**, or approve the agent's request to use it. Choose
-  **Take back from agent** when you want to revoke access.
-- **Approve or stop.** Use the island to answer permission prompts and take over
-  steps such as signing in. Click **Stop** to stop agent work.
-- **Show the agent what you mean.** Right-click a page and choose
-  **Show to agent…** to send an element with a note. Choose
-  **Record steps for an agent…** to save a repeatable task as a recipe. See the
-  [browser workflows guide](docs/browser-workflows.md) for delivery setup.
+## Contributing
 
-The agent can also inspect pages and accessibility, compare screenshots,
-print PDFs, record short tab videos, and collect network and performance
-diagnostics. HTTP rules apply to agent-opened tabs, and dedicated agent modes
-include cookie and Web Storage tools. See [browser diagnostics](docs/browser-diagnostics.md)
-for tool usage and limits.
+Bug reports, ideas and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md);
+changes are listed in the [changelog](CHANGELOG.md).
 
-## More help
+## License
 
-- [Browser tool comparison](docs/feature-comparison.md) and a
-  [Codex token benchmark](docs/browser-benchmark.md) with Kitsune and ZenPilot on the same Zen build
-- [Documentation](docs/README.md) for configuration, workflows, and internals
-- [Contributing](CONTRIBUTING.md) for development and live checks
-- After updating the checkout, rerun `npm ci`, `npm run build`, and
-  `node dist/cli.js install`. Restart the browser and reconnect the MCP client.
-- Run `node dist/cli.js uninstall` to remove the browser bridge. Restart the
-  browser and remove the server entry from your MCP client.
+[MIT](LICENSE). An independent project, not affiliated with or endorsed by the Zen Browser
+team or Mozilla.

@@ -102,49 +102,9 @@ directory, typically `~/.local/state/zen-mcp/activity.jsonl`. Use **Agent histor
 in the tab menu to review activity. Uninstalling the bridge keeps settings and
 state. See [architecture](architecture.md#permissions) for enforcement details.
 
-## Browser and profile selection
+## Browser startup
 
-The optional `browser` and `profile` keys in `config.json` choose the browser
-for new MCP sessions. Use an application name or the installation directory
-containing `application.ini`. Use a registered profile name or an absolute
-profile directory. The profile selector applies in `together` mode. For already-running instances without a registered profile
-name, the directory's basename also matches. Omit the profile to start the
-browser with its own default. Permission mode and site rules apply across the
-installed bridges.
-
-```sh
-node dist/cli.js config browser Zen --profile Default
-node dist/cli.js config
-node dist/cli.js doctor
-node dist/cli.js config browser clear
-```
-
-To override the config for one MCP client, append `--browser <name|dir>` or
-`--profile <name|dir>` to its server arguments, or set `ZEN_MCP_BROWSER` and
-`ZEN_MCP_PROFILE` in that client's server environment. Reconnect the client to
-apply a change to an existing session.
-
-## On-demand browser startup
-
-On Linux and macOS, a tool call can open a visible browser window if the
-selected browser or profile is closed. With automatic selection and no live
-bridge, it opens the first installed browser found (Zen first) with that
-browser's default profile. Install the bridge loader in the browser you want
-to use. A server pinned with `ZEN_MCP_SOCKET` only connects to that socket.
-
-The `browser.launch` rule is `allow` in auto mode, `ask` in ask mode and
-configurable in `permissions.jsonc` in custom mode. An explicit launch setting
-applies across modes, and a custom `deny` always wins.
-
-```sh
-node dist/cli.js config launch         # Show the preference and effective rule
-node dist/cli.js config launch allow   # Open on demand
-node dist/cli.js config launch ask     # Ask before opening
-node dist/cli.js config launch deny    # Keep launch disabled
-node dist/cli.js config launch default # Follow the active template
-```
-
-The launch prompt appears in the MCP client through form elicitation.
-**Open** approves this launch. **Always open (don't ask again)** saves an
-allow preference in `config.json`. If the MCP client cannot show the
-prompt, open the browser yourself or set `config launch allow`.
+The `browser.launch` rule decides whether a tool call may open a browser that isn't running:
+allowed in auto mode, asked in the MCP client in ask mode, and configurable in custom mode.
+A `config launch` preference applies in every mode, but a custom `deny` always wins. See
+[starting the browser on demand](browsers.md#starting-the-browser-on-demand).

@@ -1,10 +1,12 @@
 # Documentation
 
-Start with the [English README](../README.md) or [Türkçe README](../README.tr.md)
-to install and connect your MCP client.
+Start with the [README](../README.md) ([Türkçe](../README.tr.md)) and the
+[installation guide](installation.md).
 
 | Guide | What it covers |
 |---|---|
+| [Installation](installation.md) | Requirements, connecting clients, hooks and the skill, updating, uninstalling |
+| [Browsers, profiles and modes](browsers.md) | Choosing a browser, agent and headless profiles, starting the browser on demand |
 | [Browser workflows](browser-workflows.md) | Tabs, the island, sending picks, recording recipes, clipboard, extensions and downloads |
 | [Permissions and security](permissions.md) | Approval modes, custom rules, site lists and the local trust boundary |
 | [Browser diagnostics](browser-diagnostics.md) | Page and screenshot diffs, inspection, network and HAR, and local Web Vitals |
