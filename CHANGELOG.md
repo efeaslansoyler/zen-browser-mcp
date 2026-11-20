@@ -7,9 +7,9 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-11-20
 
-The first public release. Agents (Claude Code, Codex and other MCP clients) use your own Zen or
+The first release. Agents (Claude Code, Codex and other MCP clients) use your own Zen or
 Firefox-based browser: your tabs and logins, real input, and an island that shows what they do.
 
 ### Added
