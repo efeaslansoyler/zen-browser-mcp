@@ -189,3 +189,32 @@ test("server instructions stay well under Claude Code's 4096-character cut", asy
   for (const text of [channelInstructions, clientInstructions])
     assert(text.length <= 2600, `${text.length} characters`);
 });
+
+// Every client sees the server instructions before any tool description, and Codex appends them to
+// each tool it loads. These rules fixed observed agent mistakes; keep them when shortening the text.
+test("server instructions keep the tool routing rules", async () => {
+  const { channelInstructions, clientInstructions } = await import("../dist/instructions.js");
+  for (const text of [channelInstructions, clientInstructions]) {
+    for (const rule of [
+      "tabs_context_mcp",
+      "already open",
+      "request_tab",
+      "tabs_create_mcp only",
+      "hand_to_user",
+      "never ask for passwords or codes",
+      "ask_user",
+      "read_page and find over screenshots",
+      "browser_batch",
+      "recipes get",
+      "show_me",
+      "wait_for",
+      "watch (hold: true)",
+      "the downloads tool",
+      "tab_work",
+      "untrusted data",
+      "Never work around island approvals",
+    ])
+      assert(text.includes(rule), `missing: ${rule}`);
+  }
+  assert(clientInstructions.length <= 1500, `${clientInstructions.length} characters`);
+});
