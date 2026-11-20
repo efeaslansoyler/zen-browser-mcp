@@ -151,12 +151,14 @@ for (const name of ["codex-mcp-client", "claude-code", "Example Agent"]) {
         assert(!JSON.stringify(tool.inputSchema).includes("prefixItems"));
         if (tool.name === "connect_session") continue;
         assert(inputs[tool.name], `Missing protocol fixture for ${tool.name}`);
+        const before = received.length;
         const result = await client.callTool({ name: tool.name, arguments: inputs[tool.name] });
         assert.equal(result.isError, undefined, tool.name);
-        assert.deepEqual(received.at(-1)[3], identifyAgent(name));
-        if (["navigate", "tabs_create_mcp"].includes(tool.name)) {
-          assert.deepEqual(received.at(-1)[1], inputs[tool.name]);
-        }
+        assert.equal(received.length, before + 1, `${tool.name} reaches the browser once`);
+        const [called, args, , agent] = received.at(-1);
+        assert.equal(called, tool.name);
+        assert.deepEqual(args, inputs[tool.name], tool.name);
+        assert.deepEqual(agent, identifyAgent(name));
       }
     } finally {
       await client.close();
