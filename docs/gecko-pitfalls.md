@@ -78,6 +78,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   `browser.browsingContext` becomes a new object. Check `bc.isInBFCache` / `bc.top.isInBFCache`
   (and `isDiscarded`) as well.
 - A closed shadow root's contents don't appear in a window listener's `composedPath()`.
+- Astro's dev toolbar removes `data-astro-source-file`/`-loc` from the DOM about 300 ms after
+  load (and after every view-transition swap). The child actor records them at
+  `DOMContentLoaded`; elements swapped in later have no source location.
 - A window without focus gets no focus, blur or blur-time `change` events for text fields;
   track typing with `input` events. Enter in a form clicks its submit button with a trusted
   click whose `detail` is 0 (so do Space and Enter on a focused button).

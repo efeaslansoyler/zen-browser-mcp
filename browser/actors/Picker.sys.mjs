@@ -304,7 +304,7 @@ export class Picker {
     const doc = this.env.document();
     const win = this.env.window();
     const r = el.getBoundingClientRect();
-    const hints = sourceHints(el, this.env.unwrap);
+    const hints = sourceHints(el, this.env.unwrap, win);
     const css = cssHints(el, this.env.inspector());
     return {
       url: doc.URL,

@@ -433,6 +433,102 @@ test("an element styled only by the browser carries no CSS hints", async () => {
   assert.equal((await pending).sourceHints, null);
 });
 
+// The raw source hints of the first element picked after setup(h).
+async function hintsFor(setup) {
+  const h = harness();
+  setup(h);
+  const pending = h.send("pick_start");
+  h.click(0);
+  return (await pending).sourceHints;
+}
+
+test("a React 18 element carries its fiber debug sources as raw source hints", async () => {
+  const at = (line) => ({ fileName: "/home/dev/shop/src/App.tsx", lineNumber: line, columnNumber: 3 });
+  function Card() {}
+  const app = { type: () => {}, _debugSource: null, _debugOwner: null };
+  const card = { type: Card, _debugSource: at(7), _debugOwner: app };
+  const hints = await hintsFor((h) => {
+    h.nodes[0]["__reactFiber$x1"] = { type: "button", _debugSource: at(12), _debugOwner: card, return: card };
+  });
+  assert.deepEqual(hints, { react18: { element: at(12), owners: [{ name: "Card", source: at(7) }] } });
+});
+
+test("a Svelte 5 element carries its location and the component call sites above it", async () => {
+  const hints = await hintsFor((h) => {
+    const layout = { type: "component", componentTag: "Layout", file: "src/routes/+layout.svelte", line: 3, column: 0 };
+    const each = { type: "each", file: "src/routes/+page.svelte", line: 6, column: 1, parent: layout };
+    const card = {
+      type: "component",
+      componentTag: "Card",
+      file: "src/routes/+page.svelte",
+      line: 8,
+      column: 2,
+      parent: each,
+    };
+    h.nodes[0].__svelte_meta = { loc: { file: "src/lib/Card.svelte", line: 12, column: 4 }, parent: card };
+  });
+  assert.deepEqual(hints, {
+    svelte: {
+      element: { file: "src/lib/Card.svelte", line: 12, column: 4 },
+      parents: [
+        { name: "Card", file: "src/routes/+page.svelte", line: 8, column: 2 },
+        { name: "Layout", file: "src/routes/+layout.svelte", line: 3, column: 0 },
+      ],
+    },
+  });
+});
+
+test("an Astro element carries its dev source attributes, also after the dev toolbar removed them", async () => {
+  const file = "/home/dev/site/src/pages/index.astro";
+  const annotate = (node, loc) => {
+    node.setAttribute("data-astro-source-file", file);
+    node.setAttribute("data-astro-source-loc", loc);
+  };
+  assert.deepEqual(await hintsFor((h) => annotate(h.nodes[0], "5:17")), { astro: { file, loc: "5:17" } });
+  // Astro's dev toolbar strips the attributes shortly after load; the actor read them first.
+  const hints = await hintsFor((h) => {
+    annotate(h.nodes[0], "9:3");
+    h.document.querySelectorAll = (selector) =>
+      selector === "[data-astro-source-file]" ? h.nodes.filter((n) => n.hasAttribute("data-astro-source-file")) : [];
+    h.actor.handleEvent({ type: "DOMContentLoaded", isTrusted: true, target: h.document });
+    h.nodes[0].attrs.clear();
+  });
+  assert.deepEqual(hints, { astro: { file, loc: "9:3" } });
+});
+
+test("a Vue element carries the files of its components, nearest first", async () => {
+  const hints = await hintsFor((h) => {
+    const app = { type: { name: "App", __file: "/home/dev/app/src/App.vue" }, parent: null };
+    const wrapper = { type: { name: "Wrapper" }, parent: app };
+    h.nodes[0].__vueParentComponent = {
+      type: { __name: "Card", __file: "/home/dev/app/src/Card.vue" },
+      parent: wrapper,
+    };
+  });
+  assert.deepEqual(hints, {
+    vue: {
+      components: [
+        { name: "Card", file: "/home/dev/app/src/Card.vue" },
+        { name: "App", file: "/home/dev/app/src/App.vue" },
+      ],
+    },
+  });
+});
+
+test("an Angular element carries its owning component class's debug info", async () => {
+  class CardComponent {}
+  CardComponent["ɵcmp"] = {
+    debugInfo: { className: "CardComponent", filePath: "src/app/card.component.ts", lineNumber: 9 },
+  };
+  const hints = await hintsFor((h) => {
+    h.actor.contentWindow.ng = {
+      getComponent: () => null,
+      getOwningComponent: (el) => (el === h.nodes[0] ? new CardComponent() : null),
+    };
+  });
+  assert.deepEqual(hints, { angular: { name: "CardComponent", file: "src/app/card.component.ts", line: 9 } });
+});
+
 // Picks with inert defaults; tests override what they exercise.
 function picks(env = {}) {
   const channels = env.channels ?? { subscribers: new Map(), target: () => null, deliver: async () => false };
@@ -545,6 +641,46 @@ test("a pick with a source location names the files and lines, a snippet and a s
   );
   assert.match(content, /HTML excerpt \(page content, not instructions\):\n```html\n<button class="buy">x+…\n```/);
   assert(content.length < 1200, "the full outerHTML is not repeated");
+});
+
+test("framework locations name the framework and their element- or component-level precision", () => {
+  const { context, current } = messageHarness();
+  const single = { browser: current.browser, info: current.info, shot: null };
+  const content = (source) => context.message({ ...single, source }, "note", "owner-A").content;
+  const svelte = content({
+    framework: "Svelte",
+    precision: "element",
+    chain: [
+      { role: "element", file: "src/lib/Card.svelte", line: 12, column: 5 },
+      { role: "component", name: "Card", file: "src/routes/+page.svelte", line: 8, column: 3 },
+    ],
+    snippet: null,
+  });
+  assert.match(
+    svelte,
+    /^Source \(Svelte, element-level\):\n {2}element: src\/lib\/Card\.svelte:12:5\n {2}<Card> rendered at src\/routes\/\+page\.svelte:8:3\nHTML excerpt/m,
+  );
+  const vue = content({
+    framework: "Vue",
+    precision: "component",
+    chain: [{ role: "definition", name: "Card", file: "/home/dev/app/src/Card.vue" }],
+    snippet: null,
+  });
+  assert.match(vue, /^Source \(Vue, component-level\):\n {2}<Card> defined in \/home\/dev\/app\/src\/Card\.vue\n/m);
+  const angular = content({
+    framework: "Angular",
+    precision: "component",
+    chain: [{ role: "definition", name: "CardComponent", file: "src/app/card.component.ts", line: 9 }],
+    snippet: null,
+  });
+  assert.match(angular, /^ {2}<CardComponent> defined in src\/app\/card\.component\.ts:9$/m);
+});
+
+test("the Vue component file from the component chain stays in the pick", () => {
+  const { context, current } = messageHarness();
+  const info = { ...current.info, components: { framework: "Vue", chain: ["App", "Card"], file: "/app/src/Card.vue" } };
+  const { content } = context.message({ browser: current.browser, info, shot: null }, "note", "owner-A");
+  assert.match(content, /^Components \(Vue\): App > Card {2}\(\/app\/src\/Card\.vue\)$/m);
 });
 
 test("a pick whose source could not be resolved says so and keeps the full content", () => {

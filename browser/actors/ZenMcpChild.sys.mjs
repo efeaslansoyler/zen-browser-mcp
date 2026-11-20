@@ -90,6 +90,10 @@ export class ZenMcpChild extends JSWindowActorChild {
         console.error("zen-mcp recorder", e);
       }
     }
+    if (event.type === "DOMContentLoaded" && event.target === this.document) {
+      info.rememberSourceAttributes(this.document);
+      return;
+    }
     if (event.type === "pageshow" && event.persisted) {
       this.#vitals?.destroy();
       this.#vitals = null;

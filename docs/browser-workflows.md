@@ -76,8 +76,20 @@ few lines of the original source from the page's source maps (for Next.js
 server components, from its dev server's `/__nextjs_source-map` endpoint). The
 HTML is then shortened. Source maps are read only from the page's own origin,
 only when your site rules allow it, and within two seconds; otherwise the pick says
-`Source: unknown` and keeps its full content. Production pages and other stacks
+`Source: unknown` and keeps its full content. Production pages and stacks without such metadata
 send the same pick as before, plus the CSS rules below.
+
+Other stacks give the location their development build records, without a
+snippet. The pick names the framework and whether the location points at the
+element itself or only at its component:
+
+| Stack | Location |
+| --- | --- |
+| React 18 | element: the JSX file, line and column, plus component call sites |
+| Svelte 5 | element: the file, line and column, plus component call sites |
+| Astro 5–6 (dev toolbar on) | element: the `.astro` file and line; Astro 7 no longer records it |
+| Vue 3 | component: the nearest component's file, without a line |
+| Angular | component: the component class's file and line |
 
 Each element also lists up to eight CSS rules of the page that style it, most
 specific first, with their stylesheet file and line; browser default styles are
