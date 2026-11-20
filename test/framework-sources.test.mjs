@@ -87,7 +87,7 @@ test("Astro dev source attributes give the element's file and line", async () =>
   assert.deepEqual(await resolve({ astro: { file: "/home/dev/site/src/pages/index.astro", loc: "5:17" } }), {
     framework: "Astro",
     precision: "element",
-    chain: [{ role: "element", file: "/home/dev/site/src/pages/index.astro", line: 5, column: 17 }],
+    chain: [{ role: "element", file: "/home/dev/site/src/pages/index.astro", line: 5 }],
     snippet: null,
   });
 });

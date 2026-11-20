@@ -232,11 +232,9 @@ function resolveSvelte({ element, parents = [] }) {
   );
 }
 
+// Astro's column is the end of the opening tag, not where the element starts; only the line helps.
 function resolveAstro({ file, loc }) {
-  const [line, column] = String(loc ?? "")
-    .split(":")
-    .map(Number);
-  return elementChain("Astro", userPlace(file, line, column), []);
+  return elementChain("Astro", userPlace(file, Number(String(loc ?? "").split(":")[0])), []);
 }
 
 function resolveVue({ components = [] }) {

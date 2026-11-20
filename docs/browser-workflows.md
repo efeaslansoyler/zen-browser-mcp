@@ -87,7 +87,7 @@ element itself or only at its component:
 | --- | --- |
 | React 18 | element: the JSX file, line and column, plus component call sites |
 | Svelte 5 | element: the file, line and column, plus component call sites |
-| Astro 5–6 (dev toolbar on) | element: the `.astro` file and line; Astro 7 no longer records it |
+| Astro (dev toolbar on) | element: the `.astro` file and line |
 | Vue 3 | component: the nearest component's file, without a line |
 | Angular | component: the component class's file and line |
 
