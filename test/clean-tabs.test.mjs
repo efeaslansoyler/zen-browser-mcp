@@ -15,7 +15,9 @@ function harness(config = {}) {
     },
   };
   globalThis.ChromeUtils = { importESModule: () => ({ ContextualIdentityService: service }) };
+  const observers = new Set();
   const win = {
+    gBrowserInit: { delayedStartupFinished: true },
     gBrowser: {
       addTrustedTab(url, options) {
         created.push(options);
@@ -30,7 +32,17 @@ function harness(config = {}) {
       },
     },
   };
-  globalThis.Services = { wm: { getMostRecentWindow: () => win } };
+  globalThis.Services = {
+    wm: { getMostRecentWindow: () => win },
+    obs: {
+      addObserver: (observer) => observers.add(observer),
+      removeObserver: (observer) => observers.delete(observer),
+    },
+  };
+  const finishStartup = (subject = win) => {
+    if (subject === win) win.gBrowserInit.delayedStartupFinished = true;
+    for (const observer of [...observers]) observer(subject, "browser-delayed-startup-finished");
+  };
   const ctx = bridgeContext({
     readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] }, ...config }),
     paintTab() {},
@@ -38,7 +50,7 @@ function harness(config = {}) {
     hostOf: () => "",
   });
   ctx.sessionInfo("A");
-  return { ctx, created, identities, win };
+  return { ctx, created, identities, win, finishStartup, observers };
 }
 
 test("clean tabs share one Agent container, created on first use", async () => {
@@ -73,9 +85,9 @@ test("a configured container is the default; clean: false still uses the user's 
 
 test("a tab opened while the window starts is placed once Zen's workspaces are ready", async () => {
   const h = harness({ workspace: "Agents" });
-  let startupDone, initDone;
+  let initDone;
   const moved = [];
-  h.win.delayedStartupPromise = new Promise((resolve) => (startupDone = resolve));
+  h.win.gBrowserInit.delayedStartupFinished = false;
   const spaces = {
     workspaceEnabled: true,
     promiseInitialized: new Promise((resolve) => (initDone = resolve)),
@@ -95,13 +107,17 @@ test("a tab opened while the window starts is placed once Zen's workspaces are r
   const created = h.ctx.createTab("A").then((tab) => ((done = true), tab));
   await new Promise(setImmediate);
   assert.equal(h.created.length, 0);
+  h.finishStartup({});
+  await new Promise(setImmediate);
+  assert.equal(h.created.length, 0, "another window's startup does not count");
   h.win.gZenWorkspaces = spaces;
-  startupDone();
+  h.finishStartup();
   await new Promise(setImmediate);
   assert.equal(done, false);
   assert.deepEqual(spaces.workspaces, []);
   initDone();
   const tab = await created;
   assert.deepEqual(moved, ["{agents}"]);
+  assert.equal(h.observers.size, 0);
   assert.equal(tab.getAttribute("zen-workspace-id"), "{agents}");
 });
