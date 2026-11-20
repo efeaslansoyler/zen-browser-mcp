@@ -86,6 +86,10 @@ real MCP server, open and close only their own tabs, and restore anything they c
 | `check-workspace.ts` | Zen: agent tabs in a configured hidden space, input and screenshots there |
 | `check-pick-delivery.ts` | **Sends a real message to a real Codex conversation**; needs `CODEX_THREAD_ID`. Don't run casually. |
 
+The source stack check uses Linux `ss` and `ps` to verify that each loopback listener
+belongs to the fixture's process group. Cleanup signals only that group. If a listener
+remains, the check reports its stack and port.
+
 The page checks require the global mode to be `auto` and refuse to run in `ask` mode.
 `check-launch.ts` sets its own rules in a disposable config. `check-input`
 (device emulation) and `check-extensions` (toolbar popups) also need the Zen window visible:

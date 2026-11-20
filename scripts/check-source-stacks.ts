@@ -1,12 +1,13 @@
 // why: Use sandbox profiles and local receipts so framework picks never reach a real agent session.
 import assert from "node:assert/strict";
-import { execSync, spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, subscribe, type Content } from "../src/zen.ts";
+import { withSourceStackServer } from "./support/source-stack-server.ts";
 
 const work = path.resolve(process.argv[2] ?? path.join(os.homedir(), ".cache", "zen-mcp-stacks"));
 const only = process.argv.slice(3);
@@ -102,7 +103,7 @@ const STACKS: Record<string, Stack> = {
     scaffold:
       "npx --yes create-next-app@latest nextapp --ts --app --no-eslint --no-tailwind --src-dir --import-alias '@/*' --use-npm --yes --disable-git",
     files: NEXT_FILES,
-    dev: "npx next dev -p PORT",
+    dev: "npx next dev -p PORT -H 127.0.0.1",
     picks: [
       {
         name: "Server card",
@@ -121,7 +122,7 @@ const STACKS: Record<string, Stack> = {
     app: "nextapp",
     scaffold: "",
     files: {},
-    dev: "npx next dev --webpack -p PORT",
+    dev: "npx next dev --webpack -p PORT -H 127.0.0.1",
     picks: [
       { name: "Server card", expect: [/element: \S*src\/components\/Card\.tsx:4:7$/m] },
       { name: "Client count 0", expect: [/element: \S*src\/components\/Counter\.tsx:8:7/m] },
@@ -131,7 +132,7 @@ const STACKS: Record<string, Stack> = {
     app: "r19",
     scaffold: "npm create vite@latest r19 -- --template react-ts --no-interactive && cd r19 && npm i",
     files: VITE_REACT_FILES,
-    dev: "npx vite --port PORT --strictPort",
+    dev: "npx vite --host 127.0.0.1 --port PORT --strictPort",
     picks: [
       {
         name: "Vite card",
@@ -148,7 +149,7 @@ const STACKS: Record<string, Stack> = {
     scaffold:
       "npm create vite@latest r18 -- --template react-ts --no-interactive && cd r18 && npm i && npm i react@18 react-dom@18 @types/react@18 @types/react-dom@18",
     files: VITE_REACT_FILES,
-    dev: "npx vite --port PORT --strictPort",
+    dev: "npx vite --host 127.0.0.1 --port PORT --strictPort",
     picks: [
       { name: "Vite card", expect: [/element: \S*src\/Card\.tsx:6:7$/m, /<Card> rendered at \S*src\/App\.tsx:6:7$/m] },
     ],
@@ -174,7 +175,7 @@ const STACKS: Record<string, Stack> = {
 </main>
 `,
     },
-    dev: "npx vite --port PORT --strictPort",
+    dev: "npx vite --host 127.0.0.1 --port PORT --strictPort",
     picks: [
       {
         name: "Svelte card",
@@ -207,7 +208,7 @@ import Card from "./components/Card.vue";
 </template>
 `,
     },
-    dev: "npx vite --port PORT --strictPort",
+    dev: "npx vite --host 127.0.0.1 --port PORT --strictPort",
     picks: [
       {
         name: "Vue card",
@@ -219,7 +220,8 @@ import Card from "./components/Card.vue";
     app: "astroapp",
     scaffold: "npm create astro@latest astroapp -- --template minimal --install --no-git --yes",
     files: ASTRO_FILES,
-    dev: "npx astro dev --port PORT",
+    // why: Astro can automatically detach and reuse an existing server in agent environments.
+    dev: "ASTRO_DEV_BACKGROUND=0 npx astro dev --host 127.0.0.1 --port PORT",
     picks: [{ name: "Astro card", expect: [/element: \S*src\/components\/Card\.astro:6$/m] }],
   },
   angular: {
@@ -247,7 +249,7 @@ import { Card } from "./card";
 export class App {}
 `,
     },
-    dev: "npx ng serve --port PORT",
+    dev: "npx ng serve --host 127.0.0.1 --port PORT",
     picks: [
       {
         name: "Angular card",
@@ -327,7 +329,6 @@ let failed = 0;
 try {
   assert(process.env.ZEN_MCP_SOCKET, "Run inside a sandbox: node scripts/sandbox.ts up, then source its env file.");
   await until(() => chrome(`h.subscribers.has(${JSON.stringify(session)})`), "Local receipt fixture did not connect.");
-  let port = 3700;
   for (const [id, stack] of Object.entries(STACKS)) {
     if (only.length && !only.includes(id)) continue;
     const dir = path.join(work, stack.app);
@@ -336,15 +337,7 @@ try {
       fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
       fs.writeFileSync(path.join(dir, file), content);
     }
-    const url = `http://localhost:${++port}/`;
-    // why: Use a separate process group to stop the dev server along with its descendants.
-    const server = spawn("sh", ["-c", stack.dev.replace("PORT", String(port))], {
-      cwd: dir,
-      detached: true,
-      stdio: "ignore",
-    });
-    try {
-      await until(async () => (await fetch(url)).ok, `${id}: dev server did not answer on ${url}.`, 900);
+    await withSourceStackServer(id, dir, stack.dev, async (url) => {
       for (const { name, expect } of stack.picks) {
         const content = await pick(url, name);
         const misses = expect.filter((pattern) => !pattern.test(content));
@@ -353,14 +346,7 @@ try {
           console.log(`✗ ${id} "${name}": missing ${misses.join(", ")}\n${content}`);
         } else console.log(`✓ ${id} "${name}"`);
       }
-    } finally {
-      try {
-        process.kill(-server.pid!);
-      } catch {}
-      await sleep(500);
-      const listeners = execSync(`ss -ltnpH 'sport = :${port}'`, { encoding: "utf8" });
-      for (const pid of new Set([...listeners.matchAll(/pid=(\d+)/g)].map((m) => Number(m[1])))) process.kill(pid);
-    }
+    });
   }
 } finally {
   receiver.close();
