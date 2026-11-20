@@ -273,6 +273,12 @@ asks for a note and a target session) and recipes the user recorded go through
    process) among them.
 3. If the session ends first, or there is no target, the text is copied to the clipboard.
 
+On the wire, a `delivery` acknowledgement keeps its `ok` boolean. With `ok: false`,
+`status: "unavailable"` leaves the item in the inbox without a failure log, while
+`status: "failed"` logs the `error` diagnostic and also leaves the item in the inbox.
+For compatibility across upgrades and reloads, Node still writes `error: "no push path"`
+when unavailable, and Gecko reads that legacy value only when `status` is absent.
+
 The target list in the island (picks, recipe review) has every connected session, the same as
 "Give to session", each labelled with how it receives: now, when you write (prompt hook) or on
 its next action. After sending, the island says which of these happened.

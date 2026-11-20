@@ -116,7 +116,12 @@ export type SubscriptionInfo = {
   hook?: boolean;
 };
 
-export function subscribe(onEvent: (event: any) => void | Promise<void>, info: SubscriptionInfo) {
+type DeliveryResult = void | "unavailable";
+type DeliveryAck = { ok: true } | { ok: false; status: "unavailable" | "failed"; error: string };
+// why: Older bridges use this exact error field to recognize ordinary unavailability.
+const LEGACY_NO_PUSH = "no push path";
+
+export function subscribe(onEvent: (event: any) => DeliveryResult | Promise<DeliveryResult>, info: SubscriptionInfo) {
   let closed = false;
   let current: net.Socket | undefined;
   let reconnect: ReturnType<typeof setTimeout> | undefined;
@@ -145,25 +150,23 @@ export function subscribe(onEvent: (event: any) => void | Promise<void>, info: S
         buffer = buffer.slice(end + 1);
         try {
           const event = JSON.parse(line);
+          const acknowledge = (result: DeliveryAck) => {
+            if (info.ack && event.id && !socket.destroyed)
+              socket.write(ascii(JSON.stringify({ event: "delivery", id: event.id, ...result })) + "\n");
+          };
           Promise.resolve()
             .then(() => onEvent(event))
             .then(
-              () => {
-                if (info.ack && event.id && !socket.destroyed)
-                  socket.write(ascii(JSON.stringify({ event: "delivery", id: event.id, ok: true })) + "\n");
-              },
+              (status) =>
+                acknowledge(status === "unavailable" ? { ok: false, status, error: LEGACY_NO_PUSH } : { ok: true }),
               (error) => {
-                if (info.ack && event.id && !socket.destroyed)
-                  socket.write(
-                    ascii(
-                      JSON.stringify({
-                        event: "delivery",
-                        id: event.id,
-                        ok: false,
-                        error: String(error?.message ?? error).slice(0, 500),
-                      }),
-                    ) + "\n",
-                  );
+                const message = String(error?.message ?? error).slice(0, 500);
+                acknowledge({
+                  ok: false,
+                  status: "failed",
+                  // why: Keep a genuine failure visible even to bridges that only read the legacy error field.
+                  error: message === LEGACY_NO_PUSH ? `Delivery rejected: ${message}` : message,
+                });
               },
             );
         } catch {}

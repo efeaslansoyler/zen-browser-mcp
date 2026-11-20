@@ -1,5 +1,3 @@
-export const NO_PUSH = "no push path";
-
 export const ascii = (s) => s.replace(/[\u007f-￿]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 
 export class Channels {
@@ -143,9 +141,13 @@ export class Channels {
     const pending = this.pending.get(event?.id);
     if (event?.event !== "delivery" || !pending || pending.session !== session || pending.transport !== transport)
       return;
-    if (!event.ok && event.error !== NO_PUSH)
+    const delivered = event.ok === true;
+    // why: Older Node processes omit status and signal unavailability with the legacy error text.
+    const unavailable =
+      event.status === "unavailable" || (event.status === undefined && event.error === "no push path");
+    if (!delivered && !unavailable)
       this.env.logError("pick delivery", new Error(String(event.error || "Delivery rejected")));
-    pending.finish(event.ok === true);
+    pending.finish(delivered);
   }
 
   // why: Reload closes subscriptions so clients reconnect to the new bridge.
