@@ -122,7 +122,7 @@ export class Picks {
           : info.label;
     // every connected session, labelled with how it receives the pick
     const targets = this.env.targets().map(({ id, label, agent }) => ({ id, name: label, agent }));
-    this.env.island?.compose(current.browser, label, targets, current.targetId);
+    this.env.island?.compose(current.browser, label, targets, current.targetId, infos.length);
   }
 
   // the target session changed on the island
@@ -146,7 +146,8 @@ export class Picks {
     if (!keepIsland) this.env.island?.pickEnded();
   }
 
-  async send(note, targetId = this.current?.targetId) {
+  // elementNotes: a multi-element pick's optional note per element, in order
+  async send(note, targetId = this.current?.targetId, elementNotes = []) {
     const { L } = this.env;
     const current = this.current;
     if (current) this.env.assertSiteAccess(current.browser);
@@ -156,7 +157,7 @@ export class Picks {
       throw new Error("The page changed before sending; select the elements again.");
     }
     current.sending = true;
-    const { content, meta } = this.message(current, note, targetId);
+    const { content, meta } = this.message(current, note, targetId, elementNotes);
     // Pin to the user's selected destination. Never reroute if it disconnects.
     const target = targetId ? this.env.targets().find((t) => t.id === targetId) : null;
     this.env.pickedTabs.add(current.browser.browserId);
@@ -175,7 +176,7 @@ export class Picks {
   }
 
   // The text sent to the agent; in Claude Code it becomes the <channel source="zen" …> body.
-  message({ browser, info, shot, items }, note, targetId) {
+  message({ browser, info, shot, items }, note, targetId, elementNotes = []) {
     if (items?.length > 1) {
       const messages = items.map((item) => this.message({ browser, ...item }, "", targetId));
       const meta = { ...messages[0].meta, element_count: String(items.length) };
@@ -183,12 +184,13 @@ export class Picks {
       if (shots.length) meta.screenshots = JSON.stringify(shots);
       return {
         content: [
-          note,
-          "",
+          ...(note ? [note, ""] : []),
           `Selected elements: ${items.length}`,
-          ...messages.map(
-            (message, index) => `\n--- Selected element ${index + 1} ---\n${message.content.trimStart()}`,
-          ),
+          ...messages.map((message, index) => {
+            const own = elementNotes[index]?.trim();
+            const ownLine = own ? `User note for element ${index + 1}: ${own}\n` : "";
+            return `\n--- Selected element ${index + 1} ---\n${ownLine}${message.content.trimStart()}`;
+          }),
         ].join("\n"),
         meta,
       };

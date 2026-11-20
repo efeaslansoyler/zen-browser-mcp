@@ -24,7 +24,7 @@ test("Codex adapter preserves user note, screenshot and access metadata with pag
   assert.match(sent[0][1], /untrusted page data/);
   assert.match(sent[0][1], /"source_tab":"42"/);
   assert.match(sent[0][1], /\/tmp\/pick.png/);
-  assert.match(codexPickMessage({ ...event, note: undefined }), /No separate user note/);
+  assert.match(codexPickMessage({ ...event, note: undefined }), /User request:\n\(No general note provided\.\)/);
 });
 
 test("invalid targets never invoke queue; failures propagate for delivery acknowledgement", async () => {
@@ -124,4 +124,17 @@ test("a T3 Code thread gets the event through `t3 thread send`, the message on s
   fs.writeFileSync(cli, "#!/bin/sh\necho 'no such thread' >&2\nexit 3\n", { mode: 0o755 });
   // it exits without reading stdin: a large message can't be written (EPIPE), the exit code counts
   await assert.rejects(runT3Send(cli, "thread-1", "x".repeat(4_000_000)), /t3 thread send failed: no such thread/);
+});
+
+test("Codex adapter marks per-element user notes as the user's own when there is no general note", () => {
+  const message = codexPickMessage({
+    event: "channel",
+    note: "",
+    content:
+      "Selected elements: 2\n\n--- Selected element 1 ---\nUser note for element 1: Bigger\n#one\n\n--- Selected element 2 ---\n#two",
+    meta: { element_count: "2" },
+  });
+  assert.match(message, /User request:\n\(No general note provided\.\)/);
+  assert.match(message, /"User note for element N:" line that opens an element's section is the user's own note/);
+  assert.match(message, /--- Selected element 1 ---\nUser note for element 1: Bigger\n#one/);
 });

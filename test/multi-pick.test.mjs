@@ -388,3 +388,33 @@ test("all selected outline boxes follow geometry on animation frames and remain 
   await h.send("pick_end");
   assert.equal(h.document.documentElement.children.length, 0);
 });
+
+test("per-element notes lead their element's section; the general note leads the message", () => {
+  const { context, current } = messageHarness();
+  const both = context.message(current, "Make the pricing lighter", "owner-A", ["Bigger", ""]).content;
+  assert(both.startsWith("Make the pricing lighter\n"));
+  assert.match(both, /--- Selected element 1 ---\nUser note for element 1: Bigger\nPage: /);
+  assert.match(both, /--- Selected element 2 ---\nPage: /);
+  assert.doesNotMatch(both, /User note for element 2/);
+
+  const onlyElements = context.message(current, "", "owner-A", ["", " Remove it "]).content;
+  assert(onlyElements.startsWith("Selected elements: 2"));
+  assert.match(onlyElements, /--- Selected element 2 ---\nUser note for element 2: Remove it\nPage: [\s\S]*#item-2/);
+  assert.doesNotMatch(onlyElements, /User note for element 1/);
+
+  const generalOnly = context.message(current, "Align these controls", "owner-A", ["", ""]);
+  assert.deepEqual(generalOnly, context.message(current, "Align these controls", "owner-A"));
+  assert.doesNotMatch(generalOnly.content, /User note for/);
+});
+
+test("send carries per-element notes to delivery and the clipboard alike", async () => {
+  const { context, current } = messageHarness();
+  const document = {};
+  Object.assign(current.browser, { browsingContext: { currentWindowGlobal: document } });
+  current.document = document;
+  const clipboard = [];
+  context.env.copy = (text) => clipboard.push(text);
+  context.current = current;
+  await context.send("", "", ["Bigger", ""]);
+  assert.match(clipboard[0], /^Selected elements: 2[\s\S]*User note for element 1: Bigger\nPage: /);
+});

@@ -5,6 +5,7 @@ import * as agentModule from "../browser/Agent.sys.mjs";
 // Minimal chrome DOM: exercises the real Island class rendering and state transitions.
 class Element {
   children = [];
+  value = "";
   attrs = new Map();
   style = { setProperty: (k, v) => this.attrs.set(k, v) };
   classList = { toggle() {} };
@@ -124,7 +125,7 @@ test("island switches clients, confirmation, pause and Claude selection without 
     assert.equal(selections[0].id, "claude-session");
     const compose = el.querySelector(".compose");
     const note = compose.children[0];
-    const sendButton = compose.children[1].children[2];
+    const sendButton = el.querySelector(".compose-footer").children[2];
     note.value = "Change this button";
     sendButton.listeners.get("click")();
     sendButton.listeners.get("click")();
@@ -290,6 +291,65 @@ test("several agents share one row; question cards never change under the user",
     island.finished("B");
     for (const run of timers.splice(0)) run();
     assert.equal(el.hidden, true);
+    island.destroy();
+  } finally {
+    globalThis.Services = originalServices;
+    globalThis.ChromeUtils = originalChromeUtils;
+  }
+});
+
+test("a multi-element pick's note step has a general field and one numbered field per element", async () => {
+  const originalServices = globalThis.Services;
+  const originalChromeUtils = globalThis.ChromeUtils;
+  globalThis.Services = { locale: { appLocaleAsBCP47: "en" }, io: { newURI: (x) => x } };
+  globalThis.ChromeUtils = { importESModule: () => agentModule };
+  try {
+    const { Island } = await import("../browser/Island.sys.mjs");
+    const documentElement = new Element();
+    const win = {
+      document: { documentElement, createElementNS: () => new Element() },
+      windowUtils: { loadSheet() {}, removeSheet() {}, AUTHOR_SHEET: 1 },
+      gBrowser: { tabContainer: new Element() },
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    const browser = { ownerDocument: { defaultView: win }, currentURI: { host: "example.test" } };
+    const sent = [];
+    const island = new Island({ send: (...args) => sent.push(args) }, { setTimeout: () => 1, clearTimeout() {} });
+    island.attach(win);
+    const el = documentElement.children[0];
+    const compose = el.querySelector(".compose");
+    const general = compose.children[0];
+    const sendButton = el.querySelector(".compose-footer").children[2];
+    const rows = () => el.querySelector(".element-notes").children;
+    const field = (index) => rows()[index].children[1];
+
+    island.compose(browser, "3 selected elements", [], "", 3);
+    assert.equal(rows().length, 3);
+    assert.deepEqual(
+      rows().map((row) => row.children[0].textContent),
+      ["1", "2", "3"],
+    );
+    sendButton.listeners.get("click")();
+    assert.equal(sent.length, 0, "an empty pick is not sent");
+    field(1).value = "  Remove this  ";
+    sendButton.listeners.get("click")();
+    assert.deepEqual(sent.pop(), ["", "", ["", "Remove this", ""]]);
+    assert.equal(field(0).disabled, true);
+
+    island.compose(browser, "2 selected elements", [], "", 2);
+    assert.equal(rows().length, 2);
+    assert.equal(field(0).value, "");
+    assert(!field(0).disabled);
+    general.value = "Lighter";
+    field(0).listeners.get("keydown")({ key: "Enter", shiftKey: false, preventDefault() {} });
+    assert.deepEqual(sent.pop(), ["Lighter", "", ["", ""]]);
+
+    island.compose(browser, "button Test", [], "");
+    assert.equal(rows().length, 0, "a single pick keeps only today's field");
+    general.value = "Change it";
+    sendButton.listeners.get("click")();
+    assert.deepEqual(sent.pop(), ["Change it", ""]);
     island.destroy();
   } finally {
     globalThis.Services = originalServices;

@@ -60,7 +60,9 @@ tabs in a separate workspace. The equivalent CLI is
 
 Choose **Show to agent…** from the page menu or start the picker with
 Ctrl+Shift+F. Click to send one element, or Shift-click up to eight elements
-and press Enter. Add a note and choose a destination. The pick can include
+and press Enter. Add a note and choose a destination. A multi-element pick
+also has an optional note per numbered element; the agent reads each one at
+the top of that element's context. The pick can include
 the page URL, selector, visible crop, styles and component context. A pick
 does not grant live access to its source tab.
 
