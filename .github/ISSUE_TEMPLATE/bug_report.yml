@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in the bridge, the island, a tool or the CLI does not work as documented.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems go to [a private report](https://github.com/efeaslansoyler/zen-browser-mcp/security/advisories/new), not here.
+        Leave out cookies, tokens and contents of pages from your accounts.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you or the agent did, what you expected and what happened instead. Include the tool call and its result if an agent was involved.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A public page or a minimal local HTML file is the best reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `doctor`
+      description: Run `node dist/cli.js doctor` in your checkout and paste the output. It lists versions, browsers, profiles and the permission mode.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and model
+      placeholder: Claude Code 2.x, Codex CLI 0.x, OpenCode, …
+  - type: textarea
+    id: log
+    attributes:
+      label: Bridge log
+      description: Recent lines of `$XDG_RUNTIME_DIR/zen-mcp.log` (on macOS, the runtime folder `doctor` names), if there are any.
+      render: text

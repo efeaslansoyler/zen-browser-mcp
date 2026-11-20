@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest a tool, a browser workflow or an improvement.
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you or the agent is trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: The behavior you have in mind. Say how it should interact with permissions and with the user's own tabs, if it does.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
