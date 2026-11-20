@@ -71,7 +71,7 @@ try {
   }
   assert(ready, "The browser element picker did not reach compose mode");
   const note =
-    "ZEN_PICK_QUEUE_TEST_20261020_B: Efe’nin onayladığı gerçek Zen öğe seçimi → Codex queue testidir. Bu mesaj sana sohbet girdisi olarak ulaşınca yalnızca alındığını ve öğe bağlamının geldiğini belirt; yeni mesaj gönderme ve dosya değiştirme.";
+    "ZEN_PICK_QUEUE_TEST_20261020_B: a real Zen element pick sent through the Codex queue for a test the user approved. When it reaches you, only confirm that it arrived with its element context; don't send further messages or change files.";
   await evaluate(
     `(async () => {await h.sendPick(${JSON.stringify(note)},${JSON.stringify(target.id)});return true;})()`,
   );
