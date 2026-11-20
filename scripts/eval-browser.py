@@ -685,7 +685,7 @@ def configure_codex(env):
     config = Path(env["CODEX_HOME"]) / "config.toml"
     config.write_text(
         'web_search = "disabled"\nmodel_reasoning_effort = "low"\n'
-        "[features]\nshell_tool = false\nunified_exec = false\nplugins = false\n"
+        "[features]\nshell_tool = false\nunified_exec = false\nplugins = false\napps = false\n"
         '[mcp_servers.browser]\nstartup_timeout_sec = 30\ndefault_tools_approval_mode = "approve"\n'
         f'command = "node"\nargs = {json.dumps([str(ROOT / "dist/cli.js")])}\n'
         "[mcp_servers.browser.env]\n"
