@@ -7,3 +7,6 @@ dist/
 # Agent-local state
 .claude/
 .codex/
+
+# Python bytecode from the eval and benchmark scripts
+__pycache__/
