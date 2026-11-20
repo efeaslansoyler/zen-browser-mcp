@@ -162,3 +162,7 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   `synthesizeMouseAtPoint(x, y, { type: "contextmenu", button: 2 }, win)`.
 - `pkill -f "<pattern>"` also kills the shell whose command line contains the pattern. Find
   servers by port instead: `ss -ltnpH 'sport = :8765'`.
+- Unit-test fakes encode where a Gecko API lives. A fake global (`InspectorUtils` on the actor
+  module scope) passed while the real one existed only on window globals, and a renamed method
+  (`getCSSStyleRules` → `getMatchingCSSRules`) passed too; run the matching live check in
+  `scripts/sandbox.ts` before trusting a fake of a new Gecko API.

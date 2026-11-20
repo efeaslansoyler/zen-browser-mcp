@@ -21,8 +21,9 @@ before installation. The installer leaves a development symlink in place.
 
 - **Browser side (`browser/`):** Update the installed copy if it is not linked to
   the checkout, then run `node scripts/zenctl.ts reload` to reload the bridge without
-  restarting the browser. It compares the bridge version before and after and exits non-zero
-  if the new version failed to start; the error is in `$XDG_RUNTIME_DIR/zen-mcp.log`.
+  restarting the browser. It refuses when the bridge loads a copy that differs from this
+  checkout's `browser/`, compares the bridge version before and after, and exits non-zero if
+  the new version failed to start; the error is in `$XDG_RUNTIME_DIR/zen-mcp.log`.
 - **Node side (`src/`):** Run `npm run build`, then reconnect the MCP server in your client.
   New tool schemas and server instructions are read at connect time; instructions are only
   shown to new sessions.
@@ -103,7 +104,10 @@ a real MCP process (`toolsOnly: true` plus a `push` path), or picks wait in the 
 
 ## Testing without touching your browser
 
-To try risky changes on a copy:
+`node scripts/sandbox.ts up` starts a headless Zen in its own XDG folders that loads this
+checkout's `browser/`, prints an env file to `source`, and `down <dir>` removes it again. Run
+zenctl and the live checks from that shell; checks that need a visible window or the native
+clipboard still need a private display. By hand, the same setup is:
 
 1. Copy the browser installation to a writable scratch directory. In a dedicated shell,
    set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` and
