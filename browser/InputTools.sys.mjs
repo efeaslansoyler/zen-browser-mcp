@@ -55,7 +55,7 @@ export function inputTools(ctx) {
       await guard(loaded, call);
       assertSiteAccess(browser);
       const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
-      const result = text(describeTab(tab));
+      const result = text(describeTab(tab, call.session));
       if (read != null) {
         // Apply the destination document's own read permission, even if navigation was approved.
         try {

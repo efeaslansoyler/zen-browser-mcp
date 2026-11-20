@@ -135,12 +135,13 @@ export function tabs(ctx) {
     return tab.linkedBrowser;
   }
 
-  function describeTab(tab) {
+  // viewer: the calling session; a tab only it works in needs no members list.
+  function describeTab(tab, viewer) {
     const b = tab.linkedBrowser;
     if (!ctx.siteAllowed(ctx.hostOf(b))) return { tabId: b.browserId, blocked: true };
     const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
     const members = ctx.access.members(b.browserId);
-    if (members.length)
+    if (members.length && !(members.length === 1 && members[0] === viewer))
       info.members = members.map((session) => ({
         session,
         name: ctx.sessions.get(session)?.name || session.slice(-6),

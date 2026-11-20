@@ -80,6 +80,7 @@ try {
   tabs.add(first.tabId);
   const second = JSON.parse(await tool(b, "tabs_create_mcp"));
   tabs.add(second.tabId);
+  const sessionB = JSON.parse(await tool(b, "tabs_context_mcp")).session.id;
   const tabId = first.tabId;
   assert.equal(first.url, formUrl);
   const field = /textbox "Fixture name" \[([^\]]+)\]/.exec(opened)?.[1];
@@ -164,7 +165,7 @@ try {
   await chrome(`(() => {
     const tab=h.findTab(${tabId}), win=tab.ownerDocument.defaultView;
     h.prepareTabMenu(win,[tab]);
-    const item=[...win.document.getElementById('tabContextMenu').querySelectorAll('[data-zen-session]')].find(item=>item.getAttribute('data-zen-session')===${JSON.stringify(second.members[0].session)});
+    const item=[...win.document.getElementById('tabContextMenu').querySelectorAll('[data-zen-session]')].find(item=>item.getAttribute('data-zen-session')===${JSON.stringify(sessionB)});
     if(!item)throw new Error('Fixture session menu missing');item.doCommand();return true;
   })()`);
   // shared now: both read it, and each keeps its own baselines

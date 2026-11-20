@@ -258,6 +258,30 @@ test("in ask mode joining an agent tab asks the user; a denial keeps the session
   assert.deepEqual(h.context.access.members(tabId), ["A", "B"]);
 });
 
+test("tab results stay compact for the caller", async () => {
+  const h = harness();
+  h.register("A");
+  const created = parsed(await h.request("A", "tabs_create_mcp"));
+  assert.equal("members" in created, false, "A tab only the caller works in needs no members list");
+  const userTab = h.own("A");
+  h.context.unmark(h.tabs.get(userTab));
+  const tab = h.tabs.get(userTab);
+  tab.label = "T".repeat(300);
+  tab.linkedBrowser.currentURI.spec = `https://fixture.test/?q=${"x".repeat(500)}`;
+  const list = parsed(await h.request("A", "tabs_context_mcp"));
+  assert.deepEqual(Object.keys(list.session).sort(), ["id", "name"]);
+  const listed = list.userTabs.find((t) => t.tabId === userTab);
+  assert.equal(listed.title.length, 101);
+  assert.equal(listed.url.length, 201);
+  h.register("B");
+  const forB = parsed(await h.request("B", "tabs_context_mcp"));
+  assert.deepEqual(
+    forB.agentTabs[0].members.map((m) => m.session),
+    ["A"],
+    "Other sessions still see who works in a tab",
+  );
+});
+
 test("the user's own tabs always ask, even in automatic mode", async () => {
   const h = harness();
   const id = h.own("A");

@@ -122,8 +122,8 @@ try {
   tabs.add(createdB.tabId);
   const tabId = createdA.tabId,
     other = createdB.tabId;
-  const sessionA = createdA.members[0].session,
-    sessionB = createdB.members[0].session;
+  const sessionA = (await json(a, "tabs_context_mcp")).session.id,
+    sessionB = (await json(b, "tabs_context_mcp")).session.id;
   assert.notEqual(sessionA, sessionB, "Same-type clients shared a session");
   for (const [client, id] of [
     [a, tabId],

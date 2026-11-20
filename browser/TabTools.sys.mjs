@@ -97,6 +97,10 @@ export function tabTools(ctx) {
     };
   }
 
+  // userTabs are for finding a tab only; long titles and URLs (tracking queries) add nothing.
+  const clip = (value, max) => (typeof value === "string" && value.length > max ? `${value.slice(0, max)}…` : value);
+  const brief = (info) => ({ ...info, title: clip(info.title, 100), url: clip(info.url, 200) });
+
   return {
     async tab_work(args, call) {
       return ctx.coordinateTab(args, call.session);
@@ -118,7 +122,7 @@ export function tabTools(ctx) {
             tab.linkedBrowser && !tab.hasAttribute("zen-empty-tab") && !access.shared(tab.linkedBrowser.browserId),
         )
         .map(ctx.describeTab);
-      const session = ctx.sessions.get(activeSession);
+      const { id, name } = ctx.sessions.get(activeSession) ?? {};
       const recipes = await recipesFor([...tabs.map(ctx.describeTab), ...userTabs]);
       // a shared tab lists every member with its task note; a tab of one's own needs none
       const own = (tab) => {
@@ -138,10 +142,10 @@ export function tabTools(ctx) {
       };
       const openedTabs = ctx.openedTabs?.(activeSession);
       return text({
-        userTabs,
+        userTabs: userTabs.map(brief),
         ...(openedTabs?.length ? { openedTabs } : {}),
         ...(others.length ? { agentTabs: others.map(another) } : {}),
-        session,
+        session: { id, name },
         extensions: await ctx.extensionPanels.list(),
         ...recipes,
         tabs: tabs.map(own),
@@ -157,7 +161,7 @@ export function tabTools(ctx) {
       if (read != null && url == null) throw new Error("read needs a url.");
       if (url === "back" || url === "forward") throw new Error("A new tab needs a URL, not a history direction.");
       const tab = await ctx.createTab(call.session, { clean });
-      if (url == null) return text(ctx.describeTab(tab));
+      if (url == null) return text(ctx.describeTab(tab, call.session));
       const tabId = tab.linkedBrowser.browserId;
       const key = `tab:${tabId}`;
       // A batch may already hold this key. Never wait for a new key while holding
