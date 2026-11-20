@@ -7,12 +7,14 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-21
+
 ### Added
 
 - Install from npm: `npm install -g zen-browser-mcp`, then `zen-browser-mcp install`. MCP
   clients run the `zen-browser-mcp` command, and an update reloads the bridge in the running
-  browser on the next client start. Releases are published from GitHub Actions with
-  provenance.
+  browser on the next client start. Releases after this one are published from GitHub
+  Actions with provenance.
 
 ### Changed
 
@@ -20,9 +22,8 @@ change tool names, parameters or results.
   `node dist/cli.js`. Source checkouts get the same command with `npm link`.
 - `hooks install` and `codex-hooks install` refuse to run from the npx cache, whose files can
   disappear; they ask for a global install instead.
-
 - The agent skill tells agents to read the page before retrying a call that timed out or was
-  cut off by a bridge stop. Run `node dist/cli.js skill install` to update an installed skill.
+  cut off by a bridge stop. Run `zen-browser-mcp skill install` to update an installed skill.
 
 ## [0.1.0] - 2026-11-20
 
@@ -193,5 +194,6 @@ the commit log.
 - Auto/ask modes, sensitive sites, the activity log, the CLI and package layout, README and
   MIT license.
 
-[Unreleased]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/efeaslansoyler/zen-browser-mcp/releases/tag/v0.1.0
