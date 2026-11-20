@@ -19,3 +19,17 @@ edit/test loop.
 - Keep docs current instead of appending dated logs: update the relevant page, delete what
   became wrong. Commit messages carry the history.
 - Don't push, publish or rename without the user asking.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`efeaslansoyler/zen-browser-mcp`), managed with `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
