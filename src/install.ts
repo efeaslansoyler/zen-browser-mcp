@@ -245,8 +245,11 @@ function writeFiles(writes: { file: string; content: string }[]) {
     for (const [i, w] of needSudo.entries()) {
       const src = path.join(tmp, String(i));
       fs.writeFileSync(src, w.content);
-      const r = spawnSync("sudo", ["install", "-D", "-m", "644", src, w.file], { stdio: "inherit" });
-      if (r.status !== 0) throw new Error(L(`Could not write ${w.file}.`, `${w.file} yazılamadı.`));
+      // why: GNU and BSD install disagree on -D, so create the folder separately.
+      const ok =
+        spawnSync("sudo", ["mkdir", "-p", path.dirname(w.file)], { stdio: "inherit" }).status === 0 &&
+        spawnSync("sudo", ["install", "-m", "644", src, w.file], { stdio: "inherit" }).status === 0;
+      if (!ok) throw new Error(L(`Could not write ${w.file}.`, `${w.file} yazılamadı.`));
     }
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -294,11 +297,18 @@ function copyBrowserFiles() {
 }
 
 // why: MCP startup can activate newer package files without modifying the privileged loader.
-export async function syncBrowserFiles() {
-  const installed = installedVersion();
-  if (!installed || installed === "dev" || installed === VERSION) return;
-  copyBrowserFiles();
-  await call("reload", {}, 10_000).catch(() => {});
+// why: A browser that kept running while another one triggered the copy still runs the old files.
+export async function syncBrowserFiles({
+  installed = installedVersion(),
+  copy = copyBrowserFiles,
+  request = call,
+} = {}) {
+  if (!installed || installed === "dev") return;
+  if (installed !== VERSION) copy();
+  const running = await request("ping", {}, 2_000)
+    .then((content) => JSON.parse((content[0] as { text: string }).text).version as string)
+    .catch(() => null);
+  if (running && running !== VERSION) await request("reload", {}, 10_000).catch(() => {});
 }
 
 function chooseBrowsers(args: string[]): Browser[] {

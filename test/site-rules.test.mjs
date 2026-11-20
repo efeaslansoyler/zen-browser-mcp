@@ -63,7 +63,7 @@ test("CLI edits each list and switches between them without losing either", () =
     assert.deepEqual(read().sites, { mode: "allowlist", blocklist: ["bank.test"], allowlist: ["work.test"] });
     const before = fs.readFileSync(file, "utf8");
     assert.throws(() => run("site", "allow", "valid.test", "file:///bad"));
-    assert.throws(() => run("site", "ask", "valid.test"), /Use: config site/);
+    assert.throws(() => run("site", "ask", "valid.test"), /Use: zen-browser-mcp config site/);
     assert.equal(fs.readFileSync(file, "utf8"), before);
   } finally {
     fs.rmSync(directory, { recursive: true });

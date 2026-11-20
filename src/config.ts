@@ -62,7 +62,7 @@ export function readPermissions() {
 
 function permissionsCommand([action, base = "auto"]: string[]) {
   if (action === "init") {
-    if (base !== "ask" && base !== "auto") throw new Error("Use: config permissions init [ask|auto]");
+    if (base !== "ask" && base !== "auto") throw new Error("Use: zen-browser-mcp config permissions init [ask|auto]");
     if (fs.existsSync(PERMISSIONS_FILE))
       throw new Error(
         L(
@@ -80,7 +80,7 @@ function permissionsCommand([action, base = "auto"]: string[]) {
     );
     return;
   }
-  if (action) throw new Error("Use: config permissions [init [ask|auto]]");
+  if (action) throw new Error("Use: zen-browser-mcp config permissions [init [ask|auto]]");
   const custom = readPermissions();
   const changed = Object.entries(custom.rules).filter(([key, rule]) => rule !== ruleOf(key, custom.base));
   console.log(`${PERMISSIONS_FILE}\n`);
@@ -161,7 +161,7 @@ export function configCommand(args: string[]) {
     ) {
       writeConfig({ ...remaining, browser, ...(profile ? { profile } : {}) });
       console.log(`✓ browser: ${browser}${profile ? ` / ${profile}` : ""}`);
-    } else throw new Error("Use: config browser <name|dir> [--profile <name|dir>] | clear");
+    } else throw new Error("Use: zen-browser-mcp config browser <name|dir> [--profile <name|dir>] | clear");
     return;
   }
   if (cmd === "launch") {
@@ -171,7 +171,7 @@ export function configCommand(args: string[]) {
       return;
     }
     if (rest.length !== 1 || (pref !== "default" && pref !== "ask" && pref !== "allow" && pref !== "deny"))
-      throw new Error("Use: config launch [default|ask|allow|deny]");
+      throw new Error("Use: zen-browser-mcp config launch [default|ask|allow|deny]");
     setLaunchPreference(pref === "default" ? undefined : pref);
     console.log(`✓ launch: ${pref}`);
     return;
@@ -192,7 +192,13 @@ export function configCommand(args: string[]) {
   }
   if (cmd === "workspace") {
     const name = rest.join(" ").trim();
-    if (!name) throw new Error(L("Use: config workspace <name>|current", "Kullanım: config workspace <ad>|current"));
+    if (!name)
+      throw new Error(
+        L(
+          "Use: zen-browser-mcp config workspace <name>|current",
+          "Kullanım: zen-browser-mcp config workspace <ad>|current",
+        ),
+      );
     const { workspace: _, ...rest2 } = config;
     writeConfig(name === "current" ? rest2 : { ...config, workspace: name });
     console.log(
@@ -205,7 +211,10 @@ export function configCommand(args: string[]) {
   }
   if (cmd === "container") {
     const name = rest.join(" ").trim();
-    if (!name) throw new Error(L("Use: config container <name>|off", "Kullanım: config container <ad>|off"));
+    if (!name)
+      throw new Error(
+        L("Use: zen-browser-mcp config container <name>|off", "Kullanım: zen-browser-mcp config container <ad>|off"),
+      );
     const { container: _, ...rest2 } = config;
     writeConfig(name === "off" ? rest2 : { ...config, container: name });
     console.log(
@@ -226,7 +235,8 @@ export function configCommand(args: string[]) {
     };
     if (action === "mode") {
       const mode = values[0];
-      if (mode !== "blocklist" && mode !== "allowlist") throw new Error("Use: config site mode blocklist|allowlist");
+      if (mode !== "blocklist" && mode !== "allowlist")
+        throw new Error("Use: zen-browser-mcp config site mode blocklist|allowlist");
       config.sites.mode = mode;
       writeConfig(config);
     } else if (edits[action]) {
@@ -244,7 +254,9 @@ export function configCommand(args: string[]) {
           ),
         );
     } else if (action !== "list")
-      throw new Error("Use: config site [list] | mode blocklist|allowlist | block|unblock|allow|disallow <domain>…");
+      throw new Error(
+        "Use: zen-browser-mcp config site [list] | mode blocklist|allowlist | block|unblock|allow|disallow <domain>…",
+      );
     printSites(config.sites);
     console.log(`browser: ${config.browser ?? "(automatic)"}${config.profile ? ` / ${config.profile}` : ""}`);
     return;

@@ -101,5 +101,6 @@ npm link                      # makes the zen-browser-mcp command run this check
 zen-browser-mcp install
 ```
 
-`npm unlink -g zen-browser-mcp` switches back. [Contributing](../CONTRIBUTING.md) covers
+To go back to the published version, run `npm install -g zen-browser-mcp@latest`; unlinking
+alone leaves no command behind. [Contributing](../CONTRIBUTING.md) covers
 the development loop.

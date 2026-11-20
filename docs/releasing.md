@@ -69,6 +69,13 @@ Only when the owner asks. Agents never bump the version, tag or publish on their
    GitHub release with the version's changelog section as its notes:
    `gh release create vX.Y.Z --title "X.Y.Z" --notes-file <section.md> --verify-tag`.
 
+The very first version of the package (0.2.0) was published by hand: npm only accepts a
+trusted publisher for a package that already exists. After `npm login` and `npm publish` from
+the release commit, the package's npm settings got a GitHub Actions trusted publisher for
+`efeaslansoyler/zen-browser-mcp` and `publish.yml` with direct publishing allowed, and only
+then was the tag pushed; the workflow saw the version on npm and skipped publishing. CI
+covers the Node checks only; the Gecko, archive and tarball checks in step 1 stay manual.
+
 A failed publish leaves nothing on npm: fix the cause on `main` and release the next patch
 version, since tags are protected and can't be moved. Fixes for a released version go to
 `main` and ship as the next patch; there are no release branches.

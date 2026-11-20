@@ -37,7 +37,10 @@ ${usage([
   [`${PACKAGE} uninstall`, "remove it"],
   [`${PACKAGE} doctor`, "check the setup"],
   [`${PACKAGE} skill install|uninstall`, "add the agent skill to Claude Code and Codex"],
-  [`${PACKAGE} hooks install|uninstall`, "deliver browser picks with your next message (Claude Code, Codex)"],
+  [
+    `${PACKAGE} hooks install|uninstall`,
+    "deliver browser picks with your next message (Claude Code, Codex, Antigravity CLI) or at once (OpenCode)",
+  ],
   [`${PACKAGE} config`, "show or change settings (mode, site rules)"],
   [`${PACKAGE} recipes [list]|show|rm <id>`, "recipes the user showed the agent once"],
 ])}`,
@@ -55,7 +58,10 @@ ${usage([
   [`${PACKAGE} uninstall`, "kaldırır"],
   [`${PACKAGE} doctor`, "kurulumu kontrol eder"],
   [`${PACKAGE} skill install|uninstall`, "ajan skill'ini Claude Code ve Codex'e ekler"],
-  [`${PACKAGE} hooks install|uninstall`, "tarayıcıdan gönderilenleri sonraki mesajınla iletir (Claude Code, Codex)"],
+  [
+    `${PACKAGE} hooks install|uninstall`,
+    "tarayıcıdan gönderilenleri sonraki mesajınla (Claude Code, Codex, Antigravity CLI) ya da hemen (OpenCode) iletir",
+  ],
   [`${PACKAGE} config`, "ayarları gösterir ya da değiştirir (mod, site kuralları)"],
   [`${PACKAGE} recipes [list]|show|rm <id>`, "ajana bir kez gösterdiğin tarifler"],
 ])}`,
@@ -126,7 +132,7 @@ try {
       break;
     case "reset-agent-profile": {
       if (args.length && (args.length !== 2 || args[0] !== "--browser"))
-        throw new Error("Use: reset-agent-profile [--browser <name|dir>]");
+        throw new Error("Use: zen-browser-mcp reset-agent-profile [--browser <name|dir>]");
       const browser = parseBrowserFlags(args).browser ?? readConfig().browser;
       console.log(`✓ Agent profile reset: ${await resetAgentProfile(browser)}`);
       break;

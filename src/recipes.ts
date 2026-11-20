@@ -33,5 +33,5 @@ export async function recipesCommand(args: string[], store = new Recipes({ dir: 
     await store.remove(id);
     return L(`✓ removed “${recipe.name}”`, `✓ “${recipe.name}” silindi`);
   }
-  throw new Error("Usage: recipes [list] | show <id> | rm <id>");
+  throw new Error("Usage: zen-browser-mcp recipes [list] | show <id> | rm <id>");
 }

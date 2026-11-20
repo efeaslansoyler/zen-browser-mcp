@@ -116,7 +116,7 @@ export function antigravityHookInstalled(file = antigravityHooksFile()) {
 }
 
 export function hooksCommand(action: string | undefined, home = os.homedir(), env = process.env) {
-  if (action !== "install" && action !== "uninstall") throw new Error("Usage: hooks install|uninstall");
+  if (action !== "install" && action !== "uninstall") throw new Error("Usage: zen-browser-mcp hooks install|uninstall");
   const lines: string[] = [];
   const claude = env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
   if (fs.existsSync(claude)) {

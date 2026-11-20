@@ -33,7 +33,7 @@ export function skillStatus(targets = skillTargets()) {
 }
 
 export function skillCommand(action: string | undefined, targets = skillTargets()) {
-  if (action !== "install" && action !== "uninstall") throw new Error("Usage: skill install|uninstall");
+  if (action !== "install" && action !== "uninstall") throw new Error("Usage: zen-browser-mcp skill install|uninstall");
   const found = targets.filter((t) => t.present);
   if (!found.length) {
     console.log(
