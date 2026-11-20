@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SourceResolver } from "../browser/SourceResolver.sys.mjs";
 
-// Stacks whose dev builds record source positions themselves: nothing is fetched.
 function resolve(hints, { siteAllowed = () => true } = {}) {
   const fetched = [];
   const sources = new SourceResolver({

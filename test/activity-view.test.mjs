@@ -19,7 +19,7 @@ test("a history line shows who, what, where it went and errors", () => {
     L,
   );
   assert.match(line, /S23 downloads · efe — button "Pay": click → https:\/\/shop\.test\/done ✗ denied$/);
-  // old entries: without title and description, the agent name and tool
+  // why: Render older log records even when their richer labels are missing.
   assert.match(
     formatLine({ t: "2026-10-27T12:00:05.000Z", tool: "computer", action: "screenshot", agent: "Codex" }, L),
     /Codex — computer screenshot$/,

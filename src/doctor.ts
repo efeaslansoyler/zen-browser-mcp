@@ -1,4 +1,3 @@
-// The `doctor` command: checks each part of the setup in turn and says what to do about problems
 import fs from "node:fs";
 import path from "node:path";
 import { L } from "./i18n.ts";
@@ -62,7 +61,7 @@ export async function doctor() {
     );
   else ok(L(`browser files ${files}`, `tarayıcı dosyaları ${files}`));
 
-  // The prompt hook is optional too: without it, what the user sends waits for the next tool call.
+  // why: The inbox still delivers on the next tool call without an installed prompt hook.
   if (fs.existsSync(path.dirname(claudeSettingsFile())))
     if (claudeHookInstalled()) ok(L("Claude Code: prompt hook installed", "Claude Code: prompt hook'u kurulu"));
     else
@@ -73,7 +72,7 @@ export async function doctor() {
     if (openCodePluginInstalled()) ok(L("OpenCode: plugin installed", "OpenCode: plugin kurulu"));
     else console.log(`  OpenCode: ${L("plugin not installed", "plugin kurulu değil")} → npx ${PACKAGE} hooks install`);
 
-  // The skill is optional: report it, but never count it as a problem.
+  // why: The optional skill should not make a healthy installation fail doctor.
   for (const { client, status } of skillStatus()) {
     if (status === "current") ok(L(`${client}: skill installed`, `${client}: skill kurulu`));
     else

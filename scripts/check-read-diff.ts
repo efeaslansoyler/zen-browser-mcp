@@ -1,5 +1,4 @@
-// Real MCP read/diff tests in disposable tabs. Run: node scripts/check-read-diff.ts
-// Requires existing auto mode. Never modifies permission settings or non-fixture tabs.
+// why: Use auto mode and test-owned tabs so diff tests need no changes to user settings.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -142,7 +141,7 @@ try {
     await read("get_page_text", { diff: true, since: id(beforeReload) }),
     /mode: full \(document-or-owner-changed\)/,
   );
-  // Frame identity changes must invalidate even when the frame is empty.
+  // why: An empty replacement frame still has a new identity and must invalidate the diff.
   const iframe = "data:text/html," + encodeURIComponent("<p>Child fixture</p>");
   await page(
     `const frame=document.createElement('iframe');frame.id='fixture-frame';frame.src=${JSON.stringify(iframe)};document.body.append(frame);'added'`,
@@ -169,7 +168,7 @@ try {
     const item=[...win.document.getElementById('tabContextMenu').querySelectorAll('[data-zen-session]')].find(item=>item.getAttribute('data-zen-session')===${JSON.stringify(sessionB)});
     if(!item)throw new Error('Fixture session menu missing');item.doCommand();return true;
   })()`);
-  // shared now: both read it, and each keeps its own baselines
+  // why: Shared tabs need per-session baselines so one reader cannot overwrite another's baseline.
   assert.match(await tool(b, "read_page", { tabId, diff: true, since: id(owned) }), /mode: full \(no-baseline\)/);
   assert.doesNotMatch(await tool(a, "read_page", { tabId, diff: true, since: id(owned) }), /mode: full/);
   console.log(

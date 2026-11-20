@@ -12,14 +12,11 @@ CARD_SOURCE[11] = '    <button className="buy">Satın al</button>';
 const APP_SOURCE = Array.from({ length: 10 }, (_, i) => `// app line ${i + 1}`);
 const PAGE_SOURCE = Array.from({ length: 10 }, (_, i) => `// page line ${i + 1}`);
 
-// A Vite dev server: transformed modules with inline maps (sources relative to the module),
-// one external map, and one map with an absolute file system source.
 const files = {
   [`${ORIGIN}/src/Card.tsx`]: `export function Card() {}\n${inlineMapComment(
     sourceMap({
       sources: ["Card.tsx"],
       sourcesContent: [CARD_SOURCE.join("\n")],
-      // generated line 5, column 20 (1-based) → Card.tsx line 12, column 5
       lines: [
         [],
         [],
@@ -37,14 +34,12 @@ const files = {
   [`${ORIGIN}/src/App.tsx.map`]: sourceMap({
     sources: ["App.tsx"],
     sourcesContent: [APP_SOURCE.join("\n")],
-    // generated line 7, column 9 → App.tsx line 4, column 7
     lines: [[], [], [], [], [], [], [[8, 0, 3, 6]]],
   }),
   [`${ORIGIN}/src/Page.tsx`]: `export function Page() {}\n${inlineMapComment(
     sourceMap({
       sources: ["/home/dev/shop/src/Page.tsx"],
       sourcesContent: [PAGE_SOURCE.join("\n")],
-      // generated line 2, column 3 → line 6, column 3
       lines: [[], [[2, 0, 5, 2]]],
     }),
   )}\n`,
@@ -57,7 +52,7 @@ const stack = (...frames) =>
     ...frames,
     frame("react_stack_bottom_frame", DOM, 17424, 20),
     frame("renderWithHooks", DOM, 4206, 24),
-    // after React's bottom frame: the app's own render call, never part of the location
+    // why: Include an application frame after React's boundary to verify it is ignored.
     frame("", `${ORIGIN}/src/main.tsx`, 9, 1),
   ].join("\n");
 
@@ -148,25 +143,19 @@ test("missing, unreachable, cross-origin and disallowed sources yield unknown", 
   const only = (url, line = 1, column = 1) => ({
     react19: { element: stack(frame("Card", url, line, column)), owners: [] },
   });
-  // a module without a sourceMappingURL comment
   files[`${ORIGIN}/src/plain.js`] = "export const x = 1;\n";
   assert.equal(await resolver().sources.resolve(only(`${ORIGIN}/src/plain.js`), { pageUrl, document: {} }), "unknown");
-  // the module itself is unreachable
   assert.equal(await resolver().sources.resolve(only(`${ORIGIN}/src/gone.js`), { pageUrl, document: {} }), "unknown");
-  // a map on another origin is never fetched
   files[`${ORIGIN}/src/far.js`] = "//# sourceMappingURL=https://maps.example/far.js.map\n";
   const far = resolver();
   assert.equal(await far.sources.resolve(only(`${ORIGIN}/src/far.js`), { pageUrl, document: {} }), "unknown");
   assert.deepEqual(far.fetched, [`${ORIGIN}/src/far.js`]);
-  // a module from another origin is never fetched
   const cdn = resolver();
   assert.equal(await cdn.sources.resolve(only("https://cdn.example/Card.js"), { pageUrl, document: {} }), "unknown");
   assert.deepEqual(cdn.fetched, []);
-  // the site rules block the page's host
   const blocked = resolver({ siteAllowed: (host) => host !== "localhost" });
   assert.equal(await blocked.sources.resolve(hints, { pageUrl, document: {} }), "unknown");
   assert.deepEqual(blocked.fetched, []);
-  // stacks with only library frames
   assert.equal(
     await resolver().sources.resolve(
       { react19: { element: stack(frame("Lib", `${ORIGIN}/node_modules/.vite/deps/lib.js`, 3, 3)), owners: [] } },
@@ -189,14 +178,12 @@ test("hints without a known framework yield unknown", async () => {
   assert.deepEqual(fetched, []);
 });
 
-// CSS: a Vite dev style with and without a CSS source map, linked sheets, inline and script-made rules.
 const CARD_CSS = Array.from({ length: 30 }, (_, i) => `/* card.css line ${i + 1} */`);
 const cardCssMap = (sources) =>
   `data:application/json;base64,${Buffer.from(
     sourceMap({
       sources,
       sourcesContent: [CARD_CSS.join("\n")],
-      // injected line 3 → line 18; injected line 8, column 3 → line 25, column 1
       lines: [[], [], [[0, 0, 17, 0]], [], [], [], [], [[2, 0, 24, 0]]],
     }),
   ).toString("base64")}`;
@@ -302,9 +289,6 @@ test("CSS rules survive an unresolved element location, and the site rules still
   assert.equal(await blocked.sources.resolve(hintsWithCss, { pageUrl: `${ORIGIN}/`, document: {} }), "unknown");
 });
 
-// A Next.js app-router dev server (Turbopack). Server components reach the browser as React's fake
-// "rsc://React/<env>/<server file>?<n>" frames at the server chunk's own line and column; their
-// maps come from the dev endpoint, as index maps with sources under turbopack:///[project]/.
 const NEXT = "http://localhost:3000";
 const SERVER_CHUNK = "file:///home/dev/shop/.next/server/chunks/ssr/[root-of-the-server]__abc._.js";
 const CLIENT_CHUNK = `${NEXT}/_next/static/chunks/app_counter_tsx_1f2e._.js`;
@@ -328,7 +312,6 @@ const nextEndpoint = (filename) => `${NEXT}/__nextjs_source-map?filename=${encod
 const nextFiles = {
   [nextEndpoint(SERVER_CHUNK)]: indexMap(
     { line: 40, column: 0 },
-    // section line 3, column 7 (zero-based) → page.tsx line 7, column 7
     sourceMap({
       sources: ["turbopack:///[project]/app/page.tsx"],
       sourcesContent: [NEXT_PAGE.join("\n")],
@@ -338,7 +321,6 @@ const nextFiles = {
   [CLIENT_CHUNK]: "(globalThis.TURBOPACK = []).push([]);\n//# sourceMappingURL=app_counter_tsx_1f2e._.js.map\n",
   [`${CLIENT_CHUNK}.map`]: indexMap(
     { line: 10, column: 0 },
-    // section line 2, column 4 → counter.tsx line 9, column 5
     sourceMap({
       sources: ["turbopack:///[project]/app/counter.tsx"],
       sourcesContent: [NEXT_COUNTER.join("\n")],

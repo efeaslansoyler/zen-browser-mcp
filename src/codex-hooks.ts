@@ -1,4 +1,4 @@
-// Codex lifecycle bridge. Hook input is trusted host metadata, never page output.
+// why: Session hooks carry host metadata that must never be inferred from page output.
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -23,13 +23,12 @@ export function parseHookInput(value: unknown): CodexHookInput {
   return input as CodexHookInput;
 }
 
-// watch: replaceable so tests don't touch the real Codex service
+// why: Inject the watcher in tests to avoid connecting to the real Codex service.
 export async function handleCodexHook(value: unknown, watch: () => Promise<boolean> = ensureCodexWatch) {
   const input = parseHookInput(value);
   if (input.hook_event_name === "SessionEnd") {
     await stopCodexRelays({ threadId: input.session_id });
   } else if (!(await watch().catch(() => false))) {
-    // If the Codex service can be watched, the watcher connects conversations.
     await ensureCodexRelay({ threadId: input.session_id, cwd: input.cwd });
   }
 }
@@ -52,7 +51,7 @@ export function configureCodexHooks(
   const command = codexHookCommand();
   for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"]) {
     const groups = config.hooks[event] ?? [];
-    // Preserve other groups and handlers, including handlers sharing our group.
+    // why: Keep other handlers, including those stored in the same group.
     const kept = groups
       .map((group: any) => ({
         ...group,

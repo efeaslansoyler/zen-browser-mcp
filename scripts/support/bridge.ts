@@ -1,5 +1,4 @@
-// Reloading from a check or zenctl: the bridge runs from its data folder, which may be an
-// installed copy rather than a link to this checkout; reloading a stale copy runs old code.
+// why: Verify the bridge path because reloading an installed copy may run code from another checkout.
 import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

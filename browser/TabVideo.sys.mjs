@@ -20,7 +20,7 @@ export class TabVideo {
       throw new Error("A recording already exists for this tab.");
     if (this.#active.size >= 2) throw new Error("At most two tab videos can be recorded at once.");
     const record = { session, frames: [], bytes: 0, captureMs: 0 };
-    // Reserve before asynchronous setup so separate tabs cannot race past the limit.
+    // why: Reserve capacity before awaiting setup so concurrent recordings cannot exceed the limit.
     this.#tabs.set(id, record);
     this.#active.add(record);
     try {
@@ -79,7 +79,7 @@ export class TabVideo {
         record.done = true;
         this.#active.delete(record);
       });
-    // A lifecycle event may finish the recording without a waiting stop call.
+    // why: Lifecycle cleanup can finish a recording without a stop caller waiting for it.
     void record.result.catch(() => {});
     return record.result;
   }

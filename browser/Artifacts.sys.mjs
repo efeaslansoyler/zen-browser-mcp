@@ -59,7 +59,6 @@ export function pagePDF(ctx) {
     }
     call.check();
     const document = bc.currentWindowGlobal;
-    // Gecko completes the print before settling its promise and does not return a page count.
     const printing = bc.print(settings);
     let timer;
     try {
@@ -74,7 +73,7 @@ export function pagePDF(ctx) {
       call.check();
       return ctx.text({ path, bytes });
     } catch (error) {
-      // On Stop the platform print can still finish writing asynchronously.
+      // why: Stop can settle our wait before the platform finishes writing the PDF.
       void printing.finally(() => ctx.artifacts.remove(path)).catch(() => {});
       throw error;
     } finally {

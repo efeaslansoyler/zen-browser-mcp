@@ -1,9 +1,5 @@
-// Follows Codex conversations through Codex's background service (the app-server daemon): a
-// conversation connects as soon as it opens (without waiting for the first message), its name
-// goes into the menus, and it disconnects when its window closes. `/quit` doesn't close a
-// conversation but moves it to the background; background tasks aren't shown in menus.
-// The service protocol is experimental: if it can't connect, the per-conversation relay from
-// the hooks (codex-relay) takes over.
+// why: Quit can background a Codex conversation, which should disappear from active menus.
+// why: Use hook-backed delivery if the experimental service cannot be reached.
 import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,7 +18,7 @@ export const DAEMON_SOCKET = path.join(CODEX_HOME, "app-server-control", "app-se
 const watchSocket = (scope: string) =>
   path.join(RUNTIME_DIR, `${NAME}-codex`, scope ? `watch.${scope}.sock` : "watch.sock");
 const POLL_MS = 2000;
-const IDLE_EXIT_MS = 10 * 60_000; // exit after this long without a Codex window; a hook or the MCP server restarts it
+const IDLE_EXIT_MS = 10 * 60_000; // why: Exit a watcher with no visible windows and let the next hook or MCP connection restart it.
 
 export type Thread = {
   id: string;
@@ -34,9 +30,6 @@ export type Thread = {
 };
 export type Tui = { pid: number; startedAt: number; threadId?: string };
 
-// Open Codex windows (TUI) and the conversations they show. The service doesn't say which
-// conversation belongs to a window: `codex resume <id>` is exact; other windows are matched to
-// the newest conversation opened or loaded after them (/new inside a window picks the newest too).
 export function visibleThreads(threads: Thread[], tuis: Tui[]): Set<string> {
   const visible = new Set<string>();
   const candidates = threads.filter((t) => !t.ephemeral);
@@ -50,8 +43,6 @@ export function visibleThreads(threads: Thread[], tuis: Tui[]): Set<string> {
   return visible;
 }
 
-// argv: ["codex", ...]; the service and subcommands like `exec` or `agents` aren't windows. Only
-// known non-interactive subcommands are excluded, so option values (`-m x`) aren't taken for one.
 const NOT_WINDOWS = new Set([
   "app-server",
   "exec",
@@ -84,7 +75,7 @@ export function parseTui(argv: string[]): { threadId?: string } | null {
 }
 
 function listTuis(): Tui[] {
-  const ticks = 100; // CLK_TCK (in practice always 100 on Linux)
+  const ticks = 100;
   const bootTime = Number(/^btime (\d+)/m.exec(fs.readFileSync("/proc/stat", "utf8"))?.[1]) * 1000;
   const tuis: Tui[] = [];
   for (const entry of fs.readdirSync("/proc")) {
@@ -101,7 +92,7 @@ function listTuis(): Tui[] {
   return tuis;
 }
 
-// JSON-RPC with the service over a WebSocket on a Unix socket: read requests only
+// why: Limit the local service client to requests needed for observation.
 class DaemonClient {
   private socket?: net.Socket;
   private buffer = Buffer.alloc(0);
@@ -168,7 +159,7 @@ class DaemonClient {
       if (opcode === 0x9) {
         this.frame(payload, 0xa);
         continue;
-      } // ping → pong
+      }
       if (opcode === 0x8) {
         this.socket?.destroy();
         return;
@@ -189,7 +180,7 @@ class DaemonClient {
     }
   }
 
-  // client frames are masked (RFC 6455)
+  // why: WebSocket client frames must be masked by RFC 6455.
   private frame(payload: Buffer, opcode = 0x1) {
     const mask = crypto.randomBytes(4);
     const head =
@@ -239,7 +230,7 @@ export async function runCodexWatch(target: Selection) {
   let daemon: DaemonClient | undefined;
   let lastTui = Date.now();
   let stopped = false;
-  let firstRead = true; // the load time of conversations loaded before the watcher is unknown
+  let firstRead = true; // why: The watcher cannot reconstruct the load time of conversations already present when it connects.
 
   const connectDaemon = async () => {
     const client = new DaemonClient();
@@ -253,7 +244,7 @@ export async function runCodexWatch(target: Selection) {
     };
     await client.connect();
     daemon = client;
-    // old relays started by hooks bind the same session; they would keep replacing each other
+    // why: Watcher and hook relays must not compete for the same conversation receiver.
     await stopCodexRelays({ scope });
   };
 
@@ -267,7 +258,7 @@ export async function runCodexWatch(target: Selection) {
         for (const id of threads.keys()) if (!loaded.includes(id)) threads.delete(id);
         for (const id of loaded) {
           const known = threads.get(id);
-          // names can change: read visible ones every round, new ones once
+          // why: Refresh visible names because the conversation may be renamed.
           if (known && !receivers.has(id)) continue;
           const { thread } = await daemon.request("thread/read", { threadId: id });
           threads.set(id, {
@@ -344,7 +335,7 @@ export async function runCodexWatch(target: Selection) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
     const before = fs.lstatSync(socketPath, { throwIfNoEntry: false });
-    if (await listening(socketPath)) return; // another watcher started at the same time
+    if (await listening(socketPath)) return;
     const after = fs.lstatSync(socketPath, { throwIfNoEntry: false });
     if (before?.isSocket() && after?.ino === before.ino) fs.unlinkSync(socketPath);
     await listen();
@@ -385,7 +376,6 @@ export function contactWatch(
   });
 }
 
-// Starts the watcher if it isn't running; true if it reached the service (hooks then skip the relay)
 export async function ensureCodexWatch(target?: Selection): Promise<boolean> {
   target ??= await browserResolver.resolve();
   const scope = deliveryScope(target);
@@ -402,7 +392,7 @@ export async function ensureCodexWatch(target?: Selection): Promise<boolean> {
       state = await contactWatch("ping", scope);
     }
   }
-  // the first round tries to reach the service; a short margin until it does
+  // why: Give the first probe time to confirm the daemon is reachable before falling back to hooks.
   for (let i = 0; i < 10 && state && !state.daemon; i++) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     state = await contactWatch("ping", scope);

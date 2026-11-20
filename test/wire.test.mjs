@@ -4,7 +4,7 @@ import net from "node:net";
 import { EventEmitter } from "node:events";
 import { call } from "../dist/zen.js";
 
-// These tests mock the protocol connection itself; discovery is exercised in instances.test.mjs.
+// why: Mock the wire connection alone; instance discovery has its own tests.
 let previousSocket;
 beforeEach(() => {
   previousSocket = process.env.ZEN_MCP_SOCKET;

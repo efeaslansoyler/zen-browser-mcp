@@ -83,7 +83,7 @@ test("tab-local device settings can be restored without overwriting later manual
     h.source.browsingContext.customUserAgent,
     "Mozilla/5.0 (Android 15; Mobile; rv:158.0) Gecko/158.0 Firefox/158.0",
   );
-  h.source.browsingContext = { ...h.source.browsingContext }; // cross-site navigation replaces the context; overrides carry over
+  h.source.browsingContext = { ...h.source.browsingContext }; // why: Model Gecko's emulation override surviving a Fission context replacement.
   h.source.browsingContext.touchEventsOverride = "manually changed";
   h.settings.restoreTab(1);
   assert.equal(h.properties.size, 0);

@@ -1,5 +1,4 @@
-// Best-effort inspection of committed DOM-backed React fibers. No hook installation,
-// renderer calls, component invocation or writes to the application's objects.
+// why: Inspect existing DOM-backed React state without invoking user components or mutating the application.
 const own = (object, key) => {
   if (!object || !["object", "function"].includes(typeof object)) return undefined;
   try {
@@ -59,7 +58,6 @@ function component(fiber, includeProps) {
   if (!type || typeof type === "string") return null;
   const inner = own(type, "render") || own(type, "type");
   const name = own(type, "displayName") || own(type, "name") || own(inner, "displayName") || own(inner, "name");
-  // Fragment, root and other structural fibers are not user components.
   if (typeof type !== "function" && typeof type !== "object") return null;
   const out = { name: typeof name === "string" ? name.slice(0, 200) : "Anonymous", tag: own(fiber, "tag") };
   const source = own(fiber, "_debugSource");
@@ -113,7 +111,7 @@ export function inspectReact({
       visited.add(fiber);
       fiber = own(fiber, "return");
     }
-    // React keeps alternate trees; always prefer the committed root when available.
+    // why: React keeps alternate trees, so prefer the committed root.
     fiber = own(own(fiber, "stateNode"), "current") || fiber;
     if (fiber && !seenRoots.has(fiber)) {
       roots.push(fiber);

@@ -1,6 +1,4 @@
-// Real MCP download tracking test: click a link in a disposable tab, wait for the file, check
-// state/path/sha256, ownership and the no-download timeout. Run: node scripts/check-downloads.ts
-// Requires existing auto mode. Deletes only the files it downloaded and its own tab.
+// why: The download check needs auto mode and only cleans up its own files and tabs.
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -49,7 +47,7 @@ const expected = createHash("sha256").update(body).digest("hex");
 const name = `zen-mcp-check-${Date.now()}.bin`;
 const server = http.createServer((req, res) => {
   if (req.url === "/slow") {
-    // a slow stream: runs until cancelled
+    // why: Keep transferring data until cancellation so the test observes a pending download.
     res.writeHead(200, {
       "content-type": "application/octet-stream",
       "content-length": 50_000_000,
@@ -72,7 +70,7 @@ const server = http.createServer((req, res) => {
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = (server.address() as { port: number }).port;
 
-// Exercise only the native dialog for this fixture's unique URL and filename.
+// why: Match this fixture's unique URL and filename before answering a native dialog.
 async function dialog(file: string, action: "find" | "save" | "cancel") {
   for (let i = 0; i < 40; i++) {
     const found = await chrome(`(() => {
@@ -180,7 +178,6 @@ try {
   );
   console.log("ok  wait with nothing new times out");
 
-  // navigation-started download (no click) is tracked too
   await tool(a, "navigate", { tabId, url: `http://127.0.0.1:${port}/file` }).catch(() => {});
   if (nativeDialog) await dialog("file", "save");
   const second = JSON.parse(await tool(a, "downloads", { tabId, action: "wait", timeout: 30 }));
@@ -195,7 +192,6 @@ try {
   const running = JSON.parse(await tool(a, "downloads", { tabId, action: "wait", until: "start", timeout: 10 }));
   assert.equal(running.state, "downloading");
   assert(running.events && fs.existsSync(running.events), "no events file");
-  // event lines arrive as it progresses (every 10%); wait for at least one progress line
   for (let i = 0; i < 80 && fs.readFileSync(running.events, "utf8").trim().split("\n").length < 2; i++)
     await new Promise((resolve) => setTimeout(resolve, 250));
   const lines = fs
@@ -221,7 +217,7 @@ try {
   console.log("ok  other session cannot see the tab's downloads");
 } finally {
   for (const file of files) fs.rmSync(file, { force: true });
-  // also remove from Gecko's download list (only this test's files)
+  // why: Remove the native list entries only for files created by this fixture.
   await chrome(
     `(async () => { const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs"); const list = await Downloads.getList(Downloads.ALL); for (const d of await list.getAll()) if (d.target.path.includes(${JSON.stringify(name.replace(/\.bin$/, ""))})) { await list.remove(d); await d.finalize(true); } return "ok"; })()`,
   ).catch(() => {});

@@ -12,7 +12,7 @@ test("shared island permission rejects with denial notes, records approval notes
     island: {
       ask: () => {
         answer();
-        return 1; // the card's id
+        return 1;
       },
       askEnded: () => ended++,
       setAgent() {},

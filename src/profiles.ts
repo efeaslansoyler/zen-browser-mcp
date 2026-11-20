@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { STATE_DIR } from "./paths.ts";
 
-// Resolve symlinked XDG roots even when this installation has no profile yet.
+// why: Resolve existing ancestors so a new profile can still have a canonical path.
 function realDirectory(dir: string): string {
   try {
     return fs.realpathSync(dir);
@@ -56,7 +56,6 @@ function linkTarget(file: string) {
   }
 }
 
-// Gecko leaves the fcntl lock file on disk after exit. Check the holder, not file existence.
 export function geckoProfileInUse(profile: string) {
   const locks = [".parentlock", "lock"].map((name) => path.join(profile, name));
   for (const lock of locks) {
@@ -76,7 +75,7 @@ export function geckoProfileInUse(profile: string) {
   return false;
 }
 
-// Serialize managed startup with reset, including the interval before Gecko locks the profile.
+// why: A managed start needs a reservation before Gecko acquires its own profile lock.
 export function reserveAgentProfile(profile: string) {
   const file = path.join(path.dirname(profile), "starting");
   const owner = `${process.pid}:${randomUUID()}`;
@@ -148,7 +147,7 @@ export function sweepTemporaryProfiles() {
       if (alive(Number(fs.readFileSync(path.join(profile, "browser.pid"), "utf8")))) continue;
     } catch (error) {
       if (!missing(error)) throw error;
-      // The spawning process may have died before recording a browser that is still starting.
+      // why: The owner may die after spawning a browser but before recording its process.
       const stat = fs.lstatSync(profile, { throwIfNoEntry: false });
       if (stat && Date.now() - stat.mtimeMs < 60_000) continue;
     }

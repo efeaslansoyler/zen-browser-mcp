@@ -1,6 +1,3 @@
-// Agent sessions: one per MCP server process (or per Codex conversation). A session works in tabs;
-// it stays alive while a lifecycle connection is open and ends after a short grace period once
-// the last one closes, which takes it out of its tabs.
 export function sessionManager(ctx) {
   const GRACE = 5000;
 
@@ -20,8 +17,6 @@ export function sessionManager(ctx) {
     return info;
   }
 
-  // Name shown in menus: the conversation title if there is one (the icon shows the agent),
-  // otherwise the agent name and a short ID.
   function sessionName(theme, cwd, title, id) {
     const project = String(cwd || "")
       .split("/")
@@ -34,11 +29,10 @@ export function sessionManager(ctx) {
     return `${theme.name}${project ? " · " + project : ""} · ${String(id).slice(-6)}`;
   }
 
-  // Menus list only sessions with a live lifecycle connection: one-off callers such as zenctl
-  // never "disconnect", so listing them would leave ghosts behind.
+  // why: One-off clients never disconnect through a lifecycle transport and would leave ghost menu entries.
   function* liveSessions() {
     for (const info of ctx.sessions.values()) {
-      // Codex tabs belong to a conversation (codex:<thread>); the MCP process session belongs to none.
+      // why: Codex conversations own their tabs independently of the MCP process session.
       if (info.agent?.id === "codex" && !info.id.startsWith("codex:")) continue;
       if (info.lifecycle && !info.disconnected) yield info;
     }
@@ -81,7 +75,6 @@ export function sessionManager(ctx) {
     ctx.disconnectTimers.delete(id);
   }
 
-  // Ends the session after the grace period unless it reconnected meanwhile.
   function endAfterGrace(id) {
     ctx.disconnectTimers.set(
       id,
@@ -111,11 +104,10 @@ export function sessionManager(ctx) {
     for (const tabId of ctx.access.holdsOf(id)) ctx.access.release(tabId, id);
     for (const call of ctx.calls)
       if (call.session === id) call.cancel(new Error("The browser session disconnected; its operation was cancelled."));
-    // Allow the same MCP process to reconnect after a bridge reload or brief outage.
+    // why: The grace period lets clients reconnect across reloads and brief outages.
     endAfterGrace(id);
   }
 
-  // After a bridge reload, lifecycle sessions get the usual grace period to reconnect.
   function awaitReconnects() {
     for (const info of ctx.sessions.values()) {
       if (!info.lifecycle) continue;
@@ -124,7 +116,6 @@ export function sessionManager(ctx) {
     }
   }
 
-  // Sessions without a lifecycle connection or tabs end after 10 minutes idle, others after a day.
   function sweepSessions() {
     for (const info of ctx.sessions.values()) {
       if (ctx.ownerConnections.has(info.id)) continue;
@@ -135,14 +126,14 @@ export function sessionManager(ctx) {
     }
   }
 
-  // On bridge shutdown: close lifecycle transports but keep sessions and tab access, so the
-  // reloaded bridge can hand them back when the clients reconnect.
+  // why: Close transports on shutdown while retaining access for clients that reconnect after reload.
   function closeConnections() {
     for (const connections of ctx.ownerConnections.values()) {
       for (const transport of connections) {
         try {
+          // why: Zero is Gecko's NS_OK status for a clean transport close.
           transport.close(0);
-        } catch {} // NS_OK
+        } catch {}
       }
     }
     ctx.ownerConnections.clear();

@@ -1,16 +1,7 @@
-// Permission templates, shared by the CLI and the browser. Every tool call is one operation
-// (OPERATIONS), and a template gives each operation a rule: "allow" (done without asking), "ask"
-// (approved on the island first) or "deny" (refused). The built-in templates:
-//   ask:  every action asks; reading pages and talking to the user don't.
-//   auto: only risky operations ask (running code, uploads, submitting forms, secret fields,
-//         your clipboard, your tabs, browser settings).
-// custom is the user's own template (permissions.jsonc): a base template plus their rules.
-
 export const RULES = ["allow", "ask", "deny"];
 export const MODES = ["ask", "auto", "custom"];
 
-// [key, ask template, auto template, what it is]. The order and sections are those of the
-// example permissions file.
+// why: Section order matches the generated permissions file so it can be read in the same order.
 const A = "allow";
 const Q = "ask";
 export const SECTIONS = [
@@ -132,7 +123,6 @@ export const OPERATIONS = new Map(
   SECTIONS.flatMap(([, rows]) => rows.map(([key, ask, auto, about]) => [key, { ask, auto, about }])),
 );
 
-// Operations that only look ("Reading and looking"): they never change a page.
 export const READS = new Set(SECTIONS[0][1].map(([key]) => key));
 
 export const COMPUTER_ACTIONS = {
@@ -155,9 +145,7 @@ export const COMPUTER_ACTIONS = {
   key_up: "computer.key",
 };
 
-// The operation of a tool call, or null when the call itself is never checked (a batch is
-// checked step by step; closing an extension panel only cleans up). Every MCP tool and action
-// has an operation (a test checks it); null also covers the bridge's own test tools.
+// why: Check each batch step under its own operation instead of applying a coarse batch approval.
 export function operationOf(tool, args = {}) {
   const key = operationKey(tool, args);
   return key && OPERATIONS.has(key) ? key : null;
@@ -181,7 +169,6 @@ function operationKey(tool, args) {
       if (args.action === "close") return null;
       if (args.action === "open") return "extensions.open";
       if (args.action === "form_input") return "extensions.act";
-      // looking at a panel is reading it; clicking or typing in it acts
       if (args.action === "computer")
         return ["screenshot", "scroll", "scroll_to", "hover", "wait"].includes(args.computerAction)
           ? "extensions.read"
@@ -198,10 +185,9 @@ function operationKey(tool, args) {
 }
 
 const STRICTNESS = { allow: 0, ask: 1, deny: 2 };
-// The strictest of several rules (a click that submits a form is both a click and a submit).
+// why: A call that both clicks and submits must satisfy the stricter action rule.
 export const strictest = (...rules) => rules.reduce((a, b) => (STRICTNESS[b] > STRICTNESS[a] ? b : a), "allow");
 
-// The rule of an operation: the mode's template, or for custom the user's rule over their base.
 export function ruleOf(key, mode = "auto", custom = null) {
   const operation = OPERATIONS.get(key);
   if (!operation) throw new Error(`Unknown permission: ${key}`);
@@ -222,9 +208,7 @@ export function assertUserPresent(autonomous, tool) {
     throw new Error("no user is present (autonomous browser mode)");
 }
 
-// permissions.jsonc: { "base": "ask" | "auto", "rules": { "<operation>": "allow" | "ask" | "deny" } }
-// with // and /* */ comments and trailing commas. Unknown operations or rules are errors, so a
-// typo never silently leaves the default in place.
+// why: Reject misspelled operations and rules so a typo cannot silently leave a default in effect.
 export function parsePermissions(text) {
   let raw;
   try {
@@ -246,7 +230,6 @@ export function parsePermissions(text) {
   return { base, rules };
 }
 
-// Removes comments and trailing commas outside strings.
 export function stripJsonComments(text) {
   let out = "";
   for (let i = 0; i < text.length; i++) {
@@ -267,7 +250,6 @@ export function stripJsonComments(text) {
   return out.replace(/,(\s*[}\]])/g, "$1");
 }
 
-// The example permissions file: every operation with its built-in rules and risk.
 export function examplePermissions(base = "auto") {
   const width = Math.max(...[...OPERATIONS.keys()].map((key) => key.length)) + 4;
   const lines = [

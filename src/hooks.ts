@@ -1,13 +1,5 @@
-// Prompt hooks: what the user sent a conversation from the browser (picks, recipes) and that
-// couldn't be pushed waits in the browser's inbox. With these hooks it is added to the user's
-// next message in that conversation, even when the agent never calls a browser tool again.
-// Hooks are a stable feature of the clients, unlike channels; they are opt-in (`hooks install`).
-//
-// The hook command is `node <package>/dist/cli.js hook <client>`: it reads the hook input,
-// asks the bridge for what waits for that conversation and prints it as context for the model.
-// Nothing waiting, or no browser: no output, at once. The conversation is found by the client's
-// own conversation ID when the MCP process knows it (Claude Code), otherwise by the client's
-// process: the hook and the MCP process are both its children (Antigravity CLI).
+// why: Opt-in prompt hooks support clients without a usable channel.
+// why: Match a client's conversation ID when supplied; Antigravity needs a common parent process.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,13 +13,11 @@ import { configureOpenCodePlugin, openCodePluginFile } from "./opencode.ts";
 export type HookClient = "claude" | "codex" | "antigravity";
 export const HOOK_CLIENTS: HookClient[] = ["claude", "codex", "antigravity"];
 
-// The client's output format for context added before the model runs.
 function contextOutput(client: HookClient, text: string) {
   if (client === "antigravity") return { injectSteps: [{ systemMessage: { systemMessage: text } }] };
   return { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: text } };
 }
 
-// What the hook prints for this input (empty: nothing to add).
 export async function promptHook(
   client: HookClient,
   value: unknown,
@@ -44,7 +34,7 @@ export async function promptHook(
     const [reply] = await browser("inbox_take", { client, clientSession, pids }, 2000);
     text = reply?.type === "text" ? reply.text : "";
   } catch {
-    return ""; // the browser isn't running: nothing can be waiting
+    return ""; // why: A stopped browser cannot have a live inbox, so the hook should produce no context.
   }
   return text ? JSON.stringify(contextOutput(client, text)) : "";
 }
@@ -53,7 +43,7 @@ const shellQuote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
 export function hookCommand(client: HookClient) {
   return `${shellQuote(process.execPath)} ${shellQuote(path.join(PACKAGE_DIR, "dist/cli.js"))} hook ${client}`;
 }
-// ours, also from another installation path or Node version
+// why: Recognize prior install paths and Node versions so upgrades can replace old hook entries.
 const isOurs = (command: unknown, client: HookClient) =>
   typeof command === "string" && /dist\/cli\.js'? hook /.test(command) && command.endsWith(` hook ${client}`);
 
@@ -61,8 +51,7 @@ export function claudeSettingsFile(env = process.env, home = os.homedir()) {
   return path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "settings.json");
 }
 
-// Adds or removes our UserPromptSubmit hook in Claude Code's user settings; other hooks and
-// settings stay as they are. A changed file is backed up first.
+// why: Preserve user settings and other hooks when adding or removing ours.
 export function configureClaudeHook(action: "install" | "uninstall", file = claudeSettingsFile()) {
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : undefined;
   const settings = existing ? JSON.parse(existing) : {};
@@ -85,7 +74,6 @@ export function configureClaudeHook(action: "install" | "uninstall", file = clau
   return file;
 }
 
-// Is our hook in Claude Code's settings (the MCP process tells the browser, for the island).
 export function claudeHookInstalled(file = claudeSettingsFile()) {
   try {
     const settings = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -97,7 +85,6 @@ export function claudeHookInstalled(file = claudeSettingsFile()) {
   }
 }
 
-// Antigravity CLI: a named hook in ~/.gemini/config/hooks.json, run before each model call.
 export function antigravityHooksFile(home = os.homedir()) {
   return path.join(home, ".gemini", "config", "hooks.json");
 }
@@ -128,9 +115,6 @@ export function antigravityHookInstalled(file = antigravityHooksFile()) {
   }
 }
 
-// `hooks install|uninstall`: Claude Code's and Antigravity CLI's prompt hooks, Codex's
-// lifecycle hooks (which also deliver what waits) and the OpenCode plugin, for the clients
-// that are installed.
 export function hooksCommand(action: string | undefined, home = os.homedir(), env = process.env) {
   if (action !== "install" && action !== "uninstall") throw new Error("Usage: hooks install|uninstall");
   const lines: string[] = [];

@@ -1,4 +1,4 @@
-// Reproducible opt-in pacing. These change real input events, not only the visual cursor.
+// why: Pacing changes delivered input, so it is opt-in even when the cursor is hidden.
 export function seededRandom(seed = 1) {
   let value = Number(seed) >>> 0 || 1;
   return () => {

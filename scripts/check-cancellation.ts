@@ -1,5 +1,3 @@
-// Run from an unrestricted local terminal: node scripts/check-cancellation.ts
-// Reloads the bridge, tests actual Stop/Resume, and closes only its disposable tab.
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
@@ -22,7 +20,6 @@ const capture = <T>(promise: Promise<T>) =>
 let tabId: number | undefined;
 let ownsPause = false;
 try {
-  // Check access and user state before changing anything.
   const before = await chrome("({version:h.version,paused:h.state.paused})");
   assert(!before.paused, "Automation is already stopped by the user; resume it before running this test.");
   console.log(text(await reloadBridge()));
@@ -57,7 +54,6 @@ try {
   assert(field, `Test field missing: ${tree}`);
   const page = (code: string) => pageEval(tabId!, code);
 
-  // An active batch must stop, retain its partial error, and never execute step 2.
   const batch = capture(
     command("browser_batch", {
       actions: [
@@ -79,7 +75,7 @@ try {
   assert.equal(await page('document.getElementById("message").value'), "", "A cancelled batch step ran");
   console.log("✓ Stop cancels active wait and batch; new work is blocked while paused");
 
-  // Stop and Resume in the same browser callback must not revive the old operation.
+  // why: Resume must not revive a cancellation scope that already ended.
   const waiting = capture(command("computer", { tabId, action: "wait", duration: 30 }));
   await sleep(150);
   await chrome("(() => { h.stopClaude(); h.resumeClaude(); return h.state.paused; })()");
@@ -87,10 +83,9 @@ try {
   await command("get_page_text", { tabId });
   console.log("✓ Immediate Stop/Resume cancels old work and accepts fresh requests");
 
-  // Exercise real EventUtils text input, cancellation IPC, and no late characters.
   await command("computer", { tabId, action: "left_click", ref: field });
   const typing = capture(command("computer", { tabId, action: "type", text: "x".repeat(50000) }));
-  // Inspect only the disposable fixture directly while the tool queue is busy.
+  // why: Inspect only the fixture directly because the tool queue is busy.
   let count = 0;
   for (let i = 0; i < 100 && count === 0; i++) {
     await sleep(20);
@@ -105,7 +100,7 @@ try {
   ownsPause = true;
   await chrome("(() => { h.stopClaude(); return h.state.paused; })()");
   assert(stopped((await typing).error), "Typing did not report cancellation");
-  // Resume before checking: the previous actor must remain cancelled independently.
+  // why: Resume first to prove the old actor remains cancelled independently of the paused flag.
   await chrome("(() => { h.resumeClaude(); return h.state.paused; })()");
   ownsPause = false;
   const readLength = async () => Number(await page('document.getElementById("message").value.length'));
@@ -121,7 +116,7 @@ try {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 } finally {
-  // Undo only a pause introduced by this test; never close unrelated tabs.
+  // why: Restore only state introduced by this test so unrelated browser state survives.
   if (ownsPause)
     await chrome("(() => { h.resumeClaude(); return true; })()").catch((error) =>
       console.error("Resume cleanup failed:", error),

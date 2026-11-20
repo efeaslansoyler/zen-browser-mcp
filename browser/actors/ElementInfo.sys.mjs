@@ -1,15 +1,8 @@
-// Details about an element or page value for agents: a short unique selector, the computed
-// styles that matter for design fixes, the React/Vue component chain, and readable forms of
-// console arguments and evaluated values. unwrap is Cu.waiveXrays: page objects are read
-// without Xrays.
-
-// Owner stacks: enough frames to reach React's bottom frame; library owners are skipped later.
 const MAX_STACK = 4000;
 const MAX_OWNERS = 12;
 
 const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-// React/Next.js internals: noise in a component chain
 const FRAMEWORK_COMPONENTS = new Set([
   "InnerLayoutRouter",
   "OuterLayoutRouter",
@@ -39,7 +32,6 @@ const FRAMEWORK_COMPONENTS = new Set([
   "Fragment",
 ]);
 
-// A short selector matching one element: stops at a unique ID or once the path is unique.
 export function cssPath(el, win) {
   const doc = el.ownerDocument;
   const esc = (s) => win.CSS.escape(s);
@@ -57,7 +49,7 @@ export function cssPath(el, win) {
       break;
     }
     let part = node.localName;
-    // Utility classes (md:flex, w-[20px]) make selectors long; take the first two plain ones.
+    // why: Limit utility classes in generated selectors so the selectors remain short.
     const classes = [...node.classList].filter((c) => /^[a-zA-Z_-][\w-]*$/.test(c)).slice(0, 2);
     part += classes.map((c) => "." + esc(c)).join("");
     const same = node.parentElement
@@ -70,7 +62,6 @@ export function cssPath(el, win) {
   return parts.join(" > ");
 }
 
-// Computed styles that matter for a design fix; default values are left out.
 export function pickStyles(el, win) {
   const s = win.getComputedStyle(el);
   const out = { display: s.display };
@@ -98,7 +89,6 @@ export function pickStyles(el, win) {
     if (s.gap && s.gap !== "normal") out.gap = s.gap;
   }
   if (s.opacity !== "1") out.opacity = s.opacity;
-  // Tailwind puts transparent ring/shadow layers on every element; keep only visible ones.
   const shadows = splitTopLevel(s.boxShadow).filter(
     (l) => l !== "none" && !/rgba\([^)]*,\s*0\)|\/\s*0\)|transparent/.test(l),
   );
@@ -106,7 +96,6 @@ export function pickStyles(el, win) {
   return out;
 }
 
-// A comma-separated CSS list, without splitting at commas inside parentheses.
 function splitTopLevel(value) {
   const parts = [];
   let depth = 0;
@@ -123,13 +112,10 @@ function splitTopLevel(value) {
   return parts.filter(Boolean);
 }
 
-// Production builds minify names ("_", "y", "Oe"); skip them rather than mislead.
+// why: Skip minified component names because they cannot identify project code reliably.
 const isMinified = (name) => name.length <= 2;
-// Next.js internal boundaries such as __next_root_layout_boundary__
 const isInternal = (name) => /^__.*__$/.test(name);
 
-// The component chain of a development React (fiber) or Vue build, outermost first: enough to
-// find the right file in the repo.
 export function componentChain(el, unwrap) {
   try {
     const raw = unwrap(el);
@@ -152,7 +138,6 @@ export function componentChain(el, unwrap) {
       }
       return names.length ? { framework: "React", chain: names.reverse() } : null;
     }
-    // A Vue 3 development build also records the component's file.
     let instance = raw.__vueParentComponent;
     if (instance) {
       const names = [];
@@ -180,8 +165,7 @@ const componentName = (type) =>
 const fiberKey = (raw) =>
   Object.keys(raw).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
 
-// Unresolved hints for the source resolver, one per stack whose dev build left metadata on the
-// element. Page values are copied into plain strings and numbers.
+// why: Copy page-controlled values into plain primitives before sending them out of the actor.
 export function sourceHints(el, unwrap, win) {
   const hints = {};
   for (const [key, collect] of HINTS) {
@@ -201,13 +185,9 @@ const ownerName = (fiber) => {
   return typeof name === "string" && name ? name : null;
 };
 
-// React 19 keeps the JSX call site of every element and owner component in _debugStack (an
-// Error); the parent maps these stacks through source maps.
 function react19Hints(el, unwrap) {
   const raw = unwrap(el);
   const key = fiberKey(raw);
-  // Server components (React Server Components payload) own elements as ReactComponentInfo:
-  // { name, env, owner, debugStack } instead of a fiber.
   const stackOf = (owner) => {
     const stack = (owner?._debugStack ?? owner?.debugStack)?.stack;
     return typeof stack === "string" ? truncate(stack, MAX_STACK) : null;
@@ -227,7 +207,6 @@ function react19Hints(el, unwrap) {
   return { element, owners };
 }
 
-// React 18 (with Babel's JSX source transform) records each element's JSX position in _debugSource.
 function react18Hints(el, unwrap) {
   const raw = unwrap(el);
   const key = fiberKey(raw);
@@ -249,8 +228,6 @@ function react18Hints(el, unwrap) {
   return { element, owners };
 }
 
-// Svelte 5 dev builds: __svelte_meta.loc is the element's position (column zero-based); its
-// parent entries include the places where the enclosing components were rendered.
 function svelteHints(el, unwrap) {
   const meta = unwrap(el).__svelte_meta;
   const file = text(meta?.loc?.file);
@@ -269,8 +246,6 @@ function svelteHints(el, unwrap) {
   return { element: { file, line: number(meta.loc.line), column: number(meta.loc.column) }, parents };
 }
 
-// Astro's dev server annotates elements with their .astro file and "line:column", and its dev
-// toolbar removes the attributes soon after load, so the actor records them at DOMContentLoaded.
 const ASTRO_FILE = "data-astro-source-file";
 const ASTRO_LOC = "data-astro-source-loc";
 const astroSources = new WeakMap();
@@ -285,7 +260,6 @@ function astroHints(el) {
   return file ? { file, loc: text(el.getAttribute(ASTRO_LOC)) } : (astroSources.get(el) ?? null);
 }
 
-// A Vue 3 dev build records each component's file (no line), nearest component first.
 function vueHints(el, unwrap) {
   const components = [];
   for (
@@ -299,8 +273,6 @@ function vueHints(el, unwrap) {
   return components.length ? { components } : null;
 }
 
-// Angular dev mode: the global ng helpers find the element's component, whose definition
-// carries the class's debug info (file and line of the class).
 function angularHints(el, unwrap, win) {
   const ng = win && unwrap(win).ng;
   if (!ng) return null;
@@ -320,9 +292,6 @@ const HINTS = [
   ["angular", angularHints],
 ];
 
-// Matched author CSS rules for the source resolver, most specific first. Gecko lists them in
-// cascade order; user-agent and user sheets are left out. A <style> keeps only its source map
-// comment (Vite's css.devSourcemap), not its text.
 const MAX_CSS_RULES = 8;
 const MAX_CSS_MAP = 4e6;
 export function cssHints(el, inspector) {
@@ -355,13 +324,13 @@ function sheetHint(sheet) {
   if (!owner) return { kind: "constructed" };
   const devId = owner.getAttribute?.("data-vite-dev-id") || null;
   const css = String(owner.textContent ?? "");
-  // CSS-in-JS libraries insert rules into an empty <style> through the CSSOM
+  // why: CSSOM rules in an empty style element have no source position.
   if (!css.trim()) return { kind: "script", devId };
   const map = [...css.matchAll(/\/\*[#@]\s*sourceMappingURL=(\S+?)\s*\*\//g)].at(-1)?.[1];
   return { kind: "style", devId, map: map && map.length <= MAX_CSS_MAP ? map : null };
 }
 
-// A console.* argument is a page object: try JSON without Xrays, fall back to String.
+// why: Console arguments are page objects; try to serialize them through waived Xrays before using their string form.
 export function formatArg(arg, unwrap) {
   if (typeof arg === "string") return arg;
   try {
@@ -377,7 +346,6 @@ export function formatArg(arg, unwrap) {
   }
 }
 
-// The result of javascript_tool as text.
 export function describe(value) {
   if (value === undefined) return "undefined";
   if (typeof value === "string") return value;

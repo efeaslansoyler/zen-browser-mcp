@@ -1,4 +1,4 @@
-// Deltas refer to the exact text previously returned, never to a hidden DOM snapshot.
+// why: Compute deltas against the text the agent actually received.
 export function sameReadContext(a, b) {
   return (
     !!a &&
@@ -10,7 +10,7 @@ export function sameReadContext(a, b) {
   );
 }
 
-// Bounded Myers line diff. Exhausting the budget returns null (caller sends full text).
+// why: Bound diff work and fall back to full text when the budget is exhausted.
 export function linePatch(before, after, budget = 200_000) {
   const a = before.split("\n"),
     b = after.split("\n");
@@ -131,7 +131,7 @@ export class ReadSnapshots {
       this.clearTab(tabId);
       throw new Error("The page or one of its frames changed while reading. Retry the read; no snapshot was saved.");
     }
-    if (!diff) return text; // Existing clients keep their original response format.
+    if (!diff) return text; // why: Preserve the original response format for clients that did not request a diff.
     const key = JSON.stringify([session, tabId, scope]);
     const previous = this.entries.get(key);
     let reason = !previous

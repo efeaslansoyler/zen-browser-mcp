@@ -12,7 +12,7 @@ import {
   openCodePluginSource,
 } from "../src/opencode.ts";
 
-const pid = 900000 + Math.floor(Math.random() * 90000); // a socket name no real OpenCode uses
+const pid = 900000 + Math.floor(Math.random() * 90000); // why: Use a unique fixture socket so the test cannot reach a live OpenCode process.
 
 test("the OpenCode plugin prompts the last session with what the MCP process pushes", async () => {
   const prompts = [];
@@ -30,22 +30,18 @@ test("the OpenCode plugin prompts the last session with what the MCP process pus
     asked.push([tool, args]);
     return [{ type: "text", text: asked.length === 1 ? "The user sent you this…" : "" }];
   };
-  // a socket left by a killed OpenCode is removed
   const stale = path.join(path.dirname(openCodeSocket(pid)), "999999999.sock");
   fs.mkdirSync(path.dirname(stale), { recursive: true });
   fs.writeFileSync(stale, "");
   const hooks = await openCodePlugin({ client }, browser, pid, servers);
   assert.equal(fs.existsSync(stale), false);
   try {
-    // no session yet: refused, so it waits in the inbox
     assert.equal(await pushToOpenCode("early", pid), false);
-    // the user's next message carries what waited
     const output = { parts: [{ type: "text", text: "hi" }] };
     const model = { providerID: "p", modelID: "m" };
     await hooks["chat.message"]({ sessionID: "ses_1", agent: "build", model }, output);
     assert.equal(output.parts[0].text, "hi\n\nThe user sent you this…");
     assert.deepEqual(asked[0], ["inbox_take", { client: "opencode", pids: [pid] }]);
-    // now pushes become prompts in that session, with its agent and model
     assert.equal(await pushToOpenCode("[zen] picked ü", pid), true);
     assert.deepEqual(prompts, [
       { path: { id: "ses_1" }, body: { parts: [{ type: "text", text: "[zen] picked ü" }], agent: "build", model } },
@@ -53,7 +49,6 @@ test("the OpenCode plugin prompts the last session with what the MCP process pus
   } finally {
     for (const server of servers) server.close();
   }
-  // nothing listens: refused
   assert.equal(await pushToOpenCode("late", pid), false);
 });
 

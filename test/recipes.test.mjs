@@ -68,7 +68,7 @@ test("a saved recipe keeps its steps and images and can be listed, read and remo
   const folder = path.join(recipes.dir, "bilet-ara");
   assert.equal(fs.readFileSync(path.join(folder, "001.jpg"), "utf8"), "jpg");
   assert.equal(fs.existsSync(path.join(images, "001.jpg")), false);
-  assert.equal((await recipes.get("bilet-ara-2")).steps[0].image, undefined); // images already moved
+  assert.equal((await recipes.get("bilet-ara-2")).steps[0].image, undefined);
 
   assert.deepEqual(
     (await recipes.list()).map((r) => [r.id, r.steps]),
@@ -126,7 +126,7 @@ test("the recipes tool deletes only after the user confirms on the island", asyn
   assert.match(await out({ url: "https://elsewhere.test/x" }), /No recipes for https:\/\/elsewhere\.test/);
   assert.match(await out({ action: "get", id: "bilet-ara" }), /Start: https:\/\/tickets\.test\/login/);
   assert.match(await out({ action: "delete", id: "bilet-ara" }), /kept the recipe/);
-  assert.equal(asked[0][0], null); // a question without a tab
+  assert.equal(asked[0][0], null);
   answer = "done";
   assert.match(await out({ action: "delete", id: "bilet-ara" }), /Deleted/);
   assert.match(await out({}), /No recipes yet/);
@@ -304,8 +304,8 @@ test("the review model: names, removals, variables and play order", () => {
       "Choose “Category 2” → Category",
     ],
   );
-  model.toggleVariable(1); // a click can't vary
-  model.toggleVariable(3); // nor a secret
+  model.toggleVariable(1);
+  model.toggleVariable(3);
   model.toggleVariable(4);
   assert.equal(model.items[4].variable, "category");
   model.toggleRemoved(0);
@@ -335,11 +335,9 @@ test("the review model: names, removals, variables and play order", () => {
 test("Play zooms in around the element and keeps it in the frame", async () => {
   const { zoomOn } = await import("../browser/RecordingReview.sys.mjs");
   assert.deepEqual(zoomOn(undefined), { backgroundSize: "contain", backgroundPosition: "center" });
-  // a small button at the top left of a wide page: zoomed 3×, pinned to the top-left corner
   const small = zoomOn({ x: 0.02, y: 0.01, width: 0.03, height: 0.02, aspect: 0.6 });
   assert.equal(small.backgroundSize, `${Math.round((290 / 0.6) * 3)}px auto`);
   assert.equal(small.backgroundPosition, "0.0% 0.0%");
-  // a big element in the middle: no zoom, centered
   assert.deepEqual(zoomOn({ x: 0.2, y: 0.3, width: 0.6, height: 0.4, aspect: 0.6 }), {
     backgroundSize: `${Math.round(290 / 0.6)}px auto`,
     backgroundPosition: "50.0% 50.0%",
@@ -352,7 +350,7 @@ test("show_me tells the agent to try the recipe when the user asked for it", asy
     answers: [
       "done",
       (model) => {
-        assert.equal(model.canTry, true); // the asking agent can always try
+        assert.equal(model.canTry, true);
         model.tryNow = true;
         return { status: "done", choice: model.result() };
       },
@@ -367,7 +365,7 @@ test("a recording the user started is saved and sent to the chosen session", asy
     steps: shown,
     answers: [],
   });
-  delete ctx.waitIslandAnswer; // the user's flow answers through tabRequests, not an agent operation
+  delete ctx.waitIslandAnswer; // why: The user-started flow is independent of agent operations and answers through tabRequests.
   ctx.tabRequests = new Map();
   ctx.setTimeout = setTimeout;
   ctx.clearTimeout = clearTimeout;
@@ -407,7 +405,7 @@ test("a recording the user started is saved and sent to the chosen session", asy
   island.review = (_b, _title, m) => (model = m);
   const run = demos.start(browser);
   await new Promise((resolve) => setImmediate(resolve));
-  answer("done"); // Finish
+  answer("done");
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(model.targets, [{ id: "s1", name: "Claude · shop · now", agent: { id: "claude" } }]);
   assert.equal(model.canTry, false);

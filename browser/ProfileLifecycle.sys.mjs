@@ -1,4 +1,4 @@
-// Dedicated browsers follow MCP process connections, including clients without pick delivery.
+// why: Track connections separately from pick delivery because clients without a push channel also hold profiles.
 export function profileLifecycle({ temporary, owner, setTimeout, clearTimeout, quit }) {
   const leases = new Set();
   let timer;

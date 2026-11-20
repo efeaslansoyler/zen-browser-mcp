@@ -1,10 +1,6 @@
-// What agents are doing: the short description shown on the island, and the activity log in
-// ~/.local/state/<app>/activity.jsonl (one line per tool call, rotated to activity.1.jsonl
-// past 5 MB) that the tab menu's history views read.
 const MAX_ACTIVITY = 5 * 1048576;
 
 export function activity(ctx) {
-  // The island text: "example.com — clicking"
   function describeAction(tool, args, browser, withHost = true) {
     const { L } = ctx;
     let host = "";
@@ -97,7 +93,7 @@ export function activity(ctx) {
     }
   }
 
-  // Tab IDs are reused after a browser restart, so history starts at this browser launch.
+  // why: Tab IDs can be reused after a restart, so history starts at this browser launch.
   async function tabHistory(tabId, limit = 15) {
     const { readRecent, formatLine } = ctx.activityView;
     const entries = await readRecent(ctx.activityPath);
@@ -108,7 +104,7 @@ export function activity(ctx) {
       .map((e) => formatLine(e, ctx.L));
   }
 
-  // Written to a local file and opened in a new tab for the user (never given to an agent).
+  // why: Keep the full history in a local user-facing tab because it includes site activity.
   async function openHistory(win) {
     const { readRecent, renderPage } = ctx.activityView;
     const entries = (await readRecent(ctx.activityPath, 2 * 1048576)).slice(-500);

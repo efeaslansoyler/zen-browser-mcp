@@ -1,4 +1,3 @@
-// Settings and site lists, shared by the CLI and the browser. A listed domain covers its subdomains.
 export function normalizeDomain(value) {
   let input = String(value).trim().replace(/^\*\./, "");
   const url = new URL(input.includes("://") ? input : `https://${input}`);
@@ -18,10 +17,8 @@ export function parseBrowserMode(mode) {
 
 export function normalizeConfig(raw = {}) {
   const config = { mode: ["ask", "custom"].includes(raw.mode) ? raw.mode : "auto", sites: normalizeSites(raw.sites) };
-  // Zen: the workspace (by name) for tabs agents open; otherwise the user's current one
   const workspace = typeof raw.workspace === "string" ? raw.workspace.trim().slice(0, 80) : "";
   if (workspace) config.workspace = workspace;
-  // A container (by name) that agent tabs open in by default: their own cookies and site data
   const container = typeof raw.container === "string" ? raw.container.trim().slice(0, 80) : "";
   if (container) config.container = container;
   for (const key of ["browser", "profile"]) {
@@ -33,9 +30,8 @@ export function normalizeConfig(raw = {}) {
   return config;
 }
 
-// Which sites agents may use. "blocklist": every site but the listed ones; "allowlist": only the
-// listed ones. Both lists are kept so switching loses nothing, but only the mode's list applies.
-// Sites only say where agents may go; what they may do there is the permission mode's job.
+// why: Keep the inactive list so changing modes cannot discard the user's entries.
+// why: Limit site policy to where agents can go; operation policy governs what they do there.
 export function normalizeSites(raw) {
   raw ??= {};
   if (
@@ -58,13 +54,12 @@ export function normalizeSites(raw) {
   };
 }
 
-// The domain in the active list that covers this host (itself or a parent domain), if any.
 export function siteEntry(host, sites) {
   host = String(host).toLowerCase().replace(/\.$/, "");
   return sites[sites.mode].find((domain) => host === domain || host.endsWith(`.${domain}`)) ?? null;
 }
 
-// May agents use this host? Pages without one (about:blank, local files) aren't sites.
+// why: Hostless pages do not identify a site to match against domain rules.
 export function siteAllowed(host, sites) {
   if (!host) return true;
   const listed = siteEntry(host, sites) !== null;

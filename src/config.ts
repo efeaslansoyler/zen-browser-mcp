@@ -1,5 +1,3 @@
-// The `config` command: edits ~/.config/<name>/config.json. The bridge reads the file again when
-// it changes; no browser restart needed.
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -51,7 +49,6 @@ const MODE_TEXT = {
   custom: [`Your own rules in ${PERMISSIONS_FILE}`, `Kendi kuralların: ${PERMISSIONS_FILE}`],
 };
 
-// The custom template, or throws with what is wrong with it.
 export function readPermissions() {
   if (!fs.existsSync(PERMISSIONS_FILE))
     throw new Error(
@@ -63,7 +60,6 @@ export function readPermissions() {
   return parsePermissions(fs.readFileSync(PERMISSIONS_FILE, "utf8"));
 }
 
-// `config permissions [init [ask|auto]]`: creates the example file or reports template rules.
 function permissionsCommand([action, base = "auto"]: string[]) {
   if (action === "init") {
     if (base !== "ask" && base !== "auto") throw new Error("Use: config permissions init [ask|auto]");
@@ -184,7 +180,7 @@ export function configCommand(args: string[]) {
     const mode = rest[0];
     if (mode !== "auto" && mode !== "ask" && mode !== "custom")
       throw new Error(L("mode must be ask, auto or custom.", "mod ask, auto ya da custom olmalı."));
-    if (mode === "custom") readPermissions(); // a missing or broken file is reported now, not on the next action
+    if (mode === "custom") readPermissions(); // why: Reject a broken permission template at setup time rather than at the user's next browser action.
     writeConfig({ ...config, mode });
     const [en, tr] = MODE_TEXT[mode];
     console.log(L(`✓ mode: ${mode} (${en})`, `✓ mod: ${mode} (${tr})`));
@@ -195,7 +191,6 @@ export function configCommand(args: string[]) {
     return;
   }
   if (cmd === "workspace") {
-    // Zen: tabs agents open go to this workspace; "current" means the user's current one
     const name = rest.join(" ").trim();
     if (!name) throw new Error(L("Use: config workspace <name>|current", "Kullanım: config workspace <ad>|current"));
     const { workspace: _, ...rest2 } = config;
@@ -209,7 +204,6 @@ export function configCommand(args: string[]) {
     return;
   }
   if (cmd === "container") {
-    // Agent tabs open in this container by default (their own cookies and logins); "off" uses the user's.
     const name = rest.join(" ").trim();
     if (!name) throw new Error(L("Use: config container <name>|off", "Kullanım: config container <ad>|off"));
     const { container: _, ...rest2 } = config;
@@ -223,7 +217,6 @@ export function configCommand(args: string[]) {
     return;
   }
   if (cmd === "site") {
-    // block/unblock edit the blocklist, allow/disallow the allowlist; mode picks the one that applies
     const [action = "list", ...values] = rest;
     const edits: Record<string, ["blocklist" | "allowlist", boolean]> = {
       block: ["blocklist", true],

@@ -1,11 +1,5 @@
-// OpenCode: its MCP processes get no conversation ID and no server URL, but OpenCode loads
-// plugins into its own process, and a plugin has the API client and sees each user message.
-// `hooks install` writes a one-line plugin that loads openCodePlugin from this package:
-//   - it listens on a socket named after OpenCode's PID; the zen MCP process (OpenCode's child)
-//     pushes what the user sends from the browser there, and the plugin sends it to the last
-//     active session as a new prompt;
-//   - before that (no session yet) it waits in the inbox, and the plugin adds it to the user's
-//     next message (chat.message), asking the bridge by OpenCode's PID.
+// why: The plugin runs in the process that knows the active session and can call OpenCode's API.
+// why: A push before the first user message waits for the plugin's chat.message hook.
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -15,7 +9,6 @@ import { call } from "./zen.ts";
 
 export const openCodeSocket = (pid: number) => path.join(RUNTIME_DIR, `${NAME}-opencode`, `${pid}.sock`);
 
-// The MCP process's push path: one JSON line with the text, the plugin answers "ok" or "no".
 export function pushToOpenCode(text: string, pid = process.ppid): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.createConnection(openCodeSocket(pid));
@@ -47,12 +40,12 @@ export async function openCodePlugin(
   { client }: { client: Client },
   browser: typeof call = call,
   pid = process.pid,
-  servers: net.Server[] = [], // tests close it
+  servers: net.Server[] = [], // why: Allow tests to close the receiver without exiting the OpenCode process.
 ) {
-  let last: ChatInput | undefined; // the session the user wrote to last, with its agent and model
+  let last: ChatInput | undefined;
   const file = openCodeSocket(pid);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  // sockets of OpenCode processes that were killed (exit handlers don't run on signals)
+  // why: Killed OpenCode processes can leave a socket behind because their exit handler did not run.
   for (const name of fs.readdirSync(path.dirname(file))) {
     const other = Number(name.replace(/\.sock$/, ""));
     if (other === pid || !Number.isInteger(other)) continue;
@@ -100,7 +93,7 @@ export async function openCodePlugin(
         const [reply] = await browser("inbox_take", { client: "opencode", pids: [pid] }, 2000);
         text = reply?.type === "text" ? reply.text : "";
       } catch {
-        return; // the browser isn't running: nothing can be waiting
+        return; // why: A stopped browser has no live inbox to check.
       }
       const part = output.parts.find((p) => p.type === "text");
       if (text && part) part.text = `${part.text ?? ""}\n\n${text}`;
@@ -108,7 +101,6 @@ export async function openCodePlugin(
   };
 }
 
-// The plugin file in OpenCode's global plugin folder.
 export function openCodePluginFile(env = process.env, home = os.homedir()) {
   return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode", "plugins", "zen-browser.js");
 }

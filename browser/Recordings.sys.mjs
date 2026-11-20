@@ -1,17 +1,6 @@
-// "Show me once": collects the steps the user shows in a tab. Each frame's actor
-// (actors/Recorder.sys.mjs) records the user's input while the tab's browserId is in the
-// shared recording list; ZenMcpParent passes the steps here through an observer topic.
-//
-// Steps come from content processes, so they are untrusted: only known fields are kept, strings
-// are cut to size and steps from tabs that aren't recorded are dropped.
-//
-// Every step gets a screenshot right after it arrives (captureStep below); the captures run
-// one after another and stop() waits for them. Steps on secret fields get none.
-//
-// env: { setShared(browserIds): publishes the recorded tabs to every content process,
-//        now(): ms,
-//        capture({ recording, index, rect, frameId }): → { image, crop } file names in
-//          recording.dir, or null }
+// why: Content-process messages are untrusted, so validate the sender and bound the fields.
+// why: Serialize screenshot capture and finish it before returning the recording.
+// why: Skip images for secret fields so recording cannot expose their values.
 
 export const RECORDING_KEY = "zen-mcp:recording";
 export const STEP_TOPIC = "zen-mcp-record-step";
@@ -22,17 +11,16 @@ const TARGET_FIELDS = ["role", "name", "label", "selector", "text", "href", "typ
 const text = (value, max) => (typeof value === "string" ? value.slice(0, max) : undefined);
 
 export class Recordings {
-  #active = new Map(); // browserId → recording
+  #active = new Map();
 
   constructor(env) {
     this.env = env;
   }
 
-  // onStep(recording, step) runs after each new or merged step (live counter on the island).
   start(browser, { onStep = () => {}, dir = null } = {}) {
     if (this.#active.has(browser.browserId)) throw new Error("This tab is already being recorded.");
     const recording = {
-      dir, // where the step images go; null: no images
+      dir,
       browserId: browser.browserId,
       startUrl: browser.currentURI?.spec ?? "",
       startedAt: this.env.now(),
@@ -46,8 +34,6 @@ export class Recordings {
     return recording;
   }
 
-  // Ends the recording and returns it once its screenshots are written (null if the tab
-  // wasn't recorded).
   async stop(browserId) {
     const recording = this.#active.get(browserId);
     if (!recording) return null;
@@ -66,14 +52,12 @@ export class Recordings {
     return this.#active.has(browserId);
   }
 
-  // A message from ZenMcpParent: { browserId, isTop, pageUrl, step }.
   accept(message) {
     const recording = this.#active.get(message?.browserId);
     if (!recording) return;
     const step = this.#clean(message);
     if (!step) return;
     const last = recording.steps.at(-1);
-    // Typing into the same field again: keep the final value only.
     if (step.action === "type" && last?.action === "type" && sameTarget(last, step)) {
       recording.steps[recording.steps.length - 1] = { ...step, at: last.at };
     } else if (recording.steps.length >= MAX_STEPS) {
@@ -94,7 +78,7 @@ export class Recordings {
     recording.captures = recording.captures
       .then(() => this.env.capture({ recording, index, rect, frameId }))
       .then((files) => {
-        // a merged type step replaced this one meanwhile: the newer capture names the files
+        // why: A merged step can replace a capture while it is pending; only the latest capture owns the filenames.
         if (files && recording.steps[index] === step) Object.assign(step, files);
       })
       .catch(() => {});
@@ -149,7 +133,6 @@ function sameTarget(a, b) {
   return a.target?.selector === b.target?.selector && a.url === b.url && a.frameUrl === b.frameUrl;
 }
 
-// A rect in an iframe → the top page's viewport: adds the frame offsets without scrolling.
 async function topRect(browserId, rect, frameId) {
   let frame = BrowsingContext.get(frameId);
   if (!rect || frame?.top?.browserId !== browserId) return null;
@@ -168,9 +151,6 @@ const MAX_WIDTH = 1280;
 const round = (n) => Math.round(n * 1000) / 1000;
 const PAD = 16;
 
-// The step's screenshot: the tab's viewport (scaled to at most 1280 px wide) with a ring around
-// the element, and a crop of the element with some margin. JPEGs in recording.dir; returns
-// their names. rect is in the step's frame (CSS px); without it there is no ring and no crop.
 export async function captureStep({ recording, index, rect, frameId, color }) {
   const browser = BrowsingContext.getCurrentTopByBrowserId(recording.browserId)?.embedderElement;
   if (!browser) return null;
@@ -179,7 +159,7 @@ export async function captureStep({ recording, index, rect, frameId, color }) {
   const wg = browser.browsingContext?.currentWindowGlobal;
   if (!wg) return null;
   const doc = browser.ownerDocument;
-  // without the "Recorded" flash and the agent's cursor or highlights
+  // why: Suppress transient input overlays so screenshots show the user's page.
   const frames = browser.browsingContext.getAllBrowsingContextsInSubtree();
   const overlays = (hidden) =>
     Promise.all(
@@ -210,7 +190,6 @@ export async function captureStep({ recording, index, rect, frameId, color }) {
     height: rect.height * s + 8,
   };
   if (box) {
-    // the same look as the highlight tool: agent color with a white inner and dark outer edge
     g.lineJoin = "round";
     const ring = (width, style) => {
       g.lineWidth = width;
@@ -226,7 +205,7 @@ export async function captureStep({ recording, index, rect, frameId, color }) {
   await IOUtils.makeDirectory(dir, { permissions: 0o700 });
   const name = String(index + 1).padStart(3, "0");
   const files = { image: `${name}.jpg` };
-  // where the element is in the image (fractions), so Play can zoom in on it
+  // why: Store the element position as fractions so playback can zoom across image sizes.
   if (box)
     files.focus = {
       x: round(box.x / canvas.width),

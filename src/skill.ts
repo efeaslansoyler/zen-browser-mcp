@@ -1,6 +1,3 @@
-// The agent skill (skills/zen-browser): when and how to use the browser tools. Copied into the
-// user skill folders of Claude Code (~/.claude/skills) and Codex (~/.agents/skills), only for
-// the clients that are installed, and only when the user runs `skill install`.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -29,7 +26,6 @@ const sameAsPackage = (dir: string) => {
   }
 };
 
-// "current", "outdated" or "missing" per installed client, for doctor.
 export function skillStatus(targets = skillTargets()) {
   return targets
     .filter((t) => t.present)

@@ -1,5 +1,4 @@
-// Run from your own terminal: node scripts/check-compat.ts --reload
-// Opens only disposable test tabs; never changes the user's permission configuration.
+// why: Open only test-owned tabs and avoid writing the user's permission config.
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type AgentIdentity, type Content } from "../src/zen.ts";
@@ -56,7 +55,7 @@ for (const name of ["claude-code", "codex-mcp-client", "Example Agent"]) {
       screenshot.some((c) => c.type === "image" && c.data.length > 100),
       "No screenshot",
     );
-    // Check the chrome UI via the existing local development command, not page JS.
+    // why: Page JavaScript cannot inspect privileged chrome, so use the existing development command.
     const presentation = parse(
       await call("chrome_eval", {
         code: `(() => {

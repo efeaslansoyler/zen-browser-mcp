@@ -1,13 +1,5 @@
-// Agent tabs: finding tabs across windows and Zen workspaces, creating agent tabs, and the
-// mark that gives a session access to a tab (several sessions can share one, TabAccess.sys.mjs).
-//
-// The mark draws a container-like line on the tab, but it is not a container: a container
-// would separate cookies and hide the user's logins. The visual mark is saved in SessionStore;
-// access comes only from the access record in this browser process.
 export const MARK = "zen-mcp";
 
-// Zen draws the container line as a 3 px strip on the tab's edge in the vertical sidebar
-// (zen-tabs/vertical-tabs.css). Same as Firefox's [usercontextid] rule, in the agent's color.
 export const MARK_CSS = `
   .tabbrowser-tab[${MARK}] > .tab-stack > .tab-background > .tab-context-line {
     /* Firefox hides this element on tabs without a container */
@@ -30,7 +22,6 @@ export function tabs(ctx) {
     return [...Services.wm.getEnumerator("navigator:browser")].filter((w) => !w.closed && w.gBrowser);
   }
 
-  // In Zen, gBrowser.tabs holds only the open workspace's tabs; count the other spaces too.
   function windowTabs(win) {
     return [...(win.gZenWorkspaces?.workspaceEnabled ? win.gZenWorkspaces.allStoredTabs : win.gBrowser.tabs)];
   }
@@ -115,8 +106,7 @@ export function tabs(ctx) {
     return tabs;
   }
 
-  // Only agent tabs (opened by an agent or given by the user) are reachable; a user tab is
-  // never touched even if its ID is known. The tab joins the call's tabs.
+  // why: A known tab ID must never substitute for authorization.
   function browserFor(call, tabId) {
     const tab = ctx.findTab(tabId);
     if (tab) restoreMark(tab);
@@ -135,7 +125,6 @@ export function tabs(ctx) {
     return tab.linkedBrowser;
   }
 
-  // The user's own tabs: not shared with an agent, and not Zen's hidden empty-tab placeholder.
   function userTabs() {
     return ctx
       .browserWindows()
@@ -146,7 +135,6 @@ export function tabs(ctx) {
       );
   }
 
-  // The user's tabs on a host, for an agent that just opened that site in a tab of its own.
   function userTabsOn(host) {
     if (!host || !ctx.siteAllowed(host)) return [];
     return userTabs()
@@ -155,7 +143,6 @@ export function tabs(ctx) {
       .map((tab) => ({ tabId: tab.linkedBrowser.browserId, title: tab.linkedBrowser.contentTitle || tab.label }));
   }
 
-  // viewer: the calling session; a tab only it works in needs no members list.
   function describeTab(tab, viewer) {
     const b = tab.linkedBrowser;
     if (!ctx.siteAllowed(ctx.hostOf(b))) return { tabId: b.browserId, blocked: true };
@@ -175,9 +162,7 @@ export function tabs(ctx) {
     return info;
   }
 
-  // Opened in the background of the user's window, like Claude in Chrome: input comes from the
-  // page process, so the tab doesn't need to be selected and the user's view doesn't change.
-  // clean: in the agent container instead of with the user's cookies (default from the config).
+  // why: Open in the background to preserve the user's view; page-process input does not need selection.
   async function createTab(session, { clean } = {}) {
     const win = Services.wm.getMostRecentWindow("navigator:browser");
     if (!win) throw new Error("No browser window is open.");
@@ -189,9 +174,7 @@ export function tabs(ctx) {
     return tab;
   }
 
-  // Containers keep cookies, logins and site data apart within the same profile and window.
-  // Agents use one (configured by name, "Agent" by default, created on first use) so a clean
-  // tab doesn't browse with the user's accounts. History and extensions stay shared.
+  // why: A clean tab needs a separate cookie jar without a separate window or profile.
   function containers() {
     for (const url of [
       "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
@@ -213,8 +196,6 @@ export function tabs(ctx) {
     return (found ?? service.create(name, "fingerprint", "orange")).userContextId;
   }
 
-  // Zen: if a workspace is configured, agent tabs move there (it is created without switching
-  // the user to it). Input, reading and screenshots work in a hidden space too.
   async function placeInWorkspace(win, tab) {
     const name = ctx.readConfig().workspace;
     const spaces = win.gZenWorkspaces;
@@ -236,8 +217,7 @@ export function tabs(ctx) {
     } catch {}
   }
 
-  // Gives session access to the tab; sessions already in it keep theirs. origin: "true" when an
-  // agent opened the tab, "user" when the user gave it from the tab menu (kept once set).
+  // why: Preserve the original source of access so a later close knows whether the tab belongs to the user.
   function mark(tab, origin, session) {
     const target = ctx.sessions.get(session);
     if (!target || target.disconnected)
@@ -252,8 +232,7 @@ export function tabs(ctx) {
     } catch {}
   }
 
-  // A session leaves a shared tab: what it held there goes (held input, its browser settings,
-  // its extension panels, its running calls). The last one to leave gives the tab back.
+  // why: Revoke the departing member's state while preserving other members' access.
   function leaveTab(tab, session, { cancel = true } = {}) {
     const browser = tab.linkedBrowser;
     const id = browser.browserId;
@@ -273,8 +252,6 @@ export function tabs(ctx) {
           call.cancel(new Error(`This session left tab ${id}; this operation was cancelled.`));
   }
 
-  // When the user takes the tab back, drop held input, settings, panels, read and network
-  // records and pending questions; cancel also stops the running calls.
   function releaseTabState(browser, { cancel = true } = {}) {
     const id = browser.browserId;
     ctx.releaseInputs(id);
@@ -292,7 +269,6 @@ export function tabs(ctx) {
     ctx.tabRequests.get(browser)?.("cancelled");
   }
 
-  // The user took the tab back: the mark, tracking and records go; running work is cancelled.
   function unmark(tab, { cancel = true } = {}) {
     const browser = tab.linkedBrowser;
     const id = browser.browserId;
@@ -322,7 +298,7 @@ export function tabs(ctx) {
     if (origin !== "true" && origin !== "user") return;
     const id = tab.linkedBrowser.browserId;
     const live = ctx.access.members(id).filter((session) => ctx.sessions.has(session));
-    // Persisted visual marks are not authorization after a browser restart.
+    // why: SessionStore marks can outlive live membership (ADR 0003).
     if (!live.length) {
       unmark(tab);
       return;
@@ -339,8 +315,6 @@ export function tabs(ctx) {
     }
   }
 
-  // Zen restores the session with its own manager after windows open; catch each tab with the
-  // SSTabRestoring event fired while its state is applied.
   const onTabRestoring = (event) => {
     try {
       restoreMark(event.target);

@@ -1,7 +1,4 @@
-// Builds the bridge's shared ctx the way browser/main.js does, from the real modules, with
-// neutral defaults for the browser-specific parts. Tests pass fakes for whatever they don't
-// exercise; a fake replaces the real module function because modules call each other through
-// ctx. `tools` fakes are added to (and override) the real tab and batch tools.
+// why: Shared context lets tests replace a Gecko-specific helper everywhere without copying tool logic.
 import { agentTheme, applyTheme } from "../../browser/Agent.sys.mjs";
 import { Cancellation } from "../../browser/Cancellation.sys.mjs";
 import { Locks } from "../../browser/Locks.sys.mjs";
@@ -98,8 +95,6 @@ export function bridgeContext(fakes = {}) {
   return ctx;
 }
 
-// A running tool call the way ToolRunner makes one, registered in ctx.calls. tabs: tab IDs it
-// already works in (so helpers that get a browser find it).
 export function testCall(ctx, { session = "A", agent = { id: "codex" }, tabs = [] } = {}) {
   const call = Object.assign(new Cancellation(), {
     session,

@@ -1,12 +1,10 @@
-// Mouse, keyboard and screenshots. Events are produced by the actor in the page's own process
-// (ZenMcpChild #input), so the page sees them as trusted input and the tab needn't be selected.
+// why: Page actors dispatch trusted events in the right process without selecting the tab.
 
-// The API shrinks large images; we shrink them ourselves and remember the ratio so the point
-// the model sees is the point that gets clicked (toPagePoint converts back).
+// why: Scale images before the client does to retain the mapping from image pixels to page coordinates.
 export const MAX_EDGE = 1568;
 const MAX_PIXELS = 1150000;
 
-// xdotool names (as in Claude in Chrome) → KeyboardEvent.key
+// why: Accept xdotool names used by existing Claude in Chrome clients.
 const KEYS = {
   return: "KEY_Enter",
   enter: "KEY_Enter",
@@ -61,7 +59,6 @@ export function parseModifiers(text) {
 }
 
 export function pageInput(ctx) {
-  // Keys and buttons held down by mouse_down/key_down, per tab, until released or timed out.
   const held = ctx.heldInputFrames;
 
   function releaseInputs(browserOrId) {
@@ -127,9 +124,7 @@ export function pageInput(ctx) {
     );
   }
 
-  // A mouse event is sent from the actor of the innermost frame under the point, in that
-  // frame's coordinates: an event sent from the top page doesn't reach an out-of-process
-  // (cross-site) iframe. data.to (dragging) is converted to the same frame.
+  // why: Fission input must be dispatched from the target frame, in its own coordinates.
   async function input(browser, data) {
     const inner = await ctx.deepest(browser, data.x, data.y);
     const frame = ctx.heldFrame(browser);
@@ -163,7 +158,6 @@ export function pageInput(ctx) {
   }
 
   async function scroll(browser, [x, y], direction, amount = 3) {
-    // 100 CSS px per notch; the multiplier is what the browser applies to wheel deltas (200 in Zen)
     const multiplier = (axis) =>
       Services.prefs.getIntPref(`mousewheel.default.delta_multiplier_${axis}`, 100) / 100 || 1;
     const px = amount * 100;
@@ -179,7 +173,6 @@ export function pageInput(ctx) {
     });
   }
 
-  // "ctrl+a", "Return", "Tab Tab Return"
   async function pressKeys(browser, text) {
     const keys = text
       .trim()
@@ -198,7 +191,6 @@ export function pageInput(ctx) {
     return "done";
   }
 
-  // Keys go to the focused frame.
   async function typeInFocus(browser, data) {
     const timeout =
       data.kind === "text" && data.typing === "human"
@@ -207,13 +199,11 @@ export function pageInput(ctx) {
     return ctx.query(browser, "input", data, timeout, ctx.heldFrame(browser) || (await ctx.focusedFrame(browser)));
   }
 
-  // scale (0.1–1) shrinks the image further; tokens drop with ~scale². Coordinates are still
-  // pixels of the returned image.
   async function screenshot(browser, scale = 1, pixels = false, fullPage = false) {
     ctx.assertSiteAccess(browser);
     const wg = browser.browsingContext?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
-    // Keep the virtual cursor and click ripple out of the image the agent sees.
+    // why: Hide input overlays during capture so the agent gets an unobstructed page image.
     const overlays = (hidden) => ctx.query(browser, "overlays", { hidden }, 2000).catch(() => {});
     let bounds,
       nativeScale = 1,

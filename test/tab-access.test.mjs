@@ -25,7 +25,7 @@ test("a session that leaves and comes back can't run requests queued before it l
   const access = new TabAccess();
   access.join(1, "A");
   const ticket = access.ticket([1, 1], "A");
-  access.join(1, "B"); // someone else joining changes nothing for A
+  access.join(1, "B");
   access.checkTicket(ticket, "A");
   access.leave(1, "A");
   access.join(1, "A");
@@ -357,7 +357,7 @@ test("a session ending leaves its tabs; the others keep working and the last one
   assert.deepEqual(h.context.access.members(shared), ["B"]);
   assert.equal(h.context.access.shared(alone), false);
   assert(h.tabs.has(alone));
-  for (const call of h.context.calls) call.check(); // B's work goes on
+  for (const call of h.context.calls) call.check();
   h.context.endOwnerSession("B");
   assert.match((await pending).error, /disconnected/);
   assert.equal(h.context.access.shared(shared), false);
@@ -559,7 +559,7 @@ test("session menu pins explicit fixture tabs even when native context points el
     1,
   );
   assert.equal(choices.find((node) => node.getAttribute("data-zen-mode") === "auto").getAttribute("checked"), "true");
-  context = [h.tabs.get(other)]; // Native popup setup may change contextTab.
+  context = [h.tabs.get(other)]; // why: Pass the popup's fixture tab explicitly because native menu setup may change contextTab.
   h.context.prepareTabMenu(win, [h.tabs.get(tabId)]);
   assert.throws(() => h.context.prepareTabMenu(win, [h.tabs.get(other)]), /same window/);
   const a = menu.find((node) => node.getAttribute("data-zen-session") === "A");
@@ -568,7 +568,7 @@ test("session menu pins explicit fixture tabs even when native context points el
   assert.notEqual(a.getAttribute("label"), b.getAttribute("label"));
   const release = menu.find((node) => node.id === "zen-mcp-context-give-release");
   assert.equal(release.hidden, true);
-  h.context.lastUse.set("A", Date.now()); // the holder isn't quiet
+  h.context.lastUse.set("A", Date.now());
   h.context.access.hold(tabId, "A", { reason: "Paying" });
   h.context.prepareTabMenu(win, [h.tabs.get(tabId)]);
   assert.equal(release.hidden, false);
@@ -764,20 +764,20 @@ test("tabs_context_mcp lists recipes for the sites of open tabs", async () => {
 
 test("tab activity: what the others did since a session's last call, and whether its read is stale", () => {
   const activity = new TabActivity();
-  activity.record(1, "A", false, 1000); // A reads
+  activity.record(1, "A", false, 1000);
   activity.seen(1, "A", true);
-  activity.record(1, "B", false, 1000); // B only looks, in the same millisecond: A's read is still good
+  activity.record(1, "B", false, 1000); // why: Reuse the same millisecond to ensure ordering relies on sequence numbers rather than time alone.
   assert.deepEqual(activity.since(1, "A"), { others: new Map([["B", { actions: 1, last: 1000 }]]), changed: false });
-  activity.record(1, "B", true, 3000); // B clicks
+  activity.record(1, "B", true, 3000);
   const report = activity.since(1, "A");
   assert.deepEqual(report.others.get("B"), { actions: 2, last: 3000 });
   assert.equal(report.changed, true);
-  activity.seen(1, "A", false); // A acts without reading again
+  activity.seen(1, "A", false);
   assert.equal(activity.since(1, "A").others.size, 0);
   assert.equal(activity.since(1, "A").changed, true, "still stale until A reads");
   activity.seen(1, "A", true);
   assert.equal(activity.since(1, "A").changed, false);
-  // a session that never read has no old refs to warn about
+  // why: A session that has never read the page has no old references to invalidate.
   assert.equal(activity.since(1, "C").changed, false);
   assert.equal(activity.since(1, "C").others.size, 2);
   activity.forget(1);
@@ -805,7 +805,7 @@ test("a call in a shared tab says what the others did meanwhile and when the pag
   assert.match(report.meanwhile[0].lastAction, /^\d+ s ago$/);
   assert.match(report.pageChanged, new RegExp(`tab ${tabId} since you last read`));
   assert(!JSON.stringify(report).includes('"x"'), "values never go to other sessions");
-  // nothing new since: no meanwhile, but the warning stays until A reads the page again
+  // why: A change warning must persist after the one-time activity notice is consumed.
   const [again] = extra(await h.request("A", "form_input", { tabId, ref: "ref_3", value: "z" }));
   assert.equal(again.meanwhile, undefined);
   assert.match(again.pageChanged, /read the page again/);
@@ -813,7 +813,6 @@ test("a call in a shared tab says what the others did meanwhile and when the pag
   const [afterRead] = extra(await h.request("A", "get_page_text", { tabId }));
   assert.equal(afterRead.pageChanged, undefined);
   assert.equal(afterRead.meanwhile[0].actions, 1);
-  // B was last here before A's calls: it hears about them once
   const [forB] = extra(await h.request("B", "get_page_text", { tabId }));
   assert.equal(forB.meanwhile[0].agent, h.context.sessions.get("A").name);
 });
@@ -860,7 +859,6 @@ test("a hold refuses the other members at once, keeps working for the holder and
   );
   assert.equal(held.hold.by, "you");
   assert.equal(held.hold.endsIn, "5 min");
-  // B is refused without waiting, even while A's call runs in the tab
   const pending = h.request("A", "wait", { tabId });
   await h.first;
   const refused = await h.request("B", "write", { tabId });
@@ -882,7 +880,7 @@ test("a hold refuses the other members at once, keeps working for the holder and
 test("noWorkaround keeps the others off the held tab's site in their own tabs", async () => {
   const h = harness();
   const tabId = h.own("A");
-  const theirs = h.own("B"); // also on https://fixture.test/
+  const theirs = h.own("B");
   h.tabs.get(tabId).linkedBrowser.currentURI = { spec: "https://fixture.test/cart" };
   parsed(await h.request("A", "tab_work", { action: "hold", tabId, summary: "One order only", noWorkaround: true }));
   const refused = await h.request("B", "write", { tabId: theirs });
@@ -935,7 +933,7 @@ test("watching a hold answers at once while the holder works, and reports when i
   parsed(await h.request("A", "tab_work", { action: "hold", tabId, summary: "Paying" }));
   const pending = h.request("A", "wait", { tabId });
   await h.first;
-  const refused = await h.request("B", "write", { tabId: h.own("B") }); // own tab, same site, no noWorkaround
+  const refused = await h.request("B", "write", { tabId: h.own("B") });
   assert.equal(refused.ok, true);
   const started = parsed(await h.request("B", "watch", { tabId, hold: true }));
   assert.equal(started.hold.reason, "Paying");

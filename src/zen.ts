@@ -1,4 +1,3 @@
-// Talks to the bridge in the browser: one request line and one reply line per connection.
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { PACKAGE } from "./paths.ts";
@@ -6,19 +5,16 @@ import { browserResolver, instanceLabel, type Selection } from "./instances.ts";
 
 export type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
-// this server process's identity: browser events (picks) go to the session that used the browser last
 export const session = randomUUID();
 
 export type BrowserContent = Content[] & { isError?: boolean };
 
 type Reply = { ok: true; content: Content[]; isError?: boolean } | { ok: false; error: string };
 
-// the other side does the same: JSON stays pure ASCII, so encodings never matter
 const ascii = (s: string) => s.replace(/[\u007f-￿]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 
 export type AgentIdentity = { id: string; name: string };
 
-// as: the session of this call (such as a Codex conversation); defaults to this MCP process's session
 export async function call(
   tool: string,
   args: object = {},
@@ -33,8 +29,7 @@ export async function call(
   if (change) throw new Error(change);
   const content = await request(socketPath, tool, args, timeout, agent, as);
   if (tool === "inbox_take" && content[0]?.type === "text" && !content[0].text) {
-    // Prompt hooks run outside the MCP process. Its existing session can be sticky to a
-    // different browser. The bridge only releases picks for the exact client ID or PID.
+    // why: A standalone hook may select another browser, but the bridge releases items only for the exact client identity.
     const other = (await browserResolver.list()).filter((entry) => entry.socket !== socketPath);
     const replies = await Promise.allSettled(
       other.map((entry) => request(entry.socket, tool, args, timeout, agent, as)),
@@ -104,8 +99,6 @@ function request(
   });
 }
 
-// Keeps a connection to the browser and hands pushed events (one JSON per line) to onEvent.
-// If the browser is closed or the bridge reloads, it retries every few seconds.
 export type SubscriptionInfo = {
   cwd: string;
   session?: string;
@@ -115,13 +108,11 @@ export type SubscriptionInfo = {
   threadId?: string;
   ack?: boolean;
   toolsOnly?: boolean;
-  // how this process delivers pushed events now ("channel"), or null: they wait in the inbox
+  // why: A session lacking a push path must remain reachable through the inbox.
   push?: string | null;
-  // the client's own conversation ID (Claude Code: CLAUDE_CODE_SESSION_ID), for prompt hooks
+  // why: Prompt hooks know the native conversation ID or, failing that, their client ancestor PID.
   clientSession?: string;
-  // the client's process: prompt hooks without a conversation ID find it among their ancestors
   clientPid?: number;
-  // the client has the zen prompt hook installed (hooks install)
   hook?: boolean;
 };
 
@@ -193,7 +184,7 @@ export function subscribe(onEvent: (event: any) => void | Promise<void>, info: S
   };
 }
 
-// A dedicated browser lease is independent of conversation identity and pick subscriptions.
+// why: Dedicated profiles need a lease even for clients with no conversation or pick delivery.
 export function leaseProfile(target: Selection) {
   const instance = target.instance!;
   let socket: net.Socket;

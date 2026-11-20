@@ -70,7 +70,6 @@ test("a frame that disappears doesn't fail clearing, but does fail drawing", asy
   await assert.rejects(ctx.tools.highlight({ tabId: 1, items: [{ ref: "ref_2_f2" }] }), /not loaded/);
 });
 
-// A minimal DOM for the page actor: elements with boxes, and shadow roots that keep children.
 class Node {
   children = [];
   style = {

@@ -1,10 +1,4 @@
-// Tab access between sessions, live, with real stdio MCP clients of the same agent type:
-// separate tab lists, joining another agent's tab, turns in a shared tab and parallel work in
-// different tabs, what the other member did meanwhile, holds, the share and take-back menus,
-// leaving, session shutdown, and the ask-mode join prompt. Only disposable fixture tabs are used.
-// Run: node scripts/check-tab-access.ts
-// Requires your existing auto mode; it switches to ask mode for the last check and restores
-// the original config file (a backup path is printed).
+// why: Preserve the original configuration because the last check temporarily exercises ask mode.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -38,15 +32,14 @@ async function tool(client: Client, name: string, args: Record<string, unknown> 
   assert.equal(Boolean(result.isError), error, text(result));
   return result;
 }
-// the tool's own answer (what other sessions did meanwhile may follow it)
+// why: Separate the tool's reply from appended shared-tab activity.
 const json = async (client: Client, name: string, args: Record<string, unknown> = {}) =>
   JSON.parse(((await tool(client, name, args)).content as { text: string }[])[0].text);
 async function connect() {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
-  // Claude Code identities: their MCP process sessions are listed in the tab menu (a Codex MCP
-  // process session is not; Codex tabs belong to conversations).
+  // why: Claude process sessions appear in menus; Codex requires a conversation identity.
   const client = new Client({ name: "claude-code", version: "tab-access-test" });
   clients.push(client);
   await client.connect(
@@ -59,7 +52,6 @@ async function connect() {
   );
   return client;
 }
-// The real tab menu: share the fixture tab with a session, or take it back.
 async function menu(tabId: number, session: string | null) {
   await chrome(`(() => {
     const tab=h.findTab(${tabId}), win=tab.ownerDocument.defaultView;
@@ -112,7 +104,7 @@ try {
     } catch {}
   }
   assert(ready, "Updated bridge did not become ready; check $XDG_RUNTIME_DIR/zen-mcp.log.");
-  // a real origin (data: pages have none), for noWorkaround
+  // why: An origin-bearing URL is necessary to exercise an origin-scoped hold.
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const fixture = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
   const a = await connect(),
@@ -136,7 +128,6 @@ try {
   const type = async (client: Client, id: number, value: string) =>
     tool(client, "form_input", { tabId: id, ref: await field(client, id), value });
 
-  // 1. separate lists; non-members are refused
   for (const [client, own, foreign] of [
     [a, tabId, other],
     [b, other, tabId],
@@ -158,7 +149,6 @@ try {
     "✓ Two real Claude Code MCP clients have separate tab lists; foreign reads, writes and closes are refused",
   );
 
-  // 2. joining in auto mode, notes, and turns in a shared tab
   const joined = await json(b, "request_tab", { tabId, reason: `${token}: check the field` });
   assert.match(joined.note, /joined/);
   assert.deepEqual(await members(tabId), [sessionA, sessionB]);
@@ -166,7 +156,7 @@ try {
   const listB = await json(b, "tabs_context_mcp");
   const shared = listB.tabs.find((tab: any) => tab.tabId === tabId);
   assert.equal(shared.sharedWith[0].task.summary, `${token}: filling the field`);
-  await tool(a, "get_page_text", { tabId }); // A's view of the page, before B acts
+  await tool(a, "get_page_text", { tabId });
   const started = Date.now();
   const waiting = settle(tool(a, "computer", { tabId, action: "wait", duration: 3 }));
   await sleep(300);
@@ -181,10 +171,9 @@ try {
     `✓ Joining is immediate in auto mode; the other tab answered in ${parallel} ms while the shared tab waited its turn (${turn} ms)`,
   );
 
-  // 3. what B did reaches A with A's next call (no values), and A is told to read again
   const afterB = text(await tool(a, "computer", { tabId, action: "wait", duration: 0.1 }));
   const report = JSON.parse(afterB.split("\n").find((line) => line.includes('"meanwhile"'))!);
-  assert.equal(report.meanwhile[0].actions, 2, afterB); // find + form_input
+  assert.equal(report.meanwhile[0].actions, 2, afterB);
   assert.match(report.pageChanged, /read the page again/);
   assert(!afterB.includes("written by B"), "B's typed value reached A");
   const reread = text(await tool(a, "read_page", { tabId, filter: "interactive" }));
@@ -193,9 +182,7 @@ try {
     "✓ The other member's actions come with the next call (count and time, no values), with a read-again warning",
   );
 
-  // 4. a hold: the other member is refused at once, even while the holder works; with
-  // noWorkaround also on the same site in its own tab and when navigating there; the user's
-  // "Remove hold" menu item ends it
+  // why: Hold refusals must be immediate even while the holder occupies the tab lock.
   const held = await json(a, "tab_work", {
     action: "hold",
     tabId,
@@ -209,7 +196,7 @@ try {
   const refusedAt = Date.now();
   assert.match(text(await tool(b, "get_page_text", { tabId }, true)), /is held by .*paying, don't touch the cart/);
   assert(Date.now() - refusedAt < 1500, "A held tab made the other member wait");
-  // the refused member waits in the background: the watch answers while A still works
+  // why: Check that the watch can answer before the holder's running call finishes.
   const watchAt = Date.now();
   const watching = await json(b, "watch", { tabId, hold: true });
   assert(Date.now() - watchAt < 1500, "Watching a hold waited for the busy tab");
@@ -239,7 +226,6 @@ try {
     "✓ A hold refuses the other member at once, also on the same site in its own tab (noWorkaround); a hold watch answers at once and reports when the menu's Remove hold ends it",
   );
 
-  // 5. leaving: closing a shared tab only leaves it
   const left = text(await tool(a, "tabs_close_mcp", { tabId }));
   assert.match(left, /still work in tab/);
   assert(await chrome(`!!h.findTab(${tabId})`), "Leaving closed a shared tab");
@@ -247,7 +233,6 @@ try {
   await tool(a, "get_page_text", { tabId }, true);
   console.log("✓ Closing a shared tab only leaves it; the other session keeps it");
 
-  // 6. the share menu adds a session; take-back cancels every member's work and leaves the tab open
   await menu(tabId, sessionA);
   assert.deepEqual(await members(tabId), [sessionB, sessionA]);
   const active = settle(tool(b, "computer", { tabId, action: "wait", duration: 30 }));
@@ -260,9 +245,8 @@ try {
   assert(await chrome(`!!h.findTab(${tabId})`), "Take-back closed the tab");
   console.log("✓ The share menu adds a session; take-back cancels active work of every member and leaves the tab open");
 
-  // 7. ask mode: joining asks; Deny keeps the session out, Allow lets it in
   await menu(other, sessionA);
-  await tool(a, "tabs_close_mcp", { tabId: other }); // A leaves; B keeps working in it
+  await tool(a, "tabs_close_mcp", { tabId: other });
   const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-tab-access-config-"));
   if (original) fs.writeFileSync(path.join(backupDir, "config.json"), original, { mode: 0o600 });
   console.log(`Temporarily testing ask mode. Original config backup: ${backupDir}`);
@@ -279,7 +263,6 @@ try {
   }
   console.log("✓ Ask mode: joining an agent tab asks; Deny keeps the session out, Allow lets it in");
 
-  // 8. a session that shuts down leaves its tabs; the last one gives the tab back
   await b.close();
   let gone = false;
   for (let i = 0; i < 100; i++) {
@@ -304,7 +287,7 @@ try {
   process.exitCode = 1;
 } finally {
   server.close();
-  // Closing only the fixture clients cancels any fixture operation before cleanup.
+  // why: Disconnect only fixture sessions so cleanup cancels their work without touching other sessions.
   await Promise.allSettled(clients.map((client) => client.close()));
   await Promise.allSettled(running);
   for (const tabId of tabs) {

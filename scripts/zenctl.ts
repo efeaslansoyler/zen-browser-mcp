@@ -1,15 +1,9 @@
-// For development: calls the bridge directly, without MCP.
-//   node scripts/zenctl.ts reload
-//   node scripts/zenctl.ts eval 'gBrowser.tabs.length'      (in the browser, with helpers on h)
-//   node scripts/zenctl.ts <tool> '{"tabId": 12}'           (images summarized on stdout)
-//   node scripts/zenctl.ts --session dev <tool> '{…}'      (calls with the same name share tabs)
 import { writeFileSync } from "node:fs";
 import { callTimeout } from "../src/tools.ts";
 import { call } from "../src/zen.ts";
 import { LOG_FILE } from "../src/paths.ts";
 import { reloadBridge } from "./support/bridge.ts";
 
-// each call is its own session; with --session, consecutive calls use the same tabs
 const argv = process.argv.slice(2);
 const named = argv[0] === "--session" ? argv.splice(0, 2)[1] : undefined;
 const session = named ? `zenctl:${named}` : undefined;
@@ -22,7 +16,7 @@ if (!cmd) {
 type Ping = { bridge?: number; startError?: string };
 const ping = async (): Promise<Ping> => JSON.parse(((await call("ping", {}, 1000))[0] as { text: string }).text);
 
-// the reload reply comes from the old version; confirm with ping that the new one started
+// why: The old bridge sends the reload reply; ping the new bridge to verify it actually started.
 async function reload() {
   const before = await ping();
   await reloadBridge();
@@ -35,7 +29,7 @@ async function reload() {
       continue;
     }
     if (now.bridge === before.bridge) {
-      // if the old version came back, the error was logged; otherwise the reload hasn't run yet
+      // why: Poll until generation changes or the old bridge reports a failed reload.
       if (now.startError && now.startError !== before.startError) break;
       continue;
     }
@@ -55,7 +49,7 @@ try {
     process.exit(0);
   }
   const args = cmd === "eval" ? {} : arg ? JSON.parse(arg) : {};
-  // the tool's own timeout, as the MCP server uses it (show_me waits for minutes)
+  // why: Use the real tool timeout because interactions such as recording may wait for minutes.
   const content =
     cmd === "eval"
       ? await call("chrome_eval", { code: arg })

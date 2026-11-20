@@ -5,7 +5,7 @@ import vm from "node:vm";
 import { inputTools } from "../browser/InputTools.sys.mjs";
 import { bridgeContext } from "./support/bridge.mjs";
 
-// Execute the real actor with only the DOM/platform boundary substituted.
+// why: Stub the platform boundary while exercising the real actor.
 function harness() {
   const events = [],
     nodes = new Map();

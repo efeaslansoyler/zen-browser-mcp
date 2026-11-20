@@ -1,14 +1,4 @@
-// Reading a frame for agents: roles and accessible names close to what assistive technology
-// reports, the tree for read_page, keyword search for find, wait_for/watch checks and short
-// element descriptions for prompts and the log. Elements are seen through Xrays: the page's
-// own property overrides are invisible, native DOM behavior is what counts.
-//
-// Elements get "ref_N" IDs from the actor (in a subframe "ref_N_f<browsing context id>", which
-// the parent uses to route requests to the right frame). An iframe is replaced by a
-// "{{frame:<id>}}" line that the parent fills with that frame's tree.
-//
-// Other actor helpers get these functions from the actor, never by importing this module:
-// a static import would skip the ?v= query that makes a bridge reload load new code.
+// why: Xrays hide page property overrides, so reads follow the native DOM.
 
 export const MAX_NAME = 100;
 
@@ -77,8 +67,7 @@ export const TEXT_CONTAINERS = new Set(["paragraph", "listitem", "cell", "label"
 export const CONTROL_SELECTOR =
   "a[href], button, input, select, textarea, summary, [role], [contenteditable], [tabindex]";
 
-// Roles named by their content. The text of structural elements (list items, cells,
-// paragraphs) goes on the lines below instead, or it would repeat the name of a link inside.
+// why: Avoid repeating the accessible name of a link or control inside a structural element.
 export const NAME_FROM_CONTENT = new Set([
   "button",
   "link",
@@ -93,8 +82,7 @@ export const NAME_FROM_CONTENT = new Set([
   "radio",
 ]);
 
-// Password, card and one-time-code fields: recordings never read their values, and typing into
-// them is the secret_field permission.
+// why: The same secret-field detection protects recordings and permission checks.
 const SECRET_AUTOCOMPLETE = /\b(cc-[a-z-]+|one-time-code|current-password|new-password)\b/;
 export function isSecretField(el) {
   if (el?.localName !== "input") return false;
@@ -102,15 +90,12 @@ export function isSecretField(el) {
   return SECRET_AUTOCOMPLETE.test(el.getAttribute("autocomplete") ?? "");
 }
 
-// A button that submits its form when clicked or pressed with Space (a <button> in a form
-// submits unless its type says otherwise).
 export function submitsForm(el) {
   const control = el?.closest?.("button, input");
   if (!control?.form) return false;
   return control.localName === "button" ? control.type === "submit" : ["submit", "image"].includes(control.type);
 }
 
-// The focused element, inside open shadow roots too.
 function deepActiveElement(doc) {
   let el = doc.activeElement;
   while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
@@ -120,7 +105,6 @@ function deepActiveElement(doc) {
 export const clean = (s) => (s ?? "").replace(/\s+/g, " ").trim();
 export const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 export const normalize = (s) => clean(s).toLocaleLowerCase("tr");
-// Everything but letters and digits separates words: "package.json" → ["package", "json"]
 export const tokens = (s) =>
   normalize(s)
     .split(/[^\p{L}\p{N}]+/u)
@@ -144,18 +128,15 @@ export function roleOf(el) {
     case "INPUT":
       return INPUT_ROLES[el.type] || "textbox";
     case "IMG":
-      // alt="" marks a decorative image
       return el.getAttribute("alt") === "" ? "" : "img";
   }
   if (el.isContentEditable && !el.parentElement?.isContentEditable) return "textbox";
   if (LANDMARKS[tag]) {
-    // section and form are landmarks only when named
     if ((tag === "SECTION" || tag === "FORM") && !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby"))
       return "";
     return LANDMARKS[tag];
   }
   if (STRUCTURE[tag]) return STRUCTURE[tag];
-  // Clickable non-semantic elements (a div with onclick can't be detected; tabindex is a hint)
   if (el.hasAttribute("tabindex") && el.tabIndex >= 0) return "focusable";
   return "";
 }
@@ -185,10 +166,8 @@ export function accessibleName(el, doc) {
   }
   const role = roleOf(el);
   if (NAME_FROM_CONTENT.has(role)) {
-    // innerText skips invisible parts (e.g. hidden shortcut hints) and separates blocks
     const text = clean(el.innerText ?? el.textContent);
     if (text) return truncate(text, MAX_NAME);
-    // Icon-only buttons: the inner image's alt or the svg title
     const inner = el.querySelector("img[alt], svg title, [aria-label]");
     const innerName = inner?.getAttribute("alt") || inner?.getAttribute("aria-label") || inner?.textContent;
     if (innerName && clean(innerName)) return truncate(clean(innerName), MAX_NAME);
@@ -198,7 +177,6 @@ export function accessibleName(el, doc) {
   return "";
 }
 
-// "button#cta.btn.primary"
 export function elementLabel(el) {
   let s = el.localName;
   if (el.id) s += "#" + el.id;
@@ -210,7 +188,7 @@ export function elementLabel(el) {
 export function isVisible(el) {
   if (el.getAttribute?.("aria-hidden") === "true" || el.hidden) return false;
   if (el.tagName?.toUpperCase() === "INPUT" && el.type === "hidden") return false;
-  // checkVisibility covers display:none, visibility, content-visibility and ancestors
+  // why: Visibility must include ancestor and content-visibility checks, beyond the element's own display value.
   if (el.checkVisibility && !el.checkVisibility({ visibilityProperty: true })) return false;
   return true;
 }
@@ -225,7 +203,6 @@ export function fullyInViewport(el, win) {
   return r.top >= 0 && r.left >= 0 && r.bottom <= win.innerHeight && r.right <= win.innerWidth;
 }
 
-// The browsing context ID of the frame inside an iframe/frame element (null if not loaded).
 export function frameIdOf(el) {
   const tag = el?.localName;
   if (tag !== "iframe" && tag !== "frame") return null;
@@ -235,12 +212,10 @@ export function frameIdOf(el) {
 export const MAX_TREE = 50000;
 
 export class PageReader {
-  // env: { document(), window(), ref(el), element(ref), L }
   constructor(env) {
     this.env = env;
   }
 
-  // bare: tree lines only, for a subframe (the parent adds title and URL)
   readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false }) {
     const doc = this.env.document();
     const root = ref_id ? this.env.element(ref_id) : doc.body;
@@ -268,7 +243,7 @@ export class PageReader {
       const interactive = INTERACTIVE_ROLES.has(role);
       const printed = interactiveOnly ? interactive : !!role;
       let childIndent = indent;
-      // The iframe's content belongs to another actor: leave a marker for the parent to fill.
+      // why: Leave a marker because the content of a frame belongs to its own actor.
       const frameId = frameIdOf(el);
       if (frameId) {
         if (!interactiveOnly) push(indent, this.describeElement(el, role));
@@ -278,9 +253,8 @@ export class PageReader {
       if (printed) {
         push(indent, this.describeElement(el, role));
         childIndent = interactiveOnly ? indent : indent + 1;
-        // A button's or link's text is already its name; don't descend.
+        // why: Avoid repeating names and splitting text from a single logical block into markup fragments.
         if (interactive && role !== "listbox" && role !== "combobox") return;
-        // A text block without controls: one line instead of <b>, <span>… fragments
         if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !el.querySelector(CONTROL_SELECTOR)) {
           const t = clean(el.innerText);
           if (t) push(childIndent, `text "${truncate(t, 500)}"`);
@@ -291,7 +265,6 @@ export class PageReader {
         if (child.nodeType === 1) walk(child, childIndent, level + 1);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          // Loose text under an element; not repeated for roles named by their content.
           if (t && !(printed && NAME_FROM_CONTENT.has(role))) push(childIndent, `text "${t}"`);
         }
       }
@@ -341,8 +314,6 @@ export class PageReader {
     return parts.join(" ");
   }
 
-  // Keyword matching: every query word must match the start of a word in the element's name
-  // or attributes ("to" doesn't match "autoconfig", "serv" matches "server").
   find(query) {
     const doc = this.env.document();
     const win = this.env.window();
@@ -369,20 +340,18 @@ export class PageReader {
       const hits = words.filter((w) => haystack.some((t) => t.startsWith(w))).length;
       if (!hits) continue;
       let score = hits / words.length;
-      // Interactive elements rank above exact name matches (the link, not the cell around it).
+      // why: Prefer an actionable control to a surrounding node with the same name.
       if (INTERACTIVE_ROLES.has(role)) score += 0.5;
       if (normalize(name) === normalize(query)) score += 0.4;
-      // The whole query inside the name ("package.json" ≠ "package-lock.json")
+      // why: Check whole names so package.json does not match package-lock.json.
       else if (normalize(name).includes(normalize(query))) score += 0.2;
       if (inViewport(el, win)) score += 0.1;
       results.push({ el, role, score });
     }
-    // The parent merges all frames' results by score.
     results.sort((a, b) => b.score - a.score);
     return results.slice(0, 20).map(({ el, role, score }) => ({ line: this.describeElement(el, role), score }));
   }
 
-  // wait_for: is the text and/or selector visible in this frame
   check({ text, selector }) {
     const doc = this.env.document();
     const has = (el) => !text || normalize(el.innerText ?? "").includes(normalize(text));
@@ -392,15 +361,11 @@ export class PageReader {
     return !!doc.body && has(doc.body);
   }
 
-  // watch change: the text of the first visible element matching the selector (or null)
   sample({ selector }) {
     const el = [...this.env.document().querySelectorAll(selector)].find((el) => isVisible(el));
     return el ? truncate(clean(el.innerText ?? el.textContent ?? ""), 500) : null;
   }
 
-  // Whether an action submits a form or types into a secret field (permissions): the target
-  // (ref or point) of a click, or the focused element for keys and typing. enter/space: the
-  // keys pressed there.
   risk({ ref, x, y, focused = false, enter = false, space = false }) {
     const doc = this.env.document();
     const el = focused ? deepActiveElement(doc) : ref ? this.env.element(ref) : doc.elementFromPoint(x, y);
@@ -409,13 +374,11 @@ export class PageReader {
       el?.localName === "input" &&
       !["button", "submit", "reset", "image", "checkbox", "radio", "file"].includes(el.type);
     return {
-      // Enter in a form's text field submits it (implicit submission); Enter or Space on a submit button too
       submit: ((enter || space) && submitsForm(el)) || (enter && textField && !!el.form),
       secret: isSecretField(el),
     };
   }
 
-  // A short description for permission prompts and the log: 'button "Get a quote"'
   describeTarget({ ref, x, y }) {
     const doc = this.env.document();
     const el = ref ? this.env.element(ref) : doc.elementFromPoint(x, y);

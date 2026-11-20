@@ -18,7 +18,7 @@ test("sites are a blocklist or an allowlist of normalized domains", () => {
   assert.equal(normalizeDomain("https://BÜCHER.de/path"), "xn--bcher-kva.de");
   for (const input of ["", "file:///tmp/a", "https://user:pass@example.com"])
     assert.throws(() => normalizeDomain(input));
-  // the old per-site rules are not a list
+  // why: Cover migration from settings whose per-site entries were not lists.
   assert.throws(() => normalizeConfig({ sites: { "example.com": "block" } }), /"sites" setting is/);
   assert.throws(() => normalizeConfig({ sites: { blocklist: "example.com" } }), /must be a list/);
 });
@@ -30,7 +30,7 @@ test("a listed domain covers its subdomains, not look-alikes; only the mode's li
   assert.equal(siteAllowed("notexample.com", sites), true);
   assert.equal(siteAllowed("example.com.attacker.test", sites), true);
   assert.equal(siteEntry("sub.example.com", sites), "example.com");
-  // the allowlist is kept but doesn't apply in blocklist mode
+  // why: Switching modes should preserve the other list without applying it.
   assert.equal(siteAllowed("anything.test", sites), true);
 
   const only = { ...sites, mode: "allowlist" };
@@ -38,7 +38,6 @@ test("a listed domain covers its subdomains, not look-alikes; only the mode's li
   assert.equal(siteAllowed("app.work.test", only), true);
   assert.equal(siteAllowed("example.com", only), false);
   assert.equal(siteAllowed("other.test", only), false);
-  // pages without a host (about:blank, local files) aren't sites
   assert.equal(siteAllowed("", only), true);
 });
 

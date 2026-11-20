@@ -1,13 +1,12 @@
-// Network log: HTTP requests of agent tabs since the tab opened. Headers, request bodies and
-// fetch/XHR/document response bodies; cookie and authorization headers are hidden.
+// why: Never expose cookie or authorization headers in agent-facing logs.
 const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
 
 const MAX_REQUESTS = 500;
 const BODY_TYPES = new Set(["xmlhttprequest", "fetch", "document"]);
-const MAX_BODY = 256 * 1024; // per request
-const MAX_TAB_BODIES = 8 * 1048576; // per tab; the oldest are dropped
+const MAX_BODY = 256 * 1024;
+const MAX_TAB_BODIES = 8 * 1048576;
 const MAX_UPLOAD_TEXT = 64 * 1024;
-// never shown to agents: session and credential headers
+// why: Keep credentials and session headers out of agent-facing network results.
 const SECRET_HEADERS = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"]);
 const TOPICS = [
   "http-on-modify-request",
@@ -18,7 +17,7 @@ const TOPICS = [
   "http-on-stop-request",
   "http-on-failed-opening-request",
 ];
-// XPCOM constants don't show up in Object.entries; iterate with for...in
+// why: Object.entries omits XPCOM constants (docs/gecko-pitfalls.md, Loading and scopes).
 const CONTENT_TYPES = {};
 for (const key in Ci.nsIContentPolicy) {
   if (key.startsWith("TYPE_") && !key.startsWith("TYPE_INTERNAL")) {
@@ -27,10 +26,7 @@ for (const key in Ci.nsIContentPolicy) {
 }
 
 export class NetworkLog {
-  // logs: browserId → { list, byChannel, host, nextId }; passed in so it survives reloads
-  // env.tracked(browserId): whether the tab is recorded
-  // env.blocked(browserId, host, document): true cancels the request (site list); document: a
-  // page or frame load rather than a resource it uses
+  // why: Preserve accumulated network records across reloads.
   constructor(logs, env) {
     this.logs = logs;
     this.env = env;
@@ -55,7 +51,7 @@ export class NetworkLog {
     this.logs.delete(browserId);
   }
 
-  // requests longer than 10 s (long polling, streams) don't count
+  // why: Ignore long polling and streams so they cannot block network-idle waits indefinitely.
   busy(browserId, now = Date.now()) {
     return (this.logs.get(browserId)?.list ?? []).some((r) => r.duration == null && !r.error && now - r.start < 10000);
   }
@@ -76,8 +72,6 @@ export class NetworkLog {
       channel.cancel(Cr.NS_ERROR_ABORT);
       return;
     }
-    // The native response override runs before the cache/network connection, preserving
-    // the HTTP URL, principal and status. No response-stream or redirect shims are needed.
     if (topic === "http-on-modify-request" || topic === "http-on-before-connect") {
       const rule = this.env.control?.(channel, browserId, type === "document" && !bc.parent);
       if (topic === "http-on-before-connect") {
@@ -96,7 +90,7 @@ export class NetworkLog {
             for (const [name, value] of rule.headers) response.setResponseHeader(name, value, false);
             channel.QueryInterface(Ci.nsIHttpChannelInternal).setResponseOverride(response);
           } catch {
-            // A configured mock must never fall through and send the real request.
+            // why: A failed mock must never fall through to the real network.
             channel.cancel(Cr.NS_ERROR_ABORT);
           }
         }
@@ -108,7 +102,7 @@ export class NetworkLog {
     this.env.capture?.(channel, browserId, type, topic);
     let log = this.logs.get(browserId);
     if (!log) this.logs.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
-    // a log from the version before a reload: entries without IDs
+    // why: Logs retained during reload may contain records from a version before IDs were assigned.
     if (!log.nextId) {
       log.nextId = 1;
       for (const r of log.list) r.id = log.nextId++;
@@ -119,7 +113,7 @@ export class NetworkLog {
       (topic === "http-on-failed-opening-request" && !log.byChannel.has(channel.channelId))
     ) {
       const type = CONTENT_TYPES[channel.loadInfo.externalContentPolicyType] ?? "other";
-      // Like Claude in Chrome: old entries are cleared when the main document goes to another site
+      // why: Clear old entries on a cross-site navigation so the log stays scoped to the current site.
       if (type === "document" && bc.top === bc) {
         const host = channel.URI.host;
         if (log.host && host !== log.host) {
@@ -147,7 +141,6 @@ export class NetworkLog {
     }
     const entry = log.byChannel.get(channel.channelId);
     if (!entry) return;
-    // a request refused before opening (e.g. banned port, CSP) gets no stop-request
     if (topic === "http-on-failed-opening-request") {
       entry.error = ChromeUtils.getXPCOMErrorName(channel.status);
       entry.duration = 0;
@@ -160,20 +153,17 @@ export class NetworkLog {
       log.byChannel.delete(channel.channelId);
       return;
     }
-    // examine-*: response headers arrived
     try {
       entry.status = channel.responseStatus;
       entry.mime = channel.contentType || undefined;
       if (topic === "http-on-examine-cached-response") entry.cached = true;
       entry.responseHeaders = headersOf(channel, "visitResponseHeaders");
-      // headers added while sending (such as cookies) are complete here
       entry.requestHeaders = headersOf(channel, "visitRequestHeaders");
     } catch {}
     if (BODY_TYPES.has(entry.type) && entry.body === undefined)
       captureBody(channel, entry, log, () => this.env.projectBody?.(channel, browserId, entry));
   }
 
-  // read_network_requests with id: one request's details
   async details(browser, r, maxChars) {
     const win = browser.ownerDocument.defaultView;
     const lines = [`#${r.id} ${r.method} ${r.error ?? r.status ?? "pending"} ${r.url}`];
@@ -220,7 +210,7 @@ function headersOf(channel, visit) {
   return out;
 }
 
-// The POST body (if small); the stream is rewound after reading so the request is unaffected.
+// why: Rewind the upload stream so reading a logged POST cannot consume its body.
 function uploadText(channel) {
   try {
     const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
@@ -237,8 +227,7 @@ function uploadText(channel) {
   }
 }
 
-// Sits in front of the channel's listener and copies the incoming data (with the content
-// encoding decoded); the page receives the data unchanged.
+// why: Tee the byte stream so logging does not change what the page receives.
 function captureBody(channel, entry, log, projectBody) {
   let traceable;
   try {
@@ -287,11 +276,11 @@ function trimBodies(log) {
     if (total <= MAX_TAB_BODIES) break;
     if (!r.body) continue;
     total -= r.body.length;
-    r.body = null; // silindi
+    r.body = null;
   }
 }
 
-// Recording happens before decompression, so content-encoding is decoded here.
+// why: Traceable channels deliver encoded bytes (docs/gecko-pitfalls.md, Network and downloads).
 const DECOMPRESS_FORMATS = { gzip: "gzip", "x-gzip": "gzip", deflate: "deflate", br: "brotli", zstd: "zstd" };
 async function decompress(win, raw, encoding) {
   const format = DECOMPRESS_FORMATS[encoding.trim().toLowerCase()];
@@ -304,7 +293,6 @@ async function decompress(win, raw, encoding) {
   return binary;
 }
 
-// ikili dize → UTF-8 metin, uzunsa kesilir
 function decode(win, raw, maxChars) {
   let t;
   try {

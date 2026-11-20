@@ -14,7 +14,7 @@ for (const key of ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
   assert(process.env[key]?.startsWith(runtime + "/"), `${key} must be inside the disposable XDG_RUNTIME_DIR.`);
 assert.equal(fs.statSync(runtime).mode & 0o777, 0o700);
 
-// This child is the real stdio server. Only this check injects headless launch arguments.
+// why: Inject headless launch arguments only for this invocation of the real server.
 if (process.argv[2] === "--serve") {
   const [pidFile, ...flags] = process.argv.slice(3);
   assert(pidFile.startsWith(runtime + "/"));

@@ -1,6 +1,4 @@
-// Real MCP page watch test: a local page goes "live" after a delay and changes a price; checks
-// the events file for match, changes, stop and tab-close endings. Run: node scripts/check-watch.ts
-// Requires existing auto mode. Uses only its own tab.
+// why: Require auto mode and use only the fixture tab.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -81,7 +79,7 @@ try {
   assert.equal(done[0].event, "started");
   assert.equal(done.at(-1).event, "matched");
   const after = (Date.parse(done.at(-1).t) - Date.parse(done[0].t)) / 1000;
-  // the page goes live at 3 s; a much later match would mean it was written to an old file
+  // why: Bound match latency to catch events accidentally appended to an older file.
   assert(after >= 2 && after < 8, `matched after ${after} s`);
   console.log(`ok  text watch matched after ${after.toFixed(1)} s, then ended`);
 

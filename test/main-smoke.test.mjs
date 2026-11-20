@@ -1,19 +1,16 @@
-// Loads all of main.js with the real .sys.mjs modules. Gecko APIs are filled with stubs that
-// allow anything; the point is setup errors, not behavior (TDZ, a missing import, a wrong env
-// field). In the browser those only reach the log and a reload stays on the old version.
+// why: Exercise real bridge setup while using permissive Gecko stubs that cannot validate runtime behavior.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 
-// a new stub on every access: callable, constructible, converts to string/number, iterates empty
 function stub() {
   return new Proxy(function () {}, {
     get(_target, key) {
       if (key === Symbol.toPrimitive) return () => "";
       if (key === Symbol.iterator) return function* () {};
-      if (key === "then") return undefined; // not a thenable when awaited
-      if (key === "exists") return () => false; // no config or version file: defaults
+      if (key === "then") return undefined; // why: Make the generic proxy stub non-thenable so awaiting it does not stall.
+      if (key === "exists") return () => false;
       return stub();
     },
     apply: () => stub(),
@@ -49,7 +46,7 @@ gecko.Ci = gecko.Components.interfaces;
 gecko.Cu = gecko.Components.utils;
 gecko.Cr = gecko.Components.results;
 
-// modules use ChromeUtils/Ci at their top level: make them global before importing
+// why: Install Gecko globals before importing modules that read them at top level.
 const modules = new Map();
 gecko.ChromeUtils = new Proxy(
   {},
@@ -58,7 +55,7 @@ gecko.ChromeUtils = new Proxy(
       if (key !== "importESModule") return stub();
       return (url) => {
         const name = url.match(/^resource:\/\/zenmcp\/(.+?\.sys\.mjs)/)?.[1];
-        if (!name) return stub(); // resource://gre/... (NetUtil, Timer)
+        if (!name) return stub();
         assert.ok(modules.has(name), `unknown module ${name}`);
         return modules.get(name);
       };
@@ -66,7 +63,7 @@ gecko.ChromeUtils = new Proxy(
   },
 );
 Object.assign(globalThis, gecko);
-// actors/ isn't imported; actors are registered by URI
+// why: Map Gecko resource imports to test stubs because Node cannot load resource URLs.
 for (const name of fs.readdirSync(dir)) {
   if (name.endsWith(".sys.mjs")) modules.set(name, await import(new URL(name, dir)));
 }
@@ -86,9 +83,9 @@ for (const legacySessionStore of [false, true]) {
     });
     const context = vm.createContext({ ...gecko, ChromeUtils, zenMcpDir: "/zen-mcp", zenMcpName: "zen-mcp", console });
     vm.runInContext(fs.readFileSync(new URL("main.js", dir), "utf8"), context, { filename: "main.js" });
-    // errors caused by the stubs (e.g. the config file) don't count; only setup and start
+    // why: Ignore fixture-induced config reads because the smoke test verifies startup wiring.
     assert.equal(context.zenMcpStartError, undefined);
-    // without windows, start waits for final-ui-startup; simulate that moment
+    // why: Drive final-ui-startup because the no-window fixture cannot trigger it naturally.
     const startup = observers.get("final-ui-startup");
     assert.ok(startup, "start was not scheduled");
     startup();

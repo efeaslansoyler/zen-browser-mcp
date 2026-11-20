@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Watches } from "../browser/Watches.sys.mjs";
 
-// a manually advanced clock and an events file that collects lines
 function harness() {
   const timers = [];
   const lines = [];
@@ -83,7 +82,6 @@ test("repeat reports each new match, not every check while it stays true", async
   h.page.found = true;
   await h.tick();
   assert.deepEqual(h.events(), ["started", "matched", "matched"]);
-  // gone inverts
   const g = harness();
   g.page.found = true;
   g.watches.start("s", 1, g.browser, { text: "Loading", gone: true });
@@ -142,7 +140,7 @@ test("invalid specs and too many watches are refused", () => {
 
 test("a hold watch reads no page and ends with released when the hold ends", async () => {
   const h = harness();
-  h.page.owned = false; // not a member of the held tab: fine, it reads no page
+  h.page.owned = false; // why: A hold watch can observe release without page access or membership.
   assert.throws(() => h.watches.start("s", 1, null, { hold: true, text: "x" }), /hold watches the tab's hold only/);
   assert.throws(() => h.watches.start("s", 1, null, { hold: true, live: true }), /leave out .*live/);
   h.watches.start("s", 1, null, { hold: true });

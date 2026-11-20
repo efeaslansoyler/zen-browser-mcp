@@ -1,4 +1,3 @@
-// Real React 18 dev/production and axe smoke test in disposable owned tabs.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -31,7 +30,6 @@ try {
   original = await chrome('Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser.browserId');
   const state = await chrome("({version:h.version,paused:h.state.paused,mode:h.readConfig?.().mode})");
   assert(!state.paused);
-  // The bridge's own reading of the settings; a missing config file means the default auto mode.
   assert.equal(state.mode, "auto", "Smoke test requires existing auto mode; does not change settings.");
   console.log(text(await reloadBridge()));
   for (let i = 0; i < 50; i++) {

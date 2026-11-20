@@ -6,7 +6,7 @@ test("a channel needs the flag with this server, in an interactive Claude Code",
   const flag = ["--dangerously-load-development-channels", "server:zen"];
   assert.equal(channelArgs(["claude", ...flag]), true);
   assert.equal(channelArgs(["claude", "--channels", "server:other"]), false);
-  // Claude Code ignores the flag under the Agent SDK (T3 Code) and in -p mode
+  // why: Model the modes where Claude Code ignores channel flags.
   assert.equal(
     channelArgs(["claude", "--output-format", "stream-json", "--input-format", "stream-json", ...flag]),
     false,

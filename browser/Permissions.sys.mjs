@@ -1,8 +1,3 @@
-// Permissions: each tool call is an operation (Policy.sys.mjs) whose rule in the current mode
-// is allow, ask (approved on the island first) or deny. A click that submits a form, or typing
-// into a secret field, also takes the submit or secret_field rule, whichever is stricter. An
-// approval belongs to one document, origin, settings and tab access version; if any of them
-// changes, the user is asked again. The tool call (who asks) is passed in.
 export function permissions(ctx) {
   const { L, DialogOpen, Stopped } = ctx;
 
@@ -22,7 +17,6 @@ export function permissions(ctx) {
       key: L("press keys", "tuşa basmak"),
     })[action];
 
-  // A short description if the action needs permission ('button "Send": click'), otherwise null.
   async function describeWrite(tool, args, browser) {
     const target = async () => {
       try {
@@ -107,7 +101,6 @@ export function permissions(ctx) {
     return null;
   }
 
-  // Operations that ask in their own prompt (clipboard, tab requests…) with gate() below.
   const OWN_PROMPT = new Set([
     "clipboard.read",
     "clipboard.write",
@@ -123,15 +116,12 @@ export function permissions(ctx) {
   const deniedMessage = (key) =>
     `Your permission settings don't allow this (${key}); nothing was done. Don't try to reach the same result another way: tell the user what you need.`;
 
-  // For the operations with their own prompt: true to go on without asking, false to ask;
-  // throws when the rule denies it.
   function gate(key) {
     const rule = ctx.rule(key);
     if (rule === "deny") throw new Error(deniedMessage(key));
     return rule === "allow";
   }
 
-  // Keys that submit a focused form control or button.
   const keyList = (text = "") =>
     String(text)
       .toLowerCase()
@@ -139,7 +129,6 @@ export function permissions(ctx) {
   const pressesEnter = (text) => keyList(text).some((k) => ["enter", "return", "kp_enter"].includes(k));
   const pressesSpace = (text) => keyList(text).includes("space") || text === " ";
 
-  // Does this call submit a form or type into a secret field (only asked when it matters).
   async function riskOf(tool, args, browser) {
     const ask = async (data, frame) => {
       try {
@@ -158,7 +147,6 @@ export function permissions(ctx) {
     };
     const focused = async (keys) =>
       ask({ focused: true, ...keys }, ctx.heldFrame(browser) || (await ctx.focusedFrame(browser)));
-    // filling a field can only be secret, clicking can only submit
     if (tool === "form_input") return args.ref ? { secret: (await at()).secret } : {};
     if (tool !== "computer") return {};
     switch (args.action) {
@@ -176,8 +164,6 @@ export function permissions(ctx) {
     return {};
   }
 
-  // The rule of one tool call on this page, and the operation it comes from ("submit" when a
-  // click submits a form): { key, rule } with rule "allow", "ask" or "deny".
   async function callRule(tool, args, browser) {
     const key = ctx.policy.operationOf(tool, args);
     if (!key || OWN_PROMPT.has(key)) return { key, rule: "allow" };
@@ -186,7 +172,7 @@ export function permissions(ctx) {
     if (rule === "deny" || !browser) return { key, rule };
     const submit = ctx.rule("submit");
     const secret = ctx.rule("secret_field");
-    // look at the page only when a submit or secret rule would make this stricter
+    // why: Skip the risk query when submit and secret rules would not change the decision.
     if (strictest(rule, submit, secret) === rule) return { key, rule };
     const risk = await riskOf(tool, args, browser);
     let because = key;
@@ -195,8 +181,6 @@ export function permissions(ctx) {
     return { key: because, rule };
   }
 
-  // Approval belongs to one document, origin and permission configuration.
-  // A redirect, reload or settings change invalidates it, even on the same host.
   function permissionContext(browser) {
     const settings = ctx.readConfig();
     return {
@@ -220,8 +204,7 @@ export function permissions(ctx) {
     );
   }
 
-  // Rebuild the request if the page changes while describing actions or awaiting
-  // the user's answer. An answer for the old page must never authorize the new one.
+  // why: Navigation or policy updates while awaiting an answer must invalidate approval for the old request.
   async function requirePermission(call, browser, steps) {
     for (;;) {
       call.check();
@@ -264,7 +247,6 @@ export function permissions(ctx) {
     }
   }
 
-  // A call without a page (tabs_context_mcp, recipes, downloads…): its rule, asked on the island.
   async function requireToolPermission(call, tool, args) {
     const key = ctx.policy.operationOf(tool, args);
     if (!key || OWN_PROMPT.has(key)) return;

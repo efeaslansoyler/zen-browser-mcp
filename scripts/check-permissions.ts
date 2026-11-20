@@ -1,5 +1,4 @@
-// Local-only fixtures. Changes the mode and blocks 127.0.0.1 temporarily, preserving config.
-// Run from your terminal: node scripts/check-permissions.ts
+// why: Use loopback fixtures and restore config because this check exercises permission mode changes.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -23,7 +22,7 @@ let tabId: number | undefined,
   temporary = "",
   backupFile: string | undefined;
 const original = fs.existsSync(configFile) ? fs.readFileSync(configFile) : undefined;
-let otherURL = ""; // another origin: 127.0.0.1 instead of localhost
+let otherURL = "";
 const server = http.createServer((request, response) => {
   if (request.url === "/redirect") {
     response.writeHead(302, { Location: otherURL });
@@ -92,10 +91,10 @@ try {
   const address = server.address();
   assert(address && typeof address !== "string");
   const ordinaryURL = `http://localhost:${address.port}/`;
+  // why: Use another host name on the same fixture server to produce a different origin.
   otherURL = `http://127.0.0.1:${address.port}/`;
   tabId = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   await command("navigate", { tabId, url: ordinaryURL });
-  // auto mode, as the user has it: javascript_tool is a risky write that asks
   temporary = JSON.stringify(settings, null, 2) + "\n";
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
   if (original) {
@@ -103,7 +102,7 @@ try {
     backupFile = path.join(dir, "config.json");
     fs.writeFileSync(backupFile, original, { mode: 0o600 });
   }
-  await sleep(20); // Ensure the config mtime differs even on millisecond-resolution filesystems.
+  await sleep(20); // why: Config reload detects mtime, so make the fixture's revisions distinct.
   fs.writeFileSync(configFile, temporary, { mode: 0o600 });
   modified = true;
   for (const redirect of [false, true]) {
@@ -117,7 +116,6 @@ try {
         ],
       }),
     );
-    // navigation is free in auto mode; the risky writes ask on the page they run on
     await answer("cancelled");
     const result = await pending;
     assert(!result.error, String(result.error));
@@ -140,7 +138,6 @@ try {
   assert(!result.error && !result.value?.isError, "Same-document writes failed after approval");
   assert(text(await command("get_page_text", { tabId })).includes(token));
   console.log("✓ Approval allows grouped writes on the unchanged destination document");
-  // ask mode: opening an extension panel asks
   temporary = JSON.stringify({ ...settings, mode: "ask" }, null, 2) + "\n";
   await sleep(20);
   fs.writeFileSync(configFile, temporary, { mode: 0o600 });
@@ -152,11 +149,10 @@ try {
     "Extension invocation must use source-site approval",
   );
   console.log("✓ Extension toolbar invocation respects source-site approval and denial");
-  temporary = JSON.stringify(settings, null, 2) + "\n"; // back to auto
+  temporary = JSON.stringify(settings, null, 2) + "\n";
   await sleep(20);
   fs.writeFileSync(configFile, temporary, { mode: 0o600 });
 
-  // Block the same local fixture.
   const ordinaryTab = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   const embeddedTab = JSON.parse(text(await command("tabs_create_mcp"))).tabId;
   try {
@@ -220,7 +216,7 @@ try {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 } finally {
-  // Dismiss only this fixture's question so a failed test cannot hold the queue open.
+  // why: Answer only the fixture's prompt so failure cannot leave the tool queue blocked.
   if (tabId !== undefined) {
     await chrome(`(() => {
       const el=h.findTab(${tabId})?.ownerDocument.getElementById("zen-mcp-island");

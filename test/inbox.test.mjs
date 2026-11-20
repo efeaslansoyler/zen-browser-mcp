@@ -79,7 +79,7 @@ test("the send list is every connected session, labelled with how it receives", 
   assert.equal(sentNotice("sent", by.t3, L), "Sent to T3 thread ✓");
   assert.equal(sentNotice("sent", by["codex:1"], L), "Queued for Codex chat ✓");
   assert.equal(sentNotice("waiting", by.term, L), "Terminal sees it when you write to it");
-  // OpenCode before its first message: the push is refused, the next message carries it
+  // why: Use a push before OpenCode's first message to exercise prompt-hook delivery.
   assert.equal(sentNotice("waiting", by.oc, L), "OpenCode sees it when you write to it");
   assert.equal(sentNotice("waiting", by.old, L), "Old process gets it with its next browser action");
   assert.equal(sentNotice("missing", undefined, L), "Delivery failed; copied to clipboard");

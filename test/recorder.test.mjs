@@ -5,7 +5,6 @@ import { Recordings } from "../browser/Recordings.sys.mjs";
 import * as reader from "../browser/actors/PageReader.sys.mjs";
 import { loadActor } from "./support/actor.mjs";
 
-// Just enough DOM for the recorder: tag, attributes, parent chain, value/checked state.
 class El {
   nodeType = 1;
   isConnected = true;
@@ -65,7 +64,7 @@ test("typing becomes one type step with the final value, before the click that f
 
   search.value = "red shoes";
   fire("input", search);
-  fire("click", icon); // without window focus no change event comes before the click
+  fire("click", icon); // why: Model the missing blur-time change event in an unfocused Gecko window.
   fire("change", search);
 
   assert.deepEqual(
@@ -86,7 +85,7 @@ test("clicks that only focus a field and clicks made by the keyboard are not rec
   const submit = new El("button", { id: "save" });
   body.append(name, submit);
   fire("click", name);
-  fire("click", submit, { detail: 0 }); // Enter in the form clicks its submit button
+  fire("click", submit, { detail: 0 }); // why: Gecko sends a trusted click when Enter implicitly submits the form.
   assert.deepEqual(steps, []);
   fire("keydown", submit, { key: " " });
   fire("click", submit, { detail: 0 });
@@ -104,7 +103,7 @@ test("secret fields never carry their value, even after a show-password toggle",
 
   password.value = "hunter2";
   fire("input", password);
-  password.type = "text"; // "show password"
+  password.type = "text"; // why: Keep a once-secret field secret after its type changes to text.
   fire("change", password);
   otp.value = "123456";
   fire("input", otp);

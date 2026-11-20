@@ -62,7 +62,7 @@ test("a selected tab is left alone even when its hold expires or is forgotten", 
       assert.fail(`Changed selected tab activity to ${value}`);
     },
   };
-  // Count writes outside the setter because the bridge tolerates Gecko setter failures.
+  // why: Count externally because the bridge deliberately tolerates Gecko setter failures.
   const set = t.mock.setter(browser, "docShellIsActive");
   const release = wake.hold(browser);
   t.mock.timers.tick(2000);

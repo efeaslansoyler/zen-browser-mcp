@@ -1,7 +1,5 @@
 import { networkFilter } from "./NetworkFilters.sys.mjs";
 
-// Read tools: page text, the accessibility tree, find, waiting, network/console, JavaScript, React, axe.
-// Built last by main.js: helpers are taken from ctx once. Tools get their call as the second argument.
 export function readTools(ctx) {
   const {
     DialogOpen,
@@ -28,7 +26,6 @@ export function readTools(ctx) {
     watches,
   } = ctx;
   return {
-    // iframe text follows the page text, with its source
     async get_page_text({ tabId, diff = false, since }, call) {
       const browser = browserFor(call, tabId);
       const context = readContext(browser);
@@ -76,7 +73,6 @@ export function readTools(ctx) {
       );
     },
 
-    // searches every frame and merges the results by score
     async find({ tabId, query: q }, call) {
       const browser = browserFor(call, tabId);
       const results = [];
@@ -100,8 +96,7 @@ export function readTools(ctx) {
       );
     },
 
-    // Waits until text/selector appears (gone: disappears) and/or the network is idle. Polls,
-    // so it keeps going when the page changes meanwhile (e.g. a form was sent). Looks at all frames.
+    // why: Poll across document changes so a submitting form cannot end the wait prematurely.
     async wait_for({ tabId, text: wanted, selector, gone = false, network_idle = false, timeout = 10 }, call) {
       const browser = browserFor(call, tabId);
       if (!wanted && !selector && !network_idle) throw new Error("text, selector or network_idle is required.");
@@ -126,14 +121,14 @@ export function readTools(ctx) {
                 break;
               }
             } catch (e) {
-              // no frame or a changed one while the page loads: try again next round
+              // why: Frames may change during navigation, so retry the next poll.
               if (e instanceof DialogOpen || e instanceof Stopped) throw e;
             }
           }
           ok = gone ? !found : found;
         }
         if (ok && network_idle) {
-          // requests longer than 10 s (long polling, streams) don't count
+          // why: Long polling and streams would otherwise keep the network from reaching idle.
           const now = Date.now();
           const busy = network.busy(browser.browserId, now);
           if (busy) quietSince = null;
@@ -150,7 +145,6 @@ export function readTools(ctx) {
       }
     },
 
-    // Long-running watches: write to an events file without blocking the agent (wait_for is for short waits)
     watch({ tabId, action = "start", id, ...spec }, call) {
       const session = call.session;
       if (action === "list") return text({ watches: watches.forSession(session).map(Watches.summary) });
@@ -160,8 +154,7 @@ export function readTools(ctx) {
         watches.end(id, "stopped by the agent");
         return text(`Watch #${id} stopped.`);
       }
-      // a hold reads no page: any agent tab, member or not (ToolRunner runs it without the
-      // tab's lock, so it answers while the holder works)
+      // why: A hold watch must run without the tab lock so it can respond while the holder works.
       if (spec.hold) {
         if (!ctx.access.shared(tabId) || !ctx.findTab(tabId)) throw new Error(`Tab ${tabId} is not an agent tab.`);
         const hold = ctx.holdOf(tabId);

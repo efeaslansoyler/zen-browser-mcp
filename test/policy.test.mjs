@@ -7,7 +7,6 @@ import { TOOLS } from "../src/tools.ts";
 
 const { OPERATIONS, operationOf, ruleOf, parsePermissions, examplePermissions, COMPUTER_ACTIONS } = policy;
 
-// the values of a tool's `action` enum, if it has one
 const actionsOf = (schema) =>
   schema.action?.options ?? (schema.action?.def?.entries && Object.keys(schema.action.def.entries)) ?? [];
 
@@ -44,7 +43,7 @@ test("ask asks every action, auto only the risky ones; custom overrides its base
   const custom = { base: "ask", rules: { navigate: "allow", javascript_tool: "deny" } };
   assert.equal(ruleOf("navigate", "custom", custom), "allow");
   assert.equal(ruleOf("javascript_tool", "custom", custom), "deny");
-  assert.equal(ruleOf("computer.type", "custom", custom), "ask"); // from the base
+  assert.equal(ruleOf("computer.type", "custom", custom), "ask");
   assert.throws(() => ruleOf("computer.type", "custom", null), /custom permission template is missing/);
   assert.throws(() => ruleOf("nope", "auto"), /Unknown permission/);
 });
@@ -57,7 +56,7 @@ test("permissions.jsonc takes comments and trailing commas, and refuses typos", 
   assert.throws(() => parsePermissions('{"rules": {"navigate": "yes"}}'), /must be "allow", "ask" or "deny"/);
   assert.throws(() => parsePermissions('{"base": "custom"}'), /base must be "ask" or "auto"/);
   assert.throws(() => parsePermissions("{"), /not valid JSON/);
-  // a string with comment-like text stays as it is
+  // why: A fixture with comment-like string contents makes sure JSONC stripping preserves the data.
   assert.equal(policy.stripJsonComments('{"a": "x // y /* z */"}'), '{"a": "x // y /* z */"}');
 });
 
@@ -70,7 +69,6 @@ test("the example file lists every operation with its built-in rules and parses 
   for (const [key, rule] of Object.entries(parsed.rules)) assert.equal(rule, ruleOf(key, "auto"));
 });
 
-// The permission module with a page that answers "risk" queries.
 function harness({ mode = "auto", custom = null, risk = {} } = {}) {
   const asked = [];
   const queries = [];
@@ -120,7 +118,7 @@ test("auto asks before a click that submits a form, and before typing into a sec
   assert.deepEqual(submit.queries[0], ["risk", { ref: "ref_1" }, "frame"]);
   assert.match(submit.asked[0][0], /asks for permission \(submits a form\)/);
 
-  // clicking into a secret field is not typing into it
+  // why: Focus alone must not be mistaken for typing a secret.
   const field = harness({ risk: { secret: true } });
   assert.equal((await field.run("computer", { action: "left_click", ref: "ref_2" })).asked, false);
 
@@ -139,12 +137,12 @@ test("auto asks before a click that submits a form, and before typing into a sec
 });
 
 test("the page is only asked when submit or secret rules could change the answer", async () => {
-  // ask mode: the click asks anyway
+  // why: A stricter risk query cannot change a call that will already ask.
   const ask = harness({ mode: "ask", risk: { submit: true } });
   await ask.run("computer", { action: "left_click", ref: "ref_1" });
   assert.equal(ask.queries.length, 0);
   assert.equal(ask.asked.length, 1);
-  // custom with submit allowed: nothing to check
+  // why: Skip the risk query when the submit rule cannot make approval stricter.
   const free = harness({ mode: "custom", custom: { base: "auto", rules: { submit: "allow", secret_field: "allow" } } });
   await free.run("computer", { action: "left_click", ref: "ref_1" });
   assert.equal(free.queries.length, 0);
@@ -162,8 +160,7 @@ test("deny refuses without a prompt; custom allow and deny apply to their operat
     /permission settings don't allow this \(navigate\)/,
   );
   assert.equal(h.asked.length, 0);
-  // the gate of the operations with their own prompt
-  assert.equal(h.p.gate("clipboard.read"), false); // ask: the clipboard prompt runs
+  assert.equal(h.p.gate("clipboard.read"), false);
   const open = harness({
     mode: "custom",
     custom: { base: "auto", rules: { "clipboard.read": "allow", request_tab: "deny" } },
@@ -196,9 +193,9 @@ test("the page tells submit buttons, Enter in a form field and secret fields apa
   });
   const button = el({ localName: "button", type: "submit", form });
   assert.equal(submitsForm(button), true);
-  assert.equal(submitsForm(el({ localName: "span", parent: button })), true); // an icon inside the button
+  assert.equal(submitsForm(el({ localName: "span", parent: button })), true);
   assert.equal(submitsForm(el({ localName: "button", type: "button", form })), false);
-  assert.equal(submitsForm(el({ localName: "button", type: "submit", form: null })), false); // no form
+  assert.equal(submitsForm(el({ localName: "button", type: "submit", form: null })), false);
   assert.equal(submitsForm(el({ localName: "input", type: "image", form })), true);
   assert.equal(isSecretField(el({ localName: "input", type: "password" })), true);
   assert.equal(isSecretField(el({ localName: "input", type: "text", autocomplete: "cc-number" })), true);

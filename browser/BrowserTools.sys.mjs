@@ -1,5 +1,3 @@
-// Browser tools: per-tab emulation, downloads, the system clipboard, extension panels.
-// Built last by main.js: helpers are taken from ctx once. Tools get their call as the second argument.
 export function browserTools(ctx) {
   const {
     DEVICE_PRESETS,
@@ -16,7 +14,7 @@ export function browserTools(ctx) {
     tools,
   } = ctx;
 
-  // an address blocked by a site rule is not shown to the agent
+  // why: Keep site rules in force when disclosing download origins.
   const describeDownload = (record) => {
     const info = DownloadLog.describe(record);
     try {
@@ -40,7 +38,7 @@ export function browserTools(ctx) {
           note: "Generic layout/DPR/touch presets, not a different browser engine or a full physical device fingerprint. Mobile/tablet presets use the matching Android Firefox user agent; desktop keeps the current one unless userAgent is supplied. Reload for server-side UA detection.",
         });
       const browser = browserFor(call, args.tabId);
-      await ctx.exclusive(call); // a change selects the tab
+      await ctx.exclusive(call);
       if (args.action !== "get") await browserSettings.change(browser, call.session, args);
       const { value } = await query(browser, "browser_metrics");
       return text({
@@ -51,10 +49,6 @@ export function browserTools(ctx) {
       });
     },
 
-    // list: downloads started from the tab. cancel: stops a download and deletes the partial file.
-    // wait: waits until the oldest unreported download (or the next to start), or the one with id,
-    // finishes; called right after the click. until: "start" returns with the events file once the
-    // download starts (for agents that can follow it).
     async downloads({ tabId, action = "list", id, until = "end", timeout = 120 }, call) {
       const { browserId } = browserFor(call, tabId);
       if (action === "list") {
@@ -73,7 +67,6 @@ export function browserTools(ctx) {
         if (!record) throw new Error(`No download #${id} from this tab; take ids from action list.`);
         if (record.download.succeeded)
           throw new Error(`Download #${id} already finished; the file is at ${record.download.target.path}.`);
-        // finalize(true): stops and deletes the partial file; works on paused ones too
         record.canceling = true;
         await record.download.finalize(true);
         record.reported = true;
@@ -135,7 +128,7 @@ export function browserTools(ctx) {
       if (args.tabId == null || !args.extensionId)
         throw new Error("tabId and extensionId are required except for list.");
       const source = browserFor(call, args.tabId);
-      await ctx.exclusive(call); // one popup and selected tab per window
+      await ctx.exclusive(call);
       if (args.action === "close") {
         extensionPanels.close(source, call.session, args.tabId, args.extensionId);
         return text(

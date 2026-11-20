@@ -15,6 +15,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - XPCOM constants don't show up in `Object.entries`: iterate with `for...in`.
 - `addSystemEventListener` is gone: use `addEventListener(…, { mozSystemGroup: true })`.
 - A bare `nsITimer` without a reference may be garbage collected before it fires: use `Timer.sys.mjs`.
+- Gecko autoconfig skips the first line of the `.cfg` file. It runs before the network and
+  browser windows are ready. Zen's stderr may go to `/dev/null`, so the bridge writes early
+  errors to a runtime log even when the browser console is unavailable.
 - `security.sandbox.content.read_path_whitelist` must be set before the first content process
   starts (`main.js` writes it to the default branch during autoconfig).
 - Tool group factories (`readTools(ctx)` …) destructure `ctx` when they are created, so
@@ -26,6 +29,11 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   load new code, so the imported module stays on its old version until the browser restarts.
   Load modules with `ChromeUtils.importESModule(url + version query)` instead; the actor
   helpers get each other's functions from the actor.
+- An actor registration can outlive the autoconfig scope that made it. A fresh bridge may need
+  to unregister the old actor before registering the new version.
+- Xrays hide page-defined property overrides and expose native DOM behavior. Reading page-owned
+  framework metadata needs waived Xrays. A content-principal sandbox without Xrays can read page
+  variables, and the page's eval CSP does not govern evaluation in the separate sandbox.
 
 ## Sockets and streams
 
@@ -41,8 +49,10 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   for the directory that matches the installer.
 - On Linux, file input streams cannot report `available()` for `/proc/self/status`.
   Read the first 512 bytes to find the UID when resolving the runtime directory.
-
+- Linux `/proc/<pid>/stat` puts the command name in parentheses. Locate the end of that field
+  before splitting the remaining fields, since the name can contain spaces.
 - Closing a buffered socket output stream cut replies at 32 KB: open it with `OPEN_UNBUFFERED`.
+  Closing the output stream alone leaves the transport open while its input pump is running.
 - `NetUtil.asyncCopy` also closes the sink. For a subscription that must stay open, write with
   `nsIAsyncStreamCopier` and `closeSink: false`.
 
@@ -59,11 +69,16 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - Gecko can leave an advisory lock file in the profile after shutdown. Reset
   and orphan cleanup check whether a process holds the lock.
   See [Gecko's profile lock implementation](https://searchfox.org/firefox-main/source/toolkit/profile/nsProfileLock.cpp#1693).
+- The loader installer needs a writable installation. The Flatpak and Snap installation
+  layouts are read-only for this flow.
 
 ## Input and frames
 
 - Mouse and keyboard events sent with the top page's `windowUtils` don't reach out-of-process
-  (Fission) iframes; same-site ones work. Send from the frame's own actor.
+  (Fission) iframes; same-site ones work. Bind Gecko's `EventUtils` to the frame window and
+  send from its actor to dispatch trusted input even in a background tab.
+- A page can stop propagation in its own event group without suppressing a listener in
+  Gecko's system event group. For a user's answer or a recording, check event trust separately.
 - In a background tab a click doesn't move focus (call `focus()` yourself) and the wheel
   doesn't scroll (use `scrollBy`). Zen multiplies wheel deltas by
   `mousewheel.default.delta_multiplier_*` (200), so divide before sending.
@@ -72,27 +87,67 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   `true` restores foreground timer and animation frame rates without selecting the tab.
   The tab switcher can reset the flag when the user selects the tab and then leaves it.
 - A pending `sendQuery` is not rejected when the actor is destroyed: watch for
-  `currentWindowGlobal` changes.
+  `currentWindowGlobal` changes. Return structured errors explicitly because rejected actor
+  queries do not reliably carry the original message. Page alerts, confirms and prompts block
+  page JavaScript, so monitor for a dialog instead of relying on the pending query to finish.
 - With bfcache, a navigation can move the old page into the cache together with its own
   BrowsingContext: that context's `currentWindowGlobal` never changes and the tab's
   `browser.browsingContext` becomes a new object. Check `bc.isInBFCache` / `bc.top.isInBFCache`
   (and `isDiscarded`) as well.
 - A closed shadow root's contents don't appear in a window listener's `composedPath()`.
-- Astro's dev toolbar removes `data-astro-source-file`/`-loc` from the DOM about 300 ms after
-  load (and after every view-transition swap). The child actor records them at
-  `DOMContentLoaded`; elements swapped in later have no source location.
+- A progress listener added to a fresh tab may receive `about:blank`'s STOP after
+  the requested navigation begins. Ignore that initial stop and hold a strong reference
+  to the listener while waiting, since Gecko stores it weakly.
+- Fission can replace a browsing context on cross-site navigation while carrying its emulation
+  overrides to the new context. Restore the override on the current context. Read the reported
+  user agent and DPR from content because privileged reads can bypass emulation.
 - A window without focus gets no focus, blur or blur-time `change` events for text fields;
   track typing with `input` events. Enter in a form clicks its submit button with a trusted
-  click whose `detail` is 0 (so do Space and Enter on a focused button).
+  click whose `detail` is 0 (so do Space and Enter on a focused button). Record the key
+  instead of its generated click to avoid replaying the activation twice. A button
+  associated with a form submits by default unless its type changes that behavior.
 - Hyprland suspends windows on hidden workspaces (`document.hidden`, no focus, no APZ
   scrolling); that's why input is never sent at the window level.
+- The privileged file-input setter fills a file control without a native picker. Use the
+  parent to read the files because the sandboxed content actor has no arbitrary disk access.
+  Events dispatched from the privileged actor can be trusted by the page.
+- Setting a control through its Xray invokes the native setter, bypassing React's value
+  tracker so the following event registers the change.
+- Native semantics treat `alt=""` as decorative and expose `section` and `form` as landmarks
+  when they have an accessible name. Use `innerText` for rendered text because it skips hidden
+  descendants and separates rendered blocks. Native DOM reads do not expose arbitrary handlers
+  registered by page scripts, so `tabindex` is only a hint that a generic element is actionable.
+- Gecko stores console API calls in `ConsoleAPIStorage` and JavaScript errors in its console
+  service. Reading the stored messages does not require an early listener.
+
+## Source locations and styles
+
+- Astro's dev toolbar removes `data-astro-source-file`/`-loc` from the DOM about 300 ms after
+  load (and after every view-transition swap). The child actor records them at
+  `DOMContentLoaded`; elements swapped in later have no source location. The column marks the
+  end of the opening tag, so report only the line.
+- Gecko stack entries use `name@url:line:column`. React 19 stores JSX call sites in
+  `_debugStack` on fibers and `debugStack` on server component owners. Capture enough frames
+  to reach React's bottom marker and ignore subsequent frames. React 18 with the Babel JSX
+  source transform instead supplies positions in `_debugSource`.
+- Svelte 5 development metadata (`__svelte_meta.loc`) uses zero-based columns and includes
+  enclosing component render sites in its parent entries. Vue 3 supplies component files
+  without lines. Angular's development helpers can resolve component files and class lines.
+- Next.js development serves maps for server component frames and webpack eval modules
+  from its `/__nextjs_source-map` endpoint. Turbopack can return indexed maps with
+  `turbopack:///[project]/` sources. Webpack uses prefixes such as `webpack://_N_E/./`;
+  Vite typically serves project-relative paths such as `/src/App.tsx`.
 - `InspectorUtils` exists only on window globals; actor modules get it from a system sandbox
   with `wantGlobalProperties: ["InspectorUtils"]`. Current Gecko calls the matched-rules method
   `getMatchingCSSRules` (older builds: `getCSSStyleRules`). It lists matched rules in cascade order (least specific
   first) and includes user-agent and user sheets; keep `parentStyleSheet.parsingMode ===
   "author"`. `getRuleLine` counts a parser-inserted `<style>`'s rules from the top of the HTML
   document; `getRelativeRuleLine` counts from the start of the `<style>`, which is what its own
-  source map (Vite's `css.devSourcemap`) uses.
+  source map (Vite's `css.devSourcemap`) uses. Vite can put an inline map on the style, whose
+  relative sources resolve against its served development file. CSSOM-inserted rules can
+  exist in a textless `<style>` with no source position.
+- Tailwind can add transparent ring and shadow layers to every element. Ignore those layers
+  when summarizing visible styles.
 
 ## Network and downloads
 
@@ -106,6 +161,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   [Gecko's DevTools override](https://searchfox.org/firefox-main/source/devtools/shared/network-observer/NetworkOverride.sys.mjs)
 - Use the channel's browsing context to scope HTTP cancellation to a tab.
   `Services.io.offline` changes network state for the whole browser.
+- A request refused before opening (for example for a blocked port) may get no
+  `http-on-stop-request`. By the response-header notification, outgoing request headers
+  include late additions such as cookies.
 - An `nsITraceableChannel` listener sees bodies before content decoding: they arrive gzip/br
   encoded. Decode with `DecompressionStream` (`br` is spelled `"brotli"`).
 - `DownloadSource.browsingContextId` may be a subframe; use its `top.browserId` (and the
@@ -114,7 +172,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   contains an entry. Use its launcher's browsing context for attribution. The dialog's
   owner window and its selected tab can be unrelated to the download source.
 - While a download is being canceled with `finalize(true)`, Gecko briefly reports
-  `canceled` with partial data, which looks like `paused`.
+  `canceled` with partial data, which looks like `paused`. The same call can remove a
+  paused download's partial file. Adding a Downloads view replays existing entries,
+  so the bridge deduplicates them after reload.
 
 ## Cookie expiry
 
@@ -130,30 +190,39 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   without page-count metadata. Clearing header and footer strings prevents
   the default URL/date headers.
 - Low-scale `drawSnapshot` can capture video frames without changing screenshot
-  coordinates or using a screen recorder. Keep each capture serial and
+  coordinates, including for a background tab without selecting it. Keep each capture serial and
   resize into bounded frames before handing them to the encoder.
 
 ## Browser UI and session store
 
 - SessionStore lives at `moz-src:///browser/components/sessionstore/SessionStore.sys.mjs` on
   newer Gecko builds. ESR-based builds may use `resource:///modules/sessionstore/SessionStore.sys.mjs`.
-  Values of lazy tabs may only be readable some time after the window opens.
+  Zen can restore tabs through its own manager after the window opens. Listen for
+  `SSTabRestoring`, and retry reads of lazy tab values that can remain unavailable even
+  after that event or delayed startup.
 - `gBrowser.insertBrowser(tab)` (no underscore) creates the `<browser>` of a lazy tab.
 - A browser window-modal dialog such as Firefox Spotlight sets `window-modal-open` on the
   chrome document root. While it is open, assigning `gBrowser.selectedTab` can leave the prior
   tab selected. Keep the selected-browser and target-document identity checks after any switch.
-- Without a container Firefox sets `.tab-context-line` to `display: none`.
+- Without a container Firefox sets `.tab-context-line` to `display: none`. Zen's vertical
+  tab styles draw the line as a narrow strip on the edge of the tab.
 - `drawSnapshot(rect, …)` wants document coordinates (viewport + scrollX/Y).
 - In Zen, `gBrowser.tabs` holds only the active workspace's tabs; tabs in other spaces are
   in `gZenWorkspaces.allStoredTabs`. Code that looks tabs up by id must use the latter, or an
   agent loses its tab as soon as the user switches spaces.
 - `gZenWorkspaces.createAndSaveWorkspace(name, icon, true)` creates a space without switching;
   `moveTabToWorkspace(tab, uuid)` moves a background tab without selecting it.
+- Layout emulation may need to select a background tab to update its suspended layout.
+  Native extension toolbar popups also use the selected tab for `activeTab` and
+  `tabs.query({active: true})`. Let the tab and focus handlers finish before opening
+  the popup. Both operations require consent before switching the user's tab.
 - Zen keeps a hidden empty-tab placeholder per workspace (`zen-empty-tab`, `about:blank`):
   skip it when listing tabs.
 - Zen syncs windows; an unsynced window needs `OpenBrowserWindow({ zenSyncedWindow: false })`.
 - `--zen-primary-color` can be a light gray; white text on it is unreadable, so the island
   uses a dark tone of the theme color.
+- Zen uses Ctrl+Shift+E for its network monitor. The element picker uses Ctrl+Shift+F
+  to avoid that collision.
 
 ## Testing
 

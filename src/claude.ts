@@ -1,15 +1,9 @@
-// Facts about the Claude Code process that started this server: whether it opened the server
-// as a channel, and the current conversation's title.
 import { execFileSync } from "node:child_process";
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { NAME, SERVER_NAME } from "./paths.ts";
 
-// Did Claude Code open this server as a channel: --dangerously-load-development-channels (or
-// --channels) with server:zen (or the package name) on its command line. Without a channel,
-// events are dropped silently; then we don't subscribe and Zen copies picks to the clipboard.
-// ZEN_MCP_CHANNEL=1/0 overrides the check.
 export function channelEnabled(): boolean {
   if (process.env.ZEN_MCP_CHANNEL) return process.env.ZEN_MCP_CHANNEL === "1";
   let pid = process.ppid;
@@ -22,8 +16,7 @@ export function channelEnabled(): boolean {
   return false;
 }
 
-// The channel flags of a Claude Code command line. Claude Code ignores them in -p mode and under
-// the Agent SDK (stream-json input, as T3 Code and other apps start it), so there is no channel.
+// why: Claude Code ignores channel flags in print or stream-json mode.
 export function channelArgs(args: string[]): boolean {
   const names = new Set([`server:${SERVER_NAME}`, `server:${NAME}`]);
   const headless = args.some(
@@ -36,11 +29,9 @@ export function channelArgs(args: string[]): boolean {
   return !headless && args.some((a) => a.split(/[\s,=]+/).some((t) => names.has(t)));
 }
 
-// A process's arguments and parent: /proc on Linux, ps on macOS (arguments split at spaces).
 export function processInfo(pid: number): { args: string[]; ppid: number } | null {
   try {
     const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
-    // /proc/<pid>/stat: "pid (name) state ppid ..."
     const ppid = Number(readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1].split(" ")[1]);
     return { args, ppid };
   } catch {}
@@ -53,7 +44,7 @@ export function processInfo(pid: number): { args: string[]; ppid: number } | nul
   }
 }
 
-// This process's ancestors (parent first): a hook finds its client's process among them.
+// why: Prompt hooks identify the client through its place in the process ancestry.
 export function ancestorPids(depth = 8): number[] {
   const pids: number[] = [];
   for (let pid = process.ppid; pid > 1 && pids.length < depth;) {
@@ -65,10 +56,7 @@ export function ancestorPids(depth = 8): number[] {
   return pids;
 }
 
-// The Claude Code conversation's title (as listed by `claude -r`): the /rename name, otherwise
-// the automatic title. The MCP server is Claude's child; the current conversation (also after
-// /clear or -r) is in ~/.claude/sessions/<pid>.json. Undocumented format: if it can't be read,
-// this returns undefined and menus fall back to a short ID.
+// why: Claude titles come from an undocumented per-PID format, so menus need a fallback short ID.
 export function claudeTitle(
   pid = process.ppid,
   home = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
@@ -77,7 +65,7 @@ export function claudeTitle(
     const { sessionId, cwd } = JSON.parse(readFileSync(path.join(home, "sessions", `${pid}.json`), "utf8"));
     if (typeof sessionId !== "string" || typeof cwd !== "string") return undefined;
     const file = path.join(home, "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${sessionId}.jsonl`);
-    // Title lines are written again and again through the file: the last 512 KB are enough.
+    // why: Title records recur in transcripts, so scan a bounded tail rather than reading the entire transcript.
     const size = statSync(file).size,
       length = Math.min(size, 512 * 1024);
     const buffer = Buffer.alloc(length),

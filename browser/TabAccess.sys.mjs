@@ -1,16 +1,10 @@
-// Which agent sessions may use which tabs. A tab can be shared: every member may work in it
-// (calls on one tab still run in order, see Locks.sys.mjs). Members publish what they are doing
-// with tab_work; the notes are shared with the other members, never page contents.
-// Session identity is supplied by the MCP transport, never inferred from agent branding.
+// why: Keep recorded page contents out of notes shared among tab members.
+// why: Separate transport session identity from the agent branding shown in the browser.
 export const MAX_HOLD_MINUTES = 10;
 const HOLD_IDLE_MS = 2 * 60_000;
 
 export class TabAccess {
-  // The maps live in the bridge's reload-surviving state; a reloaded bridge keeps access.
-  //   members: tabId → Map(session → membership number)
-  //   versions: tabId → number, bumped when a session leaves or the tab returns to the user
-  //   tasks: tabId → Map(session → { state: "busy" | "done", summary, updated })
-  //   holds: tabId → { session, reason, origin, noWorkaround, since, expires }
+  // why: Preserve tab membership across bridge reloads.
   constructor(members = new Map(), versions = new Map(), tasks = new Map(), counter = { next: 1 }, holds = new Map()) {
     this.membersByTab = members;
     this.versions = versions;
@@ -25,7 +19,6 @@ export class TabAccess {
   has(tabId, session) {
     return !!session && !!this.membersByTab.get(tabId)?.has(session);
   }
-  // an agent tab: at least one session works in it
   shared(tabId) {
     return !!this.membersByTab.get(tabId)?.size;
   }
@@ -36,7 +29,6 @@ export class TabAccess {
     return this.versions.get(tabId) || 0;
   }
 
-  // Returns false when the session was a member already.
   join(tabId, session) {
     if (typeof session !== "string" || !session.trim()) throw new Error("A browser session ID is required.");
     if (!this.membersByTab.has(tabId)) this.membersByTab.set(tabId, new Map());
@@ -45,7 +37,6 @@ export class TabAccess {
     members.set(session, this.counter.next++);
     return true;
   }
-  // Returns how many members are left.
   leave(tabId, session) {
     const members = this.membersByTab.get(tabId);
     if (!members?.delete(session)) return members?.size ?? 0;
@@ -55,7 +46,6 @@ export class TabAccess {
     if (!members.size) this.clear(tabId);
     return members.size;
   }
-  // The tab goes back to the user: no members, no notes.
   clear(tabId) {
     this.membersByTab.delete(tabId);
     this.tasks.delete(tabId);
@@ -71,7 +61,6 @@ export class TabAccess {
       );
   }
 
-  // tab_work start/update/finish: the member's note about its task in this tab.
   report(tabId, session, action, summary) {
     this.check(tabId, session);
     if (action === "update" && this.tasks.get(tabId)?.get(session)?.state !== "busy")
@@ -83,9 +72,6 @@ export class TabAccess {
     return this.tasks.get(tabId)?.get(session) ?? null;
   }
 
-  // A member keeps the tab to itself for a while (tab_work hold): the other members' calls are
-  // refused until it releases it, minutes pass, or it goes quiet (see holdOf). noWorkaround also
-  // keeps the others off the tab's site (origin) in every tab. Holding again renews it.
   hold(tabId, session, { reason, minutes = MAX_HOLD_MINUTES, noWorkaround = false, origin }, now = Date.now()) {
     this.check(tabId, session);
     const current = this.holds.get(tabId);
@@ -101,8 +87,6 @@ export class TabAccess {
     this.holds.delete(tabId);
     return true;
   }
-  // The tab's hold if it still stands. quiet(session): ms since the holder's last call (0 while
-  // one runs); a hold ends when it expires or its holder has been quiet for 2 minutes.
   holdOf(tabId, quiet = () => 0, now = Date.now()) {
     const hold = this.holds.get(tabId);
     if (!hold) return null;
@@ -116,8 +100,7 @@ export class TabAccess {
     return [...this.holds].filter(([, hold]) => hold.session === session).map(([tabId]) => tabId);
   }
 
-  // A request remembers the membership it was made with; if the session left the tab (or the
-  // user took the tab back and gave it again) before the request ran, it must not run.
+  // why: Membership tickets keep queued calls from crossing a leave and rejoin or a take-back.
   ticket(tabIds, session) {
     return [...new Set(tabIds)].map((id) => [id, this.membersByTab.get(id)?.get(session)]);
   }

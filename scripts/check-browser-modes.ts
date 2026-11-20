@@ -1,4 +1,4 @@
-// Run only against a writable copy of Zen with its loader installed in disposable XDG directories.
+// why: Use a writable isolated copy because this check starts dedicated profiles and exercises install state.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
@@ -27,7 +27,7 @@ if (process.argv[2] === "--serve") {
     createBrowserLauncher({
       start(file, args, options) {
         assert(file.startsWith(runtime + "/"), "Copy Zen into the disposable runtime directory.");
-        // Exercise the visible mode semantics without opening a desktop window.
+        // why: Headless launch preserves the mode under test without opening a desktop window.
         const child = spawn(file, args.includes("--headless") ? args : [...args, "--headless"], options);
         if (child.pid) fs.appendFileSync(pidFile, `${child.pid}\n`);
         return child;

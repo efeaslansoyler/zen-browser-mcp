@@ -33,7 +33,7 @@ test("locks: a waiter that gives up doesn't block the ones behind it", async () 
   const next = locks.acquire(["a"]);
   let done = false;
   next.ready.then(() => (done = true));
-  quitter.release(); // before its turn
+  quitter.release();
   holder.release();
   await tick();
   await tick();
@@ -46,14 +46,14 @@ test("locks: requests over several keys can't wait for each other", async () => 
   const ba = locks.acquire(["b", "a"]);
   await ab.ready;
   ab.release();
-  await ba.ready; // would hang on a deadlock
+  await ba.ready; // why: The reversed key order would deadlock if the two requests queued independently.
   ba.release();
 });
 
-// The real dispatcher with fake tools that wait until the test lets them finish.
+// why: Gate fake tools on test-controlled promises to exercise the real dispatcher's queue.
 function harness() {
   const replies = [];
-  const running = new Map(); // name → release
+  const running = new Map();
   const started = [];
   const context = bridgeContext({
     browserFor: (call, tabId) => call.tabs.add(tabId),
@@ -130,7 +130,7 @@ test("a batch holds every tab it names until it ends", async () => {
 });
 
 test("questions don't wait for each other: each is a card with the agent that asks it", async () => {
-  const cards = new Map(); // id → [message, agent, key]
+  const cards = new Map();
   let next = 1;
   const context = bridgeContext({
     notifyAsk: () => false,
@@ -158,7 +158,7 @@ test("questions don't wait for each other: each is a card with the agent that as
       ["OpenCode asks without a tab", "OpenCode"],
     ],
   );
-  // tab-less questions have keys of their own, so each gets its own answer
+  // why: Give tab-less questions independent keys so their answers cannot cross.
   const [, , keySecond] = cards.get(2);
   const [, , keyThird] = cards.get(3);
   assert.notEqual(keySecond, keyThird);
@@ -176,7 +176,7 @@ test("clipboard, browser settings and extensions take the exclusive lock until t
   const first = { tabs: new Set(), check() {}, race: (p) => p };
   const second = { tabs: new Set(), check() {}, race: (p) => p };
   await context.exclusive(first);
-  await context.exclusive(first); // a call takes it once
+  await context.exclusive(first);
   let entered = false;
   const waiting = context.exclusive(second).then(() => (entered = true));
   await tick();

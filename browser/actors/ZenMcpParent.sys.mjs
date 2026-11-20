@@ -1,6 +1,4 @@
-// Requests go from the parent with sendQuery. The only message from the child is a recorded
-// step; it goes to Recordings.sys.mjs through an observer topic, since this module can't reach
-// main.js's ctx. The tab (browserId) and page URL are taken here, not from the (untrusted) child.
+// why: The actor module cannot reach autoconfig state; rederive the recorded step's attribution in the trusted parent.
 export class ZenMcpParent extends JSWindowActorParent {
   receiveMessage({ name, data }) {
     if (name !== "record_step") return;

@@ -1,16 +1,3 @@
-// The island: a pill at the top center of Zen windows, over the page (like Dynamic Island).
-// It shows what the agents are doing and holds the Stop/Resume button; when an agent needs
-// the user (ask_user, a permission) or the page opens a dialog, it expands with the message
-// and "Go to tab". Visible in compact mode too. Hidden when idle.
-//
-// Several agents at once stay on one line: the row shows one of them (the latest to act, at
-// most every SWITCH_EVERY ms, or the one the user picked with ◀ ▶ or its icon) and the icons
-// of all of them. Questions are cards: ◀ n/m ▶ goes through them, and a new question never
-// replaces the card the user is reading (a dot on ▶ tells it came).
-//
-// View only: stopping, going to the tab, cancelling and the like are done by callbacks from
-// main.js.
-
 const { agentTheme, applyTheme, agentIcon } = ChromeUtils.importESModule(
   new URL("./Agent.sys.mjs", import.meta.url).href + new URL(import.meta.url).search,
 );
@@ -19,26 +6,23 @@ const { renderReview, REVIEW_CSS } = ChromeUtils.importESModule(
 );
 
 const XHTML = "http://www.w3.org/1999/xhtml";
-// UI language: Turkish if the browser is Turkish, English otherwise
 const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
 const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
-const PREVIEW_WIDTH = 340; // live preview width (CSS px)
-const PREVIEW_EVERY = 400; // ms, ~2,5 kare/sn
-const SWITCH_EVERY = 1500; // ms: the agent row follows the latest agent at most this often
-const RECENT = 1200; // ms an agent's icon glows after it acted
-const UNPIN_AFTER = 5000; // ms after the mouse leaves before the row follows the latest agent again
+const PREVIEW_WIDTH = 340;
+const PREVIEW_EVERY = 400;
+const SWITCH_EVERY = 1500;
+const RECENT = 1200;
+const UNPIN_AFTER = 5000;
 const MAX_ICONS = 5;
-const HOLD_REFRESH = 30_000; // ms between redraws while a hold shows
+const HOLD_REFRESH = 30_000;
 
-// spinning star: the "working" sign
 const SPARK =
   "data:image/svg+xml," +
   encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path stroke="#d97757" stroke-width="2" stroke-linecap="round" d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4M3.4 3.4l2.8 2.8M9.8 9.8l2.8 2.8M3.4 12.6l2.8-2.8M9.8 6.2l2.8-2.8"/></svg>`,
   );
 
-// Like Dynamic Island: a dark, fully rounded pill, the same in every theme (dark reads on light themes too)
 const CSS = `
   #${ID} {
     position: fixed;
@@ -406,49 +390,41 @@ ${REVIEW_CSS}
 
 const isStopKey = (event) =>
   event.key === "Escape" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
-// Ctrl+Shift+F: pick elements (Ctrl+Shift+E is Zen's network monitor)
 const isPickKey = (event) =>
   event.key?.toLowerCase() === "f" && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
 const SENT_FOR = 2500;
 
 export class Island {
-  #agent = agentTheme({ id: "claude" }); // shown when no agent of its own applies (stopped, recording)
-  #windows = new Map(); // window → DOM parts and listeners
+  #agent = agentTheme({ id: "claude" });
+  #windows = new Map();
   #sheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(CSS));
-  // hidden | stopped | recording | review | dialog; "working" and "ask" follow from the agents
-  // and the cards (see #stateNow)
   #state = "hidden";
   #text = "";
   #message = "";
-  #browser = null; // the tab of a dialog, recording or review (WeakRef)
-  // agents at work: session → { session, agent, browser (WeakRef), text, at, ending (timer) }
+  #browser = null;
   #workers = new Map();
-  #shownWorker = null; // the session the agents' row shows
+  #shownWorker = null;
   #switchedAt = 0;
-  #pinned = false; // the user picked an agent: the row stays on it
+  // why: Manual row selection must stay in place while the user examines it.
+  #pinned = false;
   #hovering = false;
   #unpinTimer = null;
   #renderTimer = null;
   #renderAt = 0;
-  // questions: { id, key, browser (WeakRef | null), text, message, done, labels, options, agent }
   #cards = [];
   #nextCard = 1;
-  #shownCard = null; // id of the card on screen
-  #unseen = false; // a card came while the user read another one
-  // The user's pick goes over the agent's state; afterwards the island returns to it:
-  // { mode: "picking" | "compose" | "sent", browser (WeakRef), label, target, text }
+  #shownCard = null;
+  #unseen = false;
+  // why: Keep the underlying agent state while the user finishes their pick.
   #pick = null;
   #pickTimer = null;
-  #fresh = false; // recording, no step yet: the message stays open
-  #review = null; // { model, version }: the review panel after a recording
-  #mode = "auto"; // "auto" | "ask" | "custom"
+  #fresh = false;
+  #review = null;
+  #mode = "auto";
   #actions;
   #setTimeout;
   #clearTimeout;
 
-  // actions: { stop(), resume(), goTo(browser), answer(key, "done" | "cancelled", note, choice?),
-  //            pick(win), send(note, targetId, elementNotes?), cancelPick(), toggleMode(), holdOf?(browser) → { session,
-  //            reason, endsIn, noWorkaround } | null, releaseHold?(browser) }
   constructor(actions, { setTimeout, clearTimeout }) {
     this.#actions = actions;
     this.#setTimeout = setTimeout;
@@ -469,7 +445,6 @@ export class Island {
     const el = node("div");
     el.id = ID;
     el.hidden = true;
-    // the main row: a question card's head, a dialog, a recording, the user's pick, stopped
     const row = node("div", "row main");
     const recdot = node("span", "recdot");
     const spark = node("span", "spark");
@@ -481,10 +456,9 @@ export class Island {
     const hint = node("span", "hint");
     info.append(favicon, host, text, hint);
     const stop = node("button", "stop");
-    // show_me: the recording's own buttons stay in the one-line island
+    // why: Keep recording controls reachable without expanding the island.
     const recCancel = node("button", "rec-button", L("Cancel", "Vazgeç"));
     const recFinish = node("button", "rec-button primary", L("Finish", "Bitir"));
-    // the question cards: ◀ n/m ▶
     const cardPager = node("span", "pager");
     const cardPrev = node("button", "arr", "◀");
     const cardCount = node("span", "count");
@@ -505,7 +479,6 @@ export class Island {
     answerNote.maxLength = 2000;
     const choices = node("div", "choices");
     detail.append(message, choices, answerNote, buttons);
-    // the agents at work: one of them, ◀ their icons ▶, the mode and Stop
     const workers = node("div", "row workers");
     const wIcon = node("span", "w-icon");
     const wInfo = node("span", "info");
@@ -548,7 +521,6 @@ export class Island {
     const discard = node("button", "", L("Cancel", "Vazgeç"));
     const send = node("button", "primary", L("Send", "Gönder"));
     footer.append(target, discard, send);
-    // a multi-element pick: one optional note per numbered element, filled in by compose()
     const elementNotes = node("div", "element-notes");
     compose.append(note, elementNotes, footer);
     const reviewHost = node("div", "review-host");
@@ -572,7 +544,6 @@ export class Island {
     };
     send.addEventListener("click", submit);
     discard.addEventListener("click", () => this.#actions.cancelPick());
-    // Enter sends, Shift+Enter adds a line, Esc cancels
     const onNoteKey = (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -587,7 +558,6 @@ export class Island {
     const goTo = (browser) => {
       if (!this.#pick && browser) this.#actions.goTo(browser);
     };
-    // the main row and Go to tab: the card's tab (or the dialog's, the recording's)
     const mainBrowser = () => {
       const card = this.#card();
       return (card && this.#stateNow() === "ask" ? card.browser : this.#browser)?.deref();
@@ -610,7 +580,6 @@ export class Island {
         this.#render();
       }, UNPIN_AFTER);
     });
-    // ◀ ▶ and the icons pick the agent the row shows
     prev.addEventListener("click", () => this.#stepWorker(-1));
     next.addEventListener("click", () => this.#stepWorker(1));
     removeHold.addEventListener("click", () => {
@@ -620,20 +589,20 @@ export class Island {
     });
     cardPrev.addEventListener("click", () => this.#stepCard(-1));
     cardNext.addEventListener("click", () => this.#stepCard(1));
-    // ←/→ go through the cards while the island has focus (never while typing a note)
+    // why: Note editing must retain the arrow keys.
     el.addEventListener("keydown", (event) => {
       if (!["ArrowLeft", "ArrowRight"].includes(event.key) || this.#stateNow() !== "ask") return;
       if (["TEXTAREA", "INPUT", "SELECT"].includes(event.target?.tagName?.toUpperCase())) return;
       event.preventDefault();
       this.#stepCard(event.key === "ArrowLeft" ? -1 : 1);
     });
-    // The answer goes to the card on screen; a question without a tab answers with its key.
+    // why: Bind an answer to the card being displayed, including tab-less questions.
     const answer =
       (result, ...choice) =>
       () => {
         const card = this.#card();
         if (!card || this.#stateNow() !== "ask") return;
-        if (card.browser && !card.browser.deref()) return; // its tab is gone
+        if (card.browser && !card.browser.deref()) return;
         this.#actions.answer(card.key, result, answerNote.value.trim(), ...choice);
       };
     const recordingAnswer = (result) => () => {
@@ -650,8 +619,7 @@ export class Island {
     };
     stop.addEventListener("click", onStop);
     wStop.addEventListener("click", onStop);
-    // Ctrl+Shift+Esc: stop the agents (also while the page has focus; the browser sees keys first)
-    // Ctrl+Shift+F: pick elements (pressing it again while picking cancels)
+    // why: Listen in browser chrome so Stop works while the page has focus.
     const onKey = (event) => {
       if (isPickKey(event)) {
         event.preventDefault();
@@ -667,7 +635,6 @@ export class Island {
     win.addEventListener("keydown", onKey, true);
     const onResize = () => this.#place(win);
     win.addEventListener("resize", onResize);
-    // once the user is on the agent's tab, "Go to tab" is pointless
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
 
@@ -756,20 +723,15 @@ export class Island {
     return this.#workers.size ? "working" : "hidden";
   }
 
-  // Something the island shows changed elsewhere (a hold was set or removed).
   refresh() {
     this.#render();
   }
 
-  // The agent shown when no agent of its own applies (a dialog, stopped, a recording).
   setAgent(agent) {
     this.#agent = agentTheme(agent);
     this.#render();
   }
 
-  // ---- agents at work ----
-
-  // An agent (session) is doing something in a tab; it stays in the row until finished().
   working(browser, text, { session = "", agent = this.#agent } = {}) {
     if (this.#state === "stopped") return;
     const worker = this.#workers.get(session) ?? { session };
@@ -780,8 +742,7 @@ export class Island {
     this.#render();
   }
 
-  // The agent's call ended: its row goes after HIDE_AFTER unless it acts again (not while the
-  // user watches its preview).
+  // why: Keep the preview on screen while the user is watching it.
   finished(session = "") {
     const worker = this.#workers.get(session);
     if (!worker) return;
@@ -797,8 +758,7 @@ export class Island {
     worker.ending = this.#setTimeout(end, HIDE_AFTER);
   }
 
-  // The worker the row shows: the one the user picked, else the latest to act (switching at most
-  // every SWITCH_EVERY ms so several busy agents don't flicker).
+  // why: Limit automatic switches so multiple busy agents do not make the row flicker.
   #worker() {
     const workers = [...this.#workers.values()];
     if (!workers.length) return null;
@@ -828,8 +788,7 @@ export class Island {
     this.#render();
   }
 
-  // a render after ms (an icon stops glowing, the row may follow the latest agent)
-  // (the earliest one asked for wins)
+  // why: Keep the earliest pending redraw so later actions cannot postpone it indefinitely.
   #later(ms) {
     const at = Date.now() + Math.max(ms, 50);
     if (this.#renderTimer && this.#renderAt <= at) return;
@@ -841,13 +800,6 @@ export class Island {
     }, at - Date.now());
   }
 
-  // ---- questions ----
-
-  // An agent needs the user: a card with the message until askEnded(id). Returns the card's id.
-  // done: an OK button (wait: "done"); otherwise it ends when the user clicks the element.
-  // labels: button labels, e.g. { ok: "Allow", cancel: "Deny" }
-  // options: answer buttons instead of OK; browser null: a question not tied to a tab, shown in
-  // every window. key: what the answer is sent with (default the browser); agent: who asks.
   ask(browser, text, message, done, labels = {}, options = [], { key = browser, agent = this.#agent } = {}) {
     if (this.#state === "stopped") return null;
     const card = {
@@ -863,7 +815,7 @@ export class Island {
     };
     this.#cards.push(card);
     if (this.#card() !== card) this.#unseen = true;
-    // don't wait for the "sent" notice; a running pick or note stays on top
+    // why: A delivery notice is transient; an active pick or draft needs priority.
     if (this.#pick?.mode === "sent") {
       this.#clearTimeout(this.#pickTimer);
       this.#pick = null;
@@ -872,7 +824,7 @@ export class Island {
     return card.id;
   }
 
-  // The card on screen: the one the user reads, else one for the tab they're on, else the oldest.
+  // why: A new question must not displace the card the user is reading.
   #card() {
     if (!this.#cards.length) return null;
     let card = this.#cards.find((c) => c.id === this.#shownCard);
@@ -897,8 +849,6 @@ export class Island {
     this.#render();
   }
 
-  // The question's card goes (answered, timed out, cancelled). Without an id: the recording or
-  // review of show_me ends.
   askEnded(id) {
     if (id == null) return this.#recordingEnded();
     const before = this.#cards.length;
@@ -926,8 +876,6 @@ export class Island {
     );
   }
 
-  // show_me: the one-line recording island; text is "Recording · 3 steps". fresh: no step
-  // yet, so the agent's message stays open.
   recording(browser, text, message) {
     if (this.#state === "stopped") return;
     this.#state = "recording";
@@ -945,8 +893,7 @@ export class Island {
     this.#render();
   }
 
-  // After Finish: the review panel (RecordingReview.sys.mjs) for the model. Save and Cancel
-  // answer like ask_user's buttons: "done" with the model's result as the choice.
+  // why: Reuse the island answer path for recording review so Save and Cancel settle the same wait.
   review(browser, text, model) {
     if (this.#state === "stopped") return;
     this.#state = "review";
@@ -962,8 +909,7 @@ export class Island {
     this.#render();
   }
 
-  // Builds the panel in the window that shows the island; rebuilt only after a change in the
-  // panel, so other renders keep the user's typing and focus.
+  // why: Rebuilding the review panel on unrelated renders would lose the user's focus and typing.
   #renderReview(win, parts, visible) {
     const review = this.#state === "review" && visible ? this.#review : null;
     if (!review) {
@@ -1001,7 +947,6 @@ export class Island {
     this.#render();
   }
 
-  // The page opened alert/confirm/prompt; stays until dialogEnded (not over a question).
   dialog(browser, text, message) {
     if (["stopped", "recording", "review"].includes(this.#state) || this.#cards.length) return;
     this.#state = "dialog";
@@ -1017,7 +962,6 @@ export class Island {
     this.#render();
   }
 
-  // The tab is no longer the agents' (the user took it back): what shows it goes.
   release(browser) {
     for (const [session, worker] of this.#workers) {
       if (worker.browser.deref() !== browser) continue;
@@ -1037,7 +981,7 @@ export class Island {
     this.#review = null;
     for (const worker of this.#workers.values()) this.#clearTimeout(worker.ending);
     this.#workers.clear();
-    // the calls behind the cards are cancelled; their answers no longer matter
+    // why: Stop cancels the calls behind the cards, so their answers can no longer be used.
     this.#cards = [];
     this.#shownCard = null;
     this.#unseen = false;
@@ -1049,28 +993,22 @@ export class Island {
     this.#render();
   }
 
-  // The permission mode: ask (asks before each action) | auto (asks before risky ones) | custom
   setMode(mode) {
     if (mode === this.#mode) return;
     this.#mode = mode;
     this.#render();
   }
 
-  // ---- the user's element pick ----
-
   get pickMode() {
     return this.#pick?.mode ?? null;
   }
 
-  // picker open: "click an element"
   picking(browser, agent = { id: "claude" }) {
     this.#clearTimeout(this.#pickTimer);
     this.#pick = { mode: "picking", browser: new WeakRef(browser), agent };
     this.#render();
   }
 
-  // Element picked: the note box; target is the receiving session's name (none: clipboard).
-  // count > 1: a general note plus one numbered note per element.
   compose(browser, label, targets = [], targetId = "", count = 1) {
     this.#clearTimeout(this.#pickTimer);
     const selected = targets.find((t) => t.id === targetId);
@@ -1116,7 +1054,6 @@ export class Island {
     this.#windows.get(owner)?.note.focus();
   }
 
-  // "sent" shows briefly, then the island returns to the agent's state
   sent(text) {
     const browser = this.#pick?.browser;
     if (!browser) return;
@@ -1133,7 +1070,6 @@ export class Island {
     this.#render();
   }
 
-  // The tab the main row is about: the pick's, the card's, the dialog's or the recording's.
   #mainBrowser(state) {
     if (this.#pick) return this.#pick.browser.deref();
     if (state === "ask") return this.#card()?.browser?.deref() ?? null;
@@ -1144,8 +1080,7 @@ export class Island {
     return this.#stateNow() === "working" ? this.#worker()?.browser.deref() : this.#browser?.deref();
   }
 
-  // In every window while stopped and for a question without a tab; otherwise only in the
-  // window of the tab it is about.
+  // why: Stop and tab-less questions need to remain actionable in every window.
   #render() {
     const pick = this.#pick;
     const state = pick ? pick.mode : this.#stateNow();
@@ -1156,7 +1091,6 @@ export class Island {
     const shownBrowser = state === "working" ? worker?.browser.deref() : browser;
     const owner = shownBrowser?.ownerDocument?.defaultView;
     const theme = agentTheme(pick ? pick.agent : card ? card.agent : state === "working" ? worker.agent : this.#agent);
-    // "example.com — clicking": the site dimmed, the action prominent; the tab's favicon first
     const split = (text) => (text.includes(" — ") ? text.split(" — ") : ["", text]);
     let [siteName, action] = split(card ? card.text : this.#text);
     let hintText = "";
@@ -1185,7 +1119,7 @@ export class Island {
     const workerBrowser = worker?.browser.deref();
     const hold = worker && workerBrowser ? this.#actions.holdOf?.(workerBrowser) : null;
     const workerHolds = hold && hold.session === worker.session ? hold : null;
-    // the time left goes down, and a hold can end while its agent waits in one long call
+    // why: A hold can expire during a long-running call, so its countdown needs independent redraws.
     if (workerHolds) this.#later(HOLD_REFRESH);
     const cardIndex = card ? this.#cards.indexOf(card) : -1;
     const workers = [...this.#workers.values()];
@@ -1205,7 +1139,6 @@ export class Island {
       el.toggleAttribute("fresh", state === "recording" && this.#fresh);
       this.#renderReview(win, parts, visible);
 
-      // the main row
       host.textContent = stopped ? "" : siteName;
       text.textContent = stopped
         ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`)
@@ -1226,7 +1159,6 @@ export class Island {
       stop.textContent = stopped ? L("Resume", "Devam et") : "";
       stop.title = stopped ? "" : L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
 
-      // the question card
       parts.cardPager.hidden = !card || this.#cards.length < 2;
       if (card) {
         parts.cardPrev.disabled = cardIndex === 0;
@@ -1253,14 +1185,12 @@ export class Island {
       message.textContent = card ? card.message : this.#message;
       parts.answerNote.hidden = !card;
       parts.choices.hidden = !card?.options.length;
-      // on the tab already, "Go to tab" is pointless; without OK it is the primary button
       goto.hidden = !browser || win.gBrowser.selectedBrowser === browser;
       ok.hidden = !(card && card.done && !card.options.length);
       ok.textContent = card?.labels.ok ?? L("OK", "Tamam");
       cancel.textContent = card?.labels.cancel ?? L("Cancel", "Vazgeç");
       goto.classList.toggle("primary", ok.hidden);
 
-      // the agents' row
       this.#renderWorkers(win, parts, worker, workerHolds, workers, now);
       if (visible) this.#place(win);
       el.hidden = !visible;
@@ -1295,7 +1225,6 @@ export class Island {
       const site = origin ? L(` · also blocks ${origin} in other tabs`, ` · ${origin} başka sekmelerde de kapalı`) : "";
       holdText.textContent = `“${hold.reason}”${site}`;
     }
-    // ◀ the agents' icons ▶, the one shown ringed; only with more than one agent
     pager.hidden = workers.length < 2;
     if (workers.length >= 2) {
       const shown = workers.slice(0, MAX_ICONS);
@@ -1344,8 +1273,6 @@ export class Island {
     wStop.title = L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
   }
 
-  // ---- live preview ----
-
   #startPreview(win) {
     const parts = this.#windows.get(win);
     if (!parts || parts.previewing) return;
@@ -1362,8 +1289,6 @@ export class Island {
     parts.el.removeAttribute("previewing");
   }
 
-  // A background tab's image comes from drawSnapshot (without selecting the tab): the tab of
-  // the agent the row shows.
   async #previewLoop(parts) {
     while (parts.previewing) {
       const browser = this.#previewBrowser();
@@ -1385,7 +1310,7 @@ export class Island {
     }
   }
 
-  // the top center of the page area (also right in compact mode with the toolbar hidden)
+  // why: Anchor to the page area so compact mode can hide the toolbar without moving the island.
   #place(win) {
     const parts = this.#windows.get(win);
     const panels = win.gBrowser?.tabpanels;

@@ -1,5 +1,3 @@
-// The MCP server: tool definitions are in tools.ts; the work is done by the bridge in the
-// browser (browser/main.js), reached over a Unix socket (zen.ts).
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
@@ -22,7 +20,7 @@ import { identifyAgent } from "../browser/Agent.sys.mjs";
 
 const channel = channelEnabled();
 const t3 = channel ? null : t3Thread();
-// OpenCode (OPENCODE_PID is our parent) with the zen plugin: it pushes into the session
+// why: OpenCode's plugin uses its parent PID to route delivery from the MCP process.
 const opencode = !channel && !t3 && process.env.OPENCODE_PID === String(process.ppid) && openCodePluginInstalled();
 
 type ConnectSession = (
@@ -30,8 +28,7 @@ type ConnectSession = (
   agent: { id: string; name: string },
 ) => void | Promise<void>;
 
-// Codex sends the conversation ID in each call's _meta. One Codex MCP process can serve several
-// conversations, so ownership belongs to the conversation (the same session ID that receives picks).
+// why: One Codex MCP process serves multiple conversations, so scope ownership and delivery to the exact thread.
 export function codexSession(agent: { id: string }, meta: any) {
   const threadId = meta?.threadId ?? meta?.["x-codex-turn-metadata"]?.thread_id;
   return agent.id === "codex" && typeof threadId === "string" && THREAD_ID.test(threadId)
@@ -152,9 +149,6 @@ export function createServer(
   return server;
 }
 
-// The session's one connection to the browser: it owns the session's tabs and receives what
-// the user sends from the browser. An event this process can't push into the conversation is
-// refused with NO_PUSH and waits in the browser's inbox for the next tool result.
 let ownerSubscription: ReturnType<typeof subscribe> | undefined;
 let ownerAgent: { id: string; name: string } | undefined;
 let title = claudeTitle();
@@ -167,7 +161,7 @@ function connectOwner(server: McpServer, agent: { id: string; name: string }) {
     agent,
     title,
     push: channel ? "channel" : t3 ? "t3" : opencode ? "opencode" : null,
-    // prompt hooks find the conversation by the client's own ID, or by the client's process
+    // why: The prompt hook only knows the client conversation ID or the client's process.
     clientPid: process.ppid,
     ...(agent.id === "claude" && process.env.CLAUDE_CODE_SESSION_ID
       ? { clientSession: process.env.CLAUDE_CODE_SESSION_ID, hook: claudeHookInstalled() }
@@ -201,7 +195,7 @@ async function connectCodexWatch() {
       watchScope = scope;
     }
   } catch {
-    // The browser may be closed at initialize; try again when tools are used.
+    // why: Initialization can precede browser startup, so retry on a tool call.
   } finally {
     watchStarting = false;
   }
@@ -253,8 +247,7 @@ export async function serve(launch = createBrowserLauncher()) {
       .then(keepProfileOpen)
       .catch(() => {});
     const agent = identifyAgent(server.server.getClientVersion()?.name, process.env.ZEN_MCP_AGENT);
-    // Codex's MCP process lives in a background service, independent of conversations;
-    // codex-watch connects Codex conversations, and a process session would mislead in menus.
+    // why: A Codex service process is not a conversation and must not appear as one in menus.
     if (agent.id === "codex") {
       void connectCodexWatch();
       return;
@@ -262,11 +255,9 @@ export async function serve(launch = createBrowserLauncher()) {
     connectOwner(server, agent);
   };
   await server.connect(new StdioServerTransport());
-  // Browser files older than this version are updated and the bridge reloads.
   syncBrowserFiles().catch(() => {});
 
-  // The title appears during the conversation and changes with /rename and /clear: reconnect
-  // with the new name when it does.
+  // why: Reconnect when the conversation title changes so the browser's menus show its current name.
   setInterval(() => {
     const now = claudeTitle();
     if (now === title) return;
@@ -276,7 +267,7 @@ export async function serve(launch = createBrowserLauncher()) {
       connectOwner(server, ownerAgent!);
     }
   }, 15_000).unref();
-  // stdin closes when Claude Code exits; the browser connection must not keep the process alive.
+  // why: Closing stdio must end the server even if a browser subscription is still open.
   const shutdown = async (code: number) => {
     if (closing) return;
     closing = true;
@@ -292,5 +283,4 @@ export async function serve(launch = createBrowserLauncher()) {
   process.once("SIGINT", () => void shutdown(130));
 }
 
-// Directly during development: node src/server.ts
 if ((import.meta as { main?: boolean }).main) await serve();

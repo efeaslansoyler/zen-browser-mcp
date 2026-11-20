@@ -160,7 +160,7 @@ test("cache has bounded size, LRU eviction and explicit lifecycle cleanup", () =
   const { render, snapshots } = fixture({ maxEntries: 2, maxChars: 1000 });
   const first = render("first");
   render("second", { tabId: 2 });
-  render("first", { since: id(first) }); // Most recently used.
+  render("first", { since: id(first) });
   render("third", { tabId: 3 });
   assert.equal(snapshots.entries.size, 2);
   assert.match(render("second", { tabId: 2, since: "old" }), /no-baseline/);
@@ -183,7 +183,7 @@ test("oversized reads are returned in full without caching or diffing", () => {
   assert.equal(snapshots.entries.size, 0);
 });
 
-// Check the actual parent read tools and context capture, not just the diff helper.
+// why: Run through the real parent tools so the test also covers diff context capture.
 function parentHarness() {
   const browser = { browserId: 1, currentURI: { spec: "https://fixture.test/" }, browsingContext: {} };
   browser.browsingContext.currentWindowGlobal = {};
@@ -206,7 +206,7 @@ function parentHarness() {
     query: async (_, name) =>
       name === "text" ? { title: "Fixture", url: browser.currentURI.spec, text: page } : { value: page },
   });
-  // Built per call so tests can swap context helpers (e.g. query) after setup.
+  // why: Construct the tool per call so tests can replace captured context helpers.
   const read = async (name, args = {}) => (await readTools(context)[name]({ tabId: 1, ...args }))[0].text;
   return {
     context,
@@ -250,7 +250,7 @@ test("a long first line obeys the character limit and the delta covers only retu
   const first = await h.read("read_page", { max_chars: 50, diff: true });
   assert.equal(body(first).split("\n")[0], "x".repeat(50));
   assert(body(first).length < 200);
-  h.change("x".repeat(999) + "y"); // Outside the returned scope.
+  h.change("x".repeat(999) + "y");
   assert.match(await h.read("read_page", { max_chars: 50, diff: true, since: id(first) }), /mode: unchanged/);
 });
 

@@ -1,4 +1,4 @@
-// Uses a disposable page and per-call fixture-only island answers. Preserves the system clipboard.
+// why: Preserve the system clipboard while the fixture exercises consent.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -50,7 +50,7 @@ try {
     "Cannot safely inspect clipboard formats; no changes made.",
   );
 }
-// X11 text encodings are plain text; clipboard-manager protocol targets carry no content
+// why: Ignore X11 clipboard-manager targets because they contain protocol metadata instead of text.
 const TEXT_TARGETS = ["UTF8_STRING", "TEXT", "STRING", "COMPOUND_TEXT"];
 const PROTOCOL_TARGETS = ["SAVE_TARGETS", "TARGETS", "TIMESTAMP", "MULTIPLE", "DELETE"];
 flavors = [
@@ -74,7 +74,7 @@ try {
       if (await chrome(`h.version>${state.version}`)) break;
     } catch {}
   }
-  // Native values remain in the browser; clipboard content is never printed or sent to the model.
+  // why: Keep native clipboard contents private by asserting inside the browser.
   await chrome(
     `(()=>{const w=Services.wm.getMostRecentWindow('navigator:browser');const Cc=Components.classes,Ci=Components.interfaces;const cb=Cc['@mozilla.org/widget/clipboard;1'].getService(Ci.nsIClipboard);const saved=Cc['@mozilla.org/widget/transferable;1'].createInstance(Ci.nsITransferable);saved.init(null);for(const flavor of ${JSON.stringify(flavors)}){const t=Cc['@mozilla.org/widget/transferable;1'].createInstance(Ci.nsITransferable);t.init(null);t.addDataFlavor(flavor);const v={};try{cb.getData(t,cb.kGlobalClipboard);t.getTransferData(flavor,v);}catch{throw new Error('Your clipboard holds a format this check cannot back up ('+flavor+'); nothing was changed. Copy some plain text and run it again.');}saved.addDataFlavor(flavor);saved.setTransferData(flavor,v.value);}w[${JSON.stringify(backupKey)}]=saved;return true;})()`,
   );
@@ -162,7 +162,6 @@ try {
     () => null,
     (error) => error,
   );
-  // Wait for this fixture's prompt, then simulate a page update while approval is pending.
   for (let i = 0; i < 100; i++) {
     if (await chrome(`h.island.state==='ask'`)) break;
     await sleep(20);
@@ -242,7 +241,7 @@ try {
     );
   if (extensionDirectory) fs.rmSync(extensionDirectory, { recursive: true });
   if (backup) {
-    // The test is short; do not replace clipboard data copied independently during it.
+    // why: Preserve any clipboard data copied independently during the test.
     const unchanged =
       !modified ||
       (await chrome(

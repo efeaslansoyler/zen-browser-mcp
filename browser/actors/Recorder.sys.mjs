@@ -1,46 +1,27 @@
-// "Show me once": turns the user's own input in a recorded tab into semantic steps (click,
-// type, select, check, upload, key) that an agent can repeat with its own tools. Runs in every
-// frame; the parent collects the steps of a tab (Recordings.sys.mjs).
-//
-// Text typed into a field becomes one "type" step with the final value, taken on change or
-// before the next step. Fields are tracked by input events, not focus: a window without focus
-// gets no focus or blur events. Clicks that only focus or toggle a form field are left out:
-// the field's change event records what happened. Clicks made by the keyboard (Enter in a form,
-// Space on a button) are left out too; the key step records them. Scrolling and mouse movement
-// are not recorded.
-//
-// Values of secret fields (passwords, card data, one-time codes) are never read: such steps
-// carry secret: true instead of a value. A field that was a password once stays secret, so a
-// "show password" toggle doesn't reveal it.
-//
-// env: { document(), window(), post(step, element), reader: the PageReader module,
-//        info: the ElementInfo module }
-
 const MAX_VALUE = 2000;
 const MAX_TEXT = 200;
 
-// Keys worth repeating: they submit, close or move between widgets. Plain typing and Tab
-// (moving between fields) are covered by the type steps.
+// why: Type steps already capture text edits, so keep only keys that drive controls or submit.
 const SPECIAL_KEYS = new Set(["Enter", "Escape", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
-// Editing shortcuts change a field; the field's type step already records the result.
 const EDIT_SHORTCUTS = new Set(["a", "c", "v", "x", "z", "y"]);
 const NOT_TEXT_INPUTS = new Set(["button", "submit", "reset", "image", "checkbox", "radio", "file", "hidden"]);
 const CLICKABLE = new Set(["a", "button", "summary", "label", "input", "select", "textarea"]);
 
 export class Recorder {
-  #secret = new WeakSet(); // fields that were secret at some point
-  #typed = new WeakMap(); // field → last recorded value
-  #dirty = new Set(); // text fields typed into since their last step
+  // why: Remember once-secret fields so a show-password toggle cannot disclose their values.
+  #secret = new WeakSet();
+  #typed = new WeakMap();
+  #dirty = new Set();
 
   constructor(env) {
     this.env = env;
   }
 
-  // Called by the actor for each trusted event while the tab is recorded.
   handle(event) {
     const target = this.#target(event);
     switch (event.type) {
       case "input":
+        // why: Unfocused Gecko windows can omit change events (docs/gecko-pitfalls.md, Input and frames).
         if (target && this.#isTextField(target)) {
           this.#remember(target);
           this.#dirty.add(target);
@@ -52,6 +33,7 @@ export class Recorder {
         else this.#change(target);
         return;
       case "click":
+        // why: The key step already records activation when Gecko generates a click with detail zero.
         if (event.button !== 0 || event.detail === 0) return;
         this.#click(target);
         return;
@@ -64,12 +46,10 @@ export class Recorder {
     }
   }
 
-  // Records the fields typed into that have no step yet.
   flush() {
     for (const el of [...this.#dirty]) this.#flush(el);
   }
 
-  // The element the user acted on: inside shadow DOM too, and text nodes go to their parent.
   #target(event) {
     let el = event.composedPath?.()[0] ?? event.target;
     if (el?.nodeType !== 1) el = el?.parentElement;
@@ -79,14 +59,13 @@ export class Recorder {
   #click(el) {
     if (!el) return;
     const control = this.#clickable(el);
-    // Focusing a field or toggling a checkbox: the change/type step says it better.
+    // why: Skip focus and toggle clicks already represented by the resulting field step.
     const field = control.localName === "label" ? control.control : control;
     if (field && this.#isFormField(field)) return;
     this.#post("click", control);
   }
 
-  // The control around the clicked spot (a span inside a button is the button); a click on
-  // something that isn't a control stays on that element.
+  // why: Identify the activated control even when the click landed on its child.
   #clickable(el) {
     const { roleOf, INTERACTIVE_ROLES } = this.env.reader;
     for (let node = el; node?.nodeType === 1; node = node.parentElement ?? node.getRootNode?.().host) {
@@ -112,7 +91,7 @@ export class Recorder {
     if (!modified && !SPECIAL_KEYS.has(event.key)) return;
     if (modified && ["Control", "Meta", "Alt", "Shift"].includes(event.key)) return;
     if (modified && !event.altKey && EDIT_SHORTCUTS.has(event.key.toLowerCase())) return;
-    // Arrow keys and Space inside a text field edit it; outside they drive menus, lists and buttons.
+    // why: In a text field these keys edit the value; outside it they can operate widgets.
     if (!modified && el && this.#isTextField(el) && event.key !== "Enter" && event.key !== "Escape") return;
     const key = [event.ctrlKey && "Control", event.altKey && "Alt", event.metaKey && "Meta", event.shiftKey && "Shift"]
       .filter(Boolean)
@@ -121,7 +100,6 @@ export class Recorder {
     this.#post("key", el && el !== this.env.document().body ? el : null, { key });
   }
 
-  // Records the field's value if it changed since it was last recorded.
   #flush(el) {
     this.#dirty.delete(el);
     this.#remember(el);
@@ -159,7 +137,7 @@ export class Recorder {
   }
 
   #post(action, el, extra = {}) {
-    // A typed value comes before the step that follows it (Enter submits it).
+    // why: Flush pending values before an action such as Enter can submit them.
     if (action !== "type") this.flush();
     const doc = this.env.document();
     const r = el?.getBoundingClientRect?.();
@@ -167,7 +145,6 @@ export class Recorder {
       {
         action,
         ...(el ? { target: this.#describe(el) } : {}),
-        // where the element is in this frame's viewport, for the step's screenshot
         ...(r ? { rect: { x: r.left, y: r.top, width: r.width, height: r.height } } : {}),
         ...extra,
         url: doc.URL,
@@ -177,7 +154,6 @@ export class Recorder {
     );
   }
 
-  // Enough for an agent to find the element again with find or read_page.
   #describe(el) {
     const { roleOf, accessibleName, elementLabel, clean, truncate } = this.env.reader;
     const doc = this.env.document();

@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as agentModule from "../browser/Agent.sys.mjs";
 
-// Minimal chrome DOM: exercises the real Island class rendering and state transitions.
 class Element {
   children = [];
   value = "";
@@ -34,7 +33,7 @@ class Element {
   remove() {}
   querySelector(selector) {
     for (const child of this.children) {
-      if (typeof child !== "object") continue; // text
+      if (typeof child !== "object") continue;
       if (child.className?.split(" ").includes(selector.slice(1))) return child;
       const match = child.querySelector(selector);
       if (match) return match;
@@ -254,7 +253,7 @@ test("several agents share one row; question cards never change under the user",
     assert.equal(icons().length, 2);
     assert(icons()[0].attrs.has("on"));
     assert(icons()[1].attrs.has("recent"), "the agent that just acted glows");
-    workers.querySelector(".pager").children[2].listeners.get("click")(); // ▶
+    workers.querySelector(".pager").children[2].listeners.get("click")();
     assert.match(shown(), /^Codex · typing/);
     island.working(a, "a.test — reading", { session: "A", agent: claude });
     assert.match(shown(), /^Codex/, "a picked agent stays on the row");
@@ -286,7 +285,6 @@ test("several agents share one row; question cards never change under the user",
     island.askEnded(first);
     assert.equal(el.attrs.get("state"), "working");
 
-    // a finished agent's row goes a little later; the last one hides the island
     island.finished("A");
     island.finished("B");
     for (const run of timers.splice(0)) run();

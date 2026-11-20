@@ -1,12 +1,10 @@
-// The browser tools as MCP clients see them. Names and parameters follow Claude in Chrome; the
-// work is done by the bridge in the browser (browser/main.js).
+// why: Keep tool schemas compatible with existing Claude in Chrome clients.
 import { z } from "zod";
 
 export type ToolDef = {
   name: string;
   description: string;
   inputSchema: z.ZodRawShape;
-  // How long to wait for the browser's answer (ms); tools that wait for the user need longer.
   timeout?: (args: any) => number;
 };
 
@@ -15,7 +13,7 @@ const tool = (name: string, description: string, inputSchema: z.ZodRawShape, tim
   TOOLS.push({ name, description, inputSchema, timeout });
 };
 
-// Allow the island's full response window for each clipboard/attention prompt.
+// why: Allow the full consent window for operations that need clipboard or attention prompts.
 function consentTimeout(name: string, args: any): number | undefined {
   if (
     ((name === "computer" && args.action === "type") ||
@@ -253,7 +251,7 @@ tool(
         "true: open the tab in a separate container without the user's cookies and logins (research, untrusted sites, or when the user doesn't want their accounts used); false: with the user's logins. In together mode the default follows the user's settings. Dedicated browser profiles ignore clean.",
       ),
   },
-  // Allow the island's response window for creation plus navigation and an optional read.
+  // why: Tab creation, navigation, and an optional read may span more than one response window.
   ({ url, read }) => (url == null ? 60000 : read == null ? 270000 : 420000),
 );
 
@@ -806,7 +804,6 @@ tool(
     ),
 );
 
-// The answer timeout for one call (also each browser_batch step); undefined means the default.
 export function callTimeout(name: string, args: any): number | undefined {
   return TOOLS.find((t) => t.name === name)?.timeout?.(args) ?? consentTimeout(name, args);
 }

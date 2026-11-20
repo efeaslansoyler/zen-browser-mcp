@@ -78,7 +78,7 @@ export function browserExecutable(installation: Browser, platform = process.plat
   const ini = fs.readFileSync(path.join(dir, "application.ini"), "utf8");
   const remote = /^RemotingName=(.+)$/m.exec(ini)?.[1].trim();
   const app = name.toLowerCase();
-  // Some distro builds use a channel-specific remoting name and a plain executable name.
+  // why: Distro packages may give their remoting identity and executable different names.
   for (const candidate of [app, remote, app.replaceAll(" ", "-"), path.basename(dir)]) {
     if (!candidate || !/^[a-z0-9][a-z0-9 ._-]*$/i.test(candidate)) continue;
     const file = path.join(binDir, candidate);
@@ -101,7 +101,7 @@ const SESSION_KEYS = [
 ];
 
 function systemdUserEnv(): NodeJS.ProcessEnv {
-  // systemctl finds the user bus through XDG_RUNTIME_DIR, which such clients don't pass either.
+  // why: Locating the systemd user bus also requires the session runtime directory.
   const uid = process.getuid?.();
   if (uid === undefined) return {};
   const result = spawnSync("systemctl", ["--user", "show-environment"], {
@@ -118,9 +118,7 @@ function systemdUserEnv(): NodeJS.ProcessEnv {
   );
 }
 
-// MCP clients may start this server with a minimal environment (Codex passes only HOME, PATH,
-// USER and a few more), so a visible browser would find no display. Desktop sessions import
-// their display variables into the systemd user manager; fill the missing ones from there.
+// why: Desktop MCP clients can omit display variables, which the systemd user environment may provide.
 export function withDisplay(env: NodeJS.ProcessEnv, platform = process.platform, session = systemdUserEnv) {
   if (platform !== "linux" || env.DISPLAY || env.WAYLAND_DISPLAY) return env;
   const found = session();
@@ -172,7 +170,7 @@ export function createBrowserLauncher({
   extraArgs?: string[];
   extraEnv?: NodeJS.ProcessEnv;
 } = {}) {
-  // A process that outlasts its startup timeout still owns its profile. Don't spawn again.
+  // why: A timed-out child may still own the profile, so do not start another process.
   const starting = new Map<string, ChildProcess>();
   const instructions =
     `Check with \`npx ${PACKAGE} doctor\`, install the loader with \`npx ${PACKAGE} install\` and restart the browser. ` +
@@ -218,7 +216,7 @@ export function createBrowserLauncher({
             `or they can run \`npx ${PACKAGE} config launch allow\` to allow startup.`,
         );
       const answer = await approve(label);
-      // Non-interactive clients (e.g. codex exec) decline without showing the prompt.
+      // why: Noninteractive clients can decline without showing the prompt.
       if (answer === "declined")
         throw new Error(
           `Opening ${label} was not approved: the user declined, or this client could not show the prompt. ` +
@@ -252,7 +250,7 @@ export function createBrowserLauncher({
           if (performance.now() >= deadline) throw timedOut();
           await sleep(200);
         }
-        // A starter might have released its reservation just before we acquired it.
+        // why: Another startup may have completed before this process acquired the reservation.
         const started = await matching();
         if (started) return started;
       }
@@ -324,7 +322,7 @@ export function createBrowserLauncher({
       closed = true;
       await Promise.all(
         [...temporaryChildren].map(async ([child, finished]) => {
-          // The bridge gets the first chance to quit. A failed startup might have no bridge.
+          // why: Prefer graceful bridge shutdown when startup reached the bridge.
           if (quitRequested) await Promise.race([finished, sleep(1800)]);
           if (!temporaryChildren.has(child)) return;
           child.kill();

@@ -1,14 +1,11 @@
-// Tab tools: listing, creating and closing agent tabs, coordination (tab_work), asking for a
-// user tab (request_tab), asking the user (ask_user) and handing them a step (hand_to_user).
 export function tabTools(ctx) {
   const { L, text } = ctx;
-  // Shows the message on the island, outlines the element in the tab and waits for the user.
   async function waitForUser(call, tool, { tabId, ref, coordinate, message, wait, options, timeout }) {
     const handOver = tool === "hand_to_user";
     const browser = tabId == null ? null : ctx.browserFor(call, tabId);
     const [x, y] = coordinate ? ctx.toPagePoint(browser, coordinate) : [];
     const labels = handOver ? { ok: L("Done", "Bitti") } : {};
-    const key = browser ?? {}; // a question without a tab gets its own key: several can wait
+    const key = browser ?? {}; // why: Separate answer keys let several questions without tabs coexist.
     const card = ctx.island?.ask(
       browser,
       ctx.describeAction(tool, {}, browser),
@@ -25,8 +22,7 @@ export function tabTools(ctx) {
     let result;
     try {
       if (browser && handOver && wait === "done") {
-        // The step may navigate (login → 2FA → home), so the answer comes from the island; the
-        // outline is a hint that ends with its page.
+        // why: The user's hand-over may navigate, so the island answer must outlive the page outline.
         const outline = ctx
           .query(
             browser,
@@ -39,7 +35,7 @@ export function tabTools(ctx) {
         try {
           result = await ctx.waitIslandAnswer(call, timeout, browser);
         } finally {
-          ctx.cancelAsk(browser, "done"); // removes the outline if its page is still there
+          ctx.cancelAsk(browser, "done");
           await outline;
         }
       } else if (browser)
@@ -82,13 +78,12 @@ export function tabTools(ctx) {
     );
   }
 
-  // Recipes ("show me once") for the sites of these tabs: a few lines, only when there are any.
   async function recipesFor(described) {
     let matching = [];
     try {
       const origins = new Set(described.map((tab) => ctx.originOf(tab.url ?? "")).filter(Boolean));
       if (origins.size) matching = (await ctx.recipes.list()).filter((r) => origins.has(r.origin)).slice(0, 10);
-    } catch {} // no recipes folder yet, or a broken one: nothing to list
+    } catch {}
 
     if (!matching.length) return {};
     return {
@@ -97,7 +92,7 @@ export function tabTools(ctx) {
     };
   }
 
-  // userTabs are for finding a tab only; long titles and URLs (tracking queries) add nothing.
+  // why: Tab discovery needs only enough metadata to identify the tab; query strings can expose tracking data.
   const clip = (value, max) => (typeof value === "string" && value.length > max ? `${value.slice(0, max)}…` : value);
   const brief = (info) => ({ ...info, title: clip(info.title, 100), url: clip(info.url, 200) });
 
@@ -116,7 +111,6 @@ export function tabTools(ctx) {
       const userTabs = ctx.userTabs().map((tab) => ctx.describeTab(tab));
       const { id, name } = ctx.sessions.get(activeSession) ?? {};
       const recipes = await recipesFor([...tabs.map(ctx.describeTab), ...userTabs]);
-      // a shared tab lists every member with its task note; a tab of one's own needs none
       const own = (tab) => {
         const info = ctx.describeTab(tab);
         const { members, hold } = ctx.tabStatus(info.tabId, activeSession);
@@ -157,8 +151,7 @@ export function tabTools(ctx) {
       if (url == null) return text(ctx.describeTab(tab, call.session));
       const tabId = tab.linkedBrowser.browserId;
       const key = `tab:${tabId}`;
-      // A batch may already hold this key. Never wait for a new key while holding
-      // the batch's other locks: a request ahead of us could be waiting on them.
+      // why: A busy new tab cannot be queued while the batch holds other locks (ADR 0004).
       let lock;
       try {
         if (!call.tabVersions.has(tabId)) {
@@ -175,8 +168,7 @@ export function tabTools(ctx) {
       }
     },
 
-    // A tab the agent opened is closed; a tab the user gave is not closed but given back. While
-    // other sessions work in the tab, the caller only leaves it.
+    // why: Preserve the user's own tab and the access of other members.
     async tabs_close_mcp({ tabId }, call) {
       const tab = ctx.browserFor(call, tabId) && ctx.findTab(tabId);
       const given = tab.getAttribute(ctx.MARK) === "user";
@@ -191,8 +183,6 @@ export function tabTools(ctx) {
       return text(`Tab ${tabId} closed.`);
     },
 
-    // A question for the user on the island: OK/Cancel or 2-6 answer buttons. With a tab, the
-    // element it is about can be outlined; without one, it shows in every window.
     async ask_user({ tabId, ref, coordinate, message, options, timeout = 300 }, call) {
       if (
         options != null &&
@@ -207,16 +197,13 @@ export function tabTools(ctx) {
       return waitForUser(call, "ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout });
     },
 
-    // Frames with short labels around elements the agent points out to the user; nothing
-    // waits. Elements can be in different frames; every call replaces the tab's highlights.
     async highlight({ tabId, items, clear = false }, call) {
       const browser = ctx.browserFor(call, tabId);
       if (clear) items = [];
       else if (!Array.isArray(items) || !items.length || items.length > 20)
         throw new Error("items must list 1 to 20 elements (or pass clear: true).");
-      const byFrame = new Map(); // browsing context id → items in that frame
+      const byFrame = new Map();
       for (const [i, item] of items.entries()) {
-        // Every item gets a number badge; the label text is optional.
         const label = typeof item?.label === "string" ? item.label.trim().slice(0, 60) : "";
         const number = String(i + 1);
         let frame, data;
@@ -237,7 +224,7 @@ export function tabTools(ctx) {
         try {
           await ctx.query(browser, "highlight", { items: frameItems }, 5000, frame);
         } catch (e) {
-          // Clearing a frame that is going away doesn't matter; failing to draw does.
+          // why: Clearing a disappearing frame is best effort, but failure to draw a requested highlight matters.
           if (frameItems.length) throw e;
         }
       }
@@ -248,17 +235,12 @@ export function tabTools(ctx) {
       );
     },
 
-    // A step the user must do themselves (log in, 2FA, captcha, confirm a payment…). The tab
-    // isn't brought forward: the island expands with the message, "Go to tab" and "Done", and
-    // a desktop notification goes out if Zen isn't focused. Credentials never pass the agent.
+    // why: Leave credentials and other user-only steps with the user.
     async hand_to_user({ tabId, ref, coordinate, message, wait = "done", timeout = 600 }, call) {
       if (tabId == null) throw new Error("hand_to_user needs the tabId of the tab where the user should act.");
       return waitForUser(call, "hand_to_user", { tabId, ref, coordinate, message, wait, timeout });
     },
 
-    // Asks for one of the user's tabs, or joins a tab other sessions work in: "Allow / Deny" on
-    // the island (plus a desktop notification if Zen isn't focused) unless the permission
-    // template allows it. On approval the session is a member, as if given from the tab menu.
     async request_tab({ tabId, reason, timeout = 120 }, call) {
       const { access } = ctx;
       const { session, agent } = call;

@@ -1,4 +1,4 @@
-// Records synthetic steps in this check's tab, saves a disposable recipe, then removes it.
+// why: Use a disposable recipe so the check never alters a saved recording.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";

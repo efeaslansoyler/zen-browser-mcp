@@ -1,17 +1,9 @@
-// "Show me once" recipes: a recorded demonstration saved under a name, so any later session can
-// repeat it. Each recipe is a folder in <state>/zen-mcp/recipes/<id>/: recipe.json plus one
-// JPEG per step (the viewport with a ring around the element) and a crop of the element.
-// The recipes folder is not under the data folder because installs replace that folder.
-//
-// Used by the bridge (with IOUtils) and by the Node CLI (with fs): the store gets its file
-// operations from env.io:
-//   { readText(path), writeText(path, text), makeDirectory(path), move(from, to),
-//     remove(path) (recursive), children(path) → [paths], exists(path) }
-// Steps were recorded from web pages and are untrusted data, which the agent text says.
+// why: Keep recipes outside the install directory so reinstalling cannot erase them.
+// why: Inject filesystem operations so Gecko and the Node CLI can use the same store.
+// why: Recorded steps originate in web content and remain untrusted in agent-facing text.
 
 export const RECIPE_VERSION = 1;
 
-// env.io for the bridge (IOUtils exists in privileged modules only, so it's read on use).
 export const geckoIO = {
   readText: (path) => IOUtils.readUTF8(path),
   writeText: (path, text) => IOUtils.writeUTF8(path, text, { tmpPath: `${path}.tmp` }),
@@ -24,7 +16,6 @@ export const geckoIO = {
 const MAX_NAME = 80;
 const MAX_NOTE = 2000;
 
-// "PSG: bilet ara" → "psg-bilet-ara"
 export function slug(name) {
   const base = String(name)
     .toLocaleLowerCase("tr")
@@ -48,7 +39,6 @@ export function originOf(url) {
 
 const quote = (s) => JSON.stringify(s);
 
-// createdAt (UTC) as the local day: "2026-11-18"
 export function localDay(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "?";
@@ -56,14 +46,12 @@ export function localDay(iso) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-// 'button "Go"' (with the selector as a fallback for finding it again)
 function describeTarget(target) {
   if (!target) return "the page";
   const what = [target.role || target.label || "element", target.name && quote(target.name)].filter(Boolean).join(" ");
   return target.selector ? `${what} (${target.selector})` : what;
 }
 
-// One line per step, written for an agent that repeats it with find/computer/form_input.
 export function describeStep(step) {
   const where = describeTarget(step.target);
   switch (step.action) {
@@ -90,7 +78,6 @@ export function describeStep(step) {
   }
 }
 
-// The recipe as text for an agent: the start, the note and numbered steps.
 export function formatRecipe(recipe, { dir, images = false } = {}) {
   const lines = [
     `Recipe ${quote(recipe.name)} (id ${recipe.id}), shown by the user on ${localDay(recipe.createdAt)}.`,
@@ -144,10 +131,6 @@ export class Recipes {
     return (await this.list()).find((r) => r.name.toLocaleLowerCase("tr") === name.toLocaleLowerCase("tr")) ?? null;
   }
 
-  // Saves a stopped recording; its images move from imagesDir into the recipe folder.
-  // replace: the id of a recipe this one overwrites (same name, confirmed by the user).
-  // From the review: removed lists step indexes to drop, variables maps step indexes to
-  // variable names (values that change every time).
   async save(recording, { name, note = "", replace = null, imagesDir = null, removed = [], variables = {} }) {
     name = String(name ?? "").trim();
     if (!name) throw new Error("A recipe needs a name.");
@@ -193,7 +176,6 @@ export class Recipes {
     return recipe;
   }
 
-  // The recipe as text for an agent (formatRecipe with its folder for image paths).
   text(recipe, { images = false } = {}) {
     return formatRecipe(recipe, { dir: `${this.dir}/${recipe.id}`, images });
   }
@@ -208,7 +190,6 @@ export class Recipes {
     return JSON.parse(text);
   }
 
-  // Summaries, newest first; origin narrows them to one site.
   async list({ origin } = {}) {
     if (!(await this.io.exists(this.dir))) return [];
     const recipes = [];
@@ -218,7 +199,7 @@ export class Recipes {
         if (origin && recipe.origin !== origin) continue;
         const { id, name, note, startUrl, createdAt, steps } = recipe;
         recipes.push({ id, name, note, origin: recipe.origin, startUrl, createdAt, steps: steps.length });
-      } catch {} // not a recipe folder (or a broken one): skipped
+      } catch {}
     }
     return recipes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
@@ -230,8 +211,6 @@ export class Recipes {
   }
 }
 
-// The recipes tool: lists, returns and (after the user confirms on the island) deletes recipes.
-// show_me, which makes them, is in Demonstrations.sys.mjs.
 export function recipeTools(ctx) {
   const { L, text } = ctx;
   return {
@@ -263,7 +242,7 @@ export function recipeTools(ctx) {
           await store.remove(id);
           return text(`Deleted the recipe ${quote(recipe.name)}.`);
         }
-        const key = {}; // this question's own answer key: other questions can wait meanwhile
+        const key = {}; // why: Tab-less questions need separate answer keys so multiple cards can wait.
         const card = ctx.island?.ask(
           null,
           L("Delete recipe?", "Tarif silinsin mi?"),

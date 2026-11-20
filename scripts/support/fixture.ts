@@ -1,6 +1,4 @@
-// For live checks: runs code in a fixture tab's page as the check itself, not as an agent. Setup
-// and inspection of fixtures must not go through javascript_tool, which asks the user in auto
-// mode; the bridge's background query reaches the page without the agents' permission checks.
+// why: Fixture setup is not an agent operation; route it only to test-owned pages without opening permission cards.
 import { call } from "../../src/zen.ts";
 
 export function fixtureTransportEnv() {
@@ -31,8 +29,7 @@ export async function pageEval(tabId: number, code: string): Promise<string> {
     .join("\n");
 }
 
-// Answers the island's permission card for a call the check makes on purpose (an action auto
-// mode asks for), while the call runs: clicks Allow on the card whose message contains match.
+// why: Answer only a prompt matching the fixture's own operation.
 export async function approveWhile<T>(running: Promise<T>, match: string): Promise<T> {
   let done = false;
   const settled = running.finally(() => {

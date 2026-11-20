@@ -1,4 +1,4 @@
-// Store access is separate from arbitrary page evaluation and only available in agent profiles.
+// why: Storage access must stay bound to agent profiles and separate from arbitrary page evaluation.
 export function assertAgentDataMode(mode, tool) {
   if ((tool === "cookies" || tool === "storage") && (!mode || mode === "together"))
     throw new Error("This tool requires an agent browser mode.");
@@ -41,7 +41,7 @@ function httpURI(uri) {
 }
 
 export function agentDataTools(ctx) {
-  // ctx.text normalizes element refs. Cookie and storage values must round-trip verbatim.
+  // why: Cookie and storage values must round-trip verbatim because ctx.text rewrites element refs.
   const data = (value) => [{ type: "text", text: JSON.stringify(value) }];
   return {
     cookies(args, call) {
@@ -56,7 +56,7 @@ export function agentDataTools(ctx) {
       const { partitionKey, ...attrs } = principal.originAttributes;
       if (partitionKey) throw new Error("Partitioned cookie jars are unavailable.");
       const manager = Services.cookies;
-      // Firefox 142 moved the native cookie timestamp from seconds to milliseconds.
+      // why: Cookie expiry changes units across Gecko versions (docs/gecko-pitfalls.md, Cookie expiry).
       const expiryScale = Number.parseInt(Services.appinfo.platformVersion, 10) >= 142 ? 1000 : 1;
       const host = uri.asciiHost;
       const { action, name, value, path = "/", http_only = false, expires } = args;

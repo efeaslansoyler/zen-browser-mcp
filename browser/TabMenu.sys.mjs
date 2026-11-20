@@ -1,24 +1,13 @@
-// The tab context menu: "Take back from agent", "Remove hold", "Give to / Share with session…"
-// and "Agent settings" (permission mode, the sites agents can use and, in Zen, the workspace for
-// agent tabs). UI only; the work goes through env:
-//   env.L(en, tr), env.mark: the mark attribute,
-//   env.sessions(): connected sessions, env.memberNames(tab), env.menuAgent(),
-//   env.paintIcon(item, agent): the agent's icon and color,
-//   env.give(tab, sessionId), env.takeBack(tab), env.holdLabel(tab): who holds the tab and why
-//   (null if nobody), env.releaseHold(tab),
-//   env.readConfig(), env.writeConfig(patch), env.setMode(mode), env.hasCustomPermissions(), env.hostOf(browser), env.siteEntry(host),
-//   env.workspaces(win): Zen workspace names (null outside Zen),
-//   env.history(tabId): the latest agent actions in that tab (lines), env.openHistory(win): the full history page
 const MENU_ID = "zen-mcp-context-give";
 
 export class TabMenu {
   constructor(env) {
     this.env = env;
-    this.builders = new WeakMap(); // win → build(tabs)
+    this.builders = new WeakMap();
     this.cleanups = new Set();
   }
 
-  // Builds the menu for given tabs (tests and scripts; the native contextTab may change).
+  // why: Accept explicit tabs so callers need not depend on a changing native contextTab.
   prepare(win, tabs) {
     const build = this.builders.get(win);
     if (!build) throw new Error("The session handoff menu is not attached to this window.");
@@ -45,10 +34,8 @@ export class TabMenu {
     item.id = MENU_ID;
     item.className = "menuitem-iconic";
     env.paintIcon(item, env.menuAgent());
-    // at the end of Firefox's AI section, otherwise at the end of the menu
     const anchor = win.document.getElementById("context_aiSeparator");
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
-    // an agent's hold on the tab (tab_work hold): the user can end it
     const release = win.document.createXULElement("menuitem");
     release.id = MENU_ID + "-release";
     menu.insertBefore(release, item.nextSibling);
@@ -69,7 +56,7 @@ export class TabMenu {
     const historyPopup = win.document.createXULElement("menupopup");
     historyMenu.append(historyPopup);
     menu.insertBefore(historyMenu, permissionsMenu.nextSibling);
-    // filled when the submenu opens: the log file is read only when needed
+    // why: Defer reading the log until the user opens the history submenu.
     const onHistoryShowing = async (event) => {
       if (event.target !== historyPopup) return;
       const tab = shownTabs[0];
@@ -162,7 +149,6 @@ export class TabMenu {
         permissionsPopup.append(choice);
       }
       permissionsPopup.append(win.document.createXULElement("menuseparator"));
-      // Sites: where agents may go. One list applies: a blocklist or an allowlist.
       const sites = config.sites;
       heading(L("Sites agents can use", "Ajanların kullanabileceği siteler"));
       for (const [mode, label] of [
@@ -197,7 +183,7 @@ export class TabMenu {
               ? L(`Block ${host}`, `${host} engellensin`)
               : L(`Allow ${host}`, `${host} izinli olsun`),
       );
-      // a parent domain's entry is changed there, not here
+      // why: A subdomain cannot edit a rule inherited from its parent domain.
       if (!hasSite || (entry && entry !== host)) site.setAttribute("disabled", "true");
       if (entry) site.setAttribute("checked", "true");
       site.addEventListener("command", () => {
@@ -229,7 +215,6 @@ export class TabMenu {
       }
     };
     this.builders.set(win, build);
-    // the tab the menu opened on; all selected tabs if it is part of a multi-selection
     const contextTabs = () => {
       const tab = win.TabContextMenu?.contextTab;
       if (!tab) return [];

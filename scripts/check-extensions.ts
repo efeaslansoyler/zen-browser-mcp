@@ -1,5 +1,3 @@
-// Installs a disposable local extension, exercises its native UI, then uninstalls it.
-// Existing extensions/settings are not modified. Also reads uBlock's panel if present.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -83,7 +81,7 @@ try {
   tabId = JSON.parse(text(await tool("tabs_create_mcp"))).tabId;
   await tool("navigate", { tabId, url: `http://127.0.0.1:${address.port}/` });
   const ext = (action: string, args: object = {}) => tool("extensions", { action, tabId, extensionId, ...args });
-  // acting in a panel asks in auto mode (extensions.act): the check approves its own actions
+  // why: Auto mode still asks for extension actions, so answer only this check's own prompts.
   const act = (action: string, args: object = {}) => approveWhile(ext(action, args), "wants to");
   async function answerSwitch(allow: boolean) {
     for (let i = 0; i < 100; i++) {

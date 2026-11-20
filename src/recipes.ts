@@ -1,5 +1,3 @@
-// `recipes list|show|rm`: the "show me once" recipes saved by the browser, read straight from
-// their folder (the browser doesn't have to run).
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Recipes, formatRecipe, localDay, type RecipeIO } from "../browser/Recipes.sys.mjs";

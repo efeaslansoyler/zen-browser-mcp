@@ -1,14 +1,4 @@
-// Mouse and keyboard input, produced in this process with the page's windowUtils through the
-// browser's own EventUtils, the path Zen's WebDriver code uses. The page sees trusted
-// (isTrusted) input and it works while the tab is in the background: no need to select the tab
-// or touch the user's window. Coordinates are CSS px in the frame's viewport.
-//
-// Before a click the target is hit tested at the point, so a click never lands on an overlay
-// that covers the element. mouse_down and key_down hold input for one session until released
-// or until a watchdog lets go.
-//
-// env: { document(), window(), eventUtils(), element(ref), ref(el), cursor, ripple(x, y),
-//        mousePath, typingPlan, elementLabel, L, setTimeout, clearTimeout }
+// why: Hit-test to avoid activating an overlay and use a watchdog so abandoned input cannot stay held.
 
 export class InputDriver {
   #heldKeys = new Map();
@@ -47,7 +37,6 @@ export class InputDriver {
     this.#releaseTimer = this.env.setTimeout(() => this.release(), hold_ms);
   }
 
-  // Lets go of every held button and key.
   release() {
     const win = this.env.window();
     this.env.clearTimeout(this.#releaseTimer);
@@ -90,7 +79,6 @@ export class InputDriver {
     }
   }
 
-  // silent: no virtual cursor or ripple (development and demos: like the user's own click)
   async input(
     {
       kind,
@@ -138,7 +126,7 @@ export class InputDriver {
     };
     switch (kind) {
       case "click": {
-        // Keep the expected node, not just its coordinates, across cursor animation.
+        // why: Keep the node identity across cursor animation so a moved or replaced element cannot turn into an unintended click.
         const expected = ref ? this.env.element(ref) : this.hitAt(x, y);
         const label = ref || "Coordinate target";
         this.assertHit(expected, x, y, label);
@@ -264,8 +252,7 @@ export class InputDriver {
     }
   }
 
-  // A click in a background tab doesn't move focus; focus the focusable element at the point
-  // (the same result as the user's click).
+  // why: Background clicks do not move focus (docs/gecko-pitfalls.md, Input and frames).
   #focusAt(x, y) {
     const doc = this.env.document();
     const target = doc.elementFromPoint(x, y);
@@ -275,9 +262,7 @@ export class InputDriver {
     if (focusable && doc.activeElement !== focusable) focusable.focus();
   }
 
-  // A wheel event is sent (so the page's wheel listeners run). The browser multiplies the
-  // delta by mousewheel.default.delta_multiplier_*, so the event delta is divided by it. In a
-  // background tab the wheel doesn't scroll; then the requested amount is scrolled directly.
+  // why: Background wheel events reach listeners but do not scroll (docs/gecko-pitfalls.md, Input and frames).
   async #wheel(x, y, dx, dy, [mx, my], scope) {
     const win = this.env.window();
     const scroller = this.#scrollerAt(x, y);
@@ -295,7 +280,6 @@ export class InputDriver {
     return "done";
   }
 
-  // The nearest scrollable ancestor of the element at the point, or the page itself.
   #scrollerAt(x, y) {
     const doc = this.env.document();
     const win = this.env.window();
@@ -326,7 +310,7 @@ export class InputDriver {
       throw new Error(`Click blocked: ${label} is gone or has no hit target. Refresh screenshot/read_page.`);
     if (expected.matches?.(":disabled")) throw new Error(`Click blocked: ${label} is disabled.`);
     const hit = this.hitAt(x, y);
-    // Follow composed ancestry so an icon or shadow child inside a button is legitimate.
+    // why: Use composed ancestry to accept a descendant or shadow child hit inside the intended target.
     for (let node = hit; node; node = node.assignedSlot || node.parentNode || node.getRootNode?.().host) {
       if (node === expected) return;
     }

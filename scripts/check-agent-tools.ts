@@ -1,4 +1,4 @@
-// Headless only. Use a disposable runtime directory with an installed copy of Zen.
+// why: Use a disposable installation and runtime for a check that starts its own browser.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";

@@ -1,4 +1,3 @@
-// Run with a copy of a Zen installation that has the bridge loader installed in the isolated XDG environment.
 import assert from "node:assert/strict";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";

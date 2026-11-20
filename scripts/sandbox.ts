@@ -1,10 +1,5 @@
-// An isolated headless Zen that runs this checkout's browser/, for live checks from a worktree or
-// next to other agents, without touching the user's browser or settings.
-//   node scripts/sandbox.ts up [zen install dir]   then: source <printed env file>
-//   node scripts/sandbox.ts down <sandbox dir>
-// The install copy is a reflink copy under ~/.cache (cheap on btrfs/xfs); everything else lives in
-// a 0700 folder under /run/user/<uid>. Checks that need a visible window or the native clipboard
-// still need a private display (CONTRIBUTING.md).
+// why: Run a headless copy from the checkout so live checks cannot touch the user's browser.
+// why: Headless Zen cannot exercise the native clipboard or checks that require a visible window.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
@@ -24,6 +19,7 @@ function up(installDir = "/opt/zen-browser-bin") {
   for (const dir of Object.values(dirs)) fs.mkdirSync(dir);
   const copy = path.join(os.homedir(), ".cache", "zen-mcp-sandbox", path.basename(runtime));
   fs.mkdirSync(path.dirname(copy), { recursive: true });
+  // why: Reflinks avoid copying a full browser install on filesystems that support them.
   execFileSync("cp", ["-a", "--reflink=auto", installDir, copy]);
   fs.symlinkSync(path.join(CHECKOUT, "browser"), path.join(dirs.data, "zen-mcp"));
   fs.mkdirSync(path.join(dirs.config, "zen-mcp"), { mode: 0o700 });

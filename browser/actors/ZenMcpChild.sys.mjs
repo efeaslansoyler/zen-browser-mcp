@@ -1,13 +1,3 @@
-// Runs in the content process, in every frame of every page (iframes included). Errors are
-// returned as { error } instead of thrown: sendQuery doesn't carry error messages well.
-//
-// The actor answers the parent's queries and, while its tab is recorded ("show me once"),
-// sends the user's steps to the parent with sendAsyncMessage. It owns the per-page state: element refs (valid for
-// this actor instance, i.e. this page load), held input, the cursor and pending questions.
-// The work is in the helper modules next to this file. They are loaded with this module's
-// ?v= query so a bridge reload picks up new code, and they never import each other: whatever
-// one helper needs from another is passed in here.
-
 const load = (name) =>
   ChromeUtils.importESModule(new URL(name, import.meta.url).href + new URL(import.meta.url).search);
 const { agentTheme, applyTheme } = load("../Agent.sys.mjs");
@@ -22,19 +12,17 @@ const { Recorder } = load("./Recorder.sys.mjs");
 const { WebVitals } = load("./WebVitals.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
-// InspectorUtils is exposed only to window globals, not to module scope; DevTools gets it the same way.
+// why: InspectorUtils is exposed only to window globals (docs/gecko-pitfalls.md, Source locations and styles).
 let inspector;
 const inspectorUtils = () =>
   (inspector ??= Cu.Sandbox(Services.scriptSecurityManager.getSystemPrincipal(), {
     wantGlobalProperties: ["InspectorUtils"],
   }).InspectorUtils);
 
-// Text the user sees (cursor label, element descriptions) follows the browser language;
-// messages to agents are always English.
+// why: Localize user-facing UI while keeping agent-facing output in English.
 const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
 
 const MAX_TEXT = 100000;
-// Recordings.sys.mjs puts the recorded tabs' browserIds here.
 const RECORDING_KEY = "zen-mcp:recording";
 const RECORD_EVENTS = new Set(["click", "change", "keydown", "input", "pagehide"]);
 
@@ -51,7 +39,6 @@ export class ZenMcpChild extends JSWindowActorChild {
   #vitals;
   #restoredAt = 0;
 
-  // Shared by the helpers; document and window are read at call time.
   #env = {
     document: () => this.document,
     window: () => this.contentWindow,
@@ -87,8 +74,6 @@ export class ZenMcpChild extends JSWindowActorChild {
   });
   #flashes = new Set();
 
-  // main.js subscribes the actor to these events: the right-clicked element for "Show to
-  // agent…", and the user's input while the tab is recorded.
   handleEvent(event) {
     if (RECORD_EVENTS.has(event.type) && event.isTrusted && this.#recording()) {
       try {
@@ -110,7 +95,7 @@ export class ZenMcpChild extends JSWindowActorChild {
       this.#input.release();
       return;
     }
-    // An event the page made itself must not change the picked element.
+    // why: Ignore page-generated events when setting the context menu's picked element.
     if (event.type !== "contextmenu" || !event.isTrusted) return;
     let target = event.composedPath()[0] ?? event.target;
     if (target?.nodeType !== 1) target = target?.parentElement;
@@ -255,11 +240,9 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "highlight":
           return { value: this.#highlight(data.items ?? []) };
         case "record_flush":
-          // show_me is ending: typed values that have no step yet
           this.#recorder.flush();
           return { value: true };
         case "cancel_ask":
-          // The user answered on the island or stopped the agent (no reply expected).
           this.#ask?.finish(data?.result ?? "stopped");
           return null;
         case "file_upload":
@@ -305,7 +288,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     return { title: doc.title, url: doc.URL, text };
   }
 
-  // The values the page sees: a privileged caller doesn't see DPR/UA overrides.
+  // why: Gecko's privileged reads can bypass content emulation overrides.
   #pageMetrics() {
     const win = this.contentWindow;
     const sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
@@ -327,8 +310,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
   }
 
-  // A sandbox with the page's principal and no Xrays: it reaches page variables directly, and
-  // the page's CSP doesn't block eval.
   async #eval(code) {
     const win = this.contentWindow;
     const sandbox = Cu.Sandbox(win, { sandboxPrototype: win, wantXrays: false, sameZoneAs: win });
@@ -341,7 +322,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   async #axe({ ref, tags, max_nodes = 10, max_rules = 100, timeout_ms = 20000 }, scope) {
     if (this.#axeRunning) throw new Error("An accessibility scan is already running in this frame.");
     this.#axeRunning = true;
-    // A fresh content-principal realm: never use or overwrite a page's window.axe.
+    // why: Use a fresh content-principal realm so axe neither trusts nor overwrites page-owned state.
     const win = this.contentWindow;
     let sandbox, timer;
     try {
@@ -415,8 +396,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
   }
 
-  // ---- clipboard: the target is captured before the island prompt and must be unchanged after ----
-
   #clipboardPending = new Map();
   #clipboardSequence = 0;
   #clipboardState(element) {
@@ -464,8 +443,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     return "done";
   }
 
-  // ---- screenshot annotations: ref labels over visible controls ----
-
   #annotation = null;
   #annotate(enabled) {
     this.#annotation?.remove();
@@ -494,8 +471,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     return refs;
   }
 
-  // ---- refs ----
-
   #ref(el) {
     let id = this.#ids.get(el);
     if (!id) {
@@ -515,8 +490,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     return el;
   }
 
-  // ---- iframes ----
-
   #frameElement(bcId) {
     for (const el of this.document.querySelectorAll("iframe, frame")) {
       if (reader.frameIdOf(el) === bcId) return el;
@@ -524,8 +497,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     return null;
   }
 
-  // The iframe's content box in this frame's viewport; scrolled into view if needed.
-  // scroll: false for recordings, which must not move the user's page.
+  // why: Recordings must not scroll the user's page to locate a frame.
   #frameRect(bcId, scroll = true) {
     const el = this.#frameElement(bcId);
     if (!el) throw new Error("iframe not found (the page may have changed).");
@@ -543,7 +515,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     };
   }
 
-  // If the point is over an iframe: that frame's ID and the point inside it.
   #frameAt(x, y) {
     const el = this.document.elementFromPoint(x, y);
     const bcId = reader.frameIdOf(el);
@@ -552,21 +523,18 @@ export class ZenMcpChild extends JSWindowActorChild {
     return { bcId, x: x - o.x, y: y - o.y };
   }
 
-  // locate: make the element visible for a ref click and return its center (CSS px, viewport).
   #locate(ref, forClick = false) {
     const el = this.#element(ref);
     const win = this.contentWindow;
     if (!reader.fullyInViewport(el, win)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) throw new Error(`${ref} is not visible (no size).`);
-    // Center of the visible portion, so large elements do not target outside the viewport.
+    // why: Use the visible portion so large elements do not target a point outside the viewport.
     const x = (Math.max(0, r.left) + Math.min(win.innerWidth, r.right)) / 2;
     const y = (Math.max(0, r.top) + Math.min(win.innerHeight, r.bottom)) / 2;
     if (forClick) this.#input.assertHit(el, x, y, ref);
     return { x, y };
   }
-
-  // ---- form_input ----
 
   #formInput(ref, value) {
     const el = this.#element(ref);
@@ -588,13 +556,13 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
     if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) {
       const checked = value === true || value === "true" || value === 1 || value === "1" || value === "on";
-      // A click, so the page's click listeners and label/radio group behavior run too.
+      // why: Use a click so page listeners and native radio/label behavior run.
       if (el.checked !== checked) el.click();
       return `${ref}: ${el.checked ? "checked" : "unchecked"}.`;
     }
     if (tag === "INPUT" || tag === "TEXTAREA") {
       el.focus();
-      // Assigning through the Xray calls the native setter; React's value tracker sees the change.
+      // why: The Xray setter bypasses React's value tracker so the input event reports a change.
       el.value = String(value);
       fire("input");
       fire("change");
@@ -609,8 +577,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     throw new Error(`${ref} is not a form field (${reader.roleOf(el) || tag.toLowerCase()}).`);
   }
 
-  // ---- file_upload: the parent reads the files (this process is sandboxed, no disk access) ----
-
   #fileUpload(ref, files) {
     const input = this.#fileInputNear(this.#element(ref));
     if (!input) throw new Error(`No file input (input type=file) near ${ref}.`);
@@ -619,16 +585,12 @@ export class ZenMcpChild extends JSWindowActorChild {
     const list = files.map(
       (f) => new win.File([Cu.cloneInto(f.bytes, win)], f.name, { type: f.type, lastModified: f.lastModified }),
     );
-    // A privileged method: fills the field without opening a file picker.
     input.mozSetFileArray(list);
-    // Events created by privileged code look trusted (isTrusted) to the page.
     input.dispatchEvent(new win.Event("input", { bubbles: true }));
     input.dispatchEvent(new win.Event("change", { bubbles: true }));
     return `${files.length} file(s) uploaded: ${files.map((f) => f.name).join(", ")}`;
   }
 
-  // Drop zones usually hide an input[type=file]: look at the element, its label's control,
-  // inside it and a few ancestors up.
   #fileInputNear(el) {
     const isFile = (node) => node?.localName === "input" && node.type === "file";
     if (isFile(el)) return el;
@@ -639,8 +601,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
     return null;
   }
-
-  // ---- ask_user: outline the element and wait for the user's answer ----
 
   #askUser({ ref, x, y, wait = "done", timeout = 300 }) {
     this.#ask?.finish("replaced");
@@ -655,7 +615,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     });
   }
 
-  // Replaces this frame's highlights; an empty list removes them. items: [{ ref | x, y, label, number }]
   #highlights = null;
   #highlight(items) {
     const resolved = items.map(({ ref, x, y, label, number }) => {
@@ -671,13 +630,12 @@ export class ZenMcpChild extends JSWindowActorChild {
     return resolved.length;
   }
 
-  // A recorded element lights up briefly, so the user sees what was recorded.
   #flash(element) {
     let shown;
     try {
       shown = highlight(this.#env, [{ element, label: "", number: "✓" }]);
     } catch {
-      return; // only a hint
+      return;
     }
     this.#flashes.add(shown);
     setTimeout(() => {
@@ -686,7 +644,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     }, 900);
   }
 
-  // Keep the cursor, ripples, pick outline and highlights out of the agent's own screenshots.
+  // why: Remove transient overlays from agent-facing screenshots so they cannot cover page content.
   #overlays(hidden) {
     this.#cursor.setHidden(hidden);
     if (hidden) for (const ripple of this.document.querySelectorAll("zen-mcp-ripple")) ripple.remove();
@@ -695,9 +653,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
     return "done";
   }
-
-  // ---- console: Firefox keeps this page's console.* calls (ConsoleAPIStorage) and JS errors
-  // (console service) since the page loaded; no need to start listening in advance ----
 
   #console({ onlyErrors = false, pattern, limit = 100, clear = false }) {
     const innerId = this.manager.innerWindowId;
@@ -745,7 +700,6 @@ export class ZenMcpChild extends JSWindowActorChild {
     return lines.join("\n");
   }
 
-  // The browser's own EventUtils, bound to this frame's window.
   #eu() {
     if (!this.#eventUtils) {
       const win = this.contentWindow;

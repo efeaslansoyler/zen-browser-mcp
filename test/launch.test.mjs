@@ -203,7 +203,7 @@ for (const { action, value, expected, grant } of [
     );
     const bridge = net.createServer((peer) => peer.end());
     fs.mkdirSync(INSTANCES_DIR, { mode: 0o700, recursive: true });
-    // Bind only once spawn is attempted so the resolver has to go through approval.
+    // why: Delay binding until after spawn is attempted so discovery cannot skip the approval path.
     const { launch, calls } = launcher({
       timeout: 1000,
       started() {

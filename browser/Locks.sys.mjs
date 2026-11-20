@@ -1,12 +1,7 @@
-// FIFO locks by key. Tool calls take the locks of the tabs they touch, so calls on one tab run
-// in order while calls on different tabs run side by side. A request queues on all its keys in
-// one synchronous step: every lane sees requests in arrival order, so two requests can never
-// wait for each other.
 export class Locks {
-  #tails = new Map(); // key → promise that resolves when the last queued holder releases
+  #tails = new Map();
 
-  // Queues on every key at once. ready resolves when all are held; release frees them and may be
-  // called at any time (also before ready, when the waiter gives up).
+  // why: A canceled waiter must release its place in every lane even before acquiring the locks.
   acquire(keys) {
     const waits = [];
     const releases = [];
@@ -37,7 +32,6 @@ export class Locks {
     };
   }
 
-  // Whether anyone holds or waits for key.
   busy(key) {
     return this.#tails.has(key);
   }

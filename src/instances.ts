@@ -1,4 +1,4 @@
-// Resolves the same endpoint for requests and subscriptions within each process.
+// why: Requests and lifecycle subscriptions must resolve to the same browser within an MCP process.
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -50,8 +50,7 @@ function validMetadata(entry: Metadata | null): entry is Metadata {
 
 const lstat = (file: string) => fs.lstatSync(file, { throwIfNoEntry: false });
 
-// Probe before sending a request. Permission errors and timeouts do not justify deleting
-// entries or moving a sticky client to a different browser.
+// why: Permission errors and timeouts do not establish that an endpoint is dead.
 export function listening(socketPath: string): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
@@ -108,8 +107,7 @@ export async function discoverInstances(dir = INSTANCES_DIR): Promise<Instance[]
         const socketStat = lstat(socket);
         if (socketStat && !socketStat.isSocket()) return null;
         if (alive(entry.pid) && socketStat && (await listening(socket))) return { ...entry, socket };
-        // The browser may have stopped or updated its metadata since we began the probe.
-        // Each bind uses a fresh name, so this socket cannot belong to a later bind.
+        // why: Recheck metadata because it can change while probing.
         removeIfSame(socket, socketStat);
         removeIfSame(metadataPath, metadataStat);
         return null;
@@ -236,7 +234,7 @@ export class BrowserResolver {
     return this.override ? Promise.resolve([] as Instance[]) : discoverInstances(this.options.dir);
   }
 
-  // Detached receivers stay with the selected installation and profile across reloads.
+  // why: Detached receivers follow the same profile through bridge reloads.
   pinDelivery(target: Selection) {
     if (!target.instance) return;
     this.selected = target;
@@ -277,7 +275,7 @@ export class BrowserResolver {
       const reload = () => instances.find((instance) => sameBrowser(current, { ...current, instance }));
       let reloaded = reload();
       if (!reloaded && alive(current.instance.pid)) {
-        // A reload closes one listener before publishing the next.
+        // why: Briefly tolerate a missing listener during reload because the next socket is published afterward.
         await sleep(200);
         instances = await this.list();
         reloaded = reload();
@@ -323,7 +321,7 @@ export class BrowserResolver {
     );
   }
 
-  // Only MCP tool handlers opt in. Passive requests share discovery, never an approval or launch.
+  // why: Passive discovery must not prompt or auto-launch a browser.
   resolveForTool(launch: LaunchSelection): Promise<Selection> {
     return (this.pendingTool ??= this.probe()
       .then(async (next) => {
@@ -345,8 +343,7 @@ export class BrowserResolver {
 
 export const browserResolver = new BrowserResolver();
 
-// Receiver control sockets are scoped by profile, so one client's selection cannot
-// redirect an existing watcher or relay used by a client on another browser.
+// why: A watcher or relay must stay bound to its original profile when another client selects another browser.
 export function deliveryScope(target?: Selection) {
   const instance = target?.instance;
   const override = target ? target.reason === "ZEN_MCP_SOCKET" && target.socket : process.env.ZEN_MCP_SOCKET;

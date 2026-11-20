@@ -1,4 +1,3 @@
-// Per-tab layout and Gecko overrides. No window resize, global prefs, or WebDriver.
 export const DEVICE_PRESETS = {
   mobile: { width: 390, height: 844, dpr: 3, touch: true, platform: "Android 15; Mobile" },
   tablet: { width: 820, height: 1180, dpr: 2, touch: true, platform: "Android 15; Tablet" },
@@ -11,7 +10,7 @@ export class BrowserSettings {
   }
   validate(args) {
     const value = args.action === "device" ? { ...DEVICE_PRESETS[args.device], ...args } : { ...args };
-    // Mobile/tablet: the Android Firefox UA of the same Gecko version (so servers send the mobile page)
+    // why: Match the browser's Gecko version while asking servers for their mobile layout.
     if (value.platform && value.userAgent == null && this.env.geckoVersion) {
       const v = this.env.geckoVersion;
       value.userAgent = `Mozilla/5.0 (${value.platform}; rv:${v}) Gecko/${v} Firefox/${v}`;
@@ -37,8 +36,7 @@ export class BrowserSettings {
       throw new Error("Invalid color scheme.");
     return value;
   }
-  // target can be a function: cross-site navigation replaces the browsingContext (Fission) and
-  // overrides move to the new one, so restoring must find the current object
+  // why: Restore on the current context because Fission can replace it while retaining overrides.
   remember(entry, at, key, value, css = false) {
     const target = typeof at === "function" ? at() : at;
     let property = entry.properties.find((p) => p.at === at && p.key === key && p.css === css);
@@ -63,7 +61,7 @@ export class BrowserSettings {
       try {
         const target = typeof p.at === "function" ? p.at() : p.at;
         const current = p.css ? target.style.getPropertyValue(p.key) : target[p.key];
-        if (current !== p.applied) continue; // Preserve manual edits made since our change.
+        if (current !== p.applied) continue; // why: Restore an override only if the user has not edited it in the meantime.
         if (p.css) {
           if (p.original) target.style.setProperty(p.key, p.original, p.priority);
           else target.style.removeProperty(p.key);
@@ -72,7 +70,7 @@ export class BrowserSettings {
     }
     this.entries.delete(source);
   }
-  // session: only settings that session made (it left a shared tab)
+  // why: When a member leaves a shared tab, preserve the other members' settings.
   restoreTab(tabId, session) {
     for (const [source, entry] of this.entries)
       if (source.browserId === tabId && (!session || entry.session === session)) this.restore(source);
@@ -115,7 +113,6 @@ export class BrowserSettings {
       return;
     }
     checkModal();
-    // A background browser's layout is suspended; select it only after explicit approval.
     win.gBrowser.selectedTab = win.gBrowser.getTabForBrowser(source);
     await this.env.wait(50, source);
     this.env.check(source, session);

@@ -90,7 +90,6 @@ function actorHarness() {
 for (const kind of ["text", "keys"]) {
   test(`actor cancels ${kind} midway; fresh request works without resuming old input`, async () => {
     const { actor, events, first } = actorHarness();
-    // Cursor labels are optional when the cursor has not been created.
     const data = {
       requestId: 1,
       kind,

@@ -1,16 +1,10 @@
-// Source locations for picked elements: turns the raw hints the picker collects (stack
-// strings, framework metadata) into project files and lines through the page's source maps.
-//
-// It fetches only from the picked page's origin (including Next.js's dev source map endpoint for
-// server components) and only when the site rules allow that host.
-// Anything missing, failing or slower than the budget makes the result "unknown".
-// env: { fetchText(url): Promise<string>, siteAllowed(host), sleep(ms), budgetMs }
+// why: Source maps cannot trigger cross-origin or site-blocked fetches.
+// why: A bounded deadline prevents source resolution from blocking the pick indefinitely.
 
 const SNIPPET_BEFORE = 3;
 const SNIPPET_AFTER = 4;
 const MAX_COMPONENTS = 3;
 
-// One resolver per hint kind; each returns a location or null.
 const FRAMEWORKS = [
   ["react19", resolveReact19],
   ["react18", resolveReact18],
@@ -21,14 +15,12 @@ const FRAMEWORKS = [
 ];
 
 export class SourceResolver {
-  #maps = new WeakMap(); // document → Map(script URL → Promise<parsed map | null>)
+  #maps = new WeakMap();
 
   constructor(env) {
     this.env = env;
   }
 
-  // → "unknown" or { framework, precision, chain: [{ role, name?, file, original, line, column }], snippet,
-  //   cssRules? }; with CSS rules but no element location, just { cssRules }.
   async resolve(hints, { pageUrl, document }) {
     let page;
     try {
@@ -57,10 +49,7 @@ export class SourceResolver {
     return Promise.race([work, this.env.sleep(this.env.budgetMs).then(() => "unknown")]);
   }
 
-  // A generated stack frame → its original position, or null.
   async #mapFrame({ url, line, column }, origin, maps) {
-    // React's stand-in for a server component frame (the server file at its own position) and
-    // webpack's eval'd dev modules: Next.js's dev endpoint serves the maps of both.
     const server = url.startsWith("webpack-internal:///")
       ? url
       : /^(?:rsc|about):\/\/React\/[^/]+\/(.+)\?\d+$/.exec(url)?.[1];
@@ -107,16 +96,13 @@ export class SourceResolver {
     return parseMap(json, url.protocol === "data:" ? script?.href : url.href);
   }
 
-  // Next.js dev servers serve server bundle maps at /__nextjs_source-map?filename=… (the URL its own
-  // findSourceMapURL gives React).
   async #loadServerMap(filename, origin) {
     const url = new URL("/__nextjs_source-map", origin);
     url.searchParams.set("filename", filename);
     return parseMap(await this.env.fetchText(url.href), url.href);
   }
 
-  // Each matched rule's file and line. Lines inside an injected <style> are only a place in the
-  // project after a CSS source map maps them; rules made by script have no place at all.
+  // why: Generated inline CSS only identifies a project position after source-map resolution.
   #cssRules({ sheets = [], rules = [] }, page, maps) {
     return Promise.all(
       rules.map(async ({ sheet: index, selector, line, column }) => {
@@ -137,8 +123,6 @@ export class SourceResolver {
     );
   }
 
-  // A <style>'s own map: inline (Vite) or a same-origin URL relative to the page. Relative
-  // sources sit next to the style's dev file.
   async #mapStyle({ map: comment, devId }, line, column, page, maps) {
     const url = new URL(comment, page);
     if (url.protocol !== "data:" && url.origin !== page.origin) return null;
@@ -166,13 +150,11 @@ export class SourceResolver {
 const sourcePath = ({ sourceRoot, sources }, { source }) =>
   (sourceRoot ? sourceRoot.replace(/\/?$/, "/") : "") + sources[source];
 
-// A stylesheet without a map: its served path on the page's origin, else its URL.
 function servedFile(href, page) {
   const url = new URL(href);
   return url.origin === page.origin ? decodeURIComponent(url.pathname).slice(1) : href;
 }
 
-// A source map, or an index map of sections (Turbopack), as sections with decoded mappings.
 function parseMap(json, url) {
   const map = JSON.parse(json);
   const parts = Array.isArray(map?.sections) ? map.sections : [{ offset: { line: 0, column: 0 }, map }];
@@ -192,8 +174,6 @@ function parseMap(json, url) {
   return sections.length ? sections : null;
 }
 
-// React 19 owner stacks: the element's JSX call site, then where each owner component was
-// rendered. Only the frames above React's bottom frame belong to the owner stack.
 async function resolveReact19({ element, owners = [] }, { mapFrame }) {
   const own = await userFrame(element, mapFrame);
   if (!own) return null;
@@ -211,8 +191,6 @@ async function resolveReact19({ element, owners = [] }, { mapFrame }) {
   };
 }
 
-// The stacks below record positions in the user's own files, so no source map is needed.
-
 function resolveReact18({ element, owners = [] }) {
   const place = (source) => userPlace(source?.fileName, source?.lineNumber, source?.columnNumber);
   return elementChain(
@@ -222,7 +200,6 @@ function resolveReact18({ element, owners = [] }) {
   );
 }
 
-// Svelte columns are zero-based.
 function resolveSvelte({ element, parents = [] }) {
   const place = (loc) => userPlace(loc?.file, loc?.line, Number.isInteger(loc?.column) ? loc.column + 1 : null);
   return elementChain(
@@ -232,7 +209,6 @@ function resolveSvelte({ element, parents = [] }) {
   );
 }
 
-// Astro's column is the end of the opening tag, not where the element starts; only the line helps.
 function resolveAstro({ file, loc }) {
   return elementChain("Astro", userPlace(file, Number(String(loc ?? "").split(":")[0])), []);
 }
@@ -269,7 +245,6 @@ function componentDefinition(framework, name, place) {
   };
 }
 
-// { file, line?, column? } for a file outside node_modules, else null.
 function userPlace(file, line, column) {
   if (typeof file !== "string" || !file || isLibrary(file)) return null;
   const place = { file };
@@ -280,7 +255,6 @@ function userPlace(file, line, column) {
   return place;
 }
 
-// The first frame outside node_modules, mapped to the original source.
 async function userFrame(stack, mapFrame) {
   for (const frame of parseStack(stack)) {
     if (isLibrary(frame.url)) continue;
@@ -292,7 +266,6 @@ async function userFrame(stack, mapFrame) {
 
 const isLibrary = (path) => /(^|[/\\])node_modules[/\\]/.test(path);
 
-// Gecko's Error.stack: one "name@url:line:column" per line.
 function parseStack(stack) {
   const frames = [];
   for (const text of String(stack ?? "").split("\n")) {
@@ -312,9 +285,6 @@ function snippet({ file, line, content }) {
   return { file, line, start, lines: lines.slice(start - 1, line + SNIPPET_AFTER) };
 }
 
-// A path the agent can open from the project root when the map reveals one, else the original.
-// Dev servers serve project files at their project path (Vite: /src/App.tsx); bundlers name them
-// turbopack:///[project]/app/page.tsx or webpack://_N_E/./app/page.tsx.
 function projectPath(original, mapUrl, script) {
   const bundled =
     /^(?:turbopack:\/\/\/\[project\]\/|webpack:\/\/(?:[^/]*\/)?\.\/|webpack-internal:\/\/\/(?:\([^)]*\)\/)?\.\/)(.+)$/.exec(
@@ -349,7 +319,7 @@ function decodeDataURL(href) {
     bits = 0;
   for (const c of body) {
     const digit = BASE64.get(c);
-    if (digit === undefined) continue; // padding
+    if (digit === undefined) continue;
     value = ((value << 6) | digit) & 0xffff;
     bits += 6;
     if (bits >= 8) {
@@ -362,8 +332,6 @@ function decodeDataURL(href) {
 
 const BASE64 = new Map([..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"].map((c, i) => [c, i]));
 
-// Source map v3 "mappings" → per generated line, segments of
-// [generatedColumn, sourceIndex, originalLine, originalColumn] (absolute, zero-based).
 function decodeMappings(mappings) {
   const lines = [];
   let source = 0,
@@ -399,7 +367,6 @@ function decodeMappings(mappings) {
   return lines;
 }
 
-// Sections are sorted; the last one starting at or before the position holds it.
 function originalPosition(sections, line, column) {
   const section = sections.findLast((s) => s.line < line || (s.line === line && s.column <= column));
   if (!section) return null;

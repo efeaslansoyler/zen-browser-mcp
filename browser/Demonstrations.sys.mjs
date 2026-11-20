@@ -1,17 +1,5 @@
-// "Show me once" from start to end: record a tab while the user does a task, let the user
-// review the steps on the island, save them as a recipe. Two ways in:
-//   - an agent calls show_me in its tab and gets the recipe back;
-//   - the user picks "Record steps for an agent…" in any web page's context menu, and can send
-//     the saved recipe to a connected session (Claude Code channel or Codex queue), optionally
-//     asking it to try the recipe at once.
-// The pieces: Recordings.sys.mjs (steps and screenshots), RecordingReview.sys.mjs (the review),
-// Recipes.sys.mjs (storage and the agents' text), Island.sys.mjs (recording/review states).
-// They come through ctx (ctx.recipes, ctx.ReviewModel): modules don't import each other, so a
-// bridge reload never mixes versions.
-
 export const MAX_SHOW_TIMEOUT = 3600;
 const PAGE_MENU_ID = "zen-mcp-context-record";
-// the next step for an agent the user asked to try a recipe
 const TRY_NOW =
   "The user asks you to try this recipe now: open a new tab (tabs_create_mcp, clean: true if the site needs no login), follow the steps with your own tools, hand secret steps to the user (hand_to_user), and report what happened.";
 
@@ -25,10 +13,6 @@ const hostOf = (url) => {
   }
 };
 
-// The shared flow. wait(timeout) resolves with the island answer for this tab; targets (the
-// user's flow) adds the session picker to the review. Returns { status, recipe?, recording?,
-// choice? }; status is saved, cancelled, timeout or empty. agent: who asked, for the desktop
-// notification (notify).
 export async function demonstrate(
   ctx,
   browser,
@@ -53,7 +37,6 @@ export async function demonstrate(
     discard();
     throw e;
   } finally {
-    // typed values that have no step yet, then the steps and their images
     await Promise.all(
       browser.browsingContext.getAllBrowsingContextsInSubtree().map(async (bc) => {
         try {
@@ -73,7 +56,6 @@ export async function demonstrate(
   if (statusOf(answer) !== "done") return end(statusOf(answer) === "timeout" ? "timeout" : "cancelled");
   if (!recording?.steps.length) return end("empty");
 
-  // the review: name, delete steps, mark values that change, play back, choose a session
   const existing = await ctx.recipes.list();
   const image = (file) => (file ? ctx.fileURL(`${dir}/${file}`) : null);
   const model = new ctx.ReviewModel({
@@ -118,15 +100,11 @@ export async function demonstrate(
 export function demonstrationTools(ctx) {
   const { text } = ctx;
   return {
-    // The user does the task in the agent's tab while every step is recorded; the island shows
-    // one line with a live step count and Finish / Cancel (the agent's message on hover). After
-    // Finish the user reviews the steps and saves. Blocks until the user saves or cancels.
     async show_me({ tabId, message, name, timeout = 900 }, call) {
       const browser = ctx.browserFor(call, tabId);
       if (typeof message !== "string" || !message.trim()) throw new Error("message must say what to show.");
       timeout = Math.min(Math.max(Number(timeout) || 900, 30), MAX_SHOW_TIMEOUT);
-      // One recording at a time (the user shows one thing at once): a second one waits as a card
-      // the user can cancel.
+      // why: The user can demonstrate only one task at a time, so other requests queue cancellably.
       const busy = ctx.locks.busy("recording");
       const turn = ctx.locks.acquire(["recording"]);
       let result;
@@ -152,7 +130,7 @@ export function demonstrationTools(ctx) {
             first = await Promise.race([turn.ready.then(() => "ready"), gaveUp]);
           } finally {
             if (card != null) ctx.island?.askEnded(card);
-            ctx.tabRequests.get(key)?.("replaced"); // ends the card's wait
+            ctx.tabRequests.get(key)?.("replaced");
           }
           if (first !== "ready")
             return text(
@@ -186,18 +164,14 @@ export function demonstrationTools(ctx) {
   };
 }
 
-// The user's own recordings: the page menu item, the flow, and sending the recipe.
-// env: { L, ctx (the bridge context), channels, assertSiteAccess(browser), copy(text),
-//        logError(where, e), paintIcon(item, agent), menuAgent() }
 export class Demonstrations {
   constructor(env) {
     this.env = env;
     this.cleanups = new Set();
-    this.running = new Set(); // browsers being recorded or reviewed
+    this.running = new Set();
   }
 
-  // Answers come from the island like an agent's question, but nothing here belongs to an
-  // agent operation, so Stop or an agent's tool call doesn't end the user's recording.
+  // why: User-started recordings are independent of agent calls and must survive agent Stop.
   #wait(browser, seconds) {
     const { ctx } = this.env;
     return new Promise((resolve) => {
@@ -261,7 +235,6 @@ export class Demonstrations {
     ctx.island?.finished("recording-notice");
   }
 
-  // "Record steps for an agent…" in the page context menu (top frame of web pages)
   attachPageMenu(win) {
     const { L } = this.env;
     const doc = win.document;

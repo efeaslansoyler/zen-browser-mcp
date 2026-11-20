@@ -1,4 +1,3 @@
-// Explicit per-operation consent, independent of site/auto/batch approvals.
 export class ClipboardAccess {
   constructor(env) {
     this.env = env;
@@ -49,8 +48,6 @@ export function clipboardShortcut({ key, mods }) {
   return null;
 }
 
-// The system clipboard for agents: every operation needs the user's approval on the island,
-// even in auto mode, and the target must not change while the prompt is open.
 export function systemClipboard(ctx) {
   function readClipboardText() {
     const clipboard = Cc["@mozilla.org/widget/clipboard;1"].getService(Ci.nsIClipboard);
@@ -68,7 +65,7 @@ export function systemClipboard(ctx) {
     const { L } = ctx;
     const source = ctx.controlledSource(browser);
     const call = ctx.callOf(browser);
-    await ctx.exclusive(call); // the system clipboard is shared (key shortcuts get here too)
+    await ctx.exclusive(call); // why: Browsers share the system clipboard, including shortcut-based operations.
     const check = (context) => {
       call.check();
       ctx.access.check(source.browserId, call.session);

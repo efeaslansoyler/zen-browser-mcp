@@ -7,7 +7,7 @@ import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseHookInput, configureCodexHooks, handleCodexHook } from "../dist/codex-hooks.js";
-// As if the Codex service can't be watched: hooks fall back to the per-conversation relay
+// why: Force the watcher-unavailable path so the test covers hook fallback.
 const noWatch = async () => false;
 import { contactRelay, ensureCodexRelay, relaySocket } from "../dist/codex-relay.js";
 

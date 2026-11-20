@@ -1,13 +1,10 @@
-// Events files: JSON lines for long-running work (downloads, page watches). Agents that can
-// follow a file from the shell (like Claude Code's Monitor) keep working instead of waiting.
-// We delete the files, not the agent: TTL after the work ends; leftovers from a reload are swept on start.
+// why: Event files let agents monitor work asynchronously and expire without agent cleanup.
 const TTL = 5 * 60_000;
 
 export class EventFiles {
-  // env: { dir, setTimeout, logError }
   constructor(env) {
     this.env = env;
-    this.queues = new Map(); // file → write queue (so lines don't interleave)
+    this.queues = new Map(); // why: Serialize writes to keep JSON lines from interleaving.
   }
 
   async start() {
@@ -18,12 +15,12 @@ export class EventFiles {
     }
   }
 
-  // IDs restart at 1 after a reload or browser restart: a time suffix keeps them from appending to an old file
+  // why: IDs are reused after reload or restart, so a timestamp prevents appending to old files.
   path(name) {
     return PathUtils.join(this.env.dir, `${name}-${Date.now().toString(36)}.jsonl`);
   }
 
-  // value can be a function, computed when its turn comes (slow fields such as sha256)
+  // why: Defer expensive event fields until their write reaches the front of the queue.
   append(file, value, { last = false } = {}) {
     const queue = (this.queues.get(file) ?? Promise.resolve())
       .then(async () => {

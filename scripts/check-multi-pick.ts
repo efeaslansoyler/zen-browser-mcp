@@ -1,5 +1,4 @@
-// Live multi-pick through real input and local receipt fixtures; no message reaches an AI chat.
-// Run: node scripts/check-multi-pick.ts. Existing auto mode required; settings unchanged.
+// why: Local receipt fixtures verify delivery without messaging a real conversation.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,8 +21,7 @@ const events: { target: string; event: any }[] = [];
 const receivers: ReturnType<typeof subscribe>[] = [];
 let tabId: number | undefined;
 let server: http.Server | undefined;
-// A Vite-like dev page: a React-like runtime under node_modules and a module with an inline
-// source map whose JSX calls record React 19 style _debugStack errors.
+// why: Exercise React-style ownership and an inline map without starting a framework build.
 const RUNTIME = `window.jsxDEV = function jsxDEV() { return new Error("react-stack-top-frame"); };
 window.render = { react_stack_bottom_frame(component) { return component(); } }.react_stack_bottom_frame;`;
 const APP = `function Card() {
@@ -46,9 +44,9 @@ function serveSourceFixture(): Promise<string> {
     sources: ["App.tsx"],
     sourcesContent: [APP],
     names: [],
-    mappings: ["AAAA", ...Array(lines - 1).fill("AACA")].join(";"), // line n → line n
+    mappings: ["AAAA", ...Array(lines - 1).fill("AACA")].join(";"),
   });
-  // A parser-inserted Vite dev style: its line 2 maps to line 7 of the original file.
+  // why: Use unequal generated and original lines so a pass requires resolving the CSS map.
   const cssMap = JSON.stringify({ version: 3, sources: ["Card.css"], names: [], mappings: ";AAMA" });
   const style = `<style data-vite-dev-id="/fixture/src/Card.css">
 #located {
@@ -75,8 +73,7 @@ function serveSourceFixture(): Promise<string> {
     server!.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${(server!.address() as any).port}/`)),
   );
 }
-// Receivers subscribe like real MCP processes (toolsOnly registers the session). Menus list Codex
-// conversations (codex:…), not Codex MCP processes, so the Codex receiver is one.
+// why: Register toolsOnly sessions and use the Codex conversation identity the menus actually list.
 const ids = [
   { name: "codex", id: `codex:${token}` },
   { name: "claude", id: `${token}-claude` },
@@ -115,7 +112,7 @@ try {
           cwd: process.cwd(),
           ack: true,
           toolsOnly: true,
-          push: "channel", // like a Claude Code channel: picks are pushed, not left in the inbox
+          push: "channel",
         },
       ),
     );
@@ -139,7 +136,7 @@ try {
   });
   const linkRef = /link "Fixture link" \[([^\]]+)\]/.exec(tree)?.[1];
   assert(linkRef, tree);
-  // The picker's toggle modifier: Cmd on macOS, Ctrl elsewhere.
+  // why: Match the platform's primary modifier so the live check covers actual picker shortcuts.
   const toggle = process.platform === "darwin" ? "cmd" : "ctrl";
   const start = async () => {
     await chrome(
@@ -175,7 +172,7 @@ try {
     await click(0);
     await click(1);
     await click(0);
-    await click(2, "shift"); // Toggle first off; Shift still toggles.
+    await click(2, "shift");
     await key("Return");
     await ready();
     const selected = await chrome("h.pick.items.map(item=>({selector:item.info.selector,shot:item.shot}))");

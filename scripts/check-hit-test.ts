@@ -1,5 +1,4 @@
-// Real click hit tests in a disposable tab. Run: node scripts/check-hit-test.ts
-// Requires existing auto mode; permission settings and user tabs are never changed.
+// why: The hit-test check requires auto mode so it can leave permission settings and user tabs alone.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -122,8 +121,7 @@ try {
   );
 
   await command("computer", { tabId, action: "screenshot", scale: 0.5 });
-  // Screenshot size limits can reduce the effective scale below the requested 0.5.
-  // Use the captured screenshot's actual CSS-to-image ratio, not the requested factor.
+  // why: Capture limits can shrink the image further than requested; use the actual coordinate ratio.
   const effectiveScale = await chrome(`h.state.scale.get(${tabId})`);
   assert(effectiveScale > 0 && effectiveScale <= 0.5, `Invalid screenshot scale: ${effectiveScale}`);
   const coordinate = JSON.parse(

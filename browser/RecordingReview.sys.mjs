@@ -1,18 +1,10 @@
-// "Show me once": the review on the island after the user presses Finish. The user names the
-// recipe, deletes wrong steps, marks values that change every time ("↻ Changes") and can play
-// the steps back from their screenshots before saving. "Let the agent try it now" asks the agent
-// to run the recipe at once; a recording the user started also picks the session to send to.
-//
-// ReviewModel holds the state and has no DOM; renderReview builds the panel for one window
-// from it. The island rebuilds the panel after clicks and keeps it while the user types.
+// why: Keep the review state independent of a particular window so composing a view does not reset it.
 
 const MAX_VARIABLE = 30;
-const PLAY_EVERY = 2200; // ms per step in Play
+const PLAY_EVERY = 2200;
 
 const quote = (s) => `“${s}”`;
 
-// The step as the user reads it on the island (their language; describeStep in Recipes.sys.mjs
-// is the agent's English version).
 export function stepLabel(step, L) {
   const name = step.target?.name || step.target?.text || step.target?.label || "";
   const on = name ? ` → ${name}` : "";
@@ -44,7 +36,6 @@ export function stepLabel(step, L) {
   }
 }
 
-// The small line under the step: the site, and the frame for steps in an iframe.
 function stepDetail(step, L) {
   const host = (url) => {
     try {
@@ -62,15 +53,13 @@ function stepDetail(step, L) {
   return host(step.url);
 }
 
-// Play's frame (SHOT_WIDTH × SHOT_HEIGHT) shows the screenshot zoomed in around the element,
-// the element in the middle where the image allows it; without focus, the whole image.
 const SHOT_WIDTH = 500;
 const SHOT_HEIGHT = 290;
 export function zoomOn(focus) {
   const valid = focus && ["x", "y", "width", "height", "aspect"].every((k) => Number.isFinite(focus[k]));
   if (!valid) return { backgroundSize: "contain", backgroundPosition: "center" };
-  // the element takes about half of the frame, between the whole image and 3×
-  const fit = Math.min(SHOT_WIDTH, SHOT_HEIGHT / focus.aspect); // image width when it fits the frame
+  // why: Cap zoom to keep the element recognizable and leave surrounding context visible.
+  const fit = Math.min(SHOT_WIDTH, SHOT_HEIGHT / focus.aspect);
   const zoom = Math.min(3, Math.max(1, 0.5 / Math.max(focus.width, (focus.height * focus.aspect * fit) / SHOT_HEIGHT)));
   const width = fit * zoom;
   const height = width * focus.aspect;
@@ -92,8 +81,6 @@ export function cleanVariable(name) {
 }
 
 export class ReviewModel {
-  // steps: the recording's steps; images: { thumb(step), image(step) } → URL or null;
-  // targets: sessions to send to ([{ id, name }]), null when an agent asked (show_me)
   constructor({ name, steps, existingNames = [], targets = null, L, images = {} }) {
     this.L = L;
     this.name = name ?? "";
@@ -111,8 +98,8 @@ export class ReviewModel {
       removed: false,
       variable: null,
     }));
-    this.mode = "list"; // list | play
-    this.index = 0; // the step shown in play
+    this.mode = "list";
+    this.index = 0;
     this.playing = false;
   }
 
@@ -128,7 +115,6 @@ export class ReviewModel {
     return !!this.name.trim() && this.kept.length > 0;
   }
 
-  // Trying needs an agent: the one that asked, or the chosen session.
   get canTry() {
     return this.targets === null || !!this.targetId;
   }
@@ -142,7 +128,6 @@ export class ReviewModel {
     this.items[i].removed = !this.items[i].removed;
   }
 
-  // On: the variable's name is suggested from the field's name; off: the recorded value again.
   toggleVariable(i) {
     const item = this.items[i];
     if (!canVary(item.step)) return;
@@ -157,7 +142,6 @@ export class ReviewModel {
     if (this.items[i].variable !== null) this.items[i].variable = cleanVariable(name);
   }
 
-  // What the island sends back on Save.
   result() {
     const variables = {};
     this.items.forEach((item, i) => {
@@ -173,8 +157,6 @@ export class ReviewModel {
     };
   }
 
-  // ---- play: the kept steps one by one ----
-
   play() {
     if (!this.kept.length) return;
     this.mode = "play";
@@ -182,7 +164,6 @@ export class ReviewModel {
     this.playing = true;
   }
 
-  // dir: 1 or -1; false at the end
   step(dir) {
     const kept = this.kept;
     const at = kept.indexOf(this.items[this.index]);
@@ -198,8 +179,6 @@ export class ReviewModel {
   }
 }
 
-// The panel for one window. hooks: { changed() (rebuild), save(), cancel(), setTimeout,
-// clearTimeout }. Returns { node, dispose() }.
 export function renderReview(doc, model, hooks) {
   const { L } = model;
   const XHTML = "http://www.w3.org/1999/xhtml";
@@ -276,7 +255,6 @@ export function renderReview(doc, model, hooks) {
     return { node: root, dispose, focus: () => root.focus() };
   }
 
-  // name
   const field = node("label", "name-field");
   field.append(node("span", "", L("Recipe name", "Tarif adı")));
   const name = node("input", "name");
@@ -290,7 +268,6 @@ export function renderReview(doc, model, hooks) {
   );
   root.append(field, warn);
 
-  // steps
   const list = node("div", "steps");
   model.items.forEach((item, i) => {
     const row = node("div", "step");
@@ -360,7 +337,6 @@ export function renderReview(doc, model, hooks) {
   note.addEventListener("input", () => (model.note = note.value));
   root.append(note);
 
-  // where it goes: the session picker (the user's own recording) and "try it now"
   const options = node("div", "options");
   let target = null;
   if (model.targets !== null) {

@@ -1,5 +1,3 @@
-// Discovery metadata describes a browser process. Each bind gets a fresh socket name so
-// stale cleanup can never unlink the new listener during a reload or after PID reuse.
 export function instanceSocket({
   socketOverride,
   runtime,
@@ -85,7 +83,7 @@ export function instanceSocket({
           try {
             directory.create(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
           } catch (error) {
-            if (!directory.exists()) throw error; // another browser just created it
+            if (!directory.exists()) throw error;
           }
         }
         if (directory.isSymlink() || !directory.isDirectory() || directory.permissions & 0o077)
@@ -139,8 +137,7 @@ export function instanceSocket({
   };
 }
 
-// The CLI setting selects a browser. Only the launch environment for the current profile
-// can enable unattended permissions or opt the browser into automatic shutdown.
+// why: Only a matching launch identity may enable unattended permissions or managed shutdown.
 export function browserIdentity(profilesDir, localFile) {
   const profile = Services.dirsvc.get("ProfD", Ci.nsIFile).path;
   const root = localFile(profilesDir);

@@ -1,14 +1,5 @@
-// The element picker: the user picks elements on the page, writes a note on the island and
-// sends them to an agent.
-//
-// While picking, the page's click and key events are blocked (links don't open, shortcuts
-// don't fire); mouse movement isn't, so hover menus stay open. Picked elements stay outlined
-// while the note is written; pick_end removes the outline.
-//
-// env: { document(), window(), agent(), applyTheme, contextTarget(), unwrap, inspector(), L, mac(),
-//        reader: the PageReader module, info: the ElementInfo module }
+// why: Suppress activation during picking while keeping hover menus usable and outlines visible through note composition.
 
-// limits for the outerHTML and text sent for a picked element
 const MAX_PICK_HTML = 1500;
 const MAX_PICK_TEXT = 300;
 const MAX_PICKS = 8;
@@ -55,8 +46,6 @@ export class Picker {
     this.env = env;
   }
 
-  // fromContext: started from the context menu; the pick starts at the right-clicked element
-  // and follows the mouse from there.
   start({ fromContext = false } = {}) {
     this.cancel();
     this.end();
@@ -74,7 +63,7 @@ export class Picker {
     });
     let current = null;
     let hovered = null;
-    let trail = []; // elements left with ↑; ↓ goes back down
+    let trail = [];
     const selected = [];
     const add = (el) => {
       if (!el?.isConnected) return false;
@@ -173,12 +162,10 @@ export class Picker {
     });
   }
 
-  // Ends a running pick without a result.
   cancel() {
     this.#pending?.finish(null);
   }
 
-  // Removes the outline.
   end() {
     this.#overlay?.remove();
     this.#overlay = null;
@@ -188,7 +175,6 @@ export class Picker {
     if (this.#overlay?.host) this.env.applyTheme(this.#overlay.host, this.env.agent());
   }
 
-  // An outline and label ("button.cta 320×48") in a closed shadow root; follows the element.
   #overlayElement(hintText) {
     const { elementLabel } = this.env.reader;
     const doc = this.env.document();
@@ -229,7 +215,6 @@ export class Picker {
           width: `${r.width}px`,
           height: `${r.height}px`,
         });
-        // The label sits above the element, or inside its top edge when there's no room.
         const top = r.top >= 24 ? r.top - 22 : Math.max(r.top, 0) + 4;
         label.style.left = `${Math.max(4, Math.min(r.left, win.innerWidth - label.offsetWidth - 4))}px`;
         label.style.top = `${Math.min(top, win.innerHeight - 22)}px`;
@@ -297,7 +282,7 @@ export class Picker {
     return overlay;
   }
 
-  // Context for the agent: enough to find the right place in the code, whatever the page size.
+  // why: Bound the extracted context so even large pages produce a usable pick.
   #info(el) {
     const { elementLabel, roleOf, accessibleName, clean, truncate } = this.env.reader;
     const { cssPath, pickStyles, componentChain, sourceHints, cssHints } = this.env.info;

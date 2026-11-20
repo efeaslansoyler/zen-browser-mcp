@@ -1,5 +1,4 @@
-// Builds source map fixtures. lines: one array per generated line of
-// [generatedColumn, sourceIndex, originalLine, originalColumn] segments, all zero-based.
+// why: Source map fixture segments are zero-based even where decoded tool locations are one-based.
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function vlq(value) {

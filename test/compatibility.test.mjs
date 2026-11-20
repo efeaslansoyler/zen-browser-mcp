@@ -39,7 +39,6 @@ test("a menu that chooses a session shows the agent they share, or several agent
   const several = commonAgent([{ id: "claude" }, { id: "codex" }, { id: "claude" }]);
   assert.equal(several.id, "multi");
   assert.equal(several.name, "Claude, Codex");
-  // unknown agents differ by name
   assert.equal(
     commonAgent([
       { id: "generic", name: "A" },
@@ -198,8 +197,7 @@ test("server instructions stay well under Claude Code's 4096-character cut", asy
     assert(text.length <= 2600, `${text.length} characters`);
 });
 
-// Every client sees the server instructions before any tool description, and Codex appends them to
-// each tool it loads. These rules fixed observed agent mistakes; keep them when shortening the text.
+// why: Keep guidance that prevented observed mistakes even when shortening repeated context.
 test("server instructions keep the tool routing rules", async () => {
   const { channelInstructions, clientInstructions } = await import("../dist/instructions.js");
   for (const text of [channelInstructions, clientInstructions]) {
@@ -228,8 +226,6 @@ test("server instructions keep the tool routing rules", async () => {
   assert(clientInstructions.length <= 1500, `${clientInstructions.length} characters`);
 });
 
-// Sentences in tool descriptions that steer agents away from observed mistakes. Shorten the
-// mechanics around them, not these.
 test("tool descriptions keep their guard sentences", async () => {
   const { TOOLS } = await import("../dist/tools.js");
   const descriptions = Object.fromEntries(TOOLS.map((t) => [t.name, t.description]));

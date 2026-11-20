@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { bridgeContext, testCall } from "./support/bridge.mjs";
 
-// ask_user asks; hand_to_user leaves a step in a tab to the user and tells the agent to check.
 function harness(answer) {
   const asks = [],
     queries = [];
@@ -67,7 +66,7 @@ test("a hand-over survives the pages the user goes through and ends on the islan
     island: { ask() {}, askEnded() {}, setAgent() {} },
     guard: (promise) => promise,
     cancelAsk: (_, result) => cancelled.push(result),
-    // The outline's page goes away when the user logs in.
+    // why: Replace the outlined document to exercise hand-over across navigation.
     query: () =>
       new Promise((_, reject) => {
         outlineEnded = () => reject(new ctx.PageGone("The page changed."));

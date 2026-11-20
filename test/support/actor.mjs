@@ -1,6 +1,4 @@
-// Runs the real ZenMcpChild actor in a VM with the browser stubbed at the platform boundary.
-// The actor's imports resolve to the real modules; tests pass the Gecko globals they need
-// (Services, Cu, …) and, optionally, the timers the actor imports from Timer.sys.mjs.
+// why: Substitute Gecko APIs at the VM boundary so tests still execute the actual actor and helpers.
 import fs from "node:fs";
 import vm from "node:vm";
 

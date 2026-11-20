@@ -1,7 +1,4 @@
-// Real MCP Zen workspace test: with the workspace setting, a new agent tab opens in that space
-// (created without switching), works there (navigate, read, click, screenshot) and the user's
-// active space never changes. Restores the setting and removes the space it created.
-// Run: node scripts/check-workspace.ts  (Zen only; requires existing auto mode)
+// why: Restore the prior workspace setting and remove only the fixture space.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";

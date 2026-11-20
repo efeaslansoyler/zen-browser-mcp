@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Entry point: without arguments the MCP server (how MCP clients start it), plus setup commands
 import { configCommand, readConfig } from "./config.ts";
 import { doctor } from "./doctor.ts";
 import { L } from "./i18n.ts";
@@ -22,7 +21,6 @@ function applyBrowserFlags() {
   browserResolver.flags = parseBrowserFlags(args);
 }
 
-// Usage lines: [command, description], the descriptions aligned in one column.
 const usage = (rows: [string, string][]) => rows.map(([cmd, what]) => `  ${cmd.padEnd(30)}  ${what}`).join("\n");
 const help = L(
   `${PACKAGE} ${VERSION}: let AI agents use your Zen (or other Firefox-based) browser.
@@ -81,7 +79,6 @@ try {
       }
       const value = JSON.parse(input);
       await handleCodexHook(value);
-      // what the user sent this conversation from the browser and couldn't be queued
       if (value?.hook_event_name === "UserPromptSubmit") {
         const output = await promptHook("codex", value);
         if (output) console.log(output);

@@ -1,24 +1,4 @@
-// Running tool calls: one request per socket connection. Calls on the same tab run in order
-// (a lock per tab, taken on arrival for every tab the call names); calls on different tabs run
-// side by side, and calls without a tab don't wait. Shared browser state takes one more lock
-// (exclusive: clipboard, browser settings, extension panels); show_me takes the recording lock.
-// Locks are always taken in that order: tabs, exclusive, recording. Questions don't wait: each
-// is a card on the island.
-// runTool checks tab access, site rules and permissions around each call, shows it on the island
-// and logs it.
-//
-// Each call is a Cancellation scope that carries its own identity: session, agent, the tabs it
-// touched (tabs), the tabs whose page it read (reads), its tab memberships when it was queued
-// (tabVersions), the user's island notes (userNotes) and an open extension popup
-// (extensionSurface). Tools get it as their second argument; helpers that only get a browser
-// find it with ctx.callOf(browser).
-//
-// In a shared tab, every step is noted (TabActivity.sys.mjs) and the result of a call says what
-// the other sessions did there since the caller's last call (meanwhile), and whether one of them
-// may have changed the page since the caller last read it (pageChanged).
 export function toolRunner(ctx) {
-  // Refuses while stopped and shows what is being done on the island.
-  // Batch grants cover only listed actions on the unchanged document/site/policy.
   async function runTool(call, tool, args, { approvals, steps = [{ tool, args }] } = {}) {
     const { access, state } = ctx;
     ctx.assertAgentDataMode?.(ctx.browserMode, tool);
@@ -46,7 +26,7 @@ export function toolRunner(ctx) {
       entry.session = call.session;
       entry.tab = args.tabId;
       entry.host = ctx.hostOf(browser);
-      // for the history view: stays readable after the session ends
+      // why: Store history display names before a session disappears.
       entry.who = ctx.sessions.get(call.session)?.name;
       entry.doing = ctx.describeAction(tool, args, browser, false);
       ctx.island?.working(browser, `${ctx.describeAction(tool, args, browser)} · ${call.session.slice(-6)}`, {
@@ -56,13 +36,13 @@ export function toolRunner(ctx) {
     }
     const cleanup = tool === "tabs_close_mcp" || (tool === "extensions" && args.action === "close");
     let ran = false;
-    // Watches and downloads manage background activity without waking the page by default.
+    // why: Background monitoring controls its own wake state to avoid waking tabs by default.
     const releaseWake =
       browser && !cleanup && tool !== "watch" && tool !== "downloads" ? ctx.tabWake.hold(browser) : null;
     try {
       if (browser && !cleanup) {
         ctx.assertSiteAccess(browser);
-        // a navigation is checked against where it goes: leaving a held site is fine
+        // why: Check the navigation destination so a tab can leave a held site.
         if (tool !== "navigate" || ["back", "forward", "reload"].includes(args.url))
           ctx.assertNotHeld(args.tabId, call.session);
         else ctx.assertNotHeld(args.tabId, call.session, null, { site: false });
@@ -83,12 +63,12 @@ export function toolRunner(ctx) {
           const permission = await ctx.requirePermission(call, browser, steps);
           if (!ctx.samePermissionContext(permission.context, ctx.permissionContext(browser))) continue;
           grant = { context: permission.context, actions: new Set(steps.map((step) => step.args)) };
-          // Automatic mode is not an approval: reevaluate its policy next step.
+          // why: An automatic rule is not user approval and must be re-evaluated at the next step.
           if (permission.asked) approvals?.set(browser, grant);
           break;
         }
       }
-      // a call without a page of its own still has a rule (custom templates can ask or deny it)
+      // why: Page-less calls must still honor custom operation rules.
       if (!browser && !["request_tab", "tab_work"].includes(tool)) await ctx.requireToolPermission(call, tool, args);
       call.check();
       if (browser) access.check(args.tabId, call.session);
@@ -102,7 +82,7 @@ export function toolRunner(ctx) {
       ran = true;
       const result = await ctx.tools[tool](args, call);
       if (browser && !cleanup) ctx.assertSiteAccess(browser);
-      // Preserve completed steps and the cancellation error from a partial batch.
+      // why: Keep successful steps and the cancellation error when only part of a batch completed.
       if (!result?.isError) call.check();
       if (input || tool === "hand_to_user") {
         const openedTabs = ctx.openedTabs?.(call.session);
@@ -127,8 +107,7 @@ export function toolRunner(ctx) {
     }
   }
 
-  // How many times in a row the session made this same page read (polling); 0 for other calls.
-  const lastCalls = new WeakMap(); // session info → { signature, count }
+  const lastCalls = new WeakMap();
   function repeatedRead(call, tool, args) {
     const info = ctx.sessions.get(call.session);
     if (!info) return 0;
@@ -140,11 +119,9 @@ export function toolRunner(ctx) {
     return read ? count : 0;
   }
 
-  // Reads that give fresh refs: after one, the caller's view of the page is current again.
+  // why: A read gives the caller current page context, so earlier changes no longer warrant a warning.
   const PAGE_READS = new Set(["read_page", "find", "get_page_text", "computer.screenshot"]);
 
-  // For the other sessions in the tab: whether this step could change the page (anything but
-  // looking or talking to the user).
   function noteActivity(call, tool, args) {
     const key = ctx.policy.operationOf(tool, args);
     if (!key) return;
@@ -153,8 +130,6 @@ export function toolRunner(ctx) {
     ctx.tabActivity.record(args.tabId, call.session, write);
   }
 
-  // What the other sessions did in the shared tabs of this call since the caller's last call
-  // there, and whether one of them may have changed a page the caller read before.
   function meanwhile(call) {
     const others = [];
     const changed = [];
@@ -197,8 +172,7 @@ export function toolRunner(ctx) {
     });
   }
 
-  // Calls that never touch a page answer at once, without the tab's lock: watching a hold must
-  // work while the holder is busy in the tab, and so must listing and stopping watches.
+  // why: A hold or watch control must answer while another call holds the tab lock.
   const immediate = (tool, args) => tool === "watch" && (args.hold || ["list", "stop"].includes(args.action));
 
   async function runImmediate(session, agent, tool, args) {
@@ -213,8 +187,6 @@ export function toolRunner(ctx) {
     }
   }
 
-  // Handles one request line and writes the reply. tab_work and the calls above answer at once
-  // (they never touch a page); everything else waits for the tabs it names.
   async function handle(line, transport, output) {
     const { access, sessions, sessionVersions, state } = ctx;
     let message;
@@ -243,8 +215,7 @@ export function toolRunner(ctx) {
         const sessionGeneration = sessionVersions.get(session) || 0;
         const referenced =
           tool === "browser_batch" ? (args.actions || []).map((step) => step.input?.tabId) : [args.tabId];
-        // a held tab answers at once instead of waiting behind its holder (joining and leaving
-        // stay possible)
+        // why: Refuse an operation held by another member immediately rather than enqueuing it.
         if (!["request_tab", "tabs_close_mcp"].includes(tool))
           for (const id of referenced)
             if (id != null && ctx.access.has(id, session)) ctx.assertNotHeld(id, session, null, { site: false });
@@ -265,7 +236,6 @@ export function toolRunner(ctx) {
           try {
             const content = await runTool(call, tool, args);
             content.push(...meanwhile(call));
-            // what the user sent this session from the browser meanwhile (picks, recipes)
             const sent = ctx.inbox?.take(session) ?? [];
             if (sent.length) content.push({ type: "text", text: ctx.inboxText(sent) });
             for (const note of call.userNotes)
@@ -280,7 +250,6 @@ export function toolRunner(ctx) {
             call.cancel();
             ctx.calls.delete(call);
             call.exclusive?.release();
-            // its row leaves the island a little later, unless the session works on
             if (![...ctx.calls].some((other) => other.session === session)) ctx.island?.finished(session);
           }
         };
@@ -293,7 +262,7 @@ export function toolRunner(ctx) {
         message = { ok: true, content, ...(content.isError ? { isError: true } : {}) };
       } else message = { ok: true, content: await fn(args) };
     } catch (e) {
-      // A dialog is not an error but something the agent needs to know.
+      // why: Surface a dialog as a condition the agent can resolve.
       if (e instanceof ctx.DialogOpen) {
         message = { ok: true, content: ctx.text(e.message) };
         if (e.browser) ctx.showDialog(e.browser);
@@ -308,8 +277,6 @@ export function toolRunner(ctx) {
     }
   }
 
-  // Shared browser state (the system clipboard, the selected tab, extension popups): one call at
-  // a time, held until the call ends. Taken after the call's tab locks.
   async function exclusive(call) {
     call.exclusive ??= ctx.locks.acquire(["exclusive"]);
     await ctx.guard(call.exclusive.ready, call);
@@ -320,12 +287,9 @@ export function toolRunner(ctx) {
 
 export function batchTool(ctx) {
   return {
-    // Several tool calls in order; stops at the first error. Text results are joined into one
-    // block (not one content item each); images are interleaved in order.
     async browser_batch({ actions }, call) {
       if (!Array.isArray(actions) || !actions.length) throw new Error("actions is empty.");
       const { tools } = ctx;
-      // Grants exist only within this batch and are checked again at each step.
       const approvals = new Map();
       const content = [];
       let lines = [];
@@ -355,7 +319,7 @@ export function batchTool(ctx) {
               break;
             }
             steps.push({ tool: action.name, args: action.input });
-            // Never ask for destination-page actions before navigating there.
+            // why: Approve destination actions only after the navigation reveals their actual context.
             if (action.name === "navigate") break;
           }
           for (const c of await ctx.runTool(call, name, input, { approvals, steps })) {

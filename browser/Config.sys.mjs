@@ -1,9 +1,3 @@
-// User settings in ~/.config/<app>/config.json and the per-site access rules built on them.
-//
-// mode: the permission template, "ask", "auto" or "custom" (Policy.sys.mjs); custom's rules are
-// in permissions.jsonc next to config.json, which only the user edits.
-// sites: where agents may go, a blocklist or an allowlist of domains (SiteRules.sys.mjs). The
-// file is read again whenever it changes on disk.
 export function config(ctx) {
   const DEFAULT = ctx.normalizeConfig({});
   let current = { ...DEFAULT };
@@ -43,15 +37,13 @@ export function config(ctx) {
     modified = file.lastModifiedTime;
   }
 
-  // The island's mode button: ask → auto → custom (when permissions.jsonc exists) → ask.
   function toggleMode() {
     const modes = ctx.localFile(ctx.permissionsPath).exists() ? ["ask", "auto", "custom"] : ["ask", "auto"];
     writeConfig({ mode: modes[(modes.indexOf(readConfig().mode) + 1) % modes.length] });
     ctx.island?.setMode(current.mode);
   }
 
-  // The custom template, read again when the file changes. A broken or missing file is an
-  // error for every call that needs it: it never falls back to looser rules.
+  // why: Fail closed when custom permissions are missing or invalid.
   let custom = null;
   let customModified = -1;
   let customError = null;
@@ -77,7 +69,6 @@ export function config(ctx) {
     return custom;
   }
 
-  // The rule ("allow", "ask" or "deny") of an operation (Policy.sys.mjs) in the current mode.
   function rule(key) {
     const { mode } = ctx.readConfig();
     const rule = ctx.policy.ruleOf(key, mode, mode === "custom" ? ctx.readPermissions() : null);
@@ -113,7 +104,7 @@ export function config(ctx) {
   function assertSiteAccess(browser) {
     const source = ctx.controlledSource(browser);
     assertSiteHost(ctx.hostOf(source));
-    // Both the source page and extension UI may embed remote content.
+    // why: Apply the same site checks to embedded remote content from extension UI.
     for (const root of source === browser ? [source] : [source, browser]) {
       for (const frame of ctx.framesOf(root)) {
         const uri = frame.currentWindowGlobal?.documentURI;

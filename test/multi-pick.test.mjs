@@ -129,7 +129,6 @@ function harness({ locale = "en", os = "Linux", inspector } = {}) {
     hover(index);
     return emit("click", { button: 0, ...(modifiers === true ? { shiftKey: true } : modifiers) });
   };
-  // The hint bar in the picker's shadow root: { keys, count } text, or null when not shown.
   const hint = () => {
     const bar = document.documentElement.children[0]?.shadow?.children.find((n) => n.className === "hint");
     if (!bar || bar.hidden) return null;
@@ -335,7 +334,6 @@ test("a React 19 element carries its owner stacks as raw source hints", async ()
 test("server component owners from the RSC payload carry their owner stacks as hints", async () => {
   const h = harness();
   function Counter() {}
-  // React's ReactComponentInfo for server components: name, env, owner, debugStack
   const layout = { name: "RootLayout", env: "Server", owner: null, debugStack: { stack: "rsc-layout" } };
   const page = { name: "Page", env: "Server", owner: layout, debugStack: { stack: "rsc-page" } };
   const counter = { type: Counter, _debugStack: { stack: "client-counter" }, _debugOwner: page };
@@ -436,7 +434,6 @@ test("an element styled only by the browser carries no CSS hints", async () => {
   assert.equal((await pending).sourceHints, null);
 });
 
-// The raw source hints of the first element picked after setup(h).
 async function hintsFor(setup) {
   const h = harness();
   setup(h);
@@ -488,7 +485,7 @@ test("an Astro element carries its dev source attributes, also after the dev too
     node.setAttribute("data-astro-source-loc", loc);
   };
   assert.deepEqual(await hintsFor((h) => annotate(h.nodes[0], "5:17")), { astro: { file, loc: "5:17" } });
-  // Astro's dev toolbar strips the attributes shortly after load; the actor read them first.
+  // why: Reproduce Astro's toolbar removing the source attributes after load.
   const hints = await hintsFor((h) => {
     annotate(h.nodes[0], "9:3");
     h.document.querySelectorAll = (selector) =>
@@ -532,7 +529,6 @@ test("an Angular element carries its owning component class's debug info", async
   assert.deepEqual(hints, { angular: { name: "CardComponent", file: "src/app/card.component.ts", line: 9 } });
 });
 
-// Picks with inert defaults; tests override what they exercise.
 function picks(env = {}) {
   const channels = env.channels ?? { subscribers: new Map(), target: () => null, deliver: async () => false };
   return new Picks({
@@ -541,7 +537,6 @@ function picks(env = {}) {
     hasAccess: (_tabId, session) => session === "owner-A",
     pickedTabs: new Set(),
     channels,
-    // the real inbox: a session's subscriber pushes; nothing waits in these tests
     inbox: new Inbox({
       endpoint: (session) => channels.subscribers.get(session) ?? null,
       deliver: (sub, event) => channels.deliver(sub, event),

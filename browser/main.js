@@ -1,21 +1,5 @@
-// The browser side of zen-mcp. The autoconfig loader runs this file with system privileges
-// through loadSubScript; its scope has zenMcpDir (this folder's real path) and zenMcpName (the
-// package name, used in paths).
-//
-// It listens on a private Unix socket: one JSON request line per connection, answered
-// with one JSON line before the connection closes. Mouse and keyboard events come from each
-// frame's actor, as Zen's own WebDriver code does: the page sees trusted input and, since the
-// remote agent never starts, navigator.webdriver stays false.
-//
-// The work happens in the .sys.mjs modules next to this file. They share one `ctx` object:
-// each module's factory adds its functions to it and calls the others through it, so a module
-// can be tested with fakes for everything else. This file wires them together, owns the
-// socket and handles start, stop and "reload" (which reads this file again without
-// restarting the browser).
 "use strict";
 
-// Zen's stderr usually goes to /dev/null and autoconfig runs before the console is ready, so
-// errors are also written to $XDG_RUNTIME_DIR/<name>.log.
 const zenMcpApp = typeof zenMcpName === "string" ? zenMcpName : "zen-mcp";
 const zenMcpRuntimeDir = () =>
   Services.env.get("XDG_RUNTIME_DIR") || globalThis.zenMcpRuntime || Services.env.get("TMPDIR") || "/tmp";
@@ -28,12 +12,12 @@ function logError(where, e) {
     const out = Components.classes["@mozilla.org/network/file-output-stream;1"].createInstance(
       Components.interfaces.nsIFileOutputStream,
     );
-    out.init(f, 0x02 | 0x08 | 0x10, 0o600, 0); // write | create | append
+    out.init(f, 0x02 | 0x08 | 0x10, 0o600, 0);
     const bytes = unescape(encodeURIComponent(msg));
     out.write(bytes, bytes.length);
     out.close();
   } catch {}
-  // A failed reload shouldn't stay only in the log: zenctl ping shows the first setup error.
+  // why: Surface startup errors in zenctl so a failed reload is immediately visible.
   if (where === "setup" || where === "start" || where === "reload") globalThis.zenMcpStartError ??= `${where}: ${e}`;
   Components.utils.reportError(e);
 }
@@ -42,14 +26,12 @@ function logError(where, e) {
   try {
     const { classes: Cc, interfaces: Ci, utils: Cu, results: Cr } = Components;
     const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
-    // A bare nsITimer without a reference may be garbage collected before it fires.
     const { setTimeout, clearTimeout, setInterval, clearInterval } = ChromeUtils.importESModule(
       "resource://gre/modules/Timer.sys.mjs",
     );
 
     const dir = zenMcpDir;
-    // UI language: Turkish if the browser is Turkish, English otherwise. Messages to agents
-    // (errors, tool results) are always English.
+    // why: The browser locale is for UI, while agent-visible errors and results use English.
     const L = (en, tr) => (Services.locale.appLocaleAsBCP47.startsWith("tr") ? tr : en);
     const dirURI = Services.io.newFileURI(localFile(dir)).spec.replace(/\/?$/, "/");
     const version = (globalThis.zenMcpVersion = (globalThis.zenMcpVersion || 0) + 1);
@@ -73,39 +55,33 @@ function logError(where, e) {
       }
     }
 
-    // Private (0600) file in a private (0700) folder; replaces the file unless append is set.
     function writeTextFile(file, text, { append = false, atomic = false } = {}) {
       if (!file.parent.exists()) file.parent.create(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
       const contract = atomic
         ? "@mozilla.org/network/safe-file-output-stream;1"
         : "@mozilla.org/network/file-output-stream;1";
       const out = Cc[contract].createInstance(Ci.nsIFileOutputStream);
-      out.init(file, 0x02 | 0x08 | (append ? 0x10 : 0x20), 0o600, 0); // write | create | append or truncate
+      out.init(file, 0x02 | 0x08 | (append ? 0x10 : 0x20), 0o600, 0);
       const bytes = unescape(encodeURIComponent(text));
       out.write(bytes, bytes.length);
       if (atomic) out.QueryInterface(Ci.nsISafeOutputStream).finish();
       else out.close();
     }
 
-    // Match paths.ts when the desktop session does not supply XDG_RUNTIME_DIR.
+    // why: Use the same fallback as Node so the client can discover the listener.
     if (!Services.env.get("XDG_RUNTIME_DIR") && Services.appinfo.OS === "Linux") {
       try {
-        // procfs cannot report the available byte count. Uid is near the start of status.
         const uid = /^Uid:\s+\d+\s+(\d+)/m.exec(readTextFile(localFile("/proc/self/status"), 512))?.[1];
         if (uid && localFile(`/run/user/${uid}`).exists()) globalThis.zenMcpRuntime = `/run/user/${uid}`;
       } catch {}
     }
-
-    // ---- setup: zen.cfg already mapped resource://zenmcp/ (loadSubScript rejects file://);
-    // doing it again here covers reloads and manual loading ----
 
     Services.io
       .getProtocolHandler("resource")
       .QueryInterface(Ci.nsIResProtocolHandler)
       .setSubstitution("zenmcp", Services.io.newURI(dirURI));
 
-    // Content processes are sandboxed; allow them to read the actor module. Set on the default
-    // branch (not written to prefs.js), before the first content process starts.
+    // why: The sandbox preference must be set before the first content process starts.
     {
       const pref = "security.sandbox.content.read_path_whitelist";
       const entries = Services.prefs.getStringPref(pref, "").split(",").filter(Boolean);
@@ -114,7 +90,6 @@ function logError(where, e) {
       }
     }
 
-    // ?v= makes a reload load the new module versions instead of the cached ones.
     const load = (name) => ChromeUtils.importESModule(`resource://zenmcp/${name}.sys.mjs?v=${version}`);
     globalThis.zenMcpBrowserStart ||= Date.now();
     const { instanceSocket, browserIdentity } = load("Instances");
@@ -192,12 +167,9 @@ function logError(where, e) {
       ({ SessionStore } = ChromeUtils.importESModule("resource:///modules/sessionstore/SessionStore.sys.mjs"));
     }
 
-    // ---- state that survives reloads (kept on this scope's global) ----
-
     const state = (globalThis.zenMcpState ||= { tabs: new Set(), scale: new Map() });
-    // Tabs where the user picked an element for an agent: agents may ask only for these.
     state.pickedTabs ||= new Set();
-    // A bridge from before shared tabs had one owner per tab: each owner becomes a member.
+    // why: Migrate old single-owner state on reload so existing access still works with shared tabs.
     if (state.owners && !state.tabMembers) {
       state.tabMembers = new Map();
       for (const [tabId, session] of state.owners) state.tabMembers.set(tabId, new Map([[session, 0]]));
@@ -212,7 +184,6 @@ function logError(where, e) {
     );
 
     const ctx = {
-      // environment
       L,
       version,
       app: zenMcpApp,
@@ -248,29 +219,26 @@ function logError(where, e) {
       MAX_PAGE_TEXT: 100000,
       MAX_UPLOAD: 100 * 1048576,
 
-      // shared state
       state,
       access,
       sessions: (state.sessions ||= new Map()),
       sessionVersions: (state.sessionVersions ||= new Map()),
-      lastUse: (globalThis.zenMcpLastUse ||= new Map()), // session → last tool call
+      lastUse: (globalThis.zenMcpLastUse ||= new Map()),
       frameNumbers: (globalThis.zenMcpFrames ||= { byId: new Map(), byNumber: new Map(), next: 1 }),
       ownerConnections: new Map(),
       disconnectTimers: new Map(),
       heldInputFrames: new Map(),
-      tabRequests: new Map(), // browser → resolve of the pending island question
+      tabRequests: new Map(),
       screenshotCache: new ScreenshotCache(),
       visualBaselines: new VisualBaselines(),
-      readSnapshots: new ReadSnapshots(), // A reload deliberately invalidates previous snapshot IDs.
+      readSnapshots: new ReadSnapshots(), // why: A snapshot taken by the old bridge is no longer a valid baseline after reload.
       tools: {},
       commands: {},
 
-      // The agent the island and menus show: the one that made the latest tool call. Never the
-      // identity of a call; each call carries its own (see ToolRunner.sys.mjs).
+      // why: UI branding follows recent activity, while call identity comes from the call scope.
       lastAgent: agentTheme(globalThis.zenMcpActiveAgent ?? { id: "generic" }),
-      locks: new Locks(), // per-tab, exclusive and recording locks (ToolRunner.sys.mjs)
-      tabActivity: new TabActivity(), // what each session did in shared tabs (meanwhile)
-      // agent tabs run like foreground tabs while agents work in them
+      locks: new Locks(),
+      tabActivity: new TabActivity(),
       tabWake: new TabWake({
         setTimeout,
         clearTimeout,
@@ -278,7 +246,7 @@ function logError(where, e) {
         clearInterval,
         selected: (browser) => browser.ownerDocument?.defaultView?.gBrowser?.selectedBrowser === browser,
       }),
-      calls: new Set(), // running tool calls: Cancellation scopes with session, agent and tabs
+      calls: new Set(),
       stopGeneration: 0,
       island: null,
       shuttingDown: false,
@@ -286,19 +254,17 @@ function logError(where, e) {
       setLastAgent(theme) {
         ctx.lastAgent = theme;
         globalThis.zenMcpActiveAgent = { id: theme.id, name: theme.name };
-        ctx.island?.setAgent(theme); // only where no agent of its own applies (cards and rows have theirs)
+        ctx.island?.setAgent(theme);
       },
 
-      // The tool call working in this tab or in its extension popup. Helpers that get a browser
-      // find their call here instead of taking it as a parameter.
+      // why: A tab or its extension surface can recover the active scope when a helper has only a browser reference.
       callOf(browser) {
         for (const call of ctx.calls)
           if (call.extensionSurface?.browser === browser || call.tabs.has(browser?.browserId)) return call;
         return null;
       },
 
-      // While an extension popup is the call's surface, its tab is the source of truth for
-      // access and site checks.
+      // why: An extension surface inherits the source tab's permission and site checks.
       controlledSource(browser) {
         const call = ctx.callOf(browser);
         const surface = call?.extensionSurface;
@@ -322,8 +288,6 @@ function logError(where, e) {
       toolRunner(ctx),
     );
     Object.assign(ctx, permissions(ctx));
-
-    // ---- browser components ----
 
     ctx.extensionPanels = new ExtensionPanels({
       list: async () =>
@@ -413,15 +377,12 @@ function logError(where, e) {
       },
     });
 
-    // The agent shown on menu items that choose a session: the pick's target, the agent all
-    // connected sessions share ("multi" when they differ), the channel target, or the active agent.
     const menuAgent = () =>
       ctx.picks.current?.agent ??
       commonAgent(ctx.sendTargets().map((t) => t.agent)) ??
       ctx.channels.target()?.agent ??
       ctx.lastAgent;
 
-    // Also used by the page menu's "Show to agent…" item.
     function paintMenuIcon(item, agent) {
       const theme = agentTheme(agent);
       item.setAttribute("image", agentIcon(theme));
@@ -429,7 +390,6 @@ function logError(where, e) {
       item.setAttribute("tooltiptext", theme.name);
     }
 
-    // "Take back from agent / Give to session" and agent permissions in the tab context menu.
     ctx.tabMenu = new TabMenu({
       history: (tabId) => ctx.tabHistory(tabId),
       openHistory: (win) => ctx.openHistory(win),
@@ -468,7 +428,6 @@ function logError(where, e) {
       siteEntry: (host) => siteEntry(host, ctx.readConfig().sites),
     });
 
-    // Pushing events to agent sessions.
     ctx.channels = new Channels(ctx.lastUse, {
       theme: agentTheme,
       connectOwner: (...args) => ctx.connectOwnerSession(...args),
@@ -482,8 +441,6 @@ function logError(where, e) {
       uuid: () => Services.uuid.generateUUID().toString(),
     });
 
-    // What the user sends to a session: pushed now when its MCP process can, otherwise with the
-    // session's next tool result.
     ctx.inbox = new Inbox({
       endpoint: (session) => {
         const sub = ctx.channels.subscribers.get(session);
@@ -491,7 +448,7 @@ function logError(where, e) {
       },
       deliver: (sub, event) => ctx.channels.deliver(sub, event),
       known: (session) => ctx.sessions.has(session) && !ctx.sessions.get(session).disconnected,
-      // the session ended before it could get them: the clipboard, so nothing is lost
+      // why: When the session disappears, fall back to the clipboard so the user's pick survives.
       expired: (_session, items) =>
         Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(inboxText(items)),
       now: () => Date.now(),
@@ -501,7 +458,6 @@ function logError(where, e) {
     ctx.sendTargets = () => sendTargets(ctx.liveSessions(), ctx.channels.subscribers.values(), L);
     ctx.sentNotice = (status, target) => sentNotice(status, target, L);
 
-    // Picking elements and sending them to an agent: Ctrl+Shift+F or the page context menu.
     ctx.picks = new Picks({
       L,
       channels: ctx.channels,
@@ -522,7 +478,7 @@ function logError(where, e) {
       copy: (value) => Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value),
       paintIcon: paintMenuIcon,
       menuAgent,
-      // Source maps of the picked page; the resolver allows only its origin.
+      // why: Limit source map fetches to the origin of the picked page.
       sources: new SourceResolver({
         siteAllowed: (host) => ctx.siteAllowed(host),
         sleep: (ms) => ctx.sleep(ms),
@@ -550,7 +506,6 @@ function logError(where, e) {
       }),
     });
 
-    // "Show me once": the user's steps in a recorded tab, saved as recipes.
     ctx.recordings = new Recordings({
       setShared: (browserIds) => {
         Services.ppmm.sharedData.set(RECORDING_KEY, browserIds);
@@ -571,7 +526,6 @@ function logError(where, e) {
       }
     };
 
-    // Recordings the user starts from the page menu ("Record steps for an agent…").
     ctx.demonstrations = new Demonstrations({
       L,
       ctx,
@@ -587,7 +541,6 @@ function logError(where, e) {
     ctx.artifacts = new Artifacts(`${zenMcpRuntimeDir()}/${zenMcpApp}-artifacts`, { setTimeout });
     ctx.video = new TabVideo(videoEnvironment(ctx));
     ctx.networkControl = new NetworkControl();
-    // HTTP requests of agent tabs.
     const { HarCapture, validateHarProjection } = load("HarCapture");
     ctx.validateHarProjection = validateHarProjection;
     const harDir = `${zenMcpRuntimeDir()}/zen-mcp-har`;
@@ -619,13 +572,13 @@ function logError(where, e) {
           topDocument,
         );
       },
-      // an allowlist only checks pages and frames: allowed sites load from other hosts (CDNs)
+      // why: Allowlisted pages need third-party resources such as CDNs, so only document loads are filtered.
       blocked: (browserId, host, document) => {
         const call = [...ctx.calls].find((c) => c.tabs.has(browserId));
         if (!call || ctx.siteAllowed(host)) return false;
         if (!document && ctx.readConfig().sites.mode === "allowlist") return false;
         try {
-          ctx.assertSiteHost(host); // throws the error that says which list blocks it
+          ctx.assertSiteHost(host);
         } catch (e) {
           call.cancel(e);
         }
@@ -640,13 +593,11 @@ function logError(where, e) {
         logError,
       });
 
-    // Downloads started from agent tabs.
     ctx.downloads = new DownloadLog((globalThis.zenMcpDownloads ||= {}), {
       tracked: (browserId) => state.tabs.has(browserId),
       events: eventFiles("downloads"),
     });
 
-    // Page watches: report conditions and changes to an events file.
     ctx.watches = new Watches({
       events: eventFiles("watch"),
       owned: (tabId, session) => {
@@ -666,8 +617,6 @@ function logError(where, e) {
       clearTimeout,
     });
 
-    // ---- tools (MCP content arrays) and development commands ----
-
     Object.assign(
       ctx.tools,
       tabTools(ctx),
@@ -681,7 +630,6 @@ function logError(where, e) {
       demonstrationTools(ctx),
     );
 
-    // The version of the installed browser files (install writes .version; a dev symlink has none).
     function fileVersion() {
       try {
         const f = localFile(dir + "/.version");
@@ -692,10 +640,9 @@ function logError(where, e) {
     }
     const loadedVersion = fileVersion();
 
-    // Not exposed over MCP; used by the CLI (doctor, updates) and scripts/zenctl.ts.
+    // why: Keep development commands out of the MCP tool surface.
     Object.assign(ctx.commands, {
-      // A prompt hook (src/hooks.ts) asks for what waits for its conversation: the client's own
-      // conversation ID maps to the zen session.
+      // why: Use the client's conversation ID because the prompt hook does not know the bridge session ID.
       inbox_take({ client, clientSession, pids }) {
         let session = null;
         if (client === "codex") session = clientSession ? `codex:${clientSession}` : null;
@@ -703,7 +650,7 @@ function logError(where, e) {
           const ancestors = new Set(Array.isArray(pids) ? pids : []);
           for (const sub of ctx.channels.subscribers.values())
             if (clientSession && sub.clientSession === clientSession) session = sub.id;
-          // no conversation ID in the MCP process (Antigravity CLI): the hook's ancestor client
+          // why: Use the Antigravity ancestor PID because it supplies no conversation ID to its MCP process.
           if (!session)
             for (const sub of ctx.channels.subscribers.values())
               if (!sub.clientSession && sub.clientPid && ancestors.has(sub.clientPid)) session = sub.id;
@@ -723,7 +670,7 @@ function logError(where, e) {
         });
       },
       reload() {
-        // reload after the reply is written
+        // why: Reload closes this connection, so send the reply first.
         Services.tm.dispatchToMainThread(() => {
           stop();
           delete globalThis.zenMcpStartError;
@@ -735,8 +682,7 @@ function logError(where, e) {
           } catch (e) {
             logError("reload", e);
           }
-          // If the new version didn't start there is no socket either: rather than leaving the
-          // bridge dead until the browser restarts, clean up the half setup and restart this one.
+          // why: Recover the previous bridge after a failed reload so the browser remains reachable.
           if (!(globalThis.zenMcpRunning > version)) {
             logError("reload", new Error(`new version did not start, staying on v${version}`));
             try {
@@ -749,8 +695,7 @@ function logError(where, e) {
         });
         return ctx.text(`v${version} stopping, reloading.`);
       },
-      // eval() is forbidden in the system scope; use a system-principal sandbox like Marionette.
-      // code must be an expression; helpers are on h: h.browserFor(id), h.query(browser, ...), h.state...
+      // why: Treat development eval input as an expression so results can be returned directly.
       async chrome_eval({ code }) {
         const sandbox = Cu.Sandbox(Services.scriptSecurityManager.getSystemPrincipal(), {
           sandboxName: "zen-mcp chrome_eval",
@@ -776,28 +721,22 @@ function logError(where, e) {
       },
     });
 
-    // ---- socket ----
-
-    // JSON is sent as pure ASCII so neither side has to deal with encodings.
     ctx.reply = (transport, output, message) => {
       const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
       stream.setByteStringData(ascii(JSON.stringify(message)) + "\n");
-      // One reply per connection, then close the socket (closing the output stream isn't
-      // enough: the connection stays open while the read pump is open).
       NetUtil.asyncCopy(stream, output, () => transport.close(Cr.NS_OK));
     };
 
     let lifecycle;
     function onConnection(transport) {
       const input = transport.openInputStream(0, 0, 0);
-      // Unbuffered: asyncCopy finishes only once the data is on the socket, so closing after it
-      // is safe (closing a buffered stream cut off what hadn't been flushed).
+      // why: Buffered output could be truncated on close (docs/gecko-pitfalls.md, Sockets and streams).
       const output = transport.openOutputStream(Ci.nsITransport.OPEN_UNBUFFERED, 0, 0);
       const pump = Cc["@mozilla.org/network/input-stream-pump;1"].createInstance(Ci.nsIInputStreamPump);
       pump.init(input, 0, 0, false);
       let buffer = "";
       let handled = false;
-      let session = null; // set for a subscription connection
+      let session = null;
       let leased = false;
       pump.asyncRead({
         onStartRequest() {},
@@ -851,8 +790,6 @@ function logError(where, e) {
       });
     }
 
-    // ---- windows ----
-
     const markSheet = Services.io.newURI("data:text/css;charset=utf-8," + encodeURIComponent(MARK_CSS));
     const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
 
@@ -864,9 +801,7 @@ function logError(where, e) {
       ctx.demonstrations.attachPageMenu(win);
     }
 
-    // Saved values of lazy tabs become readable only a while after the window opens (neither at
-    // SSTabRestoring nor at delayed startup), so scan a few more times. liveTabs scans again
-    // whenever an agent asks for a tab; this is only to show the tab line early.
+    // why: Lazy tab data can arrive after Gecko startup events (docs/gecko-pitfalls.md, Browser UI and session store).
     const onWindowReady = (win) => {
       ctx.watchWindow(win);
       attachWindow(win);
@@ -880,8 +815,6 @@ function logError(where, e) {
         }, delay);
       }
     };
-
-    // ---- start and stop ----
 
     let server = null;
     let sessionSweep = null;
@@ -916,7 +849,7 @@ function logError(where, e) {
       ctx.island.setMode(ctx.readConfig().mode);
       ctx.network.start();
       ctx.artifacts.sweep().catch((e) => logError("exported files", e));
-      // images of recordings that a reload or restart cut off (running ones stopped with stop())
+      // why: Sweep temporary captures left by a reload or restart that interrupted recording.
       Promise.resolve()
         .then(() => ctx.recipes.io.remove(`${zenMcpRuntimeDir()}/${zenMcpApp}-recordings`))
         .catch(() => {});
@@ -932,8 +865,6 @@ function logError(where, e) {
       for (const win of ctx.browserWindows()) ctx.watchWindow(win);
       Services.obs.addObserver(onWindowReady, "browser-delayed-startup-finished");
       Services.obs.addObserver(onRecordStep, STEP_TOPIC);
-      // A previous version that vanished without stop() (e.g. loaded from another scope) left
-      // its registration behind.
       try {
         ChromeUtils.unregisterWindowActor("ZenMcp");
       } catch {}
@@ -941,8 +872,6 @@ function logError(where, e) {
         parent: { esModuleURI: `resource://zenmcp/actors/ZenMcpParent.sys.mjs?v=${version}` },
         child: {
           esModuleURI: `resource://zenmcp/actors/ZenMcpChild.sys.mjs?v=${version}`,
-          // the right-clicked element for "Show to agent…"; dev source attributes that a page
-          // removes after load (Astro); the others feed recordings
           events: {
             contextmenu: { capture: true, mozSystemGroup: true },
             DOMContentLoaded: { capture: true, mozSystemGroup: true },
@@ -954,11 +883,8 @@ function logError(where, e) {
             input: { capture: true, mozSystemGroup: true },
           },
         },
-        // Entering web content processes needs explicit consent (Marionette does the same);
-        // the child answers the parent's queries and sends only recorded steps, which the
-        // parent accepts from recorded tabs alone and treats as untrusted data.
+        // why: The actor's only outbound message is an untrusted recorded step; accept it only for a recorded tab.
         safeForUntrustedWebProcess: true,
-        // iframes too (including out-of-process cross-site frames)
         allFrames: true,
       });
 
@@ -1062,12 +988,9 @@ function logError(where, e) {
         logError("start", e);
       }
     };
-    // Autoconfig runs while the profile is read, before the network and windows are ready; a
-    // reload starts at once.
     if (ctx.browserWindows().length) safeStart();
     else {
-      // A dedicated browser gets tool calls as soon as it publishes. Wait for its first
-      // usable window instead of publishing during Gecko's pre-window startup.
+      // why: A dedicated bridge must have a usable window before clients discover it.
       const dedicated = Services.env.get("ZEN_MCP_LAUNCHED") === "1" && Services.env.get("ZEN_MCP_LAUNCHED_PROFILE");
       const topic = dedicated ? "browser-delayed-startup-finished" : "final-ui-startup";
       const observer = () => {

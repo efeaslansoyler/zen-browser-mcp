@@ -1,4 +1,4 @@
-// Presentation metadata only: client identity never grants tab access or permission.
+// why: Client identity is presentation metadata and must never grant access.
 export const THEMES = Object.freeze({
   claude: Object.freeze({
     id: "claude",
@@ -32,7 +32,6 @@ export const THEMES = Object.freeze({
     rgb: "168, 164, 160",
     foreground: "#161413",
   }),
-  // menu items that let the user choose among sessions of different agents
   multi: Object.freeze({
     id: "multi",
     name: "Agents",
@@ -64,12 +63,10 @@ export function identifyAgent(clientName = "", override = "") {
 
 export function agentTheme(agent) {
   const theme = Object.hasOwn(THEMES, agent?.id) ? THEMES[agent.id] : THEMES.generic;
-  const own = theme.id === "generic" || theme.id === "multi"; // these show the given name
+  const own = theme.id === "generic" || theme.id === "multi";
   return { ...theme, name: own ? String(agent?.name || theme.name).slice(0, 80) : theme.name };
 }
 
-// The agent of a menu item that lets the user choose a session: the one agent all sessions
-// share, "multi" (named after all of them) when they differ, or null when there are none.
 export function commonAgent(agents) {
   const themes = new Map();
   for (const agent of agents) {
@@ -93,7 +90,7 @@ export function applyTheme(element, agent) {
   return theme;
 }
 
-// SVG icons stay crisp in browser menus and the island (assets/ has their sources).
+// why: SVG icons stay crisp in browser menus and the island at different scales.
 const ICON_FILES = new Set(["claude", "codex", "antigravity", "opencode", "multi"]);
 export function agentIcon(agent) {
   const theme = agentTheme(agent);

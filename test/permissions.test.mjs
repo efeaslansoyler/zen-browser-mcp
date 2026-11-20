@@ -6,7 +6,6 @@ import * as policy from "../browser/Policy.sys.mjs";
 import { TabAccess } from "../browser/TabAccess.sys.mjs";
 import { bridgeContext, testCall } from "./support/bridge.mjs";
 
-// Gecko globals the real site checks and navigation use.
 globalThis.Services = {
   uriFixup: { getFixupURIInfo: (url) => ({ preferredURI: { spec: new URL(url).href } }) },
   io: { newURI: (url) => ({ host: new URL(url).hostname }) },
@@ -339,7 +338,6 @@ test("permission module describes actions and scopes approvals without slicing m
   );
   assert.equal(await p.describeWrite("computer", { action: "screenshot" }, browser), null);
   assert.equal(await p.describeWrite("navigate", { url: "back" }, browser), "go back");
-  // ask mode asks navigation and actions; reading is free
   assert.equal((await p.callRule("navigate", { url: "back" }, browser)).rule, "ask");
   assert.equal((await p.callRule("read_page", {}, browser)).rule, "allow");
   assert.equal((await p.callRule("computer", { action: "type", text: "x" }, browser)).rule, "ask");
@@ -348,7 +346,7 @@ test("permission module describes actions and scopes approvals without slicing m
   ]);
   assert.equal(prompted, true);
   assert.equal(asked[0], 'Claude wants to: button "Pay": click');
-  // An approval belongs to the document and the tab's access version
+  // why: Simulate both document and membership changes to verify neither can inherit a grant.
   assert(p.samePermissionContext(context, p.permissionContext(browser)));
   access.leave(1, "s");
   assert(!p.samePermissionContext(context, p.permissionContext(browser)));

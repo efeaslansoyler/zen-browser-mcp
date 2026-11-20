@@ -1,4 +1,4 @@
-// One local receiver per exact Codex thread. Session hooks supply the UUID; never infer it.
+// why: Key the receiver by the exact UUID supplied by the lifecycle hook.
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
@@ -101,13 +101,13 @@ export async function runCodexRelay(initial: RelayOptions, target: Selection) {
   const scope = deliveryScope(target);
   const socketPath = relaySocket(initial.threadId, scope);
   fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
-  if (await contactRelay(initial.threadId, "ping", undefined, scope)) return; // idempotent on resume/compaction
+  if (await contactRelay(initial.threadId, "ping", undefined, scope)) return;
   let options = initial;
   let subscription: ReturnType<typeof subscribe> | undefined;
   let idleTimer: ReturnType<typeof setTimeout>;
   const touch = () => {
     clearTimeout(idleTimer);
-    // SessionEnd handles normal cleanup; recover from an abruptly killed Codex client.
+    // why: SessionEnd can be skipped after an abrupt exit, so recover stale state independently.
     idleTimer = setTimeout(
       () => {
         subscription?.close();
@@ -180,7 +180,7 @@ export async function runCodexRelay(initial: RelayOptions, target: Selection) {
       console.error(error.message);
       process.exit(1);
     }
-    // Never unlink a listening endpoint, including one still starting up.
+    // why: A receiver that is listening or still starting must keep its endpoint.
     let inode: number;
     try {
       inode = fs.statSync(socketPath).ino;

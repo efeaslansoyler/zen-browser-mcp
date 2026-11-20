@@ -1,7 +1,4 @@
-// Install: copies the browser-side files to DATA_DIR and puts an autoconfig loader into the
-// browser's installation folder. If the browser already has an autoconfig (the user's own,
-// Sine, fx-autoconfig…), a marked block is appended to its .cfg file; otherwise our own files
-// are created. The installation folder usually belongs to root: sudo is used if it isn't writable.
+// why: Keep any existing autoconfig and append only the bridge's marked block.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,13 +9,12 @@ import { call } from "./zen.ts";
 
 const BEGIN = `// BEGIN ${NAME}`;
 const END = `// END ${NAME}`;
-// an old, unmarked loader added by hand (development setup)
+// why: Recognize unmarked loaders from older development installs.
 const LEGACY = "resource://zenmcp/main.js";
 
 export type Browser = { name: string; dir: string };
 
-// The loader: loads main.js with system privileges if DATA_DIR exists. The path is computed
-// from environment variables at run time (the same way as src/paths.ts).
+// why: Resolve loader paths at browser startup so they match the current XDG environment.
 function loaderBlock() {
   return `${BEGIN}: loads ${PACKAGE} (browser bridge for AI agents). Remove with \`npx ${PACKAGE} uninstall\`.
 try {
@@ -40,9 +36,6 @@ ${END}
 `;
 }
 
-// ---- finding browsers ----
-
-// a folder with application.ini is a Gecko installation
 export function browserAt(dir: string): Browser | null {
   try {
     const ini = fs.readFileSync(path.join(dir, "application.ini"), "utf8");
@@ -90,7 +83,6 @@ export function findBrowsers(): Browser[] {
       "/opt/waterfox",
       "/usr/lib/waterfox",
     );
-    // executables on PATH (usually links into the installation folder)
     for (const bin of ["zen-browser", "zen", "firefox", "librewolf", "floorp", "waterfox"]) {
       for (const p of (process.env.PATH ?? "").split(":")) {
         try {
@@ -114,11 +106,9 @@ export function findBrowsers(): Browser[] {
     const browser = browserAt(real);
     if (browser) found.push(browser);
   }
-  // Zen first
   return found.sort((a, b) => Number(/zen/i.test(b.name)) - Number(/zen/i.test(a.name)));
 }
 
-// Flatpak/Snap installations are read-only: no autoconfig possible
 export function unsupportedInstalls(): string[] {
   const out: string[] = [];
   for (const [id, label] of [
@@ -131,13 +121,10 @@ export function unsupportedInstalls(): string[] {
   return out;
 }
 
-// ---- loader state ----
-
 type Plan = { writes: { file: string; content: string }[]; status: "new" | "append" | "update" | "legacy" };
 
 const PREF = (name: string) => new RegExp(`pref\\(\\s*["']${name.replace(/\./g, "\\.")}["']\\s*,\\s*([^)]+)\\)`);
 
-// does the browser already have an autoconfig: general.config.filename in defaults/pref/*.js
 function existingAutoconfig(dir: string) {
   const prefsDir = path.join(dir, "defaults", "pref");
   let files: string[] = [];
@@ -184,7 +171,7 @@ function planInstall(dir: string): Plan {
           file: path.join(dir, "defaults", "pref", `${NAME}-prefs.js`),
           content: `// ${NAME}: loads ${NAME}.cfg (autoconfig). Remove with \`npx ${PACKAGE} uninstall\`.\npref("general.config.filename", "${NAME}.cfg");\npref("general.config.obscure_value", 0);\npref("general.config.sandbox_enabled", false);\n`,
         },
-        // autoconfig skips the first line of the .cfg file
+        // why: Gecko skips the first line of an autoconfig file.
         { file: path.join(dir, `${NAME}.cfg`), content: `// ${NAME} autoconfig (the first line is skipped)\n${block}` },
       ],
     };
@@ -235,8 +222,6 @@ function planUninstall(dir: string): string[] | { file: string; content: string 
   return [{ file: existing.cfg, content: text.slice(0, start).replace(/\n+$/, "\n") + text.slice(after) }];
 }
 
-// ---- writing files: directly, or with sudo ----
-
 function writeFiles(writes: { file: string; content: string }[]) {
   const needSudo: { file: string; content: string }[] = [];
   for (const w of writes) {
@@ -280,9 +265,7 @@ function removeFiles(files: string[]) {
   }
 }
 
-// ---- browser-side files ----
-
-// a symlinked DATA_DIR is a development setup: left alone
+// why: A symlinked data directory is a live development checkout and must not be replaced.
 const isDevLink = () => {
   try {
     return fs.lstatSync(DATA_DIR).isSymbolicLink();
@@ -310,16 +293,13 @@ function copyBrowserFiles() {
   fs.renameSync(tmp, DATA_DIR);
 }
 
-// On server start: installed files older than this package (e.g. npx fetched a new version)
-// are updated and the bridge reloads; no browser restart or sudo needed.
+// why: MCP startup can activate newer package files without modifying the privileged loader.
 export async function syncBrowserFiles() {
   const installed = installedVersion();
   if (!installed || installed === "dev" || installed === VERSION) return;
   copyBrowserFiles();
   await call("reload", {}, 10_000).catch(() => {});
 }
-
-// ---- komutlar ----
 
 function chooseBrowsers(args: string[]): Browser[] {
   const flag = args.indexOf("--browser");

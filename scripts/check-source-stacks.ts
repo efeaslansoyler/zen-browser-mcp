@@ -1,8 +1,4 @@
-// Live source locations on real dev servers: scaffolds small Next.js (Turbopack and webpack),
-// Vite React 19/18, Svelte, Vue, Astro and Angular apps, picks one element in each and checks the
-// file:line the agent receives. Needs network for the first scaffold; later runs reuse the apps.
-// Run inside a sandbox (scripts/sandbox.ts): node scripts/check-source-stacks.ts [work dir] [stack…]
-// No message reaches an AI session.
+// why: Use sandbox profiles and local receipts so framework picks never reach a real agent session.
 import assert from "node:assert/strict";
 import { execSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -341,7 +337,7 @@ try {
       fs.writeFileSync(path.join(dir, file), content);
     }
     const url = `http://localhost:${++port}/`;
-    // its own process group, so stopping it also stops the dev server's children
+    // why: Use a separate process group to stop the dev server along with its descendants.
     const server = spawn("sh", ["-c", stack.dev.replace("PORT", String(port))], {
       cwd: dir,
       detached: true,
@@ -361,7 +357,6 @@ try {
       try {
         process.kill(-server.pid!);
       } catch {}
-      // some dev servers (Astro) leave a listener outside the process group
       await sleep(500);
       const listeners = execSync(`ss -ltnpH 'sport = :${port}'`, { encoding: "utf8" });
       for (const pid of new Set([...listeners.matchAll(/pid=(\d+)/g)].map((m) => Number(m[1])))) process.kill(pid);

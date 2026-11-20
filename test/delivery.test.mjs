@@ -122,7 +122,7 @@ test("a T3 Code thread gets the event through `t3 thread send`, the message on s
   assert.equal(fs.readFileSync(path.join(dir, "stdin"), "utf8"), "hello $(whoami) `id`");
 
   fs.writeFileSync(cli, "#!/bin/sh\necho 'no such thread' >&2\nexit 3\n", { mode: 0o755 });
-  // it exits without reading stdin: a large message can't be written (EPIPE), the exit code counts
+  // why: Force a child exit without reading stdin to verify EPIPE does not hide its exit status.
   await assert.rejects(runT3Send(cli, "thread-1", "x".repeat(4_000_000)), /t3 thread send failed: no such thread/);
 });
 

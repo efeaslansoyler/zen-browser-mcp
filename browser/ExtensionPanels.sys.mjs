@@ -1,5 +1,3 @@
-// Native extension UI, scoped to one agent session and the tab it was opened for.
-// No extension-specific actions or background-script APIs are used.
 export class ExtensionPanels {
   constructor(env) {
     this.env = env;
@@ -46,9 +44,7 @@ export class ExtensionPanels {
       if (old.session === session && old.tabId === tabId && old.extensionId === extensionId) {
         try {
           return this.get(source, session, tabId, extensionId);
-        } catch {
-          /* expired */
-        }
+        } catch {}
       }
       this.discard(old);
     }
@@ -63,7 +59,6 @@ export class ExtensionPanels {
     checkModal();
     if (this.env.busy(window))
       throw new Error("A browser menu or panel is already open. Close it before opening an extension.");
-    // Extensions use the selected tab for tabs.query({active:true}) and activeTab grants.
     if (window.gBrowser.selectedBrowser !== source) {
       const selected = window.gBrowser.selectedBrowser;
       const document = source.browsingContext.currentWindowGlobal;
@@ -83,7 +78,6 @@ export class ExtensionPanels {
         );
       }
       window.gBrowser.selectedTab = window.gBrowser.getTabForBrowser(source);
-      // Let native tab/focus handlers finish before opening the toolbar popup.
       await this.env.wait(50, source);
       this.env.check(source, session);
       if (
@@ -137,7 +131,7 @@ export class ExtensionPanels {
       throw new Error("This extension panel belongs to another session or tab.");
     this.discard(entry);
   }
-  // session: only that session's panels (it left a shared tab)
+  // why: When a member leaves a shared tab, preserve other members' extension panels.
   releaseTab(tabId, session) {
     for (const entry of this.entries.values())
       if (entry.tabId === tabId && (!session || entry.session === session)) this.discard(entry);

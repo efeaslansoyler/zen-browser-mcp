@@ -1,15 +1,11 @@
-// Download log: downloads started from agent tabs (or popups they opened). Listens to Gecko's
-// Downloads list and reports state, path, size and progress. Writes an events file per
-// download (EventFiles.sys.mjs).
 const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
 
 const MAX_RECORDS = 100;
-const STEP_BYTES = 10 * 1048576; // one line per this many bytes when the size is unknown
-const HASH_CHUNK = 4 * 1048576; // in chunks, so the main thread isn't held for long
+const STEP_BYTES = 10 * 1048576;
+const HASH_CHUNK = 4 * 1048576; // why: Bound hashing work per chunk to keep the browser main thread responsive.
 
 export class DownloadLog {
-  // records: { list: [{ id, browserId, download, reported }], nextId }; passed in so it survives reloads
-  // env.tracked(browserId): whether the tab is recorded; env.events: EventFiles
+  // why: Keep download state across bridge reloads to avoid reporting old downloads again.
   constructor(records, env) {
     this.records = records;
     this.records.list ??= [];
@@ -24,7 +20,6 @@ export class DownloadLog {
   async start() {
     await this.env.events.start();
     this.list = await Downloads.getList(Downloads.ALL);
-    // addView calls onDownloadAdded for existing downloads too; recorded ones aren't added again
     await this.list.addView(this.view);
   }
 
@@ -43,7 +38,6 @@ export class DownloadLog {
     this.#changed(download);
   }
 
-  // An event line on state changes and every 10% (every 10 MB if the size is unknown).
   #changed(download) {
     const record = this.records.list.find((r) => r.download === download);
     if (!record?.events || record.closed) return;
@@ -69,7 +63,6 @@ export class DownloadLog {
     );
   }
 
-  // sha256 is computed once; undefined if the file was moved or deleted
   static async sha256(record) {
     if (record.sha256) return record.sha256;
     try {
@@ -87,7 +80,6 @@ export class DownloadLog {
     return record.sha256;
   }
 
-  // The tab of the frame that started the download; for a popup, the tab that opened it.
   #sourceTab(contextId) {
     const bc = contextId && BrowsingContext.get(contextId);
     if (!bc) return null;
@@ -102,8 +94,7 @@ export class DownloadLog {
   }
 
   hasPendingDialog(browserId) {
-    // Gecko opens this window before creating a Downloads entry. Attribute it using
-    // the launcher, never the focused tab or the browser window that owns the dialog.
+    // why: The dialog can predate the download entry, so use its launcher to find the source tab.
     for (const win of Services.wm.getEnumerator(null)) {
       if (win.closed || win.document.documentURI !== "chrome://mozapps/content/downloads/unknownContentType.xhtml")
         continue;
@@ -112,14 +103,12 @@ export class DownloadLog {
     return false;
   }
 
-  // a paused download (cancelled with partial data) doesn't count as finished
   static finished({ download: d }) {
     return d.succeeded || !!d.error || (d.canceled && !d.hasPartialData);
   }
 
   static describe(record) {
     const d = record.download;
-    // during cancel Gecko briefly keeps partial data: don't report "paused" in between
     const state = d.succeeded
       ? "done"
       : d.error

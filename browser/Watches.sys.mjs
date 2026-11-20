@@ -1,18 +1,10 @@
-// Page watches: write a line to an events file when a condition holds in an agent tab (text or
-// element appears or disappears) or an element's text changes. Unlike wait_for they don't block
-// the agent and can run for hours. They end when the session leaves the tab, the tab closes,
-// the time runs out or on Stop.
-// A hold watch (hold: true) reads no page: it reports when another session's hold on an agent
-// tab ends (tab_work hold), so an agent refused by a hold can wait without blocking.
+// why: A hold watch lets an agent wait for another member without reading or locking the page.
 const MAX_PER_SESSION = 10;
 
 export class Watches {
-  // env: { events: EventFiles, owned(tabId, session) → browser|null, check(browser, {text, selector}),
-  //        sample(browser, selector), assertSite(browser), held(tabId, session) → "held" | "free" |
-  //        "gone", wake(browser) → release: keeps the tab awake (live), setTimeout, clearTimeout }
   constructor(env) {
     this.env = env;
-    this.list = new Map(); // id → record
+    this.list = new Map();
     this.nextId = 1;
   }
 
@@ -41,8 +33,7 @@ export class Watches {
       started: Date.now(),
     };
     this.list.set(id, watch);
-    // live: the tab runs like a foreground tab for as long as the watch does (a page that
-    // updates on animation frames or fast timers); otherwise it sleeps like any background tab
+    // why: Foreground-speed watches need timers and animation frames that background Gecko throttles.
     if (live && browser) watch.release = this.env.wake(browser);
     this.#write(watch, {
       event: "started",
@@ -97,7 +88,7 @@ export class Watches {
       } else {
         const found = await this.env.check(browser, { text: spec.text, selector: spec.selector });
         const ok = spec.gone ? !found : found;
-        // write on transitions only, not every round while the condition stays true
+        // why: Emit transitions so an unchanged match does not fill the events file.
         if (ok && !watch.matched) {
           if (!spec.repeat) return this.end(watch.id, "matched", { url });
           this.#write(watch, { event: "matched", url });
@@ -105,14 +96,13 @@ export class Watches {
         watch.matched = ok;
       }
     } catch {
-      // no frame while loading, a dialog open…: try again next round
+      // why: A loading frame or modal dialog may clear on the next poll.
     }
     if (!this.list.has(watch.id)) return;
     if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
     this.#schedule(watch, watch.interval);
   }
 
-  // the final line; reason "matched" means the condition held, "released" that the hold ended
   end(id, reason, extra = {}) {
     const watch = this.list.get(id);
     if (!watch) return null;

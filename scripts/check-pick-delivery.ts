@@ -1,6 +1,4 @@
-// Live, opt-in test: sends one browser pick to the exact current Codex chat.
-// node scripts/check-pick-delivery.ts (requires CODEX_THREAD_ID in the environment)
-// Add --automatic to verify the existing hook receiver without connect_session.
+// why: This opt-in check sends a real pick to the exact Codex conversation supplied in the environment.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";

@@ -1,4 +1,4 @@
-// Shared by the browser parent and content actors. Cancelled work never resumes.
+// why: A cancellation scope cannot resume after cancellation.
 export class Cancellation {
   #error = null;
   #listeners = new Set();

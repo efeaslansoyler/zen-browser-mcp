@@ -1,30 +1,16 @@
-// Picking elements and giving an agent work on them.
-//
-// The user picks one or more elements in any tab (not only agent tabs): Ctrl+Shift+F or
-// "Show to agent…" in the page context menu. The island asks for a note; the note and the
-// elements' context go to a session connected as a channel, or to the clipboard without one.
-// env:
-//   env.L(en, tr), env.island (getter; changes on reload), env.channels (Channels),
-//   env.inbox (Inbox: sends to a session now or with its next tool result),
-//   env.targets(): sessions to send to, with labels; env.sentNotice(status, target),
-//   env.theme(agent), env.hasAccess(browserId, session), env.pickedTabs (Set),
-//   env.assertSiteAccess(browser), env.logError(where, e), env.sleep(ms),
-//   env.copy(text): to the clipboard, env.paintIcon(item, agent), env.menuAgent(),
-//   env.shotsDir, env.maxEdge
 const PAGE_MENU_ID = "zen-mcp-context-pick";
-const MAX_SHOTS = 20; // the latest images are kept
-const SOURCE_HTML = 300; // the HTML excerpt when the snippet already shows the code
+const MAX_SHOTS = 20;
+const SOURCE_HTML = 300; // why: Avoid sending the same code as both HTML and a source snippet.
 
 export class Picks {
   constructor(env) {
     this.env = env;
-    this.current = null; // { win, browser, document, onTabSelect, targetId, agent, info, items, shot, preparing, sending }
+    this.current = null;
     this.cleanups = new Set();
     this.shotId = 0;
   }
 
-  // Asks the actor in the user's tab (agent tab rules and Stop don't apply); null if the
-  // page changes.
+  // why: User-initiated picks use their own actor query because agent access and Stop do not govern them.
   async pageQuery(browser, name, data) {
     const wg = browser.browsingContext?.currentWindowGlobal;
     if (!wg) return null;
@@ -33,7 +19,7 @@ export class Picks {
       actor = wg.getActor("ZenMcp");
     } catch {
       return null;
-    } // privileged about: pages
+    }
     let done = false;
     const gone = (async () => {
       while (!done) {
@@ -52,7 +38,6 @@ export class Picks {
 
   #begin(win, browser) {
     if (this.current) this.end();
-    // switching tabs while picking closes the picker; while writing the note it stays
     const onTabSelect = () => {
       if (this.current?.browser === browser && !this.current.info) this.end();
     };
@@ -70,8 +55,6 @@ export class Picks {
     return this.current;
   }
 
-  // Ctrl+Shift+F (pressing it again while picking cancels) or the context menu
-  // (fromContext: the pick starts at the right-clicked element)
   async start(win, { browser = win.gBrowser.selectedBrowser, fromContext = false } = {}) {
     this.env.assertSiteAccess(browser);
     if (this.current && !fromContext) {
@@ -98,7 +81,7 @@ export class Picks {
     if (current.document && current.document !== current.browser.browsingContext?.currentWindowGlobal)
       throw new Error("The page changed; select the elements again.");
     current.document ||= current.browser.browsingContext?.currentWindowGlobal;
-    current.info = infos[0]; // Keep single-pick compatibility for existing clients/helpers.
+    current.info = infos[0]; // why: Preserve the original single-pick reply shape for existing clients and helpers.
     current.items = [];
     current.preparing = true;
     const sources = infos.map((info) => this.source(current, info));
@@ -123,13 +106,10 @@ export class Picks {
         : info.name
           ? `${info.role || info.label} "${info.name.slice(0, 40)}"`
           : info.label;
-    // every connected session, labelled with how it receives the pick
     const targets = this.env.targets().map(({ id, label, agent }) => ({ id, name: label, agent }));
     this.env.island?.compose(current.browser, label, targets, current.targetId, infos.length);
   }
 
-  // The element's source location and CSS rules: undefined without hints; { unknown: true, … }
-  // only when framework hints could not be resolved.
   source(current, info) {
     const hints = info.sourceHints;
     if (!hints || !this.env.sources) return undefined;
@@ -143,7 +123,6 @@ export class Picks {
       });
   }
 
-  // the target session changed on the island
   selectTarget(target) {
     const current = this.current;
     if (!current) return;
@@ -152,7 +131,6 @@ export class Picks {
     this.pageQuery(current.browser, "pick_theme", { agent: current.agent }).catch(() => {});
   }
 
-  // Removes the outline from the page; keepIsland: the island will show "sent".
   end({ keepIsland = false } = {}) {
     if (!this.current) return;
     const { win, browser, onTabSelect } = this.current;
@@ -164,7 +142,6 @@ export class Picks {
     if (!keepIsland) this.env.island?.pickEnded();
   }
 
-  // elementNotes: a multi-element pick's optional note per element, in order
   async send(note, targetId = this.current?.targetId, elementNotes = []) {
     const { L } = this.env;
     const current = this.current;
@@ -177,7 +154,7 @@ export class Picks {
     current.sending = true;
     const { content, meta } = this.message(current, note, targetId, elementNotes);
     const notes = current.items?.length > 1 ? current.items.map((_, i) => elementNotes[i]?.trim() ?? "") : [];
-    // Pin to the user's selected destination. Never reroute if it disconnects.
+    // why: A disconnect cannot silently redirect a pick to a different session.
     const target = targetId ? this.env.targets().find((t) => t.id === targetId) : null;
     this.env.pickedTabs.add(current.browser.browserId);
     let status = "missing";
@@ -201,7 +178,6 @@ export class Picks {
     );
   }
 
-  // The text sent to the agent; in Claude Code it becomes the <channel source="zen" …> body.
   message({ browser, info, shot, source, items }, note, targetId, elementNotes = []) {
     if (items?.length > 1) {
       const messages = items.map((item) => this.message({ browser, ...item }, "", targetId));
@@ -253,7 +229,6 @@ export class Picks {
     return { content: lines.join("\n"), meta };
   }
 
-  // A PNG of the picked element's visible part with some margin; the agent views it with Read.
   async shot(browser, { rect, viewport }) {
     this.env.assertSiteAccess(browser);
     const wg = browser.browsingContext?.currentWindowGlobal;
@@ -266,11 +241,11 @@ export class Picks {
     if (width <= 0 || height <= 0) return null;
     const win = browser.ownerDocument.defaultView;
     const scale = Math.min(viewport.dpr, this.env.maxEdge / Math.max(width, height));
-    // keep the pick outline and the virtual cursor off the element in the image
+    // why: Remove visual overlays before capturing the element so they do not cover its content.
     await this.pageQuery(browser, "overlays", { hidden: true }).catch(() => {});
     let bitmap;
     try {
-      // drawSnapshot wants document coordinates; rect is viewport-relative
+      // why: drawSnapshot uses document coordinates (docs/gecko-pitfalls.md, Browser UI and session store).
       bitmap = await wg.drawSnapshot(
         new win.DOMRect(left + viewport.scrollX, top + viewport.scrollY, width, height),
         scale,
@@ -295,8 +270,7 @@ export class Picks {
     return path;
   }
 
-  // "Show to agent…" in the page context menu; only in the top frame of web pages
-  // (the pick runs in the top frame's actor)
+  // why: Limit the menu to the top frame because the pick runs in that frame's actor.
   attachPageMenu(win) {
     const { L } = this.env;
     const doc = win.document;
@@ -307,7 +281,6 @@ export class Picks {
     item.className = "menuitem-iconic";
     this.env.paintIcon(item, this.env.menuAgent());
     item.setAttribute("label", L("Show to agent…", "Ajana göster…"));
-    // above "Inspect", otherwise at the end of the menu
     const anchor = doc.getElementById("inspect-separator");
     menu.insertBefore(item, anchor?.parentNode === menu ? anchor : null);
     let browser = null;
@@ -346,11 +319,10 @@ export class Picks {
   }
 }
 
-// The map's own path only when it says more than the project path.
+// why: Avoid showing redundant source map paths beside the project path.
 const originalNote = ({ file, original }) =>
   original && ![file, `file://${file}`].includes(original) && !file.endsWith(`/${original}`) ? ` (${original})` : "";
 
-// The source location and snippet of a picked element, for the agent.
 function sourceLines({ framework, precision, chain, snippet }) {
   const place = (link) =>
     `${link.file}${link.line ? `:${link.line}` : ""}${link.line && link.column ? `:${link.column}` : ""}${originalNote(link)}`;

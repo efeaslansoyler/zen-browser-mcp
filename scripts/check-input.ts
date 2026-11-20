@@ -1,4 +1,3 @@
-// Disposable local fixture; exercises real input and per-tab settings via a fresh MCP client.
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";

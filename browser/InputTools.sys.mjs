@@ -1,5 +1,3 @@
-// Input tools: mouse/keyboard/screenshots, forms, file upload, page dialogs, navigation.
-// Built last by main.js: helpers are taken from ctx once. Tools get their call as the second argument.
 export function inputTools(ctx) {
   const {
     MAX_UPLOAD,
@@ -62,7 +60,7 @@ export function inputTools(ctx) {
       assertSiteAccess(browser);
       const tab = browser.ownerDocument.defaultView.gBrowser.getTabForBrowser(browser);
       const result = text(describeTab(tab, call.session));
-      // An agent tab that arrives on a site the user has open: the task may be about their page.
+      // why: An open tab on the same site may hold the user's existing task context.
       const host = ctx.hostOf(browser);
       const sameSite = host !== from && tab.getAttribute(ctx.MARK) !== "user" ? ctx.userTabsOn(host) : [];
       if (sameSite.length)
@@ -73,7 +71,7 @@ export function inputTools(ctx) {
           }),
         );
       if (read != null) {
-        // Apply the destination document's own read permission, even if navigation was approved.
+        // why: Navigation approval does not grant read access to the destination document.
         try {
           result.push(...(await ctx.runTool(call, "read_page", { tabId, filter: read, max_chars: 8000 })));
         } catch (e) {
@@ -200,7 +198,7 @@ export function inputTools(ctx) {
               downsampled: shot.nativeScale < 1,
               note: "Use refs or a viewport screenshot for coordinates.",
             });
-          // the dialog is drawn in the browser UI, so it isn't in the page image
+          // why: A page capture cannot include a dialog drawn by the browser UI.
           const dialog = openDialog(browser);
           return [
             { type: "image", data: shot.data, mimeType },
@@ -314,7 +312,6 @@ export function inputTools(ctx) {
         default:
           throw new Error(`Unsupported action: ${args.action}`);
       }
-      // give the page a moment to handle the events
       await operationSleep(100, call);
       return text(`${args.action} done.`);
     },
@@ -327,7 +324,6 @@ export function inputTools(ctx) {
     async file_upload({ tabId, ref, paths }, call) {
       const browser = browserFor(call, tabId);
       const mime = Cc["@mozilla.org/mime;1"].getService(Ci.nsIMIMEService);
-      // the browser window's IOUtils (the autoconfig scope has none)
       const { IOUtils } = browser.ownerDocument.defaultView;
       let total = 0;
       const files = [];

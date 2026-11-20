@@ -1,13 +1,8 @@
-// What agents draw on the page: the virtual cursor, the click ripple and the ask_user outline.
-// Everything lives in a closed shadow root (page CSS can't break it, page scripts can't look
-// inside) and ignores pointer events. Colors follow the agent theme.
-//
-// env: { document(), window(), agent(), applyTheme, setTimeout, clearTimeout }
+// why: Isolate overlay styles from the page and keep overlays from intercepting input.
 
 const HOST_STYLE =
   "all: initial !important; position: fixed !important; z-index: 2147483647 !important; pointer-events: none !important;";
 
-// The arrow in the agent's accent color.
 const arrowImage = (color) =>
   "data:image/svg+xml," +
   encodeURIComponent(
@@ -77,10 +72,9 @@ const ASK_CSS = `
   }
 `;
 
-// The system event group: a page's stopPropagation doesn't affect it (privileged code only).
+// why: The system event group still sees events the page stops propagating.
 const SYSTEM_CAPTURE = { capture: true, mozSystemGroup: true };
 
-// A themed host element with a closed shadow root holding the style sheet.
 function overlayHost(env, tag, css, style = "inset: 0 !important; display: block !important;") {
   const doc = env.document();
   const host = doc.createElement(tag);
@@ -93,9 +87,7 @@ function overlayHost(env, tag, css, style = "inset: 0 !important; display: block
   return { host, root };
 }
 
-// The virtual cursor: an arrow with a small label ("Claude", "typing…") so a user watching the
-// tab sees where the agent acts. Before an action it glides from its last position to the
-// target, but only while the tab is visible (no delay when nobody watches). It fades out when idle.
+// why: Avoid cursor animation delays when the user cannot see the tab.
 export class VirtualCursor {
   constructor(env) {
     this.env = env;
@@ -122,7 +114,6 @@ export class VirtualCursor {
     pointer.append(arrow, label);
     root.append(pointer);
     doc.documentElement.append(host);
-    // The first appearance comes from the middle of the page.
     const x = this.el?.x ?? win.innerWidth / 2;
     const y = this.el?.y ?? win.innerHeight / 2;
     pointer.style.setProperty("--move", "0ms");
@@ -131,7 +122,6 @@ export class VirtualCursor {
     return this.el;
   }
 
-  // Follows the agent theme (the active agent can change between requests).
   paint() {
     if (!this.el) return;
     const agent = this.env.agent();
@@ -175,7 +165,6 @@ export class VirtualCursor {
     this.#idle();
   }
 
-  // An operation was cancelled: hide at once.
   hide() {
     if (!this.el) return;
     this.env.clearTimeout(this.el.hideTimer);
@@ -183,7 +172,7 @@ export class VirtualCursor {
     this.el.pointer.classList.add("gone");
   }
 
-  // Kept out of the agent's own screenshots.
+  // why: Keep the visual cursor out of screenshots sent to the agent.
   setHidden(hidden) {
     if (this.el?.host.isConnected) this.el.pointer.style.visibility = hidden ? "hidden" : "";
   }
@@ -192,7 +181,6 @@ export class VirtualCursor {
     if (this.el) this.env.clearTimeout(this.el.hideTimer);
   }
 
-  // Fades out after 4 s idle (like the island).
   #idle() {
     const cursor = this.el;
     this.env.clearTimeout(cursor.hideTimer);
@@ -203,8 +191,6 @@ export class VirtualCursor {
   }
 }
 
-// A short ring at the clicked point, so a user looking at the tab sees what the agent last did.
-// It doesn't block clicks and removes itself.
 export function ripple(env, x, y) {
   const { host, root } = overlayHost(
     env,
@@ -217,8 +203,7 @@ export function ripple(env, x, y) {
   env.setTimeout(() => host.remove(), 700);
 }
 
-// Readable on any page: a crisp ring (a thin light gap, then the agent color) that follows the
-// element's own corner radius, and dark labels like the island's, beside the element.
+// why: A contrasting double ring and dark labels stay visible on varied pages.
 const HIGHLIGHT_CSS = `
   .ring {
     position: fixed; box-sizing: border-box; pointer-events: none;
@@ -244,12 +229,9 @@ const HIGHLIGHT_CSS = `
   }
 `;
 
-const GAP = 3; // between the element and its ring
-const SIDE = 8; // between the ring and its label
+const GAP = 3;
+const SIDE = 8;
 
-// highlight: rings with labels around elements the agent points out to the user. They follow
-// their elements and stay until removed; nothing waits for the user.
-// items: [{ element, label, number }]: number is the badge, label the text (may be empty).
 export function highlight(env, items) {
   const doc = env.document();
   const win = env.window();
@@ -266,7 +248,7 @@ export function highlight(env, items) {
     if (label) tag.append(label);
     else tag.style.padding = "3px";
     root.append(ring, tag);
-    // the element's own corner radius, so a pill gets a pill and a card a card
+    // why: Match the target's corner radius so the outline follows its shape.
     const radius = parseFloat(win.getComputedStyle(element).borderTopLeftRadius) || 0;
     ring.style.borderRadius = `${radius + GAP}px`;
     return { element, ring, tag };
@@ -283,8 +265,6 @@ export function highlight(env, items) {
         width: `${r.width + GAP * 2}px`,
         height: `${r.height + GAP * 2}px`,
       });
-      // Beside the element, centered vertically: right if there's room, else left, else inside
-      // its top-right corner. Stacked fields get labels at different heights.
       const width = tag.offsetWidth;
       const right = r.right + GAP + SIDE;
       const left = r.left - GAP - SIDE - width;
@@ -307,15 +287,9 @@ export function highlight(env, items) {
   };
 }
 
-// ask_user: outline the element and wait. The message and buttons are on the island; the page
-// only gets the outline (nothing at all without a target, then the answer comes from the
-// island through cancel_ask). Only trusted clicks count; they are watched in the system group,
-// so a page that stops the event can't hide them.
-// Returns { answer: Promise<"clicked" | "timeout" | result>, finish(result) }.
 export function outlineAndWait(env, { target, wait, timeout }) {
   const doc = env.document();
   const win = env.window();
-  // an outline left behind by an earlier failure
   for (const old of doc.querySelectorAll("zen-mcp-ask")) old.remove();
   const { host, root } = overlayHost(env, "zen-mcp-ask", ASK_CSS);
   let box = null;
@@ -326,7 +300,6 @@ export function outlineAndWait(env, { target, wait, timeout }) {
     doc.documentElement.append(host);
   }
 
-  // follow the element when it scrolls or resizes
   let frame = 0;
   const place = () => {
     const r = target.getBoundingClientRect();

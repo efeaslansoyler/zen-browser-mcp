@@ -25,7 +25,6 @@ test("the prompt hook adds what waits for its conversation, and nothing otherwis
   });
   assert.deepEqual(asked[0], ["inbox_take", { client: "claude", clientSession: "with-items-1", pids: [10, 1] }, 2000]);
   assert.equal(await promptHook("codex", { session_id: "empty-session" }, browser), "");
-  // bad input or no browser: silent
   assert.equal(await promptHook("claude", { session_id: "../x y" }, browser), "");
   assert.equal(await promptHook("claude", null, browser), "");
   const closed = async () => {
@@ -42,7 +41,7 @@ test("installing the Claude Code hook keeps the user's other hooks and settings"
   assert.equal(claudeHookInstalled(file), false);
 
   configureClaudeHook("install", file);
-  configureClaudeHook("install", file); // twice: still one entry
+  configureClaudeHook("install", file);
   let settings = JSON.parse(fs.readFileSync(file, "utf8"));
   assert.equal(settings.model, "opus");
   assert.deepEqual(settings.hooks.UserPromptSubmit, [
@@ -104,7 +103,7 @@ test("the Antigravity hook is one named entry in its hooks.json", () => {
   configureAntigravityHook("uninstall", file);
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), { linter: { PostToolUse: [] } });
   assert.equal(antigravityHookInstalled(file), false);
-  // agy creates an empty file at first
+  // why: Antigravity may create an empty hook file before any config has been written.
   const empty = path.join(dir, "empty.json");
   fs.writeFileSync(empty, "");
   configureAntigravityHook("install", empty);

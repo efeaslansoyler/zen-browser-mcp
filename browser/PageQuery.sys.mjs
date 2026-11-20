@@ -1,30 +1,19 @@
-// Talking to pages: every frame has its own ZenMcp actor (actors/ZenMcpChild.sys.mjs). This
-// module sends queries to the right frame, translates refs and coordinates between frames,
-// waits for loads and handles page dialogs.
-
-// An open alert/confirm/prompt blocks the page's JS, so a query would never get an answer.
-// Dialogs are looked for before and during each query; one is reported as information
-// (DialogOpen), not as a failure, and the agent answers it with handle_dialog.
 export class DialogOpen extends Error {}
-// The page changed while a query was pending: its actor is gone and no answer will come.
 export class PageGone extends Error {}
 
 export function pageQueries(ctx) {
   let querySequence = 0;
   const pendingListeners = new Set();
 
-  // The autoconfig scope has no BrowsingContext global (like IOUtils); use the window's.
+  // why: Autoconfig has no BrowsingContext global (docs/gecko-pitfalls.md, Loading and scopes).
   const bcById = (browser, id) => browser.ownerDocument.defaultView.BrowsingContext.get(id);
 
-  // All loaded frames, top first.
   const framesOf = (browser) =>
     browser.browsingContext.getAllBrowsingContextsInSubtree().filter((bc) => bc.currentWindowGlobal);
 
-  // The actor appends the browsing context ID to refs in subframes ("ref_3_f150323855361").
-  // Agents see a short number instead ("ref_3_f2"); incoming refs are translated back.
+  // why: Compact frame IDs keep tool output short while maintaining a mapping to Gecko's frame IDs.
   const frameNumbers = ctx.frameNumbers;
   function shortRefs(value) {
-    // only long IDs (short numbers are already translated)
     return value.replace(/(ref_\d+)_f(\d{6,})\b/g, (_, ref, id) => {
       let n = frameNumbers.byId.get(id);
       if (!n) {
@@ -36,14 +25,13 @@ export function pageQueries(ctx) {
     });
   }
 
-  // The ref sent to the actor: the real ID instead of the short number.
   function longRef(ref) {
     const m = /^(ref_\d+)_f(\d+)$/.exec(ref ?? "");
     const id = m && frameNumbers.byNumber.get(Number(m[2]));
     return id ? `${m[1]}_f${id}` : ref;
   }
 
-  // A subframe ref is "ref_N_f<n>"; that frame must be inside this tab.
+  // why: A supplied frame ID must be checked against the authorized tab.
   function frameOf(browser, ref) {
     const id = /_f(\d+)$/.exec(ctx.longRef(ref) ?? "")?.[1];
     if (!id) return browser.browsingContext;
@@ -56,13 +44,11 @@ export function pageQueries(ctx) {
   const queryRef = (browser, name, data, timeout) =>
     ctx.query(browser, name, data, timeout, ctx.frameOf(browser, data.ref));
 
-  // A screenshot coordinate → CSS px in the page's viewport.
   function toPagePoint(browser, [x, y]) {
     const s = ctx.state.scale.get(browser.browserId) || 1;
     return [x / s, y / s];
   }
 
-  // Converts a point in a frame to the top page's viewport (scrolling iframes into view if needed).
   async function toTop(browser, frame, x, y, forClick = false) {
     for (let bc = frame; bc.parent; bc = bc.parent) {
       const o = await ctx.query(browser, "frame_rect", { bcId: bc.id }, 30000, bc.parent);
@@ -73,7 +59,6 @@ export function pageQueries(ctx) {
     return [x, y];
   }
 
-  // The innermost frame under a top-page point, and the point in its coordinates.
   async function deepest(browser, x, y) {
     let frame = browser.browsingContext;
     for (let depth = 0; depth < 8; depth++) {
@@ -85,7 +70,6 @@ export function pageQueries(ctx) {
     return { frame, x, y };
   }
 
-  // The innermost frame that has keyboard focus.
   async function focusedFrame(browser) {
     let frame = browser.browsingContext;
     for (let depth = 0; depth < 8; depth++) {
@@ -97,8 +81,6 @@ export function pageQueries(ctx) {
     return frame;
   }
 
-  // The element's center if a ref is given (scrolled into view if needed), otherwise the
-  // coordinate; in CSS px of the top page's viewport.
   async function target(browser, args, key = "coordinate") {
     if (args.ref && key === "coordinate") {
       const frame = ctx.frameOf(browser, args.ref);
@@ -144,8 +126,6 @@ export function pageQueries(ctx) {
     throw error;
   }
 
-  // Shows "the page asks for confirmation" on the island until the dialog closes (answered by
-  // the agent or the user).
   async function showDialog(browser) {
     const { L } = ctx;
     const dialog = openDialog(browser);
@@ -165,7 +145,6 @@ export function pageQueries(ctx) {
     ctx.island?.dialogEnded();
   }
 
-  // frame: the BrowsingContext of a frame in the tab (the top frame by default)
   async function query(browser, name, data, timeout = 30000, frame = browser.browsingContext) {
     const { access } = ctx;
     const timers = { setTimeout: ctx.setTimeout, clearTimeout: ctx.clearTimeout };
@@ -192,8 +171,7 @@ export function pageQueries(ctx) {
         await watcher.wait(250, timers);
         if (done) return;
         throwIfDialog(browser);
-        // With bfcache the old page keeps its own BrowsingContext, whose currentWindowGlobal
-        // never changes: a navigation shows up as that context entering the cache.
+        // why: A bfcache entry can retain its original actor (docs/gecko-pitfalls.md, Input and frames).
         if (frame.currentWindowGlobal !== wg || frame.isDiscarded || frame.top?.isInBFCache)
           throw new PageGone("The page changed.");
         access.check(ctx.controlledSource(browser).browserId, scope?.session);
@@ -222,9 +200,7 @@ export function pageQueries(ctx) {
     }
   }
 
-  // A query for page watches. query() depends on the tab's running call (its session's
-  // access, its cancellation); a watch has none and checks access and site rules itself
-  // on every round.
+  // why: Watches outlive individual tool calls and therefore check access and cancellation independently.
   async function backgroundQuery(browser, name, data, frame) {
     const wg = frame?.currentWindowGlobal;
     if (!wg) throw new Error("The page has not loaded yet.");
@@ -242,7 +218,6 @@ export function pageQueries(ctx) {
     }
   }
 
-  // Across all frames: the first accepted value wins; frames that vanish while loading are skipped.
   async function acrossFrames(browser, name, data, accept) {
     for (const bc of ctx.framesOf(browser)) {
       try {
@@ -253,7 +228,6 @@ export function pageQueries(ctx) {
     return null;
   }
 
-  // Replaces read_page's "{{frame:<id>}}" lines with that frame's tree (nested frames too).
   async function expandFrames(browser, value, opts, level = 0) {
     const parts = [];
     let last = 0;
@@ -293,14 +267,13 @@ export function pageQueries(ctx) {
         QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
         onStateChange(webProgress, _request, flags) {
           const done = Ci.nsIWebProgressListener.STATE_STOP | Ci.nsIWebProgressListener.STATE_IS_WINDOW;
-          // A newly inserted tab may still deliver about:blank's STOP after the
-          // listener was installed. It is not the requested navigation completing.
+          // why: A new tab can still report STOP for about:blank after the requested navigation starts.
           const initialBlank =
             destination && destination !== "about:blank" && browser.currentURI?.spec === "about:blank";
           if (webProgress.isTopLevel && (flags & done) === done && !initialBlank) finish();
         },
       };
-      // The browser holds the listener weakly; keep it alive until it finishes.
+      // why: The progress service holds the listener weakly (docs/gecko-pitfalls.md, Input and frames).
       pendingListeners.add(listener);
       const off = ctx.callOf(browser)?.onCancel(() => {
         try {
@@ -323,8 +296,7 @@ export function pageQueries(ctx) {
     });
   }
 
-  // Read snapshots: the document and owner a read came from, so a later diff can tell whether
-  // its baseline still applies.
+  // why: The baseline needs the read's document and owner to prevent reuse in a different context.
   function readContext(browser) {
     return {
       url: browser.currentURI?.spec,
@@ -352,7 +324,7 @@ export function pageQueries(ctx) {
     );
   }
 
-  // Single-line JSON: indentation costs tokens on every call.
+  // why: JSON indentation adds token cost to every call.
   const text = (t) => [{ type: "text", text: ctx.shortRefs(typeof t === "string" ? t : JSON.stringify(t)) }];
 
   return {
