@@ -29,7 +29,9 @@ Form protections use the target's DOM and the kind of action. A custom
 JavaScript button outside a form may send or buy something without looking
 like form submission. Use `ask` or a site rule if the distinction matters.
 Approvals in a batch are scoped to the current document, site, permissions
-and tab access. The bridge checks each step and stops on a denial.
+and tab access. An approval covers only the steps the prompt listed; every
+other step is checked when it runs, against the focus and URL it has then.
+The bridge stops on a denial.
 
 ## Browser pages and local files
 
@@ -64,6 +66,8 @@ every bridge rule that resolves to `ask` becomes `allow`. This applies to
 the built-in templates and custom rules, including JavaScript and recognized
 form submission. Custom denials and site rules keep their effect. The system
 clipboard is always denied, including clipboard shortcuts routed through it.
+Local files stay closed too: `navigate.local_file` and `file_upload` are
+denied unless a custom rule allows them.
 `ask_user`, `hand_to_user` and `show_me` immediately return
 `no user is present (autonomous browser mode)`.
 

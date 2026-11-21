@@ -118,7 +118,7 @@ test("runTool holds the tab through the tool and releases after success or failu
     describeWrite() {},
     assertSiteAccess() {},
     permissionContext: () => null,
-    requirePermission: async () => ({ context: null }),
+    requirePermission: async () => ({ context: null, approved: new Map() }),
     requireToolPermission: async () => {},
     samePermissionContext: () => true,
     releaseInputs() {},

@@ -138,6 +138,14 @@ function existingAutoconfig(dir: string) {
       ?.trim()
       .replace(/^["']|["']$/g, "");
     if (!filename) continue;
+    // why: The installer may write this file with sudo, so it must stay inside the browser folder.
+    if (filename !== path.basename(filename) || filename === "..")
+      throw new Error(
+        L(
+          `The existing autoconfig name (${filename}) points outside ${dir}; add the loader by hand.`,
+          `Mevcut autoconfig adı (${filename}) ${dir} dışını gösteriyor; yükleyiciyi elle ekle.`,
+        ),
+      );
     return {
       cfg: path.join(dir, filename),
       obscure: PREF("general.config.obscure_value").exec(text)?.[1]?.trim(),
@@ -148,10 +156,10 @@ function existingAutoconfig(dir: string) {
 }
 
 export function loaderStatus(dir: string): "installed" | "legacy" | "missing" {
-  const existing = existingAutoconfig(dir);
-  if (!existing) return "missing";
   let text: string;
   try {
+    const existing = existingAutoconfig(dir);
+    if (!existing) return "missing";
     text = fs.readFileSync(existing.cfg, "utf8");
   } catch {
     return "missing";
@@ -222,7 +230,47 @@ function planUninstall(dir: string): string[] | { file: string; content: string 
   return [{ file: existing.cfg, content: text.slice(0, start).replace(/\n+$/, "\n") + text.slice(after) }];
 }
 
-function writeFiles(writes: { file: string; content: string }[]) {
+// why: Files may be written or removed with sudo; a symlink in the path, now or swapped in later, leads out of the browser folder, so callers use the resolved path.
+export function assertInside(root: string, file: string) {
+  const base = fs.realpathSync(root);
+  let dir = path.dirname(file);
+  while (!fs.existsSync(dir)) dir = path.dirname(dir);
+  const real = fs.realpathSync(dir);
+  const resolved = path.join(real, path.relative(dir, file));
+  if (
+    (real !== base && !real.startsWith(base + path.sep)) ||
+    fs.lstatSync(resolved, { throwIfNoEntry: false })?.isSymbolicLink()
+  )
+    throw new Error(
+      L(
+        `${file} leads outside ${root}; add the loader by hand.`,
+        `${file} ${root} dışına çıkıyor; yükleyiciyi elle ekle.`,
+      ),
+    );
+  return resolved;
+}
+
+// why: sudo resolves the path again, so every directory on it must be one only root (or macOS admins, who can sudo anyway) can change; members of group 0 are not necessarily root.
+export function assertRootChain(file: string) {
+  let dir = path.dirname(file);
+  while (!fs.existsSync(dir)) dir = path.dirname(dir);
+  for (;;) {
+    const stat = fs.lstatSync(dir);
+    const groupOk = process.platform === "darwin" && stat.gid === 80;
+    if (stat.isSymbolicLink() || stat.uid !== 0 || (stat.mode & 0o002) !== 0 || ((stat.mode & 0o020) !== 0 && !groupOk))
+      throw new Error(
+        L(
+          `${dir} can be changed by a non-root user, so ${file} is not written with sudo; add the loader by hand.`,
+          `${dir} root olmayan bir kullanıcı tarafından değiştirilebilir, bu yüzden ${file} sudo ile yazılmıyor; yükleyiciyi elle ekle.`,
+        ),
+      );
+    if (dir === path.dirname(dir)) return;
+    dir = path.dirname(dir);
+  }
+}
+
+function writeFiles(root: string, planned: { file: string; content: string }[]) {
+  const writes = planned.map((w) => ({ ...w, file: assertInside(root, w.file) }));
   const needSudo: { file: string; content: string }[] = [];
   for (const w of writes) {
     try {
@@ -234,6 +282,7 @@ function writeFiles(writes: { file: string; content: string }[]) {
     }
   }
   if (!needSudo.length) return;
+  for (const w of needSudo) assertRootChain(w.file);
   console.log(
     L(
       "The browser folder belongs to root; sudo will ask for your password.",
@@ -256,12 +305,14 @@ function writeFiles(writes: { file: string; content: string }[]) {
   }
 }
 
-function removeFiles(files: string[]) {
+function removeFiles(root: string, planned: string[]) {
+  const files = planned.map((f) => assertInside(root, f));
   for (const f of files) {
     try {
       fs.rmSync(f);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
+      assertRootChain(f);
       if (spawnSync("sudo", ["rm", "-f", f], { stdio: "inherit" }).status !== 0)
         throw new Error(L(`Could not remove ${f}.`, `${f} silinemedi.`), { cause: e });
     }
@@ -349,7 +400,7 @@ export async function install(args: string[]) {
   const browsers = chooseBrowsers(args);
   for (const browser of browsers) {
     const plan = planInstall(browser.dir);
-    writeFiles(plan.writes);
+    writeFiles(browser.dir, plan.writes);
     const what = {
       new: L("added an autoconfig loader", "autoconfig yükleyicisi eklendi"),
       append: L("added a block to the existing autoconfig", "mevcut autoconfig'e blok eklendi"),
@@ -403,8 +454,8 @@ export async function uninstall(args: string[]) {
   for (const browser of browsers) {
     const plan = planUninstall(browser.dir);
     if (!plan.length) continue;
-    if (typeof plan[0] === "string") removeFiles(plan as string[]);
-    else writeFiles(plan as { file: string; content: string }[]);
+    if (typeof plan[0] === "string") removeFiles(browser.dir, plan as string[]);
+    else writeFiles(browser.dir, plan as { file: string; content: string }[]);
     console.log(L(`✓ ${browser.name}: loader removed`, `✓ ${browser.name}: yükleyici kaldırıldı`));
   }
   if (!isDevLink()) {

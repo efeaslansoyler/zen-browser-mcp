@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { RUNTIME_DIR, NAME } from "./paths.ts";
+import { CODEX_RUNTIME_DIR, foreignOwned, privateDir } from "./paths.ts";
 import { subscribe } from "./zen.ts";
 import { browserResolver, deliveryScope, type Selection } from "./instances.ts";
 import { THREAD_ID, deliverCodexPick } from "./delivery.ts";
@@ -12,7 +12,7 @@ import { THREAD_ID, deliverCodexPick } from "./delivery.ts";
 export type RelayOptions = { threadId: string; cwd: string; label?: string };
 export function relaySocket(threadId: string, scope = deliveryScope()) {
   if (!THREAD_ID.test(threadId)) throw new Error("An exact Codex thread UUID is required.");
-  return path.join(RUNTIME_DIR, `${NAME}-codex`, `${scope ? scope + "." : ""}${threadId}.sock`);
+  return path.join(CODEX_RUNTIME_DIR, `${scope ? scope + "." : ""}${threadId}.sock`);
 }
 
 export function contactRelay(
@@ -22,7 +22,9 @@ export function contactRelay(
   scope?: string,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = net.createConnection(relaySocket(threadId, scope));
+    const file = relaySocket(threadId, scope);
+    if (foreignOwned(file)) return resolve(false);
+    const socket = net.createConnection(file);
     let data = "";
     let settled = false;
     const finish = (ok: boolean) => {
@@ -76,7 +78,7 @@ export async function ensureCodexRelay(options: RelayOptions) {
 }
 
 export async function stopCodexRelays({ scope, threadId }: { scope?: string; threadId?: string } = {}) {
-  const directory = path.join(RUNTIME_DIR, `${NAME}-codex`);
+  const directory = CODEX_RUNTIME_DIR;
   let files: string[];
   try {
     files = fs.readdirSync(directory);
@@ -100,7 +102,7 @@ export async function runCodexRelay(initial: RelayOptions, target: Selection) {
   browserResolver.pinDelivery(target);
   const scope = deliveryScope(target);
   const socketPath = relaySocket(initial.threadId, scope);
-  fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
+  privateDir(path.dirname(socketPath));
   if (await contactRelay(initial.threadId, "ping", undefined, scope)) return;
   let options = initial;
   let subscription: ReturnType<typeof subscribe> | undefined;

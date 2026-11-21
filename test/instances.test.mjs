@@ -263,3 +263,52 @@ test("browser mode precedence and profile isolation apply before focus", async (
   await listen(legacy);
   await assert.rejects(resolver({ env: { ZEN_MCP_BROWSER_MODE: "scratch" } }).resolve(), /scratch.*not running/);
 });
+
+test("private runtime directories are tightened when ours and refused when foreign", async () => {
+  const { privateDir } = await import("../dist/paths.js");
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "zen-private-"));
+  try {
+    const loose = path.join(base, "loose");
+    fs.mkdirSync(loose, { mode: 0o755 });
+    fs.chmodSync(loose, 0o755);
+    privateDir(loose);
+    assert.equal(fs.statSync(loose).mode & 0o777, 0o700);
+    const file = path.join(base, "file");
+    fs.writeFileSync(file, "");
+    assert.throws(() => privateDir(file));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the installer keeps writes and removals inside the browser folder", async () => {
+  const { assertInside } = await import("../dist/install.js");
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "zen-install-"));
+  try {
+    const root = path.join(base, "browser");
+    const outside = path.join(base, "outside");
+    fs.mkdirSync(path.join(root, "defaults"), { recursive: true });
+    fs.mkdirSync(outside);
+    assertInside(root, path.join(root, "defaults", "pref", "zen-mcp-prefs.js"));
+    const link = path.join(base, "link");
+    fs.symlinkSync(root, link);
+    assert.equal(assertInside(link, path.join(link, "zen-mcp.cfg")), path.join(fs.realpathSync(root), "zen-mcp.cfg"));
+    fs.symlinkSync(outside, path.join(root, "defaults", "pref"));
+    assert.throws(() => assertInside(root, path.join(root, "defaults", "pref", "zen-mcp-prefs.js")), /outside/);
+    fs.symlinkSync(path.join(outside, "x.cfg"), path.join(root, "zen-mcp.cfg"));
+    assert.throws(() => assertInside(root, path.join(root, "zen-mcp.cfg")), /outside/);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("sudo writes need a path that only root can change", async () => {
+  const { assertRootChain } = await import("../dist/install.js");
+  assertRootChain("/usr/zen-mcp-test/zen-mcp.cfg");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-chain-"));
+  try {
+    if (process.getuid?.() !== 0) assert.throws(() => assertRootChain(path.join(dir, "zen-mcp.cfg")), /non-root/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

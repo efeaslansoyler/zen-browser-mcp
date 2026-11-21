@@ -1,7 +1,7 @@
 // why: Node and Gecko must compute the same paths from the same environment.
 import os from "node:os";
 import path from "node:path";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync } from "node:fs";
 
 export const PACKAGE = "zen-browser-mcp";
 // why: Keep the on-disk name stable independently of npm branding so upgrades preserve settings.
@@ -28,6 +28,8 @@ const runtimeSuffix = /\/(?:var\/)?tmp\/?$/.test(RUNTIME_DIR)
   ? "-" + [...home].reduce((hash, c) => (Math.imul(hash, 31) + c.codePointAt(0)!) >>> 0, 0).toString(16)
   : "";
 export const INSTANCES_DIR = path.join(RUNTIME_DIR, NAME + runtimeSuffix);
+export const CODEX_RUNTIME_DIR = path.join(RUNTIME_DIR, `${NAME}${runtimeSuffix}-codex`);
+export const OPENCODE_RUNTIME_DIR = path.join(RUNTIME_DIR, `${NAME}${runtimeSuffix}-opencode`);
 export const LEGACY_SOCKET = path.join(RUNTIME_DIR, `${NAME}.sock`);
 export const LOG_FILE = path.join(runtimeSuffix ? INSTANCES_DIR : RUNTIME_DIR, `${NAME}.log`);
 
@@ -44,6 +46,22 @@ export const VERSION: string = JSON.parse(readFileSync(path.join(PACKAGE_DIR, "p
 
 // why: With a shared temporary runtime directory another OS user could create a socket at a path we connect to.
 export function foreignOwned(file: string) {
-  const stat = statSync(file, { throwIfNoEntry: false });
-  return !!stat && !!process.getuid && stat.uid !== process.getuid();
+  try {
+    const stat = statSync(file, { throwIfNoEntry: false });
+    return !!stat && !!process.getuid && stat.uid !== process.getuid();
+  } catch {
+    // why: A path we may not even inspect is not ours to connect to.
+    return true;
+  }
+}
+
+// why: In a shared temp directory another user can create our directory first and plant sockets in it.
+export function privateDir(dir: string) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || (process.getuid && stat.uid !== process.getuid()))
+    throw new Error(`Runtime directory must be a directory that belongs to the current user: ${dir}`);
+  // why: Earlier versions created some of these directories with the default umask.
+  if ((stat.mode & 0o077) !== 0) chmodSync(dir, 0o700);
+  return dir;
 }

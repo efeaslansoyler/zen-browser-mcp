@@ -8,7 +8,7 @@ import path from "node:path";
 import { BROWSER_MODES, isTemporaryMode, parseBrowserMode, type BrowserMode } from "../browser/SiteRules.sys.mjs";
 import { agentProfile, alive, isManagedProfile, profileOwner } from "./profiles.ts";
 import { readConfig } from "./config.ts";
-import { INSTANCES_DIR, LEGACY_SOCKET, PACKAGE } from "./paths.ts";
+import { INSTANCES_DIR, LEGACY_SOCKET, PACKAGE, foreignOwned } from "./paths.ts";
 
 export type BrowserChoice = { browser?: string; profile?: string; browserMode?: BrowserMode };
 
@@ -294,7 +294,13 @@ export class BrowserResolver {
     const { choice, source } = this.choice();
     const next = selectInstance(instances, choice, source);
     if (next) return this.remember(next);
-    if (choice.browserMode === "together" && !choice.browser && !choice.profile && (await listening(legacy)))
+    if (
+      choice.browserMode === "together" &&
+      !choice.browser &&
+      !choice.profile &&
+      !foreignOwned(legacy) &&
+      (await listening(legacy))
+    )
       return this.remember({ socket: legacy, reason: "legacy socket fallback" });
     return { choice, source };
   }

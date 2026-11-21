@@ -59,16 +59,34 @@ export function toolRunner(ctx) {
         }
       }
       if (browser && !["browser_batch", "clipboard"].includes(tool) && !cleanup) {
-        const what = await ctx.describeWrite(tool, args, browser);
+        const what = await ctx.describeWrite(tool, args, browser, { values: false });
         if (what) entry.what = what;
+        const sameContext = (grant) => ctx.samePermissionContext(grant.context, ctx.permissionContext(browser));
+        // why: An answer covers the step only while it would raise the same rule; focus moved by earlier steps can make submit or secret_field apply.
+        const approved = async (grant) =>
+          !!grant?.approved.has(args) &&
+          sameContext(grant) &&
+          grant.approved.get(args) === (await ctx.callRule(tool, args, browser)).key &&
+          sameContext(grant);
         let grant = approvals?.get(browser);
-        while (!grant?.actions.has(args) || !ctx.samePermissionContext(grant.context, ctx.permissionContext(browser))) {
-          const permission = await ctx.requirePermission(call, browser, steps);
+        let prompts = 0;
+        while (!(await approved(grant))) {
+          // why: A page that keeps moving focus or changing could otherwise ask the user again and again.
+          if (prompts >= 3)
+            throw new Error("The page kept changing while permission was asked; nothing more was done. Read it again.");
+          // why: Within a planned group, only the user's answers carry over; every other step is judged when it runs, against the focus and URL it actually has.
+          const planned = grant && sameContext(grant);
+          const permission = await ctx.requirePermission(call, browser, planned ? [{ tool, args }] : steps);
+          if (permission.approved.size) prompts++;
           if (!ctx.samePermissionContext(permission.context, ctx.permissionContext(browser))) continue;
-          grant = { context: permission.context, actions: new Set(steps.map((step) => step.args)) };
-          // why: An automatic rule is not user approval and must be re-evaluated at the next step.
-          if (permission.asked) approvals?.set(browser, grant);
-          break;
+          if (planned && ctx.samePermissionContext(grant.context, permission.context))
+            for (const [a, key] of permission.approved) grant.approved.set(a, key);
+          else {
+            grant = { context: permission.context, approved: permission.approved };
+            approvals?.set(browser, grant);
+          }
+          // why: Only a judgment of this step alone with no prompt is current; a prompt or the later steps' risk queries take time in which focus can move.
+          if (!permission.approved.size && (planned || steps.length === 1)) break;
         }
       }
       // why: Page-less and cleanup calls skip the page check but must still honor custom operation rules.

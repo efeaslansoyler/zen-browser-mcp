@@ -204,7 +204,7 @@ export function ruleOf(key, mode = "auto", custom = null) {
 export function autonomousRule(key, rule) {
   if (key.startsWith("clipboard.")) return "deny";
   // why: Nobody is there to notice a local file being read and sent elsewhere.
-  if (key === "navigate.local_file" && rule === "ask") return "deny";
+  if ((key === "navigate.local_file" || key === "file_upload") && rule === "ask") return "deny";
   return rule === "ask" ? "allow" : rule;
 }
 

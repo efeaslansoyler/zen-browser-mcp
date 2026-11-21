@@ -337,14 +337,21 @@ test("permission module describes actions and scopes approvals without slicing m
     'button "Pay": click',
   );
   assert.equal(await p.describeWrite("computer", { action: "screenshot" }, browser), null);
+  // why: The activity log keeps the description on disk without what was typed.
+  const typing = { action: "type", text: "hunter2" };
+  assert.equal(await p.describeWrite("computer", typing, browser), 'type "hunter2"');
+  assert.equal(await p.describeWrite("computer", typing, browser, { values: false }), 'type "…"');
+  const panel = { action: "form_input", extensionId: "vault", ref: "panel_1", value: "seed words" };
+  assert.doesNotMatch(await p.describeWrite("extensions", panel, browser, { values: false }), /seed/);
   assert.equal(await p.describeWrite("navigate", { url: "back" }, browser), "go back");
   assert.equal((await p.callRule("navigate", { url: "back" }, browser)).rule, "ask");
   assert.equal((await p.callRule("read_page", {}, browser)).rule, "allow");
   assert.equal((await p.callRule("computer", { action: "type", text: "x" }, browser)).rule, "ask");
-  const { context, asked: prompted } = await p.requirePermission({ check() {}, agent: { name: "Claude" } }, browser, [
-    { tool: "computer", args: { action: "left_click", ref: "ref_1" } },
+  const click = { action: "left_click", ref: "ref_1" };
+  const { context, approved } = await p.requirePermission({ check() {}, agent: { name: "Claude" } }, browser, [
+    { tool: "computer", args: click },
   ]);
-  assert.equal(prompted, true);
+  assert.equal(approved.get(click), "computer.click");
   assert.equal(asked[0], 'Claude wants to: button "Pay": click');
   // why: Simulate both document and membership changes to verify neither can inherit a grant.
   assert(p.samePermissionContext(context, p.permissionContext(browser)));
@@ -458,6 +465,8 @@ test("local files follow custom rules and are denied unattended unless allowed",
   assert.equal(policy.operationOf("navigate", { url: "https://example.test/" }), "navigate");
   assert.equal(policy.autonomousRule("navigate.local_file", "ask"), "deny");
   assert.equal(policy.autonomousRule("navigate.local_file", "allow"), "allow");
+  assert.equal(policy.autonomousRule("file_upload", "ask"), "deny");
+  assert.equal(policy.autonomousRule("file_upload", "allow"), "allow");
   assert.equal(policy.autonomousRule("navigate", "ask"), "allow");
 });
 
@@ -468,4 +477,127 @@ test("a custom rule can stop agents from closing tabs", async () => {
   const result = await h.batch([h.action("tabs_close_mcp")]);
   assert.match(result[0].text, /settings don't allow this \(tabs_close_mcp\)/);
   assert.deepEqual(h.effects, []);
+});
+
+test("a batch grant does not cover a step whose operation changes or that was not asked", async () => {
+  const fixup = globalThis.Services.uriFixup;
+  globalThis.Services.uriFixup = {
+    getFixupURIInfo: (url) => ({ preferredURI: uri(url.startsWith("/") ? `file://${url}` : url) }),
+  };
+  try {
+    const steps = (h) => [h.action("javascript_tool", { text: "1" }), h.action("navigate", { url: "/etc/hostname" })];
+    const asked = harness();
+    assert(!(await asked.batch(steps(asked))).isError);
+    assert.equal(asked.prompts.length, 2);
+    assert.match(asked.prompts[1].message, /file:\/\/\/etc\/hostname/);
+
+    const denied = harness({ mode: "custom", custom: { base: "auto", rules: { "navigate.local_file": "deny" } } });
+    const result = await denied.batch(steps(denied));
+    assert(result.isError);
+    assert.match(result.at(-1).text, /navigate\.local_file/);
+    assert.equal(denied.browser.currentURI.host, "ordinary.test");
+  } finally {
+    globalThis.Services.uriFixup = fixup;
+  }
+
+  const h = harness();
+  Object.assign(h.context, {
+    query: async (_browser, _name, data) => ({
+      value: data.focused ? { submit: h.effects.includes("hunter2") } : { secret: true },
+    }),
+    queryRef: async () => ({ value: "password field" }),
+    frameOf: () => null,
+    heldFrame: () => null,
+    focusedFrame: async () => null,
+  });
+  await h.batch([
+    h.action("form_input", { ref: "ref_1", value: "hunter2" }),
+    h.action("computer", { action: "key", text: "Return" }),
+  ]);
+  assert.equal(h.prompts.length, 2, "Return is judged against the focus it has when it runs");
+
+  // why: An asked key step must not keep its approval once an earlier step moves focus onto a submit control.
+  const strict = harness({
+    mode: "custom",
+    custom: { base: "auto", rules: { "computer.key": "ask", submit: "deny" } },
+  });
+  Object.assign(strict.context, {
+    query: async (_browser, _name, data) => ({ value: { submit: !!data.focused && strict.effects.includes("x") } }),
+    queryRef: async () => ({ value: "field" }),
+    frameOf: () => null,
+    heldFrame: () => null,
+    focusedFrame: async () => null,
+  });
+  const denied = await strict.batch([
+    strict.action("form_input", { ref: "ref_1", value: "x" }),
+    strict.action("computer", { action: "key", text: "Return" }),
+  ]);
+  assert(denied.isError);
+  assert.match(denied.at(-1).text, /\(submit\)/);
+
+  // why: Focus can also move while the user is answering.
+  let moved = false;
+  const during = harness({
+    mode: "custom",
+    custom: { base: "auto", rules: { "computer.key": "ask", submit: "deny" } },
+    answer: () => ((moved = true), "done"),
+  });
+  Object.assign(during.context, {
+    query: async () => ({ value: { submit: moved } }),
+    heldFrame: () => null,
+    focusedFrame: async () => null,
+  });
+  const late = await during.batch([during.action("computer", { action: "key", text: "Return" })]);
+  assert(late.isError);
+  assert.match(late.at(-1).text, /\(submit\)/);
+
+  // why: The step that needed no answer is checked again when a prompt for a later step closes.
+  let shifted = false;
+  const first = harness({
+    mode: "custom",
+    custom: { base: "auto", rules: { "computer.key": "allow", javascript_tool: "ask", submit: "deny" } },
+    answer: () => ((shifted = true), "done"),
+  });
+  Object.assign(first.context, {
+    query: async () => ({ value: { submit: shifted } }),
+    heldFrame: () => null,
+    focusedFrame: async () => null,
+  });
+  const stale = await first.batch([
+    first.action("computer", { action: "key", text: "Return" }),
+    first.action("javascript_tool", { text: "1" }),
+  ]);
+  assert(stale.isError);
+  assert.match(stale.at(-1).text, /\(submit\)/);
+
+  // why: The later steps' risk queries also take time in which focus can move.
+  let queries = 0;
+  const slow = harness({
+    mode: "custom",
+    custom: { base: "auto", rules: { "computer.key": "allow", submit: "deny" } },
+  });
+  Object.assign(slow.context, {
+    query: async () => ({ value: { submit: ++queries > 2 } }),
+    heldFrame: () => null,
+    focusedFrame: async () => null,
+  });
+  const preflight = await slow.batch([
+    slow.action("computer", { action: "key", text: "Return" }),
+    slow.action("computer", { action: "key", text: "Return" }),
+  ]);
+  assert(preflight.isError);
+  assert.match(preflight[0].text, /^\[1\] computer: ERROR: .*\(submit\)/);
+
+  // why: A page that flips focus on every answer must not keep the user answering.
+  let flips = 0;
+  const flapping = harness({ mode: "custom", custom: { base: "auto", rules: { "computer.key": "allow" } } });
+  Object.assign(flapping.context, {
+    query: async () => ({ value: { submit: ++flips % 2 === 1 } }),
+    heldFrame: () => null,
+    focusedFrame: async () => null,
+  });
+  const tired = await flapping.batch([flapping.action("computer", { action: "key", text: "Return" })]);
+  assert(tired.isError);
+  assert.match(tired[0].text, /kept changing/);
+  assert.equal(flapping.prompts.length, 3);
 });

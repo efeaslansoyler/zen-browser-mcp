@@ -4,10 +4,10 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { NAME, PACKAGE, PACKAGE_DIR, RUNTIME_DIR, foreignOwned } from "./paths.ts";
+import { OPENCODE_RUNTIME_DIR, PACKAGE, PACKAGE_DIR, foreignOwned, privateDir } from "./paths.ts";
 import { call } from "./zen.ts";
 
-export const openCodeSocket = (pid: number) => path.join(RUNTIME_DIR, `${NAME}-opencode`, `${pid}.sock`);
+export const openCodeSocket = (pid: number) => path.join(OPENCODE_RUNTIME_DIR, `${pid}.sock`);
 
 export function pushToOpenCode(text: string, pid = process.ppid): Promise<boolean> {
   return new Promise((resolve) => {
@@ -45,7 +45,7 @@ export async function openCodePlugin(
 ) {
   let last: ChatInput | undefined;
   const file = openCodeSocket(pid);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  privateDir(path.dirname(file));
   // why: Killed OpenCode processes can leave a socket behind because their exit handler did not run.
   for (const name of fs.readdirSync(path.dirname(file))) {
     const other = Number(name.replace(/\.sock$/, ""));

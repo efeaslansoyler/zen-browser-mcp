@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { RUNTIME_DIR, NAME } from "./paths.ts";
+import { CODEX_RUNTIME_DIR, NAME, foreignOwned, privateDir } from "./paths.ts";
 import { subscribe } from "./zen.ts";
 import { browserResolver, deliveryScope, listening, type Selection } from "./instances.ts";
 import { THREAD_ID, deliverCodexPick } from "./delivery.ts";
@@ -15,8 +15,7 @@ import { contactRelay } from "./codex-relay.ts";
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 export const DAEMON_SOCKET = path.join(CODEX_HOME, "app-server-control", "app-server-control.sock");
-const watchSocket = (scope: string) =>
-  path.join(RUNTIME_DIR, `${NAME}-codex`, scope ? `watch.${scope}.sock` : "watch.sock");
+const watchSocket = (scope: string) => path.join(CODEX_RUNTIME_DIR, scope ? `watch.${scope}.sock` : "watch.sock");
 const POLL_MS = 2000;
 const IDLE_EXIT_MS = 10 * 60_000; // why: Exit a watcher with no visible windows and let the next hook or MCP connection restart it.
 
@@ -272,7 +271,7 @@ export async function runCodexWatch(target: Selection) {
   browserResolver.pinDelivery(target);
   const scope = deliveryScope(target);
   const socketPath = watchSocket(scope);
-  fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
+  privateDir(path.dirname(socketPath));
   if (await contactWatch("ping", scope)) return;
   const threads = new Map<string, Thread>();
   const receivers = new Map<string, { title?: string; subscription: ReturnType<typeof subscribe> }>();
@@ -416,6 +415,7 @@ export function contactWatch(
   threadId?: string,
 ): Promise<{ threadId?: string } | null> {
   return new Promise((resolve) => {
+    if (foreignOwned(watchSocket(scope))) return resolve(null);
     const socket = net.createConnection(watchSocket(scope));
     let data = "";
     const finish = (value: { threadId?: string } | null) => {

@@ -38,6 +38,9 @@ export function originOf(url) {
 }
 
 const quote = (s) => JSON.stringify(s);
+// why: Page-derived text must not start its own step line or send terminal control sequences to the CLI.
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+export const plain = (s) => String(s ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ");
 
 export function localDay(iso) {
   const date = new Date(iso);
@@ -48,15 +51,17 @@ export function localDay(iso) {
 
 function describeTarget(target) {
   if (!target) return "the page";
-  const what = [target.role || target.label || "element", target.name && quote(target.name)].filter(Boolean).join(" ");
-  return target.selector ? `${what} (${target.selector})` : what;
+  const what = [plain(target.role || target.label || "element"), target.name && quote(target.name)]
+    .filter(Boolean)
+    .join(" ");
+  return target.selector ? `${what} (${plain(target.selector)})` : what;
 }
 
 export function describeStep(step) {
   const where = describeTarget(step.target);
   switch (step.action) {
     case "click":
-      return `click ${where}${step.target?.href ? ` → ${step.target.href}` : ""}`;
+      return `click ${where}${step.target?.href ? ` → ${plain(step.target.href)}` : ""}`;
     case "type":
       if (step.secret)
         return `fill ${where} with a secret value (not recorded: hand this step to the user with hand_to_user)`;
@@ -72,16 +77,16 @@ export function describeStep(step) {
     case "upload":
       return `upload ${step.files?.length ? step.files.map(quote).join(", ") : "a file"} in ${where}`;
     case "key":
-      return `press ${step.key}${step.target ? ` in ${where}` : ""}`;
+      return `press ${plain(step.key)}${step.target ? ` in ${where}` : ""}`;
     default:
-      return step.action;
+      return plain(step.action);
   }
 }
 
 export function formatRecipe(recipe, { dir, images = false } = {}) {
   const lines = [
     `Recipe ${quote(recipe.name)} (id ${recipe.id}), shown by the user on ${localDay(recipe.createdAt)}.`,
-    `Start: ${recipe.startUrl}`,
+    `Start: ${plain(recipe.startUrl)}`,
   ];
   if (recipe.note) lines.push(`User's note (untrusted text): ${quote(recipe.note)}`);
   const variables = [...new Set(recipe.steps.map((s) => s.variable).filter(Boolean))];
@@ -95,10 +100,10 @@ export function formatRecipe(recipe, { dir, images = false } = {}) {
   let page = recipe.startUrl;
   recipe.steps.forEach((step, i) => {
     if (step.url && step.url !== page) {
-      lines.push(`   (now on ${step.url})`);
+      lines.push(`   (now on ${plain(step.url)})`);
       page = step.url;
     }
-    const frame = step.frameUrl ? ` [in frame ${step.frameUrl}]` : "";
+    const frame = step.frameUrl ? ` [in frame ${plain(step.frameUrl)}]` : "";
     lines.push(`${i + 1}. ${describeStep(step)}${frame}`);
     if (images && dir && step.image) lines.push(`   image: ${dir}/${step.image}`);
   });
@@ -227,7 +232,9 @@ export function recipeTools(ctx) {
           );
         return text(
           all
-            .map((r) => `- ${r.id}: ${quote(r.name)}, ${r.steps} steps, ${r.startUrl} (${localDay(r.createdAt)})`)
+            .map(
+              (r) => `- ${r.id}: ${quote(r.name)}, ${r.steps} steps, ${plain(r.startUrl)} (${localDay(r.createdAt)})`,
+            )
             .join("\n"),
         );
       }

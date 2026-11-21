@@ -143,6 +143,10 @@ export function subscribe(onEvent: (event: any) => DeliveryResult | Promise<Deli
       return;
     }
     if (closed) return;
+    if (foreignOwned(socketPath)) {
+      reconnect = setTimeout(connect, 3000);
+      return;
+    }
     const socket = net.createConnection(socketPath);
     current = socket;
     let buffer = "";

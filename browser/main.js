@@ -362,15 +362,24 @@ function logError(where, e) {
       ask: async (source, args, value) => {
         if (ctx.gate("browser_settings.change")) return true;
         const target = source.contentTitle || ctx.hostOf(source) || source.currentURI.spec;
+        // why: Name every field that change() will apply, not only the ones the action is named after.
+        const parts = [
+          value.width != null &&
+            L(
+              `the viewport to ${value.width}×${value.height}${args.action === "device" ? ` (${args.device}, Gecko emulation)` : ""}`,
+              `görünüm alanını ${value.width}×${value.height}${args.action === "device" ? ` (${args.device}, Gecko benzetimi)` : ""}`,
+            ),
+          value.dpr != null && L(`pixel ratio ${value.dpr}`, `piksel oranını ${value.dpr}`),
+          value.touch != null &&
+            L(`touch ${value.touch ? "on" : "off"}`, `dokunmayı ${value.touch ? "açık" : "kapalı"}`),
+          value.userAgent != null &&
+            L(`user agent “${value.userAgent.slice(0, 160)}”`, `user agent'ı “${value.userAgent.slice(0, 160)}”`),
+          value.color_scheme != null && L(`color scheme ${value.color_scheme}`, `renk temasını ${value.color_scheme}`),
+        ].filter(Boolean);
         const details =
           args.action === "reset"
             ? L("restore this tab's original settings", "bu sekmenin önceki ayarlarını geri yüklemek")
-            : args.action === "media"
-              ? L(`set color scheme to ${value.color_scheme}`, `renk temasını ${value.color_scheme} yapmak`)
-              : L(
-                  `set the viewport to ${value.width}×${value.height}${args.action === "device" ? ` (${args.device}, Gecko emulation)` : ""}`,
-                  `görünüm alanını ${value.width}×${value.height} yapmak${args.action === "device" ? ` (${args.device}, Gecko benzetimi)` : ""}`,
-                );
+            : L(`set ${parts.join(", ")}`, `${parts.join(", ")} yapmak`);
         const switching =
           source.ownerDocument.defaultView.gBrowser.selectedBrowser !== source && args.action !== "reset";
         const call = ctx.callOf(source);
@@ -577,13 +586,16 @@ function logError(where, e) {
         if (!ctx.networkControl.has(id)) return null;
         const tab = ctx.findTab(id);
         if (tab?.getAttribute(MARK) !== "true") return null;
-        return ctx.networkControl.match(
+        // why: Match first, because matching also drops rules left from another origin.
+        const decision = ctx.networkControl.match(
           id,
           channel.URI.spec,
           channel.URI.prePath,
           tab.linkedBrowser.currentURI.prePath,
           topDocument,
         );
+        // why: Rules approved for a site stop applying once the user blocks that site.
+        return ctx.siteAllowed(ctx.hostOf(tab.linkedBrowser)) ? decision : null;
       },
       // why: Allowlisted pages need third-party resources such as CDNs, so only document loads are filtered.
       blocked: (browserId, host, document) => {

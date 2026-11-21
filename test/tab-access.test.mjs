@@ -95,7 +95,7 @@ function harness() {
     readConfig: () => ({ mode: "auto", sites: { mode: "blocklist", blocklist: [], allowlist: [] } }),
     cancelAsk() {},
     describeWrite: async () => undefined,
-    requirePermission: async () => ({ context: {}, asked: false }),
+    requirePermission: async () => ({ context: {}, approved: new Map() }),
     permissionContext: () => ({}),
     samePermissionContext: () => true,
     hostOf: () => "fixture.test",

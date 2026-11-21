@@ -17,7 +17,8 @@ export function permissions(ctx) {
       key: L("press keys", "tuşa basmak"),
     })[action];
 
-  async function describeWrite(tool, args, browser) {
+  // why: The activity log is kept on disk, so it gets the description without typed values.
+  async function describeWrite(tool, args, browser, { values = true } = {}) {
     const target = async () => {
       try {
         if (args.ref) return (await ctx.queryRef(browser, "describe", { ref: ctx.longRef(args.ref) })).value;
@@ -32,6 +33,7 @@ export function permissions(ctx) {
       return args.ref ?? L("an element", "bir öğe");
     };
     const quote = (t, n = 80) => `"${String(t).length > n ? String(t).slice(0, n - 1) + "…" : t}"`;
+    const typed = (t) => (values ? quote(t) : '"…"');
     switch (tool) {
       case "react":
         return L(
@@ -46,14 +48,21 @@ export function permissions(ctx) {
             `open extension ${args.extensionId} for this tab`,
             `bu sekme için ${args.extensionId} eklentisini açmak`,
           );
-        if (args.action === "computer")
-          return describeWrite(
+        if (args.action === "computer") {
+          const what = await describeWrite(
             "computer",
             { ...args, action: args.computerAction, ref: undefined, coordinate: undefined },
             browser,
+            { values },
           );
+          const where = args.ref ?? (args.coordinate ? `(${args.coordinate.join(", ")})` : null);
+          return what && `${L("in extension", "eklentide")} ${args.extensionId}${where ? ` ${where}` : ""}: ${what}`;
+        }
         if (args.action === "form_input")
-          return L(`fill extension field ${args.ref}`, `eklenti alanını doldurmak: ${args.ref}`);
+          return L(
+            `fill extension ${args.extensionId} field ${args.ref} with ${typed(args.value ?? "")}`,
+            `${args.extensionId} eklentisinin ${args.ref} alanına ${typed(args.value ?? "")} yazmak`,
+          );
         return null;
       case "cookies":
         if (args.action !== "set" && args.action !== "delete") return null;
@@ -72,7 +81,7 @@ export function permissions(ctx) {
           return L("move a held mouse button", "basılı fare düğmesiyle hareket etmek");
         const verb = actionVerb(args.action);
         if (!verb) return null;
-        if (args.action === "type") return L(`type ${quote(args.text ?? "")}`, `${quote(args.text ?? "")} yazmak`);
+        if (args.action === "type") return L(`type ${typed(args.text ?? "")}`, `${typed(args.text ?? "")} yazmak`);
         if (["key", "key_down", "key_up"].includes(args.action))
           return L(`press ${args.text}`, `${args.text} tuşuna basmak`);
         return `${await target()}: ${verb}`;
@@ -83,7 +92,7 @@ export function permissions(ctx) {
             ? args.value
               ? L("check", "işaretlemek")
               : L("uncheck", "işareti kaldırmak")
-            : L(`type ${quote(args.value)}`, `${quote(args.value)} yazmak`)
+            : L(`type ${typed(args.value)}`, `${typed(args.value)} yazmak`)
         }`;
       case "file_upload":
         return `${await target()}: ${L("upload", "dosya yüklemek")} (${args.paths?.map((p) => p.split("/").pop()).join(", ")})`;
@@ -138,10 +147,10 @@ export function permissions(ctx) {
         return {};
       }
     };
-    const at = async () => {
-      if (args.ref) return ask({ ref: ctx.longRef(args.ref) }, ctx.frameOf(browser, args.ref));
-      if (!args.coordinate) return {};
-      const [x, y] = ctx.toPagePoint(browser, args.coordinate);
+    const at = async (coordinate = args.coordinate, ref = args.ref) => {
+      if (ref) return ask({ ref: ctx.longRef(ref) }, ctx.frameOf(browser, ref));
+      if (!coordinate) return {};
+      const [x, y] = ctx.toPagePoint(browser, coordinate);
       const inner = await ctx.deepest(browser, x, y);
       return ask({ x: inner.x, y: inner.y }, inner.frame);
     };
@@ -155,11 +164,21 @@ export function permissions(ctx) {
       case "triple_click":
       case "mouse_down":
         return { submit: (await at()).submit };
+      // why: A drag that starts and ends on a submit button clicks it.
+      case "left_click_drag":
+        return { submit: (await at(args.start_coordinate, null)).submit || (await at()).submit };
       case "type":
         return focused({ enter: /[\r\n]/.test(args.text ?? "") });
       case "key":
-      case "key_down":
+      case "key_down": {
+        // why: Earlier keys in a sequence can move focus onto a submit control before Enter or Space lands.
+        const later = String(args.text ?? "")
+          .trim()
+          .split(/\s+/)
+          .slice(1);
+        if (later.some((combo) => pressesEnter(combo) || pressesSpace(combo))) return { submit: true };
         return focused({ enter: pressesEnter(args.text), space: pressesSpace(args.text) });
+      }
     }
     return {};
   }
@@ -206,22 +225,27 @@ export function permissions(ctx) {
 
   // why: Navigation or policy updates while awaiting an answer must invalidate approval for the old request.
   async function requirePermission(call, browser, steps) {
-    for (;;) {
+    for (let asked = 0; ;) {
       call.check();
       ctx.assertSiteAccess(browser);
       const context = permissionContext(browser);
       const lines = [];
       const reasons = new Set();
+      const approved = new Map();
       for (const { tool, args } of steps) {
         const { key, rule } = await callRule(tool, args, browser);
         if (rule === "deny") throw new Error(deniedMessage(key));
         if (rule !== "ask") continue;
+        approved.set(args, key);
         if (key === "submit") reasons.add(L("submits a form", "form gönderir"));
         if (key === "secret_field") reasons.add(L("secret field", "gizli alan"));
         lines.push((await describeWrite(tool, args, browser)) ?? ctx.describeAction(tool, args, browser, false));
       }
       if (!samePermissionContext(context, permissionContext(browser))) continue;
-      if (!lines.length) return { context, asked: false };
+      if (!lines.length) return { context, approved };
+      // why: A page that keeps navigating while the user answers could otherwise ask again and again.
+      if (asked++ >= 3)
+        throw new Error("The page kept changing while permission was asked; nothing more was done. Read it again.");
       const host = ctx.hostOf(browser);
       const agent = call.agent.name;
       const why = reasons.size ? ` (${[...reasons].join(", ")})` : "";
@@ -243,7 +267,7 @@ export function permissions(ctx) {
             : "The user denied this action; nothing was done. Ask the user what they want.",
         );
       }
-      if (samePermissionContext(context, permissionContext(browser))) return { context, asked: true };
+      if (samePermissionContext(context, permissionContext(browser))) return { context, approved };
     }
   }
 

@@ -555,7 +555,8 @@ export class ZenMcpChild extends JSWindowActorChild {
         [...el.options].find((o) => o.value === wanted) ||
         [...el.options].find((o) => reader.normalize(o.text) === reader.normalize(wanted));
       if (!opt)
-        throw new Error(`No option "${wanted}". Options: ${[...el.options].map((o) => o.text.trim()).join(", ")}`);
+        // why: Errors reach the activity log, which must not keep what the agent typed.
+        throw new Error(`No such option. Options: ${[...el.options].map((o) => o.text.trim()).join(", ")}`);
       el.value = opt.value;
       fire("input");
       fire("change");
@@ -569,6 +570,8 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
     if (tag === "INPUT" || tag === "TEXTAREA") {
       el.focus();
+      // why: A chrome-privileged value setter on a file input attaches the named local file, bypassing file_upload. Check after focus, whose handlers can change the type.
+      if (el.type === "file") throw new Error(`${ref} is a file input; use file_upload.`);
       // why: The Xray setter bypasses React's value tracker so the input event reports a change.
       el.value = String(value);
       fire("input");

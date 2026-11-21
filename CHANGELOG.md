@@ -40,6 +40,28 @@ change tool names, parameters or results.
 - HAR export redacts values after percent-encoded sensitive path segments too.
 - When the runtime folder is a shared temp directory, the bridge keeps its files in its private
   per-user folder, and the MCP server refuses browser and OpenCode sockets owned by another user.
+  Codex and OpenCode receivers use private per-user folders there too, and the browser
+  subscription refuses a socket owned by another user.
+- In `browser_batch`, approving one step no longer covers later steps the user wasn't asked
+  about, and an approved step is checked again if earlier steps changed which rule applies.
+  A bare path that turns into a `file:` URL asks as `navigate.local_file`, and Enter after
+  `form_input` is judged against the new focus.
+- `computer` key sequences that press Enter or Space after another key (`Tab Return`) and
+  `left_click_drag` on a submit button follow the `submit` rule.
+- `form_input` refuses file inputs; uploads go through `file_upload`, which is denied in the
+  autonomous modes unless a custom rule allows it.
+- Copy and paste in an extension panel follow the `extensions.act` rule, and panel prompts
+  name the extension, the target and the typed value. `browser_settings` prompts list every
+  setting they apply, including user agent, pixel ratio and touch.
+- The activity log no longer keeps what agents typed: `type` and `form_input` entries show
+  `"…"` instead of the value.
+- Network rules stop applying in a tab once its site is blocked.
+- Recipe steps and the `recipes` CLI flatten page-derived text, so it can't add step lines or
+  send terminal control sequences. Source-map paths and snippets in pick messages can't start
+  their own line or close their fence.
+- `install` and `uninstall` refuse an autoconfig name or a file path that leads outside the
+  browser folder, including through a symlink, and use sudo only when every folder on the
+  path belongs to root.
 
 ### Fixed
 

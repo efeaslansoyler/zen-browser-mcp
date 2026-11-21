@@ -111,7 +111,9 @@ export function systemClipboard(ctx) {
         return context;
       },
       ask: async (input) => {
-        if (ctx.gate(ctx.policy.operationOf("clipboard", input))) return true;
+        // why: Copying or pasting in a panel acts on the extension, so its rule applies as well as the clipboard's.
+        const rules = [ctx.policy.operationOf("clipboard", input), ...(panel ? ["extensions.act"] : [])];
+        if (rules.map((key) => ctx.gate(key)).every(Boolean)) return true;
         const what = {
           read: L("read text from your system clipboard", "sistem panondaki metni okumak"),
           write: L(
@@ -122,6 +124,9 @@ export function systemClipboard(ctx) {
           paste: L("paste your system clipboard into the target", "sistem panondakini hedefe yapıştırmak"),
           cut: L("cut the target selection to your system clipboard", "hedefteki seçimi kesip sistem panona almak"),
         }[input.action];
+        const where = panel
+          ? L(` in the panel of extension ${surface.extensionId}`, ` (${surface.extensionId} eklentisinin panelinde)`)
+          : "";
         const name = call.agent.name;
         const result = await ctx.askIsland(
           call,
@@ -129,8 +134,8 @@ export function systemClipboard(ctx) {
           L("System clipboard permission", "Sistem panosu izni") +
             ` · ${ctx.hostOf(source) || source.contentTitle || source.currentURI.spec}`,
           L(
-            `${name} wants to ${what}. This clipboard is shared with your other applications.`,
-            `${name} şunu yapmak istiyor: ${what}. Bu pano diğer uygulamalarınla ortaktır.`,
+            `${name} wants to ${what}${where}. This clipboard is shared with your other applications.`,
+            `${name} şunu yapmak istiyor: ${what}${where}. Bu pano diğer uygulamalarınla ortaktır.`,
           ),
           { ok: L("Allow once", "Bir kez izin ver"), cancel: L("Deny", "Verme") },
         );

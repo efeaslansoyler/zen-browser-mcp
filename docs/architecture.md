@@ -233,8 +233,8 @@ when the selected instance has no queued picks.
   elicitation can show the approval before the bridge exists. **Always open**
   saves `launch: "allow"` in `config.json`.
 - **One decision** (`Permissions.sys.mjs`): `requirePermission` checks a page call (every
-  step of a batch, against the current document, origin and settings; a redirect or new
-  document invalidates earlier approvals), `requireToolPermission` a call without a page, and
+  step of a batch, against the current document, origin and settings; an answer covers
+  only the steps it listed, and a redirect or new document invalidates it), `requireToolPermission` a call without a page, and
   `gate(key)` the operations that keep their own prompt (clipboard, `request_tab`,
   `browser_settings` changes, extension tab switches, recipe deletes, joining agent tabs).
   A click, Enter or Space is also checked against `submit`, and typing against `secret_field`,
@@ -267,7 +267,8 @@ asks for a note and a target session) and recipes the user recorded go through
    - **OpenCode** through the plugin `hooks install` writes to
      `~/.config/opencode/plugins/zen-browser.js` (`opencode.ts`). OpenCode gives its MCP
      servers only `OPENCODE_PID`, but a plugin runs inside OpenCode with its API client: it
-     listens on `$XDG_RUNTIME_DIR/zen-mcp-opencode/<OpenCode PID>.sock`, the MCP process (its
+     listens on `$XDG_RUNTIME_DIR/zen-mcp-opencode/<OpenCode PID>.sock` (in a shared temp
+     directory, a private per-user `zen-mcp-<hash>-opencode` folder), the MCP process (its
      child) pushes there, and the plugin sends the text as a new prompt to the session the user
      last wrote to (`session.promptAsync`, with that session's agent and model). Before the
      user's first message there is no session to send to, so the push is refused and the

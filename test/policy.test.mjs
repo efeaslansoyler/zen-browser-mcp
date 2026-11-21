@@ -91,10 +91,12 @@ function harness({ mode = "auto", custom = null, risk = {} } = {}) {
     frameOf: () => "frame",
     heldFrame: () => null,
     focusedFrame: async () => "focused-frame",
+    toPagePoint: (_browser, point) => point,
+    deepest: async (_browser, x, y) => ({ x, y, frame: "frame" }),
     queryRef: async () => ({ value: 'button "Pay"' }),
     query: async (_browser, name, data, _timeout, frame) => {
       queries.push([name, data, frame]);
-      return { value: risk };
+      return { value: typeof risk === "function" ? risk(data) : risk };
     },
     describeAction: (tool) => tool,
     askIsland: async (_call, _browser, title, message) => {
@@ -120,10 +122,10 @@ test("auto asks before a click that submits a form, and before typing into a sec
 
   // why: Focus alone must not be mistaken for typing a secret.
   const field = harness({ risk: { secret: true } });
-  assert.equal((await field.run("computer", { action: "left_click", ref: "ref_2" })).asked, false);
+  assert.equal((await field.run("computer", { action: "left_click", ref: "ref_2" })).approved.size, 0);
 
   const plain = harness({ risk: {} });
-  assert.deepEqual(await plain.run("computer", { action: "left_click", ref: "ref_1" }).then((r) => r.asked), false);
+  assert.deepEqual(await plain.run("computer", { action: "left_click", ref: "ref_1" }).then((r) => r.approved.size), 0);
 
   const secret = harness({ risk: { secret: true } });
   await secret.run("computer", { action: "type", text: "hunter2" });
@@ -134,6 +136,19 @@ test("auto asks before a click that submits a form, and before typing into a sec
   await enter.run("computer", { action: "key", text: "Return" });
   assert.deepEqual(enter.queries[0][1], { focused: true, enter: true, space: false });
   assert.equal(enter.asked.length, 1);
+  // why: Pre-call focus says nothing about where a later Enter in the same sequence lands.
+  const sequence = harness({ risk: {} });
+  await sequence.run("computer", { action: "key", text: "Tab Return" });
+  assert.equal(sequence.asked.length, 1);
+  const tabs = harness({ risk: {} });
+  await tabs.run("computer", { action: "key", text: "Tab Tab" });
+  assert.equal(tabs.asked.length, 0);
+
+  for (const end of [10, 12]) {
+    const drag = harness({ risk: (data) => ({ submit: data.x === end }) });
+    await drag.run("computer", { action: "left_click_drag", start_coordinate: [10, 10], coordinate: [12, 11] });
+    assert.match(drag.asked[0][0], /submits a form/, `submit at x=${end}`);
+  }
 });
 
 test("the page is only asked when submit or secret rules could change the answer", async () => {
@@ -154,7 +169,7 @@ test("deny refuses without a prompt; custom allow and deny apply to their operat
     mode: "custom",
     custom: { base: "auto", rules: { javascript_tool: "allow", navigate: "deny" } },
   });
-  assert.equal((await h.run("javascript_tool", { text: "1" })).asked, false);
+  assert.equal((await h.run("javascript_tool", { text: "1" })).approved.size, 0);
   await assert.rejects(
     h.run("navigate", { url: "https://x.test" }),
     /permission settings don't allow this \(navigate\)/,
@@ -238,4 +253,18 @@ test("CLI: custom needs a valid permissions.jsonc, init writes the example once"
   } finally {
     fs.rmSync(directory, { recursive: true });
   }
+});
+
+test("a page that keeps changing during the question stops asking after three prompts", async () => {
+  const h = harness({ mode: "ask" });
+  const ask = h.p.requirePermission;
+  // why: Every answer arrives on a new document, as if the page navigated during the question.
+  const documents = [];
+  h.browser.browsingContext = {
+    get currentWindowGlobal() {
+      return (documents[h.asked.length] ??= {});
+    },
+  };
+  await assert.rejects(ask(h.call, h.browser, [{ tool: "javascript_tool", args: { text: "1" } }]), /kept changing/);
+  assert.equal(h.asked.length, 3);
 });
