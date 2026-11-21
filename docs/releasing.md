@@ -39,11 +39,34 @@ a removed or renamed tool, parameter, result field, permission operation, config
 command or flag, environment variable; a parameter that becomes required; a default that
 asks less than before; a step users must repeat, such as running `install` again.
 
-1.0.0 is the owner's decision. From then on breaking changes need a major version.
+npm reads 0.x the same way: `^0.2.0` accepts 0.2.x but not 0.3.0, so a minor version is
+the only safe place for a breaking change.
+
+1.0.0 is the owner's decision. The usual signal is that people depend on the tool names,
+parameters and config in daily use and the last few minor versions needed no **Breaking:**
+line. From then on breaking changes need a major version.
+
+## When to release
+
+The contents of `## [Unreleased]` decide when to release, not the calendar or a mood:
+
+| Unreleased contains | Release |
+|---|---|
+| A `Security` line | a patch as soon as the fix is on `main` and the checks in step 1 pass |
+| A `Fixed` line for something that worked in the last release and broke | a patch within a few days |
+| Other `Fixed` lines | with the next release, or a patch within two weeks |
+| `Added` or `Changed` lines | a minor (or patch) once the feature is finished and documented; don't hold finished work back for more than two weeks |
+| Nothing | no release |
+
+A release ships everything in Unreleased; versions are cumulative, so nobody needs the ones
+in between. When a trigger above is met, an agent says so and proposes the version. The
+owner approves; agents never bump the version, tag or publish on their own.
+
+Large commit-driven release tools (semantic-release, release-please, Changesets) were
+considered and not adopted. This is one package with a hand-written changelog that is
+already updated in the same commit as the change, and a tag-triggered workflow publishes it.
 
 ## Releasing
-
-Only when the owner asks. Agents never bump the version, tag or publish on their own.
 
 1. Check the candidate on `main`, pushed and clean:
    - CI is green for that commit.
@@ -79,3 +102,8 @@ covers the Node checks only; the Gecko, archive and tarball checks in step 1 sta
 A failed publish leaves nothing on npm: fix the cause on `main` and release the next patch
 version, since tags are protected and can't be moved. Fixes for a released version go to
 `main` and ship as the next patch; there are no release branches.
+
+A published version is never unpublished or republished. If it is broken, release the fix
+as the next patch and mark the bad one with
+`npm deprecate zen-browser-mcp@X.Y.Z "<what is wrong>; use X.Y.Z+1"`. A breaking change
+released by mistake in a patch is reverted in the next patch and comes back in a minor.
