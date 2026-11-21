@@ -69,15 +69,16 @@ export function toolRunner(ctx) {
           grant.approved.get(args) === (await ctx.callRule(tool, args, browser)).key &&
           sameContext(grant);
         let grant = approvals?.get(browser);
-        let prompts = 0;
+        const promptBudget = { asked: 0 };
         while (!(await approved(grant))) {
-          // why: A page that keeps moving focus or changing could otherwise ask the user again and again.
-          if (prompts >= 3)
-            throw new Error("The page kept changing while permission was asked; nothing more was done. Read it again.");
           // why: Within a planned group, only the user's answers carry over; every other step is judged when it runs, against the focus and URL it actually has.
           const planned = grant && sameContext(grant);
-          const permission = await ctx.requirePermission(call, browser, planned ? [{ tool, args }] : steps);
-          if (permission.approved.size) prompts++;
+          const permission = await ctx.requirePermission(
+            call,
+            browser,
+            planned ? [{ tool, args }] : steps,
+            promptBudget,
+          );
           if (!ctx.samePermissionContext(permission.context, ctx.permissionContext(browser))) continue;
           if (planned && ctx.samePermissionContext(grant.context, permission.context))
             for (const [a, key] of permission.approved) grant.approved.set(a, key);

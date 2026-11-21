@@ -159,6 +159,29 @@ test("navigation during the permission question requires a fresh answer", async 
   assert.equal(h.prompts[1].host, "other.test");
 });
 
+test("document changes during and after approval share a three-prompt limit per step", async () => {
+  const h = harness({
+    mode: "ask",
+    answer: ({ prompts, navigate }) => {
+      if (prompts.length % 3 !== 0) navigate("https://ordinary.test/changed-during-prompt");
+      return "done";
+    },
+  });
+  const { callRule } = h.context;
+  h.context.callRule = async (...args) => {
+    h.navigate("https://ordinary.test/changed-during-recheck");
+    return callRule(...args);
+  };
+  const result = await h.batch([h.action("form_input", { value: "never" })]);
+  assert(result.isError);
+  assert.match(
+    result[0].text,
+    /The page kept changing while permission was asked; nothing more was done\. Read it again\./,
+  );
+  assert.equal(h.prompts.length, 3);
+  assert.deepEqual(h.effects, []);
+});
+
 test("a config change is checked even if the page did not change", async () => {
   const h = harness();
   await h.batch([

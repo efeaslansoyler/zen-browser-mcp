@@ -224,8 +224,8 @@ export function permissions(ctx) {
   }
 
   // why: Navigation or policy updates while awaiting an answer must invalidate approval for the old request.
-  async function requirePermission(call, browser, steps) {
-    for (let asked = 0; ;) {
+  async function requirePermission(call, browser, steps, promptBudget = { asked: 0 }) {
+    while (promptBudget.asked < 3) {
       call.check();
       ctx.assertSiteAccess(browser);
       const context = permissionContext(browser);
@@ -243,9 +243,6 @@ export function permissions(ctx) {
       }
       if (!samePermissionContext(context, permissionContext(browser))) continue;
       if (!lines.length) return { context, approved };
-      // why: A page that keeps navigating while the user answers could otherwise ask again and again.
-      if (asked++ >= 3)
-        throw new Error("The page kept changing while permission was asked; nothing more was done. Read it again.");
       const host = ctx.hostOf(browser);
       const agent = call.agent.name;
       const why = reasons.size ? ` (${[...reasons].join(", ")})` : "";
@@ -253,6 +250,7 @@ export function permissions(ctx) {
         lines.length === 1
           ? L(`${agent} wants to: ${lines[0]}`, `${agent} şunu yapmak istiyor: ${lines[0]}`)
           : L(`${agent} wants to:`, `${agent} şunları yapmak istiyor:`) + `\n${lines.map((l) => `• ${l}`).join("\n")}`;
+      promptBudget.asked++;
       const result = await ctx.askIsland(
         call,
         browser,
@@ -269,6 +267,7 @@ export function permissions(ctx) {
       }
       if (samePermissionContext(context, permissionContext(browser))) return { context, approved };
     }
+    throw new Error("The page kept changing while permission was asked; nothing more was done. Read it again.");
   }
 
   async function requireToolPermission(call, tool, args) {
