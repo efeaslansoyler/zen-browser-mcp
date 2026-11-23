@@ -75,6 +75,8 @@ export async function doctor() {
   // why: The optional skill should not make a healthy installation fail doctor.
   for (const { client, status } of skillStatus()) {
     if (status === "current") ok(L(`${client}: skill installed`, `${client}: skill kurulu`));
+    else if (status === "newer")
+      ok(L(`${client}: skill installed by a newer version`, `${client}: skill daha yeni bir sürümle kurulmuş`));
     else if (status === "missing")
       console.log(`  ${client}: ${L("skill not installed", "skill kurulu değil")} → ${PACKAGE} skill install`);
     else if (status === "outdated")
