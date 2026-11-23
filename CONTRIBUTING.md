@@ -81,6 +81,7 @@ browser you use:
 | `check-tab-access.ts` | Tab access between sessions: joining, turns in a shared tab, parallel tabs, share and take-back menus, leaving, shutdown, the ask-mode join prompt |
 | `check-cancellation.ts`, `check-hit-test.ts` | Stop, covered-click detection |
 | `check-clickables.ts` | Refs for clickables without a role, text search in `find`, reading a large page, click results, `find` ranking, coordinates of screenshots at different scales |
+| `check-island.ts` | Requests that shrink to a line, hover, notes, the time a request stays open, a hand-over's buttons |
 | `check-dialogs.ts` | Calls right after an answered alert, confirm or prompt, dialogs opened one after another |
 | `check-stale-refs.ts` | Refs from before navigations, back/forward, reloads and iframe navigations, or from another tab, send no input |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |

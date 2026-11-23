@@ -16,6 +16,9 @@ const RECENT = 1200;
 const UNPIN_AFTER = 5000;
 const MAX_ICONS = 5;
 const HOLD_REFRESH = 30_000;
+const OPEN_FOR = 4000;
+const HOVER_IN = 150;
+const HOVER_OUT = 400;
 
 const SPARK =
   "data:image/svg+xml," +
@@ -70,7 +73,7 @@ const CSS = `
     &[state="working"] .main { display: none; }
     & .workers { display: none; }
     &[state="working"] .workers { display: flex; }
-    &[state="ask"] .workers[busy] {
+    &[state="ask"][open] .workers[others] {
       display: flex;
       height: 30px;
       margin: 0 6px;
@@ -78,6 +81,8 @@ const CSS = `
       font-size: 12px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
+    /* the card has its own */
+    &[state="ask"] .workers :is(.mode, .stop) { display: none; }
     & .w-icon {
       flex: none;
       width: 15px;
@@ -190,6 +195,7 @@ const CSS = `
     & .host {
       flex: none;
       opacity: 0.5;
+      &:empty { display: none; }
     }
     & .action {
       overflow: hidden;
@@ -258,7 +264,7 @@ const CSS = `
       &::before { display: none; }
       &:hover { background: var(--zen-agent-hover, #e08667); }
     }
-    &:is([state="ask"], [state="dialog"], [state="picking"], [state="compose"], [state="sent"]) .main .stop { display: none; }
+    &:is([state="picking"], [state="compose"], [state="sent"]) .main .stop { display: none; }
     &:is([state="picking"], [state="compose"], [state="sent"]) .spark { animation: none; }
 
     & .hint {
@@ -329,6 +335,36 @@ const CSS = `
       padding: 0 12px 11px 33px;
     }
     &:is([state="ask"], [state="dialog"]) .detail { display: flex; }
+    /* waiting: one line with the message; the card unfolds below it (only .fold animates) */
+    & :is(.fold, .clip) { display: contents; }
+    &:is([state="ask"], [state="dialog"]) {
+      width: min(460px, 70vw);
+
+      & .fold {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.22s ease;
+      }
+      & .clip {
+        display: block;
+        min-height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        transition: visibility 0.22s;
+      }
+      &[open] .fold { grid-template-rows: 1fr; }
+      &[open] .clip { visibility: visible; }
+    }
+    & .card-footer {
+      display: none;
+      align-items: center;
+      & .mode { margin-left: -9px; }
+      & .buttons { margin-left: auto; }
+    }
+    &[state="ask"] .card-footer { display: flex; }
+    & .review-fold { display: none; }
+    &[state="review"] .review-fold { display: block; width: 24px; padding: 0; font-size: 9px; }
+    &[state="review"][folded] .review-host { display: none; }
     & .message {
       white-space: pre-wrap;
       line-height: 1.45;
@@ -415,6 +451,8 @@ export class Island {
   #nextCard = 1;
   #shownCard = null;
   #unseen = false;
+  #dialogLook = null;
+  #look = null;
   // why: Keep the underlying agent state while the user finishes their pick.
   #pick = null;
   #pickTimer = null;
@@ -457,6 +495,8 @@ export class Island {
     info.append(favicon, host, text, hint);
     const stop = node("button", "stop");
     // why: Keep recording controls reachable without expanding the island.
+    const reviewFold = node("button", "review-fold", "▲");
+    reviewFold.title = L("Fold or unfold", "Katla ya da aç");
     const recCancel = node("button", "rec-button", L("Cancel", "Vazgeç"));
     const recFinish = node("button", "rec-button primary", L("Finish", "Bitir"));
     const cardPager = node("span", "pager");
@@ -464,7 +504,7 @@ export class Island {
     const cardCount = node("span", "count");
     const cardNext = node("button", "arr", "▶");
     cardPager.append(cardPrev, cardCount, cardNext);
-    row.append(recdot, spark, info, cardPager, recCancel, recFinish, stop);
+    row.append(recdot, spark, info, cardPager, recCancel, recFinish, reviewFold, stop);
     const detail = node("div", "detail");
     const message = node("div", "message");
     const buttons = node("div", "buttons");
@@ -478,7 +518,15 @@ export class Island {
     answerNote.setAttribute("aria-label", answerNote.placeholder);
     answerNote.maxLength = 2000;
     const choices = node("div", "choices");
-    detail.append(message, choices, answerNote, buttons);
+    const footer = node("div", "card-footer");
+    const cardMode = node("button", "mode");
+    cardMode.addEventListener("click", () => this.#actions.toggleMode());
+    footer.append(cardMode, buttons);
+    detail.append(message, choices, answerNote, footer);
+    const fold = node("div", "fold");
+    const clip = node("div", "clip");
+    clip.append(detail);
+    fold.append(clip);
     const workers = node("div", "row workers");
     const wIcon = node("span", "w-icon");
     const wInfo = node("span", "info");
@@ -507,7 +555,7 @@ export class Island {
     const compose = node("div", "compose");
     const note = node("textarea");
     note.placeholder = L("What should the agent do?", "Ne yapılsın?");
-    const footer = node("div", "compose-footer");
+    const composeFooter = node("div", "compose-footer");
     const target = node("select", "target");
     target.setAttribute("aria-label", L("Destination session", "Hedef oturum"));
     target.addEventListener("change", () => {
@@ -520,11 +568,11 @@ export class Island {
     });
     const discard = node("button", "", L("Cancel", "Vazgeç"));
     const send = node("button", "primary", L("Send", "Gönder"));
-    footer.append(target, discard, send);
+    composeFooter.append(target, discard, send);
     const elementNotes = node("div", "element-notes");
-    compose.append(note, elementNotes, footer);
+    compose.append(note, elementNotes, composeFooter);
     const reviewHost = node("div", "review-host");
-    el.append(row, detail, workers, holdline, reviewHost, compose, preview);
+    el.append(row, fold, workers, holdline, reviewHost, compose, preview);
     doc.documentElement.append(el);
 
     const submit = () => {
@@ -566,13 +614,40 @@ export class Island {
     goto.addEventListener("click", () => goTo(mainBrowser()));
     wInfo.addEventListener("click", () => goTo(this.#worker()?.browser.deref()));
     preview.addEventListener("click", () => goTo(this.#previewBrowser()));
+    const setOpen = (reason, on) => {
+      const parts = this.#windows.get(win);
+      if (!parts || parts[reason] === on) return;
+      parts[reason] = on;
+      const waiting = this.#waiting();
+      // why: The card has been looked at, so it closes as soon as the user leaves it.
+      if (on && waiting) waiting.left = 0;
+      this.#render();
+    };
+    let hoverTimer = null;
+    const hoverSoon = (on) => {
+      this.#clearTimeout(hoverTimer);
+      hoverTimer = this.#setTimeout(() => setOpen("hovered", on), on ? HOVER_IN : HOVER_OUT);
+    };
+    el.addEventListener("focusin", (event) =>
+      setOpen("focused", event.target.localName === "textarea" || event.target.matches(":focus-visible")),
+    );
+    el.addEventListener("focusout", (event) => {
+      if (!el.contains(event.relatedTarget)) setOpen("focused", false);
+    });
+    reviewFold.addEventListener("click", () => {
+      const parts = this.#windows.get(win);
+      parts.folded = !parts.folded;
+      this.#render();
+    });
     el.addEventListener("mouseenter", () => {
       this.#hovering = true;
+      hoverSoon(true);
       this.#clearTimeout(this.#unpinTimer);
       this.#startPreview(win);
     });
     el.addEventListener("mouseleave", () => {
       this.#hovering = false;
+      hoverSoon(false);
       this.#stopPreview(win);
       this.#clearTimeout(this.#unpinTimer);
       this.#unpinTimer = this.#setTimeout(() => {
@@ -637,9 +712,20 @@ export class Island {
     win.addEventListener("resize", onResize);
     const onTabSelect = () => this.#render();
     win.gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
+    win.addEventListener("activate", onTabSelect);
+    win.addEventListener("deactivate", onTabSelect);
 
     this.#windows.set(win, {
       el,
+      row,
+      footer,
+      buttons,
+      buttonsOnLine: false,
+      cardMode,
+      reviewFold,
+      hovered: false,
+      focused: false,
+      folded: false,
       spark,
       favicon,
       host,
@@ -701,6 +787,8 @@ export class Island {
       win.removeEventListener("keydown", parts.onKey, true);
       win.removeEventListener("resize", parts.onResize);
       win.gBrowser.tabContainer.removeEventListener("TabSelect", parts.onTabSelect);
+      win.removeEventListener("activate", parts.onTabSelect);
+      win.removeEventListener("deactivate", parts.onTabSelect);
       win.windowUtils.removeSheet(this.#sheet, win.windowUtils.AUTHOR_SHEET);
     } catch {}
   }
@@ -709,6 +797,7 @@ export class Island {
     this.#clearTimeout(this.#pickTimer);
     this.#clearTimeout(this.#unpinTimer);
     this.#clearTimeout(this.#renderTimer);
+    this.#clearTimeout(this.#look?.timer);
     for (const worker of this.#workers.values()) this.#clearTimeout(worker.ending);
     for (const win of [...this.#windows.keys()]) this.detach(win);
   }
@@ -800,7 +889,16 @@ export class Island {
     }, at - Date.now());
   }
 
-  ask(browser, text, message, done, labels = {}, options = [], { key = browser, agent = this.#agent } = {}) {
+  // why: With line, the answer buttons stay on the closed line, so only for cards that need no reading before the answer.
+  ask(
+    browser,
+    text,
+    message,
+    done,
+    labels = {},
+    options = [],
+    { key = browser, agent = this.#agent, session = null, line = false } = {},
+  ) {
     if (this.#state === "stopped") return null;
     const card = {
       id: this.#nextCard++,
@@ -812,6 +910,9 @@ export class Island {
       labels: labels ?? {},
       options: options ?? [],
       agent: agentTheme(agent),
+      session,
+      line,
+      left: OPEN_FOR,
     };
     this.#cards.push(card);
     if (this.#card() !== card) this.#unseen = true;
@@ -950,6 +1051,7 @@ export class Island {
   dialog(browser, text, message) {
     if (["stopped", "recording", "review"].includes(this.#state) || this.#cards.length) return;
     this.#state = "dialog";
+    this.#dialogLook = { left: OPEN_FOR };
     this.#text = text;
     this.#message = message;
     this.#browser = new WeakRef(browser);
@@ -1076,6 +1178,26 @@ export class Island {
     return this.#browser?.deref() ?? null;
   }
 
+  #waiting() {
+    if (this.#pick) return null;
+    const state = this.#stateNow();
+    return state === "ask" ? this.#card() : state === "dialog" ? this.#dialogLook : null;
+  }
+
+  // why: A request must not shrink before the user could see it.
+  #countLook(waiting, browser) {
+    if (this.#look) {
+      this.#clearTimeout(this.#look.timer);
+      this.#look.waiting.left -= Date.now() - this.#look.since;
+      this.#look = null;
+    }
+    const active = Services.focus?.activeWindow;
+    const seen = browser ? active?.gBrowser?.selectedBrowser === browser : this.#windows.has(active);
+    if (!seen || !(waiting?.left > 0)) return;
+    const timer = this.#setTimeout(() => this.#render(), waiting.left);
+    this.#look = { waiting, since: Date.now(), timer };
+  }
+
   #previewBrowser() {
     return this.#stateNow() === "working" ? this.#worker()?.browser.deref() : this.#browser?.deref();
   }
@@ -1090,6 +1212,8 @@ export class Island {
     const browser = this.#mainBrowser(state);
     const shownBrowser = state === "working" ? worker?.browser.deref() : browser;
     const owner = shownBrowser?.ownerDocument?.defaultView;
+    const waiting = this.#waiting();
+    this.#countLook(waiting, browser);
     const theme = agentTheme(pick ? pick.agent : card ? card.agent : state === "working" ? worker.agent : this.#agent);
     const split = (text) => (text.includes(" — ") ? text.split(" — ") : ["", text]);
     let [siteName, action] = split(card ? card.text : this.#text);
@@ -1116,15 +1240,18 @@ export class Island {
       }
     };
     const icon = iconOf(browser);
-    const workerBrowser = worker?.browser.deref();
-    const hold = worker && workerBrowser ? this.#actions.holdOf?.(workerBrowser) : null;
-    const workerHolds = hold && hold.session === worker.session ? hold : null;
-    // why: A hold can expire during a long-running call, so its countdown needs independent redraws.
-    if (workerHolds) this.#later(HOLD_REFRESH);
     const cardIndex = card ? this.#cards.indexOf(card) : -1;
-    const workers = [...this.#workers.values()];
+    const all = [...this.#workers.values()];
+    const asking = (w) => (card.session ? w.session === card.session : w.browser.deref() === browser);
+    const workers = card ? all.filter((w) => !asking(w)) : all;
+    const rowWorker = workers.includes(worker) ? worker : workers[0];
     const now = Date.now();
     if (workers.some((w) => now - w.at < RECENT)) this.#later(RECENT);
+    const workerBrowser = rowWorker?.browser.deref();
+    const hold = rowWorker && workerBrowser ? this.#actions.holdOf?.(workerBrowser) : null;
+    const workerHolds = hold && hold.session === rowWorker.session ? hold : null;
+    // why: A hold can expire during a long-running call, so its countdown needs independent redraws.
+    if (workerHolds) this.#later(HOLD_REFRESH);
 
     for (const [win, parts] of this.#windows) {
       const { el, spark, favicon, host, text, hint, stop, message, cancel, goto, ok, target } = parts;
@@ -1138,11 +1265,20 @@ export class Island {
       el.setAttribute("state", state);
       el.toggleAttribute("fresh", state === "recording" && this.#fresh);
       this.#renderReview(win, parts, visible);
+      if (!visible) parts.hovered = parts.focused = false;
+      if (state !== "review") parts.folded = false;
+      el.toggleAttribute("folded", parts.folded);
+      parts.reviewFold.textContent = parts.folded ? "▼" : "▲";
+      const open = !!waiting && (parts.hovered || parts.focused || waiting.left > 0);
+      const closed = !!waiting && !open;
+      el.toggleAttribute("open", open);
 
-      host.textContent = stopped ? "" : siteName;
-      text.textContent = stopped
-        ? L(`${theme.name} is stopped`, `${theme.name} durduruldu`)
-        : `${theme.name} · ${action}`;
+      const asked = card ? card.message : this.#message;
+      const draft = card && parts.answerNote.value.trim() ? "✎ " : "";
+      host.textContent = stopped || closed ? "" : siteName;
+      if (stopped) text.textContent = L(`${theme.name} is stopped`, `${theme.name} durduruldu`);
+      else if (closed) text.textContent = draft + (asked.startsWith(theme.name) ? asked : `${theme.name}: ${asked}`);
+      else text.textContent = `${theme.name} · ${action}`;
       hint.textContent = hintText;
       if (pick?.mode === "compose") {
         const options = [...pick.targets, { id: "", name: L("Clipboard", "Pano") }].map((destination) => {
@@ -1185,21 +1321,29 @@ export class Island {
       message.textContent = card ? card.message : this.#message;
       parts.answerNote.hidden = !card;
       parts.choices.hidden = !card?.options.length;
+      const onLine = state === "dialog" || !!card?.line;
+      if (onLine !== parts.buttonsOnLine) {
+        parts.buttonsOnLine = onLine;
+        if (onLine) parts.row.append(parts.buttons, stop);
+        else parts.footer.append(parts.buttons);
+      }
       goto.hidden = !browser || win.gBrowser.selectedBrowser === browser;
       ok.hidden = !(card && card.done && !card.options.length);
       ok.textContent = card?.labels.ok ?? L("OK", "Tamam");
       cancel.textContent = card?.labels.cancel ?? L("Cancel", "Vazgeç");
       goto.classList.toggle("primary", ok.hidden);
 
-      this.#renderWorkers(win, parts, worker, workerHolds, workers, now);
+      this.#renderMode(parts.mode);
+      this.#renderMode(parts.cardMode);
+      this.#renderWorkers(win, parts, rowWorker, workerHolds, workers, now);
       if (visible) this.#place(win);
       el.hidden = !visible;
     }
   }
 
   #renderWorkers(win, parts, worker, hold, workers, now) {
-    const { workers: row, wIcon, wFavicon, wHost, wText, wStop, lock, pager, icons, mode, holdline, holdText } = parts;
-    row.toggleAttribute("busy", !!worker);
+    const { workers: row, wIcon, wFavicon, wHost, wText, wStop, lock, pager, icons, holdline, holdText } = parts;
+    row.toggleAttribute("others", !!worker);
     if (!worker) return;
     const [site, action] = worker.text.includes(" — ") ? worker.text.split(" — ") : ["", worker.text];
     wIcon.style.backgroundImage = `url("${agentIcon(worker.agent)}")`;
@@ -1252,6 +1396,10 @@ export class Island {
       }
       icons.replaceChildren(...buttons);
     }
+    wStop.title = L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
+  }
+
+  #renderMode(mode) {
     mode.setAttribute("mode", this.#mode);
     mode.textContent = { ask: L("ask", "onaylı"), auto: L("auto", "otomatik"), custom: L("custom", "özel") }[
       this.#mode
@@ -1270,7 +1418,6 @@ export class Island {
         "Ajanlar senin permissions.jsonc kurallarına uyuyor. Mod değiştirmek için tıkla",
       ),
     }[this.#mode];
-    wStop.title = L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
   }
 
   #startPreview(win) {

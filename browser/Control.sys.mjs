@@ -61,7 +61,11 @@ export function control(ctx) {
     const key = browser ?? {};
     if (ctx.tabRequests.has(key)) throw new Error("A question is already pending in this tab.");
     const answered = new Promise((resolve) => ctx.tabRequests.set(key, resolve));
-    const card = ctx.island?.ask(browser, text, message, true, labels, [], { key, agent: call.agent });
+    const card = ctx.island?.ask(browser, text, message, true, labels, [], {
+      key,
+      agent: call.agent,
+      session: call.session,
+    });
     const notified = ctx.notifyAsk(browser, message, call.agent);
     const timer = new ctx.Cancellation();
     try {

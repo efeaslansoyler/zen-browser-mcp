@@ -9,6 +9,10 @@ change tool names, parameters or results.
 
 ### Changed
 
+- A request on the island (a permission, a question, a hand-over or a page dialog) opens for a few
+  seconds while you look at its tab, then shrinks to one line that leaves the page free. Hover
+  opens it again. A hand-over keeps Cancel and Done on the line. The asking agent is no longer
+  repeated below its card; the mode and Stop are on the card. The recording review can be folded.
 - `find` ranks an element that holds every word of the query above any that holds only some, and
   sees the whole text of a control whose name is a label or cut off.
 - The server instructions, `hand_to_user` and the skill tell agents to number several elements

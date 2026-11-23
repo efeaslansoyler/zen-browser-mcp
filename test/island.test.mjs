@@ -29,6 +29,9 @@ class Element {
     this.children = nodes;
   }
   focus() {}
+  contains() {
+    return false;
+  }
   removeEventListener() {}
   remove() {}
   querySelector(selector) {
@@ -268,7 +271,9 @@ test("several agents share one row; question cards never change under the user",
       agent: claude,
     });
     assert.equal(el.attrs.get("state"), "ask");
-    assert(workers.attrs.has("busy"), "the agents' row stays under the card");
+    assert(workers.attrs.has("others"), "another agent's row stays under the card");
+    assert.match(shown(), /^Codex/, "the asking agent isn't repeated");
+    assert.equal(workers.querySelector(".pager").hidden, true);
     const second = island.ask(null, "asks", "Codex wants to know", true, {}, [], { key: token, agent: codex });
     assert.equal(el.querySelector(".message").textContent, "Claude wants to click", "the card on screen stays");
     const next = el.querySelector(".main").children[3].children[2];
@@ -348,6 +353,109 @@ test("a multi-element pick's note step has a general field and one numbered fiel
     general.value = "Change it";
     sendButton.listeners.get("click")();
     assert.deepEqual(sent.pop(), ["Change it", "", []]);
+    island.destroy();
+  } finally {
+    globalThis.Services = originalServices;
+    globalThis.ChromeUtils = originalChromeUtils;
+  }
+});
+
+test("a request shows itself while it is looked at, then waits on one line that keeps a hand-over's buttons", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const originalServices = globalThis.Services;
+  const originalChromeUtils = globalThis.ChromeUtils;
+  const focus = { activeWindow: null };
+  globalThis.Services = { locale: { appLocaleAsBCP47: "en" }, io: { newURI: (x) => x }, focus };
+  globalThis.ChromeUtils = { importESModule: () => agentModule };
+  try {
+    const { Island } = await import("../browser/Island.sys.mjs");
+    const documentElement = new Element();
+    const win = {
+      document: { documentElement, createElementNS: () => new Element() },
+      windowUtils: { loadSheet() {}, removeSheet() {}, AUTHOR_SHEET: 1 },
+      gBrowser: { tabContainer: new Element() },
+      listeners: new Map(),
+      addEventListener: (event, callback) => win.listeners.set(event, callback),
+      removeEventListener() {},
+    };
+    const browser = { ownerDocument: { defaultView: win }, currentURI: { host: "example.test" } };
+    const other = { ownerDocument: { defaultView: win } };
+    const island = new Island(
+      { answer() {} },
+      { setTimeout: (...args) => setTimeout(...args), clearTimeout: (id) => clearTimeout(id) },
+    );
+    island.attach(win);
+    const el = documentElement.children[0];
+    const open = () => el.attrs.has("open");
+    const line = () => el.querySelector(".action").textContent;
+    const select = (tab) => {
+      win.gBrowser.selectedBrowser = tab;
+      win.gBrowser.tabContainer.listeners.get("TabSelect")();
+    };
+    const fire = (event, data) => el.listeners.get(event)(data);
+    const claude = agentModule.identifyAgent("claude-code");
+
+    win.gBrowser.selectedBrowser = browser;
+    const hand = island.ask(browser, "example.test — needs you", "Log in", true, {}, [], { agent: claude, line: true });
+    assert.equal(line(), "Claude · needs you");
+    t.mock.timers.tick(60_000);
+    assert(open(), "time doesn't run while the window is inactive");
+    focus.activeWindow = win;
+    win.listeners.get("activate")();
+    t.mock.timers.tick(3000);
+    select(other);
+    t.mock.timers.tick(60_000);
+    assert(open(), "time doesn't run while another tab is selected");
+    select(browser);
+    t.mock.timers.tick(999);
+    assert(open());
+    t.mock.timers.tick(1);
+    assert(!open());
+    assert.equal(line(), "Claude: Log in");
+    assert(el.querySelector(".main").children.includes(el.querySelector(".buttons")), "the buttons are on the line");
+
+    fire("mouseenter");
+    t.mock.timers.tick(100);
+    fire("mouseleave");
+    t.mock.timers.tick(1000);
+    assert(!open(), "a pointer passing by doesn't open it");
+    fire("mouseenter");
+    t.mock.timers.tick(150);
+    assert(open());
+    const note = el.querySelector(".answer-note");
+    fire("focusin", { target: { localName: "textarea" } });
+    fire("mouseleave");
+    t.mock.timers.tick(10_000);
+    assert(open(), "it stays open while a note is written");
+    note.value = "later";
+    fire("focusout", { relatedTarget: null });
+    assert(!open());
+    assert.equal(line(), "✎ Claude: Log in");
+    assert.equal(note.value, "later");
+    fire("focusin", { target: { localName: "button", matches: () => false } });
+    assert(!open(), "a button clicked with the mouse doesn't hold it open");
+    fire("focusin", { target: { localName: "button", matches: () => true } });
+    assert(open(), "keyboard focus does");
+    fire("focusout", { relatedTarget: null });
+
+    const permission = island.ask(browser, "example.test — asks", "Claude wants to click", true, {}, [], {
+      agent: claude,
+    });
+    assert(!open(), "a second card doesn't open the line");
+    assert(el.querySelector(".count").attrs.has("unseen"));
+    island.askEnded(hand);
+    assert(open(), "it opens when it is its turn");
+    assert(el.querySelector(".card-footer").children.includes(el.querySelector(".buttons")));
+    t.mock.timers.tick(4000);
+    assert(!open());
+    assert.equal(line(), "Claude wants to click", "the name isn't repeated");
+    island.askEnded(permission);
+
+    island.dialog(browser, "example.test — the page asks", "Restart?");
+    assert(open());
+    t.mock.timers.tick(4000);
+    assert(!open());
+    assert.equal(line(), "Claude: Restart?");
     island.destroy();
   } finally {
     globalThis.Services = originalServices;

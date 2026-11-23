@@ -16,6 +16,8 @@ export function tabTools(ctx) {
       {
         key,
         agent: call.agent,
+        session: call.session,
+        line: handOver,
       },
     );
     const notified = ctx.notifyAsk(browser, message, call.agent);

@@ -61,7 +61,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `Control.sys.mjs` | Stop/Resume and island questions (`askIsland`, tab-less `ask_user`, notifications) |
 | `Config.sys.mjs`, `Activity.sys.mjs` | `config.json` and site access checks; island action text and the activity log |
 | `TabTools`, `ReadTools`, `InputTools`, `BrowserTools.sys.mjs` | Tool groups |
-| `Island.sys.mjs` | The island: the agents at work on one row (one shown, ◀ their icons ▶, hold lock), question cards (`ask` returns a card id, `askEnded(id)`; a new card never replaces the one on screen), Stop/Resume, dialogs, the recording and its review, pick note box |
+| `Island.sys.mjs` | The island: the agents at work on one row (one shown, ◀ their icons ▶, hold lock), question cards (`ask` returns a card id, `askEnded(id)`; a new card never replaces the one on screen; a card opens for a few seconds of being looked at, then shrinks to a line until hover or keyboard focus opens it), Stop/Resume, dialogs, the recording and its review, pick note box |
 | `Agent.sys.mjs` | Agent identity, theme and icon (`assets/`: Claude, Codex, Antigravity, OpenCode, several agents; others a drawn `>_`); shared by Node and Gecko |
 | `TabAccess.sys.mjs` | Which sessions may use which tabs (a tab can have several members), their `tab_work` notes and holds, and membership tickets for queued requests |
 | `TabActivity.sys.mjs` | In shared tabs: which session acted when, and whether it could change the page (for `meanwhile` and `pageChanged`) |
