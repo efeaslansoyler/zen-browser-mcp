@@ -214,6 +214,7 @@ export const MAX_TREE = 50000;
 
 const CLICK_EVENTS = new Set(["click", "mousedown", "mouseup", "pointerdown", "pointerup"]);
 const MAX_JOINED_TEXT = 2000;
+const FULL_MATCH = 10;
 const MAX_HIT_NAME = 60;
 const NATIVELY_CLICKABLE = new Set(["VIDEO", "AUDIO", "EMBED", "OBJECT"]);
 
@@ -415,7 +416,7 @@ export class PageReader {
     return parts.join(" ");
   }
 
-  // why: An element whose match lies in one of its children, or in a control listed by name, is not a separate hit.
+  // why: An element whose match lies in one of its children is not a separate hit.
   #textMatches(words) {
     const win = this.env.window();
     const found = [];
@@ -440,7 +441,12 @@ export class PageReader {
         let inner;
         if (isControl(child) || (this.#clickable(child) && this.#whole(child))) {
           inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? child.textContent : "";
-          if (holds(inner)) inner = null;
+          if (holds(inner)) {
+            // why: The name may be a label or cut off, and textContent includes what isn't shown.
+            const shown = clean(child.innerText ?? inner);
+            if (holds(shown)) found.push({ el: child, text: shown });
+            inner = null;
+          }
         } else inner = visit(child);
         if (inner === null) covered = true;
         else text += win.getComputedStyle(child)?.display === "inline" ? inner : ` ${inner} `;
@@ -464,12 +470,15 @@ export class PageReader {
     const words = tokens(query);
     if (!words.length) throw new Error("Empty query.");
     const results = new Map();
-    const add = (el, name, base, weight, details) => {
-      let score = base;
-      if (normalize(name) === normalize(query)) score += 0.4 * weight;
+    const add = (el, text, share, named, details) => {
+      // why: Prefer an actionable element to a surrounding node with the same name, and a real control to a guessed one.
+      const kind = isControl(el) ? 3 : details.clickable ? 2 : named ? 1 : 0;
+      // why: Scores of a frame are compared with those of others, so a full match must beat any partial one by itself.
+      let score = share === 1 ? FULL_MATCH + kind : share + kind / 6;
+      if (normalize(text) === normalize(query)) score += 0.4;
       // why: Check whole names so package.json does not match package-lock.json.
-      else if (normalize(name).includes(normalize(query))) score += 0.2 * weight;
-      if (inViewport(el, win)) score += 0.1 * weight;
+      else if (normalize(text).includes(normalize(query))) score += 0.2;
+      if (inViewport(el, win)) score += 0.1;
       if (score > (results.get(el)?.score ?? 0)) results.set(el, { el, score, ...details });
     };
     const all = doc.body?.querySelectorAll("*") ?? [];
@@ -492,13 +501,10 @@ export class PageReader {
         ].join(" "),
       );
       const hits = words.filter((w) => haystack.some((t) => t.startsWith(w))).length;
-      // why: Prefer an actionable element to a surrounding node with the same name, and a real control to a guessed one.
-      const bonus = INTERACTIVE_ROLES.has(role) ? 0.5 : clickable ? 0.45 : 0;
-      if (hits) add(el, name, hits / words.length + bonus, 1, { clickable, nameFromContent: clickable || undefined });
+      if (hits) add(el, name, hits / words.length, !!name, { clickable, nameFromContent: clickable || undefined });
     }
-    // why: Even the best text match stays below a full name match (1).
     for (const { el, text } of this.#textMatches(words))
-      add(el, text, 0.7, 0.5, { clickable: this.#clickable(el), nameFromContent: true });
+      add(el, text, 1, false, { clickable: this.#clickable(el), nameFromContent: true });
     return [...results.values()]
       .sort((a, b) => b.score - a.score)
       .slice(0, 20)

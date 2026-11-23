@@ -363,7 +363,7 @@ tool(
 
 tool(
   "find",
-  "Find elements by keywords matched against their accessible name, visible text, placeholder, title, id, name and href (not natural-language understanding: use words that appear on the element). Returns up to 20 matches with refs, controls and clickables first; a text match is the innermost element that holds all the words.",
+  "Find elements by keywords matched against their accessible name, visible text, placeholder, title, id, name and href (not natural-language understanding: use words that appear on the element). Returns up to 20 matches with refs: elements that hold every word first, and of these controls, then clickables; a text match is the innermost element that holds all the words.",
   {
     tabId,
     query: z.string().describe('Keywords, e.g. "search", "sign in", "email".'),

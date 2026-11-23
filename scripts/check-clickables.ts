@@ -24,6 +24,9 @@ const menu = `<!doctype html><meta charset="utf-8"><title>Menu</title><style>.it
 <label class="item"><input type="checkbox">Visible box</label>
 <label class="item" id="custom"><input type="checkbox" style="display:none">Custom box</label>
 <div class="item"><iframe srcdoc="<button>Framed button</button>" width="200" height="60"></iframe></div>
+<button aria-label="Close">Discard draft <span hidden>secretly</span></button>
+<div id="devices">Wi-Fi devices(13)</div><div class="item">Wi-Fi settings</div><svg class="item" id="wi-icon" width="20" height="20"></svg>
+<div>${"<button>Wi-Fi</button>".repeat(25)}</div>
 <table><tr><td id="cell">Cell <b>WIFI</b></td></tr></table>
 <script>
 window.hits=[];const hit=(id)=>hits.push(id);
@@ -35,7 +38,9 @@ document.addEventListener('click',(e)=>{if(e.target.id==='delegated')hit('delega
 const server = http.createServer((request, response) => {
   response.setHeader("content-type", "text/html; charset=utf-8");
   response.end(
-    request.url === "/menu" ? menu : `<!doctype html><title>Panel</title><iframe src="/menu" width="600" height="500">`,
+    request.url === "/menu"
+      ? menu
+      : `<!doctype html><title>Panel</title><iframe src="/menu" width="600" height="500"></iframe>${"<button>Wi-Fi</button>".repeat(25)}`,
   );
 });
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -64,6 +69,7 @@ try {
     "First line",
     "Second line",
     "more",
+    "Wi-Fi settings",
   ]);
   assert.match(interactive, /clickable svg#icon\.gear \[ref_/);
   assert.doesNotMatch(interactive, /"Visible box".*clickable/);
@@ -90,6 +96,14 @@ try {
     "cell",
   ]);
   console.log("✓ Clicks on those refs, and on text that find returned, reach the right elements");
+
+  const search = async (tabId: number, query: string) => (await command("find", { tabId, query })).split("\n");
+  const devices = await search(tabId, "wi-fi devices");
+  assert.match(devices[0], /^text "Wi-Fi devices\(13\)" \[ref_/);
+  assert.equal(devices.length, 20);
+  assert.match((await search(tabId, "discard draft"))[0], /^button "Close" \[ref_/);
+  assert.match((await search(tabId, "secretly"))[0], /^Nothing matches/);
+  console.log("✓ A full match ranks above partial ones; a control's shown text counts, its hidden text doesn't");
 
   const shotOf = async (scale?: number) => {
     const taken = await command("computer", { tabId, action: "screenshot", scale });
@@ -133,6 +147,7 @@ try {
   const [framed] = await open("/");
   const found = await command("find", { tabId: framed, query: "WLAN" });
   assert.match(found, /^clickable "WLAN" \[ref_\w+\]/);
+  assert.match((await search(framed, "wi-fi devices"))[0], /^text "Wi-Fi devices\(13\)" \[ref_/);
   const framedShot = await command("computer", { tabId: framed, action: "screenshot" });
   assert.match(framedShot, /shot_\d+: /);
   const box = JSON.parse(

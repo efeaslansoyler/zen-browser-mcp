@@ -170,16 +170,51 @@ test("find reads text across line breaks, controls and long blocks", async () =>
   assert.match((await find("needle"))[0], /^text "needle z/);
 });
 
-test("find ranks any full name match and any partial control match above text", async () => {
+test("find ranks an element that holds every word above any that holds only some", async () => {
   const { find } = page(
-    ...Array.from({ length: 25 }, () => h("p", {}, "Add item")),
-    h("h2", {}, "Add item panel"),
+    h("svg", { id: "wi-first", style: { cursor: "pointer" } }),
+    h("div", { on: "click" }, "Wi-Fi settings"),
+    h("a", { href: "/wi-fi" }, "Wi-Fi"),
+    h("button", {}, "Wi-Fi"),
+    h("div", {}, "Wi-Fi devices(13)"),
+  );
+  assert.equal((await find("wi-fi devices"))[0], 'text "Wi-Fi devices(13)" [ref]');
+});
+
+test("find ranks full matches as controls, clickables, named elements, then text", async () => {
+  const { find } = page(
+    h("p", {}, "Add item"),
+    h("h2", {}, "Add item"),
+    h("div", { on: "click" }, "Add item to the list"),
+    h("button", {}, "Add an item"),
     h("button", {}, "Add"),
   );
-  assert.deepEqual((await find("add item")).slice(0, 2).sort(), [
+  assert.deepEqual(await find("add item"), [
+    'button "Add an item" [ref]',
+    'clickable "Add item to the list" [ref]',
+    'heading "Add item" [ref] level=2',
+    'paragraph "Add item" [ref]',
     'button "Add" [ref]',
-    'heading "Add item panel" [ref] level=2',
   ]);
+});
+
+test("partial matches can't push a full match out of the result", async () => {
+  const { find } = page(
+    ...Array.from({ length: 25 }, () => h("button", {}, "Add")),
+    h("p", { box: { top: 5000, bottom: 5010 } }, "Add some item"),
+  );
+  const found = await find("add item");
+  assert.equal(found.length, 20);
+  assert.equal(found[0], 'paragraph "Add some item" [ref] (off-screen)');
+});
+
+test("find sees the whole text of a control whose name is another or cut off", async () => {
+  const { find } = page(
+    h("button", { "aria-label": "Close" }, "Discard draft"),
+    h("a", { href: "/card" }, `${"word ".repeat(30)}warranty terms`),
+  );
+  assert.deepEqual(await find("discard draft"), ['button "Close" [ref]']);
+  assert.match((await find("warranty terms"))[0], /^link "word /);
 });
 
 test("find ranks controls and clickables above plain text, and full text above partial matches", async () => {
