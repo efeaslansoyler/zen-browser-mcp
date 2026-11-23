@@ -27,6 +27,8 @@ change tool names, parameters or results.
 
 ### Fixed
 
+- `read_page` reads elements at any depth. It silently stopped after 30 levels, which left out most
+  of a GitHub page. When you pass `depth` and it leaves something out, the result says so.
 - `read_page` and `find` no longer leave out everything inside an element with `display: contents`,
   such as the whole article on MDN. Refs to such elements can be clicked and highlighted, and
   `wait_for` and `watch` selectors match them.

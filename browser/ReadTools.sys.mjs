@@ -64,7 +64,7 @@ export function readTools(ctx) {
       }
       return readOutput(
         browser,
-        ["read_page", filter || "all", depth ?? 30, ref_id || null, max_chars],
+        ["read_page", filter || "all", depth ?? null, ref_id || null, max_chars],
         context,
         value,
         diff,
