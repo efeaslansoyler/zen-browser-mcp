@@ -4,6 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseHookInput, configureCodexHooks, handleCodexHook } from "../dist/codex-hooks.js";
@@ -68,7 +70,7 @@ function readControl(threadId) {
   });
 }
 
-test("a connected watcher leaves hooks available for unconfirmed threads; relay refresh and cleanup still work", async () => {
+test("a connected watcher leaves hooks available for unconfirmed threads; relay refresh and cleanup still work", async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zen-relay-"));
   const previous = process.env.ZEN_MCP_SOCKET;
   process.env.ZEN_MCP_SOCKET = path.join(dir, "browser.sock");
@@ -89,6 +91,19 @@ test("a connected watcher leaves hooks available for unconfirmed threads; relay 
       );
     });
   });
+  const receivers = [];
+  const spawn = childProcess.spawn;
+  t.mock.method(childProcess, "spawn", (...args) => {
+    const child = spawn(...args);
+    receivers.push(child);
+    return child;
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const alive = () => receivers.filter((child) => child.exitCode === null && child.signalCode === null);
   const clients = new Set();
   const registrations = [];
   const updates = [];
@@ -107,7 +122,9 @@ test("a connected watcher leaves hooks available for unconfirmed threads; relay 
     await handleCodexHook({ ...input, session_id: confirmedId });
     assert.equal(await contactRelay(confirmedId), false);
     await Promise.all([handleCodexHook(input), handleCodexHook(input)]);
-    await waitUntil(() => clients.size === 1 && registrations.length >= 1);
+    assert.equal(receivers.length, 2);
+    // why: The second receiver may still be starting; after the kill below it would rightly take over.
+    await waitUntil(() => alive().length === 1 && clients.size === 1);
     const first = await readControl(threadId);
     const [connection] = clients;
     await handleCodexHook({ ...input, cwd: "/moved", hook_event_name: "UserPromptSubmit" });
