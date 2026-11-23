@@ -58,6 +58,8 @@ change tool names, parameters or results.
   because of it, and fails if the dialog stays open.
 - A new conversation title no longer cancels the session's running and queued calls or releases its
   holds, for Claude and for Codex conversations found through the Codex service.
+- `read_page` and `find` give the right level for headings made with `role="heading"` (it was a letter)
+  and for `h1` to `h6` with an `aria-level`.
 
 ## [0.3.0] - 2026-11-23
 

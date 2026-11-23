@@ -198,6 +198,26 @@ test("find ranks full matches as controls, clickables, named elements, then text
   ]);
 });
 
+test("a heading's level is its aria-level, then its tag's, then 2, as in Gecko's accessibility tree", async () => {
+  const heading = { role: "heading" };
+  const { read } = page(
+    h("div", { ...heading, "aria-level": "4" }, "Div"),
+    h("div", heading, "Default"),
+    h("my-title", { ...heading, "aria-level": "0" }, "Invalid"),
+    h("h3", {}, "Tag"),
+    h("h3", { "aria-level": "5" }, "Override"),
+    h("h3", { "aria-level": "none" }, "Kept"),
+  );
+  assert.deepEqual(await read(), [
+    'heading "Div" [ref] level=4',
+    'heading "Default" [ref] level=2',
+    'heading "Invalid" [ref] level=2',
+    'heading "Tag" [ref] level=3',
+    'heading "Override" [ref] level=5',
+    'heading "Kept" [ref] level=3',
+  ]);
+});
+
 test("partial matches can't push a full match out of the result", async () => {
   const { find } = page(
     ...Array.from({ length: 25 }, () => h("button", {}, "Add")),
