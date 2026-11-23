@@ -140,7 +140,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   when they have an accessible name. Use `innerText` for rendered text because it skips hidden
   descendants and separates rendered blocks. It is also empty for text in an off-screen
   `content-visibility: auto` section, which `checkVisibility()` reports as visible; use
-  `shownText` or `pageText` (`PageReader`). `checkVisibility()` is false for an element with
+  `shownText` or `pageText` (`PageReader`). The text they build has `text-transform` applied as in
+  Gecko, except Greek capitals, Dutch `ij`, ligatures (`ﬁ`, `ǆ`) capitalized at the start of a word,
+  and `full-width`. `checkVisibility()` is false for an element with
   `display: contents` although its children show, and its client rect is empty (`isVisible`,
   `rectOf` and `clickRectOf` in `PageReader` handle both). It is true for an element whose own
   text is hidden: `content-visibility: hidden`, closed `details`. Native DOM reads do not expose

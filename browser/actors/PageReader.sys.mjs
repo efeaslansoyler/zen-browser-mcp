@@ -356,14 +356,36 @@ function showsText(el, node) {
   return !hidesContent(el) && isRendered(el, { visibilityProperty: true });
 }
 
+const WORD_START = /(?<![\p{L}\p{M}\p{N}_]|[\p{L}\p{N}]['’])\p{L}/gu;
+
+// why: Without a language the mapping must not follow the browser's, which is Turkish for some users.
+function transformed(text, el, style, before) {
+  const [transform] = /uppercase|lowercase|capitalize/.exec(style.textTransform) ?? [];
+  if (!transform) return text;
+  let lang = closestShown(el, "[lang]")?.getAttribute("lang") || "en";
+  try {
+    Intl.getCanonicalLocales(lang);
+  } catch {
+    lang = "en";
+  }
+  if (transform === "uppercase") return text.toLocaleUpperCase(lang);
+  if (transform === "lowercase") return text.toLocaleLowerCase(lang);
+  // why: A word can begin in the text before, as in <b>f</b>oo.
+  const joint = /[\p{L}\p{N}_'’]/u.test(before) ? "_" : "";
+  return (joint + text).replace(WORD_START, (letter) => letter.toLocaleUpperCase(lang)).slice(joint.length);
+}
+
 // why: innerText, built from the DOM where Gecko leaves it empty (docs/gecko-pitfalls.md, Input and frames).
 // why: As in its specification, a number is how many line breaks must separate what is around it.
-function textItems(el, isNative) {
+function textItems(el, isNative, before = "") {
   const style = styleOf(el);
   const items = [];
+  const end = () => (items.length ? (items.at(-1).at?.(-1) ?? "") : before);
   for (const child of shownChildren(el)) {
-    if (child.nodeType === 3 && showsText(el, child))
-      items.push(style.whiteSpace.startsWith("pre") ? child.data : child.data.replace(/\s+/g, " "));
+    if (child.nodeType === 3 && showsText(el, child)) {
+      const text = style.whiteSpace.startsWith("pre") ? child.data : child.data.replace(/\s+/g, " ");
+      items.push(transformed(text, el, style, end()));
+    }
     if (child.nodeType !== 1) continue;
     if (!isRendered(child)) continue;
     const tag = tagOf(child);
@@ -371,7 +393,7 @@ function textItems(el, isNative) {
     if (tag === "BR" || SKIP_TAGS.has(tag) || frameIdOf(child)) continue;
     const { display } = styleOf(child);
     const inline = /^(inline|contents|ruby)/.test(display);
-    const inner = !inline && isNative?.(child) ? [shownText(child)] : textItems(child, isNative);
+    const inner = !inline && isNative?.(child) ? [shownText(child)] : textItems(child, isNative, inline ? end() : "");
     const gap = tag === "P" ? 2 : 1;
     if (inline) items.push(...inner);
     else if (display === "table-cell") items.push(...inner, "\t");
