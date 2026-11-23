@@ -73,8 +73,9 @@ npm install -g zen-browser-mcp@latest
 ```
 
 Then reconnect your MCP client. When it starts the server, the server copies the new bridge
-files and reloads the bridge in the running browser; no browser restart is needed. If you use
-the skill, run `zen-browser-mcp skill install` again (`doctor` says when it is outdated).
+files and reloads the bridge in the running browser; no browser restart is needed. It also
+updates an installed skill, which new agent sessions then read. A skill you edited is left
+alone, and `doctor` says so; `zen-browser-mcp skill install` replaces it.
 
 ## Uninstall
 

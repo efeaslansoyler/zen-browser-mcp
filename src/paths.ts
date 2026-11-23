@@ -42,6 +42,10 @@ export function assertStableInstall(dir = PACKAGE_DIR) {
       `Hooks need a lasting install, not the npx cache. Run \`npm install -g ${PACKAGE}\`, then \`${PACKAGE} hooks install\`.`,
     );
 }
+
+// why: A checkout can hold an unreleased skill, and its servers run in tests, live checks and worktrees.
+export const runsFromCheckout = (dir = PACKAGE_DIR) => existsSync(path.join(dir, ".git"));
+
 export const VERSION: string = JSON.parse(readFileSync(path.join(PACKAGE_DIR, "package.json"), "utf8")).version;
 
 // why: With a shared temporary runtime directory another OS user could create a socket at a path we connect to.

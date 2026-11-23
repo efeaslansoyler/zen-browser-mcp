@@ -5,7 +5,8 @@ import { z } from "zod";
 import { call, leaseProfile, subscribe } from "./zen.ts";
 import { browserResolver, deliveryScope, type Selection } from "./instances.ts";
 import { sweepTemporaryProfiles } from "./profiles.ts";
-import { SERVER_NAME, VERSION } from "./paths.ts";
+import { SERVER_NAME, VERSION, runsFromCheckout } from "./paths.ts";
+import { refreshSkills } from "./skill.ts";
 import { syncBrowserFiles } from "./install.ts";
 import { createBrowserLauncher, type LaunchApproval } from "./launch.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
@@ -256,6 +257,7 @@ export async function serve(launch = createBrowserLauncher()) {
   };
   await server.connect(new StdioServerTransport());
   syncBrowserFiles().catch(() => {});
+  if (!runsFromCheckout()) refreshSkills();
 
   // why: Reconnect when the conversation title changes so the browser's menus show its current name.
   setInterval(() => {

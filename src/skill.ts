@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +7,13 @@ import { PACKAGE_DIR } from "./paths.ts";
 
 const SKILL = "zen-browser";
 const SOURCE = path.join(PACKAGE_DIR, "skills", SKILL);
+const STAMP = ".installed";
+
+// why: 0.2.0 and 0.3.0 installed the skill without a stamp.
+const UNSTAMPED = new Set([
+  "f736965238da35cd6809ed2347275a0bbd2127aa75b64147ffed07e366bc0b23",
+  "7161bcf48104bc4a012d3976559097137146ee356c9fa5222301e2c5041621ad",
+]);
 
 export function skillTargets(home = os.homedir(), env = process.env) {
   const claude = env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
@@ -16,20 +24,55 @@ export function skillTargets(home = os.homedir(), env = process.env) {
   ];
 }
 
-const sameAsPackage = (dir: string) => {
+const hashOf = (dir: string) =>
+  createHash("sha256")
+    .update(fs.readFileSync(path.join(dir, "SKILL.md")))
+    .digest("hex");
+
+const stamp = (dir: string) => fs.writeFileSync(path.join(dir, STAMP), hashOf(SOURCE) + "\n");
+
+function stampOf(dir: string) {
   try {
-    return (
-      fs.readFileSync(path.join(dir, "SKILL.md"), "utf8") === fs.readFileSync(path.join(SOURCE, "SKILL.md"), "utf8")
-    );
+    return fs.readFileSync(path.join(dir, STAMP), "utf8").trim();
   } catch {
-    return false;
+    return null;
   }
-};
+}
+
+function statusOf(dir: string): "missing" | "current" | "outdated" | "edited" {
+  if (!fs.existsSync(dir)) return "missing";
+  let hash;
+  try {
+    hash = hashOf(dir);
+  } catch {
+    return "edited";
+  }
+  if (hash === hashOf(SOURCE)) return "current";
+  return hash === stampOf(dir) || UNSTAMPED.has(hash) ? "outdated" : "edited";
+}
 
 export function skillStatus(targets = skillTargets()) {
-  return targets
-    .filter((t) => t.present)
-    .map((t) => ({ ...t, status: !fs.existsSync(t.dir) ? "missing" : sameAsPackage(t.dir) ? "current" : "outdated" }));
+  return targets.filter((t) => t.present).map((t) => ({ ...t, status: statusOf(t.dir) }));
+}
+
+const isLink = (file: string) => fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink();
+
+export function refreshSkills(targets = skillTargets()) {
+  for (const { dir, status } of skillStatus(targets)) {
+    const file = path.join(dir, "SKILL.md");
+    if ((status !== "current" && status !== "outdated") || isLink(dir) || isLink(file)) continue;
+    try {
+      if (status === "outdated") {
+        // why: A client may read the skill at any moment, and several servers can start together.
+        const next = `${file}.${process.pid}`;
+        fs.copyFileSync(path.join(SOURCE, "SKILL.md"), next);
+        fs.renameSync(next, file);
+      }
+      if (stampOf(dir) !== hashOf(SOURCE)) stamp(dir);
+    } catch {
+      // why: A copy that can't be written must not stop the server or the other copies.
+    }
+  }
 }
 
 export function skillCommand(action: string | undefined, targets = skillTargets()) {
@@ -49,6 +92,7 @@ export function skillCommand(action: string | undefined, targets = skillTargets(
       fs.rmSync(dir, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(dir), { recursive: true });
       fs.cpSync(SOURCE, dir, { recursive: true });
+      stamp(dir);
       console.log(L(`✓ ${client}: skill installed in ${dir}`, `✓ ${client}: skill ${dir} klasörüne kuruldu`));
     } else if (fs.existsSync(dir)) {
       fs.rmSync(dir, { recursive: true, force: true });
