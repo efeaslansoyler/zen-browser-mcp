@@ -11,6 +11,13 @@ the activity to go to the agent's tab. Ctrl+Shift+Esc also stops browser
 automation. When several agents are active, use the arrows or agent icons to
 switch between them.
 
+On an agent's tab, **Take over** on the island's row gives you that tab for a while:
+the agent's running call is interrupted, and until you press **Give back** no agent can
+act or look there. Their place in the tab stays, and other tabs go on. Hover over the row
+to write an optional note for the agent before you give the tab back. The agent then has
+to read the page again before it acts. The button is only on the tab you are looking at;
+elsewhere, and to end everything, use **Stop**.
+
 A request opens on the island for a few seconds while you look at its tab, then
 shrinks to one pulsing line so the page stays free. Hover over the line to open
 it again; it stays open while you type a note. When an agent hands you a step,

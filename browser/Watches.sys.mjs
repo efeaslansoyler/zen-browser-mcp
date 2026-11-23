@@ -75,6 +75,10 @@ export class Watches {
     } catch (e) {
       return this.end(watch.id, e.message);
     }
+    if (this.env.paused?.(watch.tabId)) {
+      if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
+      return this.#schedule(watch, watch.interval);
+    }
     const { spec } = watch;
     const url = browser.currentURI?.spec;
     try {

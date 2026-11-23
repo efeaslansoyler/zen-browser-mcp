@@ -7,6 +7,16 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+### Added
+
+- **Take over** on the island's row: on an agent's tab, one click gives you the tab for a while and
+  **Give back**, at the same place, returns it, with an optional note. Meanwhile agents can neither
+  act nor look there; the running call is interrupted, watches pause, a video recording ends and
+  nothing is logged. Calls wait up to 45 seconds, then return a `user_control` status. Afterwards an
+  agent must read the page again before it acts.
+- The island's row stays on an agent's tab while the agent thinks, until two minutes after its last
+  call there, and shows that tab's agent first.
+
 ### Changed
 
 - A request on the island (a permission, a question, a hand-over or a page dialog) opens for a few

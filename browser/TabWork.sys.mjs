@@ -63,6 +63,7 @@ export function tabWork(ctx) {
         ...(sessions.get(id)?.disconnected ? { disconnected: true } : {}),
         task: task(id),
       })),
+      ...(ctx.takenOver(tabId) ? { userControl: true } : {}),
       executing: [...ctx.calls].some((call) => call.tabs.has(tabId)),
       ...(holdOf(tabId) ? { hold: describeHold(tabId, holdOf(tabId), session) } : {}),
     };

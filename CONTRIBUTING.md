@@ -88,6 +88,7 @@ browser you use:
 | `check-shadow.ts` | Reads, searches, clicks, fields, uploads, iframes, hand-overs and selectors in open, closed and nested shadow roots; slots; reading times |
 | `check-read-depth.ts` | Reads at any depth, the notice when a depth leaves something out, a very deep page |
 | `check-island.ts` | Requests that shrink to a line, hover, notes, the time a request stays open, a hand-over's buttons |
+| `check-takeover.ts [dir]` | Take over and Give back: the island's states (pictures in `dir`), interrupted and waiting calls, watch, network log, video, the read owed, reload, Stop, take back; takes about 90 s |
 | `check-dialogs.ts` | Calls right after an answered alert, confirm or prompt, dialogs opened one after another |
 | `check-stale-refs.ts` | Refs from before navigations, back/forward, reloads and iframe navigations, or from another tab, send no input |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |

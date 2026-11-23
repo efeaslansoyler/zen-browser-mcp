@@ -462,3 +462,93 @@ test("a request shows itself while it is looked at, then waits on one line that 
     globalThis.ChromeUtils = originalChromeUtils;
   }
 });
+
+test("island takes over only the tab the user is on and keeps Give back beside other cards", async () => {
+  const originalServices = globalThis.Services;
+  const originalChromeUtils = globalThis.ChromeUtils;
+  const focus = { activeWindow: null };
+  globalThis.Services = { locale: { appLocaleAsBCP47: "en" }, io: { newURI: (x) => x }, focus };
+  globalThis.ChromeUtils = { importESModule: () => agentModule };
+  try {
+    const { Island } = await import("../browser/Island.sys.mjs");
+    const documentElement = new Element();
+    const win = {
+      document: { documentElement, createElementNS: () => new Element() },
+      windowUtils: { loadSheet() {}, removeSheet() {}, AUTHOR_SHEET: 1 },
+      gBrowser: { tabContainer: new Element(), getTabForBrowser() {}, getIcon() {} },
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    focus.activeWindow = win;
+    const tab = (host) => ({ ownerDocument: { defaultView: win }, currentURI: { host } });
+    const mine = tab("mine.test");
+    const other = tab("other.test");
+    const taken = new Set();
+    const given = [];
+    const timers = [];
+    const island = new Island(
+      {
+        takeover: (browser) => ({ taken: taken.has(browser), session: "a", agent: { id: "claude" } }),
+        takeOver: (browser) => taken.add(browser),
+        giveBack: (browser, note) => {
+          taken.delete(browser);
+          given.push(note);
+        },
+      },
+      { setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout() {} },
+    );
+    win.gBrowser.selectedBrowser = mine;
+    island.attach(win);
+    const el = documentElement.children[0];
+    const take = el.querySelector(".take");
+    const field = el.querySelector(".back-field");
+    field.blur = () => {};
+    const line = () => el.querySelector(".workers").querySelector(".action").textContent;
+    const select = (browser) => {
+      win.gBrowser.selectedBrowser = browser;
+      win.gBrowser.tabContainer.listeners.get("TabSelect")();
+    };
+
+    island.working(mine, "mine.test — reading", { session: "a", agent: { id: "claude" } });
+    island.working(other, "other.test — reading", { session: "b", agent: { id: "codex" } });
+    assert.match(line(), /^Claude/, "the tab the user is on has the row");
+    assert.equal(take.hidden, false);
+    island.finished("a");
+    for (const timer of timers.filter((t) => t.ms === 4000)) timer.fn();
+    assert.match(line(), /Claude · waiting/);
+    assert.equal(take.hidden, false, "it stays while the agent thinks");
+    const plain = tab("plain.test");
+    select(plain);
+    assert.equal(take.hidden, true, "no button on a tab no agent worked in");
+    select(mine);
+    take.listeners.get("click")();
+    assert.equal(take.textContent, "Give back");
+    assert.match(line(), /you have control/);
+    const card = island.ask(other, "needs you", "Which?", true, {}, ["A"], { agent: { id: "codex" }, session: "b" });
+    assert.equal(el.attrs.get("state"), "ask");
+    assert.equal(take.hidden, false, "Give back stays beside a card of another tab");
+    island.askEnded(card);
+    select(other);
+    assert.equal(take.textContent, "Take over");
+    select(mine);
+    field.value = "Careful";
+    field.listeners.get("input")();
+    select(other);
+    select(mine);
+    assert.equal(field.value, "Careful", "the draft belongs to its tab");
+    assert.match(line(), /^✎ /);
+    take.listeners.get("click")();
+    assert.deepEqual(given, ["Careful"]);
+    assert.equal(take.textContent, "Take over");
+    const asked = island.ask(mine, "permission", "May I?", true, {}, [], { session: "a" });
+    assert.equal(take.hidden, true, "a card has its own buttons");
+    island.askEnded(asked);
+    taken.add(mine);
+    island.stopped();
+    assert.equal(take.textContent, "Give back", "Stop doesn't end it");
+    island.destroy();
+  } finally {
+    globalThis.Services = originalServices;
+    globalThis.ChromeUtils = originalChromeUtils;
+  }
+});

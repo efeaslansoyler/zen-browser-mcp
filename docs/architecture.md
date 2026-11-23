@@ -54,6 +54,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `main.js` | Wiring: loads the modules into one shared `ctx`, builds the browser components, socket server, start/stop/reload, dev commands |
 | `ToolRunner.sys.mjs`, `Locks.sys.mjs` | Request handling: per-tab locks, the exclusive lock, the call scope (session, agent, tabs, cancellation; tools get it as their second argument, helpers find it with `ctx.callOf(browser)`), per-call tab membership, site and permission checks, island status, activity log entry; `browser_batch` |
 | `Sessions.sys.mjs`, `TabWork.sys.mjs` | Session lifecycle (connect, grace period, sweep); `tab_work` notes and status |
+| `Takeover.sys.mjs` | Tabs the user took over: interrupting and waiting calls, the status and notes, the read an agent owes afterwards |
 | `Tabs.sys.mjs` | Finding tabs across windows and Zen workspaces, creating agent tabs, the tab mark and its restore |
 | `TabWake.sys.mjs` | Foreground-speed execution in background agent tabs during tool calls and live watches |
 | `PageQuery.sys.mjs` | `query` to a frame's actor, refs across frames, coordinate translation, load waits, page dialogs |
@@ -97,8 +98,8 @@ tool's answer timeout (`callTimeout` in `tools.ts`), it closes the socket and re
 "did not answer". The bridge keeps running the call and drops the reply, so the action may
 or may not have happened: the agent should read the page before it retries. MCP
 `notifications/cancelled` is not forwarded either; it only aborts a pending `browser.launch`
-approval. Only Stop on the island, the user taking a tab back or giving it to another session, and a
-bridge reload or quit cancel calls in the browser.
+approval. Only Stop on the island, the user taking a tab over, taking it back or giving it to
+another session, and a bridge reload or quit cancel calls in the browser.
 
 ## Browser instances
 
@@ -202,6 +203,18 @@ when the selected instance has no queued picks.
   (leaving that site is fine). A hold ends on `release`, when it expires, when its holder has
   made no call for 2 minutes (`TabAccess.holdOf` checks lazily), when the holder leaves the
   tab or disconnects, on take-back, and from the tab menu's "Remove hold".
+- A **takeover** (the island's Take over / Give back) keeps every session out of one tab without
+  ending its membership. It cancels the calls that touched the tab; new ones wait before they enter
+  the tab's queue, so they block no other tab (`whenFree`, up to 45 s from their arrival; the MCP
+  server allows that much longer for the answer), then return `user_control`. A step that reaches
+  the tab later, such as in a batch, is refused. `request_tab`, `tab_work`, `downloads` and watch
+  controls don't wait. Meanwhile `describeTab` leaves out title and URL, watches skip their reads, a
+  video recording ends, and `NetworkLog` records nothing (network rules still apply). On give-back,
+  a waiting call's result carries the note; other members get it, and sessions that were interrupted
+  or told `user_control` are woken, through the inbox. Each member then owes a read: acting tools are
+  refused until one of its earlier calls read or navigated the tab. State lives in `zenMcpState`, so a
+  reload keeps it; `TabAccess.clear` (tab closed, taken back, last member gone) ends it. Page
+  JavaScript that was already running can't be stopped, only its result is dropped.
 - Calls on one tab run in order; calls on different tabs run side by side, and calls without a
   tab don't wait. A call queues on every tab it names when it arrives (a batch on all of its
   tabs), so requests can't wait for each other. The system clipboard, browser settings and
