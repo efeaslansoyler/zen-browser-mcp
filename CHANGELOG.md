@@ -21,6 +21,9 @@ change tool names, parameters or results.
 - `read_page`, `find` and click results name a form field without a name of its own after the
   label in its table row, marked `(from row)`, and an icon control or clickable after its own
   hidden text, marked `(hidden text)`.
+- An installed agent skill is updated when an MCP client starts a newer server, like the bridge
+  files. A copy you edited is left alone and `doctor` says so; a skill that isn't installed is never
+  added.
 
 ### Fixed
 

@@ -75,9 +75,15 @@ export async function doctor() {
   // why: The optional skill should not make a healthy installation fail doctor.
   for (const { client, status } of skillStatus()) {
     if (status === "current") ok(L(`${client}: skill installed`, `${client}: skill kurulu`));
+    else if (status === "missing")
+      console.log(`  ${client}: ${L("skill not installed", "skill kurulu değil")} → ${PACKAGE} skill install`);
+    else if (status === "outdated")
+      console.log(
+        `  ${client}: ${L("skill outdated: updated when the MCP client starts the server", "skill eski: MCP istemcisi sunucuyu başlatınca güncellenir")}`,
+      );
     else
       console.log(
-        `  ${client}: ${status === "missing" ? L("skill not installed", "skill kurulu değil") : L("skill outdated", "skill eski")} → ${PACKAGE} skill install`,
+        `  ${client}: ${L("skill edited, so it isn't updated; this replaces it", "skill düzenlenmiş, bu yüzden güncellenmiyor; şu komut yenisiyle değiştirir")} → ${PACKAGE} skill install`,
       );
   }
 
