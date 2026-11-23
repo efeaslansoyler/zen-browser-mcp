@@ -306,7 +306,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #text() {
     const doc = this.document;
     const root = doc.querySelector("main, article, [role=main]") || doc.body;
-    let text = root?.innerText ?? "";
+    let text = root ? reader.pageText(root) : "";
     if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + "\n…(truncated)";
     return { title: doc.title, url: doc.URL, text };
   }

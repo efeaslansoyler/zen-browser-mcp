@@ -124,7 +124,10 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - Native semantics treat `alt=""` as decorative and expose `section` and `form` as landmarks
   when they have an accessible name. Use `innerText` for rendered text because it skips hidden
   descendants and separates rendered blocks. It is also empty for text in an off-screen
-  `content-visibility: auto` section, which `checkVisibility()` reports as visible. Native DOM reads do not expose arbitrary handlers
+  `content-visibility: auto` section, which `checkVisibility()` reports as visible; use
+  `shownText` or `pageText` (`PageReader`). `checkVisibility()` is false for an element with
+  `display: contents` although its children show, and true for an element whose own text is
+  hidden: `content-visibility: hidden`, closed `details`. Native DOM reads do not expose arbitrary handlers
   registered by page scripts, so `tabindex` is only a hint that a generic element is actionable.
 - Gecko stores console API calls in `ConsoleAPIStorage` and JavaScript errors in its console
   service. Reading the stored messages does not require an early listener.

@@ -83,6 +83,7 @@ browser you use:
 | `check-clickables.ts` | Refs for clickables without a role, text search in `find`, reading a large page, click results, `find` ranking, coordinates of screenshots at different scales |
 | `check-names.ts` | Field names from table rows, names from hidden text, rows and icons that must stay unnamed |
 | `check-loading-reads.ts` | Reads of pages and iframes that are still loading, loaded without content, or filled later |
+| `check-skipped-text.ts` | Reads, searches and waits on text in off-screen `content-visibility: auto` sections, which stay unrendered |
 | `check-island.ts` | Requests that shrink to a line, hover, notes, the time a request stays open, a hand-over's buttons |
 | `check-dialogs.ts` | Calls right after an answered alert, confirm or prompt, dialogs opened one after another |
 | `check-stale-refs.ts` | Refs from before navigations, back/forward, reloads and iframe navigations, or from another tab, send no input |
