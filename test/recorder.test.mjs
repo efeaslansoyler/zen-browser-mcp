@@ -35,6 +35,7 @@ class El {
   querySelector() {
     return null;
   }
+  ownerDocument = { querySelectorAll: () => [] };
 }
 
 function setup() {

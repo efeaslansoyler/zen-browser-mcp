@@ -1,10 +1,24 @@
 // why: The reader needs inherited cursors, listener info and layout text, which plain object fakes keep getting wrong.
 import { loadActor } from "./actor.mjs";
 
+// why: As in Gecko, native text and visibility know slotted nodes but never enter a shadow root.
+const slotOf = (node) => {
+  const root = node.parentElement?.openOrClosedShadowRoot;
+  const name = node.attrs?.slot ?? "";
+  return root?.querySelectorAll("slot").find((slot) => (slot.attrs.name ?? "") === name) ?? null;
+};
+const shownParent = (node) =>
+  node.parentElement?.openOrClosedShadowRoot ? slotOf(node) : (node.parentElement ?? node.parentNode?.host ?? null);
+const isLeftOut = (node) => !!node.parentElement?.openOrClosedShadowRoot && !slotOf(node);
+
 class Text {
   nodeType = 3;
+  parentElement = null;
   constructor(data) {
     this.data = data;
+  }
+  get openOrClosedAssignedSlot() {
+    return slotOf(this);
   }
   get textContent() {
     return this.data;
@@ -29,7 +43,14 @@ class Element {
     this.attrs = rest;
     this.classList = (rest.class ?? "").split(" ").filter(Boolean);
     this.childNodes = children.map((child) => (typeof child === "string" ? new Text(child) : child));
-    for (const child of this.childNodes) if (child.nodeType === 1) child.parentElement = this;
+    for (const child of this.childNodes) child.parentElement = this;
+  }
+  get openOrClosedAssignedSlot() {
+    return slotOf(this);
+  }
+  assignedNodes() {
+    const { host } = this.getRootNode();
+    return (host?.childNodes ?? []).filter((node) => slotOf(node) === this);
   }
   get id() {
     return this.attrs.id ?? "";
@@ -52,7 +73,7 @@ class Element {
   get innerText() {
     if (this.localName === "br") return "\n";
     return this.childNodes
-      .filter((node) => !node.hidden)
+      .filter((node) => !node.hidden && !isLeftOut(node))
       .map((node) =>
         node.nodeType === 3 ? node.data : node.display === "inline" ? node.innerText : `\n${node.innerText}\n`,
       )
@@ -61,22 +82,38 @@ class Element {
       .trim();
   }
   get display() {
+    if (this.localName === "slot") return "contents";
     return (
       this.style.display ??
       (["span", "b", "a", "label", "img", "svg", "input", "br"].includes(this.localName) ? "inline" : "block")
     );
   }
   get cursor() {
-    return this.style.cursor ?? this.parentElement?.cursor ?? "auto";
+    return this.style.cursor ?? shownParent(this)?.cursor ?? "auto";
   }
   get parentNode() {
-    return this.parentElement;
+    return this.parentElement ?? this.shadow ?? null;
   }
   get ownerDocument() {
-    return { defaultView: { getComputedStyle: ({ display }) => ({ display, whiteSpace: "normal" }) } };
+    const root = this.getRootNode();
+    return root.host ? root.host.ownerDocument : root;
   }
   getRootNode() {
-    return {};
+    if (this.parentNode) return this.parentElement?.getRootNode() ?? this.shadow;
+    return (this.document ??= {
+      nodeType: 9,
+      defaultView: {
+        getComputedStyle: (el) => ({
+          cursor: el.cursor,
+          display: el.display,
+          visibility: "visible",
+          whiteSpace: "normal",
+        }),
+      },
+      createRange: () => ({ selectNodeContents() {}, getClientRects: () => [this.box] }),
+      getElementById: (id) => this.querySelectorAll("*").find((el) => el.id === id) ?? null,
+      querySelectorAll: (selector) => this.querySelectorAll(selector),
+    });
   }
   getAttribute(key) {
     return this.attrs[key] ?? null;
@@ -84,11 +121,17 @@ class Element {
   hasAttribute(key) {
     return key in this.attrs;
   }
+  get rendered() {
+    return !this.hidden && !isLeftOut(this) && (shownParent(this)?.rendered ?? true);
+  }
   checkVisibility() {
-    return !this.hidden && (this.parentElement?.checkVisibility() ?? true);
+    return this.rendered && this.display !== "contents";
   }
   getBoundingClientRect() {
-    return this.box;
+    return this.display === "contents" ? { top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 } : this.box;
+  }
+  getClientRects() {
+    return this.display === "contents" ? [] : [this.box];
   }
   scrollIntoView() {}
   dispatchEvent() {}
@@ -114,6 +157,32 @@ class Element {
     for (let el = other; el; el = el.parentElement) if (el === this) return true;
     return false;
   }
+}
+
+class ShadowRoot {
+  nodeType = 11;
+  parentNode = null;
+  constructor(host, children) {
+    this.host = host;
+    const holder = new Element("holder", {}, children);
+    this.childNodes = holder.childNodes;
+    this.querySelectorAll = (selector) => holder.querySelectorAll(selector);
+    for (const child of this.childNodes) {
+      child.parentElement = null;
+      child.shadow = this;
+    }
+  }
+  isUAWidget() {
+    return false;
+  }
+  getElementById(id) {
+    return this.querySelectorAll("*").find((el) => el.id === id) ?? null;
+  }
+}
+
+export function shadow(host, ...children) {
+  host.openOrClosedShadowRoot = new ShadowRoot(host, children);
+  return host;
 }
 
 export const h = (tag, attrs = {}, ...children) => new Element(tag, attrs, children);
@@ -142,13 +211,12 @@ export function page(...children) {
     Event: class {},
     getComputedStyle: (el) => ({ cursor: el.cursor, display: el.display }),
   };
-  actor.document = {
+  actor.document = Object.assign(root.ownerDocument, {
     title: "Page",
     URL: "https://page.test/",
     body,
     documentElement: root,
-    getElementById: () => null,
-  };
+  });
   const send = async (name, data = {}) => {
     const result = await actor.receiveMessage({ name, data: { documentNumber: 1, ...data } });
     if (result.error) throw new Error(result.error);

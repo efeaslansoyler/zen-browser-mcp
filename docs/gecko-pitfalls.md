@@ -99,7 +99,19 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - `Services.els.getListenerInfoFor(element)` lists page listeners from an actor (`onclick`
   attributes and properties included) but not ones delegated to an ancestor. Computed `cursor`
   is inherited, so a whole subtree reports `pointer`.
-- A closed shadow root's contents don't appear in a window listener's `composedPath()`.
+- A closed shadow root's contents don't appear in a window listener's `composedPath()`;
+  `event.composedTarget` is the real target there too.
+- `openOrClosedShadowRoot` and `openOrClosedAssignedSlot` also return browser-internal roots and
+  slots (text and date fields, `select`, `textarea`, `details`, `video`, `marquee`):
+  `isUAWidget()` is true for them, but not for the copies in an SVG `use`. `shadowRoot` and
+  `assignedSlot` are null for closed roots.
+- `innerText` and `querySelectorAll` of an element never enter shadow roots, and `innerText` of an
+  element inside one leaves out what is slotted. `checkVisibility()` is false for a `slot`
+  (`display: contents`) and for a host's child without a slot. A range around a `slot` has no
+  rects of slotted nodes. Walk with `shownChildren`, `shownElements` and `composedParent`
+  (`PageReader`).
+- The `selectAll` command doesn't select the content of an editable element in a shadow root; set
+  the selection with `selectAllChildren`.
 - A progress listener added to a fresh tab may receive `about:blank`'s STOP after
   the requested navigation begins. Ignore that initial stop and hold a strong reference
   to the listener while waiting, since Gecko stores it weakly.

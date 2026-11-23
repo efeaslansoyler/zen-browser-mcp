@@ -222,7 +222,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "frame_at":
           return { value: this.#frameAt(data.x, data.y) };
         case "active_frame":
-          return { value: reader.frameIdOf(this.document.activeElement) };
+          return { value: reader.frameIdOf(reader.deepActiveElement(this.document)) };
         case "check":
           return { value: this.#reader.check(data) };
         case "sample":
@@ -436,7 +436,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
   #clipboardPrepare({ action, ref }) {
     if (!["copy", "paste", "cut"].includes(action)) throw new Error("Unsupported clipboard command.");
-    const element = ref ? this.#element(ref) : this.document.activeElement;
+    const element = ref ? this.#element(ref) : reader.deepActiveElement(this.document);
     if (!element) throw new Error("No clipboard target.");
     if (
       (action === "paste" || action === "cut") &&
@@ -456,7 +456,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#clipboardPending.delete(token);
     if (!pending || pending.action !== action) throw new Error("Clipboard approval target expired; try again.");
     const expected = pending.state;
-    if (!expected.element.isConnected || (!pending.ref && this.document.activeElement !== expected.element))
+    if (!expected.element.isConnected || (!pending.ref && reader.deepActiveElement(this.document) !== expected.element))
       throw new Error("Clipboard focus changed; nothing was done.");
     const current = this.#clipboardState(expected.element);
     if (Object.keys(expected).some((key) => current[key] !== expected[key]))
@@ -512,10 +512,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   #frameElement(bcId) {
-    for (const el of this.document.querySelectorAll("iframe, frame")) {
-      if (reader.frameIdOf(el) === bcId) return el;
-    }
-    return null;
+    const el = BrowsingContext.get(bcId)?.embedderElement;
+    return el?.isConnected && el.ownerDocument === this.document ? el : null;
   }
 
   // why: Recordings must not scroll the user's page to locate a frame.
@@ -537,7 +535,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   #frameAt(x, y) {
-    const el = this.document.elementFromPoint(x, y);
+    const el = reader.hitAt(this.document, x, y);
     const bcId = reader.frameIdOf(el);
     if (!bcId) return null;
     const o = this.#contentOrigin(el);
@@ -595,7 +593,9 @@ export class ZenMcpChild extends JSWindowActorChild {
     }
     if (el.isContentEditable) {
       el.focus();
-      this.document.execCommand("selectAll");
+      // why: The selectAll command doesn't select inside a shadow root.
+      if (el.getRootNode() === this.document) this.document.execCommand("selectAll");
+      else win.getSelection().selectAllChildren(el);
       this.document.execCommand("insertText", false, String(value));
       return `${ref}: content set.`;
     }
@@ -620,8 +620,8 @@ export class ZenMcpChild extends JSWindowActorChild {
     const isFile = (node) => node?.localName === "input" && node.type === "file";
     if (isFile(el)) return el;
     if (isFile(el.control)) return el.control;
-    for (let node = el, depth = 0; node && depth < 5; node = node.parentElement, depth++) {
-      const found = node.querySelector?.('input[type="file"]');
+    for (let node = el, depth = 0; node?.nodeType === 1 && depth < 5; node = reader.composedParent(node), depth++) {
+      const found = reader.findShown(node, 'input[type="file"]');
       if (found) return found;
     }
     return null;
@@ -630,7 +630,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #askUser({ ref, x, y, wait = "done", timeout = 300 }) {
     this.#ask?.finish("replaced");
     const doc = this.document;
-    const target = ref ? this.#element(ref) : x != null ? doc.elementFromPoint(x, y) : null;
+    const target = ref ? this.#element(ref) : x != null ? reader.hitAt(doc, x, y) : null;
     if (target && !reader.fullyInViewport(target, this.contentWindow)) reader.scrollIntoView(target);
     const ask = outlineAndWait(this.#env, { target, wait, timeout });
     this.#ask = ask;
@@ -642,7 +642,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #highlights = null;
   #highlight(items) {
     const resolved = items.map(({ ref, x, y, label, number }) => {
-      const element = ref ? this.#element(ref) : this.document.elementFromPoint(x, y);
+      const element = ref ? this.#element(ref) : reader.hitAt(this.document, x, y);
       if (!element) throw new Error(`Nothing to highlight at (${Math.round(x)}, ${Math.round(y)}).`);
       return { element, label, number };
     });

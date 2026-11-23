@@ -90,15 +90,107 @@ export function isSecretField(el) {
   return SECRET_AUTOCOMPLETE.test(el.getAttribute("autocomplete") ?? "");
 }
 
+const tagOf = (el) => el.tagName?.toUpperCase();
+
+// why: Browser-internal roots (fields, details, video controls) and the copies in a use element aren't page content.
+function shadowRootOf(el) {
+  const root = el?.openOrClosedShadowRoot;
+  return root && !root.isUAWidget() && tagOf(el) !== "USE" ? root : null;
+}
+
+// why: A slot shows what is slotted into it; light children of a host show only through one.
+function shownChildren(el) {
+  const root = shadowRootOf(el);
+  if (root) return root.childNodes;
+  const slotted = el.localName === "slot" ? el.assignedNodes() : [];
+  return slotted.length ? slotted : el.childNodes;
+}
+
+export function composedParent(node) {
+  const slot = node.openOrClosedAssignedSlot;
+  if (slot && !slot.getRootNode().isUAWidget()) return slot;
+  return node.parentNode?.nodeType === 11 ? node.parentNode.host : node.parentNode;
+}
+
+export function closestShown(el, selector) {
+  for (let up = el; up; up = composedParent(up)) if (up.matches?.(selector)) return up;
+  return null;
+}
+
+// why: Finding them is a pass over the whole page, so the answer is kept until the running job ends.
+let crossings = new WeakMap();
+function crossingsIn(doc) {
+  if (crossings.has(doc)) return crossings.get(doc);
+  const found = new Set();
+  const add = (el) => {
+    for (let up = el; up && !found.has(up); up = composedParent(up)) found.add(up);
+  };
+  const scan = (root) => {
+    for (const el of root.querySelectorAll("*")) {
+      const inner = shadowRootOf(el);
+      if (inner) {
+        add(el);
+        scan(inner);
+      } else if (el.localName === "slot" && el.assignedNodes().length) add(el);
+    }
+  };
+  scan(doc);
+  crossings.set(doc, found);
+  Promise.resolve().then(() => (crossings = new WeakMap()));
+  return found;
+}
+
+// why: Native text and queries are right, and much faster, where nothing inside is in another tree.
+const crossesTrees = (el) => crossingsIn(el.ownerDocument).has(el);
+
+export function shownElements(root) {
+  const found = [];
+  const collect = (el) => {
+    if (!crossesTrees(el)) {
+      for (const inner of el.querySelectorAll("*")) found.push(inner);
+      return;
+    }
+    for (const child of shownChildren(el)) {
+      if (child.nodeType !== 1) continue;
+      found.push(child);
+      collect(child);
+    }
+  };
+  collect(root);
+  return found;
+}
+
+export const findShown = (el, selector) =>
+  crossesTrees(el) ? shownElements(el).find((inner) => inner.matches(selector)) : el.querySelector(selector);
+
+function allText(el) {
+  if (!crossesTrees(el)) return el.textContent;
+  return [...shownChildren(el)]
+    .map((node) =>
+      node.nodeType === 3 ? node.data : node.nodeType === 1 && !SKIP_TAGS.has(tagOf(node)) ? allText(node) : "",
+    )
+    .join("");
+}
+
+export function hitAt(doc, x, y) {
+  let hit = doc.elementFromPoint(x, y);
+  for (let root = shadowRootOf(hit); root; root = shadowRootOf(hit)) {
+    const inner = root.elementFromPoint(x, y);
+    if (!inner || inner.getRootNode() !== root) break;
+    hit = inner;
+  }
+  return hit;
+}
+
 export function submitsForm(el) {
-  const control = el?.closest?.("button, input");
+  const control = closestShown(el, "button, input");
   if (!control?.form) return false;
   return control.localName === "button" ? control.type === "submit" : ["submit", "image"].includes(control.type);
 }
 
-function deepActiveElement(doc) {
+export function deepActiveElement(doc) {
   let el = doc.activeElement;
-  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+  for (let inner = el; inner; inner = shadowRootOf(el)?.activeElement) el = inner;
   return el;
 }
 
@@ -157,37 +249,52 @@ function isRendered(el, options) {
   return parent?.nodeType === 1 && !hidesContent(parent) && isRendered(parent);
 }
 
-function contentRange(el) {
-  const range = el.ownerDocument.createRange();
-  range.selectNodeContents(el);
-  return range;
+function* contentRects(el) {
+  for (const node of shownChildren(el)) {
+    if (node.nodeType === 3) {
+      const range = el.ownerDocument.createRange();
+      range.selectNodeContents(node);
+      yield* range.getClientRects();
+    } else if (node.nodeType === 1) {
+      const rects = node.getClientRects();
+      if (rects.length) yield* rects;
+      else if (isBoxless(node)) yield* contentRects(node);
+    }
+  }
 }
 
 const lacksBox = ({ width, height }, el) => !width && !height && isBoxless(el);
 
 export function rectOf(el) {
   const rect = el.getBoundingClientRect();
-  return lacksBox(rect, el) ? contentRange(el).getBoundingClientRect() : rect;
+  if (!lacksBox(rect, el)) return rect;
+  const parts = [...contentRects(el)].filter((part) => part.width || part.height);
+  if (!parts.length) return rect;
+  const left = Math.min(...parts.map((part) => part.left));
+  const top = Math.min(...parts.map((part) => part.top));
+  const right = Math.max(...parts.map((part) => part.right));
+  const bottom = Math.max(...parts.map((part) => part.bottom));
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
 }
 
 // why: The middle of everything inside a boxless element can be a gap between its parts.
 export function clickRectOf(el) {
   const rect = el.getBoundingClientRect();
   if (!lacksBox(rect, el)) return rect;
-  return [...contentRange(el).getClientRects()].find((part) => part.width && part.height) ?? rect;
+  return [...contentRects(el)].find((part) => part.width && part.height) ?? rect;
 }
 
 export function scrollIntoView(el, options) {
   let target = el;
   if (lacksBox(el.getBoundingClientRect(), el)) {
-    target = [...el.querySelectorAll("*")].find((inner) => inner.getClientRects().length);
-    for (target ??= el; isBoxless(target) && target.parentElement;) target = target.parentElement;
+    target = shownElements(el).find((inner) => inner.getClientRects().length);
+    for (target ??= el; isBoxless(target) && composedParent(target)?.nodeType === 1;) target = composedParent(target);
   }
   target.scrollIntoView({ block: "center", behavior: "instant", ...options });
 }
 
 function showsText(el, node) {
-  if (el.openOrClosedShadowRoot && !node.openOrClosedAssignedSlot) return false;
+  if (el.openOrClosedShadowRoot && !shadowRootOf(el) && !node.openOrClosedAssignedSlot) return false;
   return !hidesContent(el) && isRendered(el, { visibilityProperty: true });
 }
 
@@ -196,7 +303,7 @@ function showsText(el, node) {
 function textItems(el, isNative) {
   const style = styleOf(el);
   const items = [];
-  for (const child of el.childNodes) {
+  for (const child of shownChildren(el)) {
     if (child.nodeType === 3 && showsText(el, child))
       items.push(style.whiteSpace.startsWith("pre") ? child.data : child.data.replace(/\s+/g, " "));
     if (child.nodeType !== 1) continue;
@@ -206,7 +313,7 @@ function textItems(el, isNative) {
     if (tag === "BR" || SKIP_TAGS.has(tag) || frameIdOf(child)) continue;
     const { display } = styleOf(child);
     const inline = /^(inline|contents|ruby)/.test(display);
-    const inner = !inline && isNative?.(child) ? [child.innerText] : textItems(child, isNative);
+    const inner = !inline && isNative?.(child) ? [shownText(child)] : textItems(child, isNative);
     const gap = tag === "P" ? 2 : 1;
     if (inline) items.push(...inner);
     else if (display === "table-cell") items.push(...inner, "\t");
@@ -230,25 +337,29 @@ function joinItems(items) {
 }
 
 // why: Hidden text stays out, so for an element that really shows nothing both parts are empty.
-export const shownText = (el) =>
-  (el.innerText ?? el.textContent) || (clean(el.textContent) && joinItems(textItems(el)));
+export function shownText(el) {
+  if (crossesTrees(el)) return joinItems(textItems(el, (inner) => !crossesTrees(inner)));
+  return (el.innerText ?? el.textContent) || (clean(el.textContent) && joinItems(textItems(el)));
+}
 
 export function pageText(root) {
   const win = root.ownerDocument.defaultView;
-  const skipped = [root, ...root.querySelectorAll("*")].filter(
-    (el) => win.getComputedStyle(el).contentVisibility === "auto" && !el.innerText && clean(el.textContent),
+  const skipped = [root, ...shownElements(root)].filter(
+    (el) => win.getComputedStyle(el).contentVisibility === "auto" && !el.innerText && clean(allText(el)),
   );
   if (!skipped.length) return shownText(root);
-  return joinItems(textItems(root, (el) => !skipped.some((section) => el.contains(section) || section.contains(el))));
+  const isNative = (el) =>
+    !crossesTrees(el) && !skipped.some((section) => el.contains(section) || section.contains(el));
+  return joinItems(textItems(root, isNative));
 }
 
-export function accessibleName(el, doc, fromContent = NAME_FROM_CONTENT.has(roleOf(el))) {
+export function accessibleName(el, fromContent = NAME_FROM_CONTENT.has(roleOf(el))) {
   const labelledby = el.getAttribute("aria-labelledby");
   if (labelledby) {
     const text = labelledby
       .split(/\s+/)
       .map((id) => {
-        const target = doc.getElementById(id);
+        const target = el.getRootNode().getElementById?.(id);
         return target ? shownText(target) : "";
       })
       .join(" ");
@@ -272,7 +383,7 @@ export function accessibleName(el, doc, fromContent = NAME_FROM_CONTENT.has(role
   if (fromContent) {
     const text = clean(shownText(el));
     if (text) return truncate(text, MAX_NAME);
-    const inner = el.querySelector("img[alt], svg title, [aria-label]");
+    const inner = findShown(el, "img[alt], svg title, [aria-label]");
     const innerName = inner?.getAttribute("alt") || inner?.getAttribute("aria-label") || inner?.textContent;
     if (innerName && clean(innerName)) return truncate(clean(innerName), MAX_NAME);
   }
@@ -295,7 +406,7 @@ export function isVisible(el) {
   if (el.tagName?.toUpperCase() === "INPUT" && el.type === "hidden") return false;
   // why: Visibility must include ancestor and content-visibility checks, beyond the element's own display value.
   if (!el.checkVisibility || el.checkVisibility({ visibilityProperty: true })) return true;
-  return isRendered(el, { visibilityProperty: true }) && contentRange(el).getClientRects().length > 0;
+  return isRendered(el, { visibilityProperty: true }) && !contentRects(el).next().done;
 }
 
 export function inViewport(el, win) {
@@ -337,8 +448,6 @@ const FULL_MATCH = 10;
 const MAX_HIT_NAME = 60;
 const NATIVELY_CLICKABLE = new Set(["VIDEO", "AUDIO", "EMBED", "OBJECT"]);
 
-const tagOf = (el) => el.tagName?.toUpperCase();
-const composedParent = (node) => node.assignedSlot || node.parentNode || node.getRootNode?.().host;
 const isControl = (el) => INTERACTIVE_ROLES.has(roleOf(el));
 const isField = (el) => FIELD_ROLES.has(roleOf(el)) || (tagOf(el) === "INPUT" && ["file", "color"].includes(el.type));
 const isSkipped = (el, clickable) => SKIP_TAGS.has(tagOf(el)) && !(clickable && tagOf(el) === "SVG");
@@ -369,12 +478,12 @@ export class PageReader {
   }
 
   #pointer(el) {
-    return !!el && this.env.window().getComputedStyle(el)?.cursor?.endsWith("pointer") === true;
+    return el?.nodeType === 1 && this.env.window().getComputedStyle(el)?.cursor?.endsWith("pointer") === true;
   }
 
   // why: The cursor is inherited, so only the element where it starts says what is clickable.
   #startsPointer(el) {
-    return this.#pointer(el) && !this.#pointer(el.parentElement ?? el.parentNode?.host);
+    return this.#pointer(el) && !this.#pointer(composedParent(el));
   }
 
   // why: Only a short clickable without parts of its own can be read and clicked as one line.
@@ -383,16 +492,16 @@ export class PageReader {
       if (tagOf(el) === "SVG") return true;
       const shown = shownText(el).trim();
       if (shown.length > MAX_NAME || /[\n\t]/.test(shown)) return false;
-      const all = clean(el.textContent);
-      return ![...el.querySelectorAll("*")].some((part) => {
+      const all = clean(allText(el));
+      return !shownElements(el).some((part) => {
         const role = roleOf(part);
-        return (role && role !== "img") || frameIdOf(part) || (this.#listens(part) && clean(part.textContent) !== all);
+        return (role && role !== "img") || frameIdOf(part) || (this.#listens(part) && clean(allText(part)) !== all);
       });
     });
   }
 
   #insideControl(el) {
-    for (let up = el.parentElement; up && tagOf(up) !== "BODY"; up = up.parentElement)
+    for (let up = composedParent(el); up?.nodeType === 1 && tagOf(up) !== "BODY"; up = composedParent(up))
       if (isControl(up) || (this.#startsPointer(up) && this.#whole(up))) return true;
     return false;
   }
@@ -406,14 +515,19 @@ export class PageReader {
     if (tagOf(el) === "LABEL" && el.control && isVisible(el.control)) return false;
     const pointer = this.#startsPointer(el);
     if ((!pointer && !this.#listens(el)) || this.#insideControl(el)) return false;
-    if (pointer) return true;
+    if (pointer) return !this.#isOneControl(el);
     // why: Frameworks put delegated listeners on wrappers, which are not themselves a target.
-    if (clean(el.textContent).length > MAX_NAME) return false;
+    if (clean(allText(el)).length > MAX_NAME) return false;
     const { width, height } = rectOf(el);
     if (!width || !height) return false;
-    return ![...el.querySelectorAll("*")].some(
-      (inner) => isControl(inner) || this.#startsPointer(inner) || this.#listens(inner),
-    );
+    return !shownElements(el).some((inner) => isControl(inner) || this.#startsPointer(inner) || this.#listens(inner));
+  }
+
+  // why: Components often give their host the pointer of the control they show.
+  #isOneControl(el) {
+    if (!shadowRootOf(el)) return false;
+    const all = clean(allText(el));
+    return shownElements(el).some((inner) => isControl(inner) && isVisible(inner) && clean(allText(inner)) === all);
   }
 
   // why: A wrong name makes an agent change the wrong setting, so any doubt leaves the field unnamed.
@@ -422,20 +536,20 @@ export class PageReader {
     const row = cell?.parentElement;
     if (!row || tagOf(row) !== "TR") return "";
     const { field, cells } = this.#remember(this.#rowLabels, row, () => {
-      const fields = [...row.querySelectorAll(FIELD_SELECTOR)].filter((inner) => isField(inner) && isVisible(inner));
+      const fields = shownElements(row).filter(
+        (inner) => inner.matches(FIELD_SELECTOR) && isField(inner) && isVisible(inner),
+      );
       return {
         field: fields.length === 1 && fields[0],
         cells: [...row.children].filter((child) => isVisible(child)),
       };
     });
-    if (field !== el || cell.querySelector(LAYOUT_SELECTOR)) return "";
+    if (field !== el || findShown(cell, LAYOUT_SELECTOR)) return "";
     const labels = cells.slice(0, cells.indexOf(cell)).filter((before) => tokens(shownText(before)).length);
     if (labels.length !== 1) return "";
     const text = shownText(labels[0]).trim();
     if (text.length > MAX_NAME || /[\n\t]/.test(text)) return "";
-    const holdsControl = [...labels[0].querySelectorAll("*")].some(
-      (inner) => isControl(inner) && clean(shownText(inner)),
-    );
+    const holdsControl = shownElements(labels[0]).some((inner) => isControl(inner) && clean(shownText(inner)));
     return holdsControl ? "" : clean(text);
   }
 
@@ -444,7 +558,7 @@ export class PageReader {
     if (clean(shownText(el))) return "";
     const texts = [];
     const collect = (node, own) => {
-      for (const child of node.childNodes) {
+      for (const child of shownChildren(node)) {
         if (texts.length > 1) return;
         if (child.nodeType === 3 && clean(child.data)) texts.push(own ? clean(child.data) : "");
         else if (child.nodeType === 1 && !SKIP_TAGS.has(tagOf(child)) && !frameIdOf(child))
@@ -457,7 +571,7 @@ export class PageReader {
 
   // why: An inferred name is marked, because the page declares no relation between the text and the element.
   #name(el, clickable, fromContent) {
-    const declared = accessibleName(el, this.env.document(), fromContent);
+    const declared = accessibleName(el, fromContent);
     if (declared) return { name: declared, mark: "" };
     const fromRow = isField(el) && this.#rowLabel(el);
     if (fromRow) return { name: fromRow, mark: "(from row)" };
@@ -467,7 +581,9 @@ export class PageReader {
 
   targets(selector) {
     this.#startRead();
-    return [...this.env.document().querySelectorAll("*")].filter((el) => el.matches(selector) || this.#clickable(el));
+    return shownElements(this.env.document().documentElement).filter(
+      (el) => el.matches(selector) || this.#clickable(el),
+    );
   }
 
   readPage({ filter = "all", depth = Infinity, ref_id, max_chars = MAX_TREE, bare = false, loading = false }) {
@@ -493,7 +609,7 @@ export class PageReader {
       lines.push(text);
     };
 
-    const walk = (el, indent, level) => {
+    const walk = (el, indent, level, named = false) => {
       // why: Below the depth limit, only whether there is anything to read matters.
       if (truncated || (level > depth && leftOut)) return;
       if (!isVisible(el)) return;
@@ -530,12 +646,12 @@ export class PageReader {
           return;
         }
       }
-      for (const child of el.childNodes) {
-        if (child.nodeType === 1) walk(child, childIndent, level + 1);
+      const ownNamed = printed ? NAME_FROM_CONTENT.has(role) : named && tagOf(el) === "SLOT";
+      for (const child of shownChildren(el)) {
+        if (child.nodeType === 1) walk(child, childIndent, level + 1, ownNamed);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          if (t && !(printed && NAME_FROM_CONTENT.has(role)) && showsText(el, child))
-            push(level, childIndent, `text "${t}"`);
+          if (t && !ownNamed && showsText(el, child)) push(level, childIndent, `text "${t}"`);
         }
       }
     };
@@ -556,9 +672,7 @@ export class PageReader {
   }
 
   #hasTargets(el) {
-    return (
-      !!el.querySelector(CONTROL_SELECTOR) || [...el.querySelectorAll("*")].some((inner) => this.#clickable(inner))
-    );
+    return !!findShown(el, CONTROL_SELECTOR) || shownElements(el).some((inner) => this.#clickable(inner));
   }
 
   describeElement(el, role, { clickable = false, nameFromContent } = {}) {
@@ -611,7 +725,7 @@ export class PageReader {
       let text = "";
       let own = false;
       let covered = false;
-      for (const child of el.childNodes) {
+      for (const child of shownChildren(el)) {
         if (child.nodeType === 3 && showsText(el, child)) {
           text += child.data;
           own ||= !!clean(child.data);
@@ -623,7 +737,7 @@ export class PageReader {
         }
         let inner;
         if (isControl(child) || (this.#clickable(child) && this.#whole(child))) {
-          inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? child.textContent : "";
+          inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? allText(child) : "";
           if (holds(inner)) {
             // why: The name may be a label or cut off, and textContent includes what isn't shown.
             const shown = clean(shownText(child));
@@ -664,7 +778,7 @@ export class PageReader {
       if (inViewport(el, win)) score += 0.1;
       if (score > (results.get(el)?.score ?? 0)) results.set(el, { el, score, ...details });
     };
-    const all = doc.body?.querySelectorAll("*") ?? [];
+    const all = doc.body ? shownElements(doc.body) : [];
     for (const el of all) {
       if (el.ownerSVGElement) continue;
       const role = roleOf(el);
@@ -697,23 +811,26 @@ export class PageReader {
       }));
   }
 
+  #matching(selector) {
+    const { documentElement } = this.env.document();
+    return [documentElement, ...shownElements(documentElement)].filter((el) => el.matches(selector));
+  }
+
   check({ text, selector }) {
     const doc = this.env.document();
     const has = (el) => !text || normalize(pageText(el)).includes(normalize(text));
-    if (selector) {
-      return [...doc.querySelectorAll(selector)].some((el) => isVisible(el) && has(el));
-    }
+    if (selector) return this.#matching(selector).some((el) => isVisible(el) && has(el));
     return !!doc.body && has(doc.body);
   }
 
   sample({ selector }) {
-    const el = [...this.env.document().querySelectorAll(selector)].find((el) => isVisible(el));
+    const el = this.#matching(selector).find((el) => isVisible(el));
     return el ? truncate(clean(shownText(el)), 500) : null;
   }
 
   risk({ ref, x, y, focused = false, enter = false, space = false }) {
     const doc = this.env.document();
-    const el = focused ? deepActiveElement(doc) : ref ? this.env.element(ref) : doc.elementFromPoint(x, y);
+    const el = focused ? deepActiveElement(doc) : ref ? this.env.element(ref) : hitAt(doc, x, y);
     if (!focused) return { submit: submitsForm(el), secret: isSecretField(el) };
     const textField =
       el?.localName === "input" &&
@@ -729,7 +846,7 @@ export class PageReader {
     this.#startRead();
     let listens = false;
     for (let up = el; up && tagOf(up) !== "BODY" && tagOf(up) !== "HTML"; up = composedParent(up)) {
-      if (up.nodeType !== 1) continue;
+      if (up.nodeType !== 1) break;
       const target = tagOf(up) === "LABEL" && up.control ? up.control : up;
       const clickable = !isControl(target) && this.#clickable(target);
       if (!clickable && !isControl(target)) {
@@ -748,10 +865,10 @@ export class PageReader {
 
   describeTarget({ ref, x, y }) {
     const doc = this.env.document();
-    const el = ref ? this.env.element(ref) : doc.elementFromPoint(x, y);
+    const el = ref ? this.env.element(ref) : hitAt(doc, x, y);
     if (!el) return this.env.L("an empty spot", "boş bir yer");
     const role = roleOf(el) || el.localName;
-    const name = accessibleName(el, doc) || truncate(clean(el.innerText ?? ""), 40);
+    const name = accessibleName(el) || truncate(clean(el.innerText ?? ""), 40);
     return name ? `${role} "${truncate(name, 60)}"` : role;
   }
 }
