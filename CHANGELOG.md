@@ -18,6 +18,9 @@ change tool names, parameters or results.
 - The server instructions, `hand_to_user` and the skill tell agents to number several elements
   with `highlight` before handing over; `hand_to_user` and the skill also say not to name the
   card's buttons, whose language agents don't know.
+- `read_page`, `find` and click results name a form field without a name of its own after the
+  label in its table row, marked `(from row)`, and an icon control or clickable after its own
+  hidden text, marked `(hidden text)`.
 
 ### Fixed
 

@@ -349,7 +349,7 @@ tool(
     "Get the page as an accessibility-style tree: roles, names, values and states, each element with a ref (e.g. ref_12c) usable in computer, form_input and read_page.",
     "Cheaper and more precise than a screenshot for finding and operating controls. Refs stay valid until the page navigates.",
     "Iframes (cross-origin too) are included under [iframe url]; their refs work with every tool.",
-    '"clickable" marks an element without a control role that has a pointer cursor or its own click listener. filter: "interactive" lists only controls (buttons, links, inputs...) and clickables as a flat list; default "all" includes headings, landmarks and text.',
+    '"clickable" marks an element without a control role that has a pointer cursor or its own click listener. A name marked (from row) or (hidden text) is inferred from the table row or from text the page hides. filter: "interactive" lists only controls (buttons, links, inputs...) and clickables as a flat list; default "all" includes headings, landmarks and text.',
   ].join(" "),
   {
     tabId,

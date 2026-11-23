@@ -56,8 +56,9 @@ background monitor if you have one. Don't open the same site elsewhere to get ar
   This view is capped at 8,000 characters and does not set a diff baseline.
 - `read_page` (`filter: "interactive"` for controls only) and `find` give refs such as `ref_12c`
   that every tool accepts. They are cheaper and more exact than screenshots. `clickable` marks an
-  element without a control role that reacts to clicks; when `read_page` shows text without a
-  ref, `find` with that text returns one.
+  element without a control role that reacts to clicks; a name marked `(from row)` or
+  `(hidden text)` is inferred, so check it before changing something important. When
+  `read_page` shows text without a ref, `find` with that text returns one.
 - For repeated reads of the same page, pass `diff: true`, then `since` with the snapshot ID from
   your previous read: you get only what changed.
 - Take a screenshot for visual questions (layout, images, "does it look right"); pass
