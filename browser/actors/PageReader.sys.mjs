@@ -819,8 +819,15 @@ export class PageReader {
   }
 
   #matching(selector) {
-    const { documentElement } = this.env.document();
-    return [documentElement, ...shownElements(documentElement)].filter((el) => el.matches(selector));
+    const doc = this.env.document();
+    const { documentElement } = doc;
+    if (!documentElement || !crossesTrees(documentElement)) return [...doc.querySelectorAll(selector)];
+    const shown = [documentElement, ...shownElements(documentElement)];
+    // why: A query of the root gives :scope its meaning, which matches() can't.
+    const matches = new Set(
+      [...new Set(shown.map((el) => el.getRootNode()))].flatMap((root) => [...root.querySelectorAll(selector)]),
+    );
+    return shown.filter((el) => matches.has(el));
   }
 
   check({ text, selector }) {
