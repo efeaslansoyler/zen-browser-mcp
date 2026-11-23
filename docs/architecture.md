@@ -211,10 +211,13 @@ when the selected instance has no queued picks.
   server allows that much longer for the answer), then return `user_control`. A step that reaches
   the tab later, such as in a batch, is refused. `request_tab`, `tab_work`, `downloads` and watch
   controls don't wait. Meanwhile `describeTab` leaves out title and URL, watches skip their reads, a
-  video recording ends, and `NetworkLog` records nothing (network rules still apply). On give-back,
+  video recording ends, and `NetworkLog` records nothing (network rules still apply). Recorders that
+  run across its start have a `cut(tabId)`: a request in flight keeps only what was known before, without
+  a body, HAR drops it, and a watch discards the read it is waiting for. On give-back,
   a waiting call's result carries the note; other members get it, and sessions that were interrupted
   or told `user_control` are woken, through the inbox. Each member then owes a read: acting tools are
-  refused until one of its earlier calls read or navigated the tab. State lives in `zenMcpState`, so a
+  refused until one of its earlier calls read or navigated the tab (screenshots, scrolling and waiting
+  are free, hovering isn't; a call that a takeover cancelled doesn't count). State lives in `zenMcpState`, so a
   reload keeps it; `TabAccess.clear` (tab closed, taken back, last member gone) ends it. Page
   JavaScript that was already running can't be stopped, only its result is dropped.
 - Calls on one tab run in order; calls on different tabs run side by side, and calls without a

@@ -2,6 +2,9 @@
 export class Cancellation {
   #error = null;
   #listeners = new Set();
+  get cancelled() {
+    return !!this.#error;
+  }
   check() {
     if (this.#error) throw this.#error;
   }

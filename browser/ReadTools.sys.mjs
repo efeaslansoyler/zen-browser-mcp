@@ -155,11 +155,13 @@ export function readTools(ctx) {
       if (spec.hold) {
         if (!ctx.access.shared(tabId) || !ctx.findTab(tabId)) throw new Error(`Tab ${tabId} is not an agent tab.`);
         const hold = ctx.holdOf(tabId);
-        if (!hold || hold.session === session) throw new Error(`Nobody else holds tab ${tabId} now; go ahead.`);
+        const user = ctx.takenOver(tabId);
+        if (!user && (!hold || hold.session === session))
+          throw new Error(`Nobody else holds tab ${tabId} now; go ahead.`);
         return text({
           ...Watches.summary(watches.start(session, tabId, null, spec)),
-          hold: ctx.describeHold(tabId, hold, session),
-          next: "The events file gets a released line when the hold ends. Do other work meanwhile.",
+          hold: user ? { tabId, by: "the user" } : ctx.describeHold(tabId, hold, session),
+          next: "The events file gets a released line when the tab is free. Do other work meanwhile.",
         });
       }
       const browser = browserFor(call, tabId);

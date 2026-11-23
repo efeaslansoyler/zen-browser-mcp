@@ -39,6 +39,8 @@ function harness({ now = 0 } = {}) {
   };
   const released = [];
   const ended = [];
+  const cuts = [];
+  const recorder = (name) => ({ cut: (id) => cuts.push([name, id]) });
   const ctx = bridgeContext({
     now: () => now,
     logActivity() {},
@@ -62,6 +64,9 @@ function harness({ now = 0 } = {}) {
       return browsers.get(id);
     },
     releaseInputs: (browser) => released.push(browser.browserId ?? browser),
+    network: recorder("network"),
+    har: { ...recorder("har"), dropTab() {} },
+    watches: recorder("watches"),
     video: { endTab: (id, reason) => ended.push([id, reason]), dropTab() {} },
     setTimeout: (fn, ms) => {
       const timer = { fn, at: now + ms };
@@ -114,6 +119,7 @@ function harness({ now = 0 } = {}) {
     pushable,
     released,
     ended,
+    cuts,
     browser: (id) => browsers.get(id),
     finish: async (name) => {
       running.get(name)();
@@ -141,6 +147,10 @@ test("taking over interrupts the calls in that tab only and releases held input"
   assert.match(result.text, /user took over tab 1.*may have partly happened/s);
   assert(h.released.includes(1));
   assert.deepEqual(h.ended, [[1, "the user took over"]]);
+  assert.deepEqual(
+    h.cuts,
+    ["network", "har", "watches"].map((name) => [name, 1]),
+  );
   await h.finish("elsewhere");
   assert.equal((await there).text, "elsewhere");
 });
@@ -266,6 +276,7 @@ test("acting needs a read after the tab was given back, per session", async () =
   h.ctx.giveBack(h.browser(1));
   for (const [tool, args] of [
     ["computer", { action: "left_click" }],
+    ["computer", { action: "hover" }],
     ["javascript_tool", {}],
   ])
     assert.match((await h.ask("A", tool, { tabId: 1, ...args })).text, /read it again/i, tool);
@@ -281,6 +292,41 @@ test("acting needs a read after the tab was given back, per session", async () =
   assert.match((await h.ask("B", "computer", { tabId: 1, action: "left_click" })).text, /read it again/i);
   assert.equal((await h.ask("B", "navigate", { tabId: 1, url: "reload" })).ok, true);
   assert.equal((await h.ask("B", "computer", { tabId: 1, action: "left_click" })).text, "computer");
+});
+
+test("a call that the takeover interrupted doesn't pay the read, however late it returns", async () => {
+  const h = harness();
+  let finish;
+  h.ctx.tools.downloads = () => new Promise((resolve) => (finish = () => resolve([{ type: "text", text: "late" }])));
+  const batch = h.ask("A", "browser_batch", {
+    actions: [
+      { name: "read_page", input: { tabId: 1 } },
+      { name: "downloads", input: { tabId: 1 } },
+    ],
+  });
+  await ticks();
+  h.ctx.takeOver(h.browser(1));
+  h.ctx.giveBack(h.browser(1));
+  finish();
+  await batch;
+  assert.match((await h.ask("A", "computer", { tabId: 1, action: "left_click" })).text, /read it again/i);
+});
+
+test("a hold watch can start while the user has the tab", async () => {
+  const h = harness();
+  const { readTools } = await import("../browser/ReadTools.sys.mjs");
+  const started = [];
+  const { watch } = readTools(
+    Object.assign(Object.create(h.ctx), {
+      Watches,
+      watches: { start: (...args) => started.push(args) && { id: 1, spec: {}, events: "file", until: 0, started: 0 } },
+    }),
+  );
+  assert.throws(() => watch({ tabId: 1, hold: true }, { session: "A" }), /Nobody else holds/);
+  h.ctx.takeOver(h.browser(1));
+  const [{ text }] = watch({ tabId: 1, hold: true }, { session: "A" });
+  assert.match(text, /"by":"the user"/);
+  assert.equal(started.length, 1);
 });
 
 test("a refused click still carries the note", async () => {
@@ -376,4 +422,83 @@ test("a watch reads nothing while the user has the tab", async () => {
   timers.shift()();
   await ticks();
   assert.equal(reads, 1);
+});
+
+test("a watch drops what it read when the user takes over meanwhile", async () => {
+  for (const spec of [{ text: "x" }, { selector: "p", change: true }]) {
+    const lines = [];
+    const timers = [];
+    const answers = [];
+    const read = () => new Promise((resolve) => answers.push(resolve));
+    const watches = new Watches({
+      events: { path: () => "file", append: (_file, line) => lines.push(line.event) },
+      owned: () => ({ currentURI: { spec: "https://a.test/" } }),
+      paused: () => false,
+      assertSite() {},
+      check: read,
+      sample: read,
+      setTimeout: (fn) => timers.push(fn),
+      clearTimeout() {},
+    });
+    watches.start("A", 1, {}, spec);
+    if (spec.change) {
+      timers.shift()();
+      answers.shift()("before");
+      await ticks();
+    }
+    timers.shift()();
+    watches.cut(1);
+    answers.shift()(spec.change ? "typed" : true);
+    await ticks();
+    assert.deepEqual(lines, ["started"]);
+    timers.shift()();
+    answers.shift()(spec.change ? "after" : true);
+    await ticks();
+    assert.deepEqual(lines.slice(1), [spec.change ? "changed" : "matched"]);
+  }
+});
+
+test("a watch doesn't name a site the user visits meanwhile", async () => {
+  const lines = [];
+  const timers = [];
+  const watches = new Watches({
+    events: { path: () => "file", append: (_file, line) => lines.push(line.event) },
+    owned: () => ({ currentURI: { spec: "https://bank.test/" } }),
+    paused: () => true,
+    assertSite() {
+      throw new Error("bank.test is blocked");
+    },
+    setTimeout: (fn) => timers.push(fn),
+    clearTimeout() {},
+  });
+  watches.start("A", 1, null, { text: "x" });
+  timers.shift()();
+  await ticks();
+  assert.deepEqual(lines, ["started"]);
+});
+
+test("a HAR capture leaves out requests that were running when the user took over", async () => {
+  globalThis.Ci ??= {};
+  const { HarCapture } = await import("../browser/HarCapture.sys.mjs");
+  const har = new HarCapture({ allowed: () => true, setTimeout() {}, clearTimeout() {} });
+  har.start(1, "A");
+  const capture = har.owned(1, "A");
+  const channel = (channelId) => ({
+    channelId,
+    requestMethod: "GET",
+    URI: { spec: "https://a.test/x", host: "a.test" },
+    responseStatus: 200,
+    getResponseHeader: () => {
+      throw new Error();
+    },
+    QueryInterface: () => ({}),
+  });
+  har.observe(channel(1), 1, "fetch", "http-on-modify-request");
+  har.observe(channel(1), 1, "fetch", "http-on-stop-request");
+  har.observe(channel(2), 1, "fetch", "http-on-modify-request");
+  har.cut(1);
+  har.observe(channel(2), 1, "fetch", "http-on-examine-response");
+  har.observe(channel(2), 1, "fetch", "http-on-stop-request");
+  assert.deepEqual([...capture.rows.keys()], ["1:1"]);
+  assert.equal(har.status(capture).omitted, 1);
 });

@@ -279,7 +279,8 @@ export function toolRunner(ctx) {
           ctx.setLastAgent(call.agent);
           try {
             const content = await runTool(call, tool, args);
-            for (const tabId of call.fresh) ctx.wasRead(tabId, session);
+            // why: A takeover may have begun and ended since a cancelled call read the tab.
+            if (!call.cancelled) for (const tabId of call.fresh) ctx.wasRead(tabId, session);
             content.push(...meanwhile(call));
             const sent = ctx.inbox?.take(session) ?? [];
             if (sent.length) content.push({ type: "text", text: ctx.inboxText(sent) });

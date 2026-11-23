@@ -5,6 +5,7 @@ export class TakenOver extends Error {}
 
 const FREE_TOOLS = new Set(["request_tab", "tab_work", "downloads"]);
 const ACTING_TOOLS = new Set(["computer", "form_input", "file_upload", "javascript_tool", "clipboard"]);
+const UNREAD_ACTIONS = new Set(["screenshot", "scroll", "scroll_to", "wait"]);
 
 export function takeover(ctx) {
   // why: A reload must not let agents back into a page where the user may be typing a password.
@@ -68,6 +69,7 @@ export function takeover(ctx) {
     }
     ctx.releaseInputs(id);
     ctx.video?.endTab(id, "the user took over");
+    for (const recorder of [ctx.network, ctx.har, ctx.watches]) recorder?.cut(id);
     ctx.island?.refresh();
     return true;
   }
@@ -138,7 +140,7 @@ export function takeover(ctx) {
 
   function assertRead(call, tabId, tool, args) {
     if (!unread.get(tabId)?.has(call.session) || !ACTING_TOOLS.has(tool)) return;
-    if (ctx.policy.READS.has(ctx.policy.operationOf(tool, args))) return;
+    if (tool === "computer" && UNREAD_ACTIONS.has(args.action)) return;
     throw new Error(
       `The user had control of tab ${tabId} and gave it back; read it again first (read_page, find, get_page_text or a screenshot, in a call before this one). Nothing was done.`,
     );
