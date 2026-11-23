@@ -87,7 +87,6 @@ function harness({ mode = "auto", custom = null, risk = {} } = {}) {
     hostOf: (b) => b.currentURI.host,
     assertSiteAccess() {},
     holdsButtons: () => false,
-    longRef: (x) => x,
     frameOf: () => "frame",
     heldFrame: () => null,
     focusedFrame: async () => "focused-frame",

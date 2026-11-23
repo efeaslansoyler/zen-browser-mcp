@@ -27,6 +27,9 @@ change tool names, parameters or results.
 
 - Coordinates in a `browser_batch` refer to the screenshot from before the batch, as documented,
   and another session's screenshot in a shared tab no longer changes how yours are read.
+- A ref from before a navigation or a bridge reload, or from another tab, is refused instead of
+  resolving to another element. Refs look like `ref_12c`: a number for the document and letters
+  for the element.
 - `find`, `wait_for` text and select options match capital I: "WIFI" on a page now equals "wifi".
 
 ## [0.2.0] - 2026-11-21

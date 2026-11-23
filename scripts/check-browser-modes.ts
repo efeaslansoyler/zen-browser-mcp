@@ -168,7 +168,7 @@ if (process.argv[2] === "--serve") {
       text: "document.querySelector('button').textContent = 'Submit changed fixture'",
     });
     const found = await tool(autonomous, "find", { tabId: tab, query: "Submit changed fixture" });
-    const ref = (found[0] as { text: string }).text.match(/ref_\d+/)?.[0];
+    const ref = (found[0] as { text: string }).text.match(/ref_\w+/)?.[0];
     assert(ref, (found[0] as { text: string }).text);
     await tool(autonomous, "computer", { tabId: tab, action: "left_click", ref });
     await until(async () => {

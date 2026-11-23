@@ -24,9 +24,7 @@ function harness(run) {
     browserFor: () => browser,
     framesOf: () => frames,
     frameOf: () => child,
-    longRef: (x) => x,
-    shortRefs: (x) => x,
-    text: (x) => x,
+    text: (x) => JSON.stringify(x),
     permissionContext: () => top.currentWindowGlobal,
     samePermissionContext: (a, b) => a === b,
     readContext: document,
@@ -62,7 +60,7 @@ function harness(run) {
 test("inspection tools route iframe refs only to their frame", async () => {
   const h = harness();
   for (const name of ["react", "accessibility"]) {
-    const result = JSON.parse(await h.tools[name]({ tabId: 1, ref: "ref_1_f2", action: "inspect" }));
+    const result = JSON.parse(await h.tools[name]({ tabId: 1, ref: "ref_2b", action: "inspect" }));
     assert.equal(result.frames.length, 1);
     assert.equal(result.frames[0].frame, 2);
   }

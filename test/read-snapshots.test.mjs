@@ -199,8 +199,6 @@ function parentHarness() {
     browserFor: () => browser,
     framesOf: () => [browser.browsingContext],
     frameOf: () => browser.browsingContext,
-    longRef: (value) => value,
-    shortRefs: (value) => value,
     expandFrames: async (_, value) => value,
     text: (value) => [{ type: "text", text: value }],
     query: async (_, name) =>

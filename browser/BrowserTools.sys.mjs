@@ -178,7 +178,7 @@ export function browserTools(ctx) {
         const result = await tools[name]({ ...args, ref, action: args.computerAction }, call);
         return result.map((item) =>
           item.type === "text"
-            ? { ...item, text: item.text.replace(/\bref_\d+(?:_f\d+)?\b/g, (ref) => prefix + ref) }
+            ? { ...item, text: item.text.replace(/\bref_\d+[a-z]+\b/g, (ref) => prefix + ref) }
             : item,
         );
       } finally {

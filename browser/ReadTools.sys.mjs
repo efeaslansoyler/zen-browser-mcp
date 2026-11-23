@@ -12,7 +12,6 @@ export function readTools(ctx) {
     expandFrames,
     frameOf,
     framesOf,
-    longRef,
     network,
     operationSleep,
     permissionContext,
@@ -21,7 +20,6 @@ export function readTools(ctx) {
     readOutput,
     samePermissionContext,
     sameReadContext,
-    shortRefs,
     text,
     watches,
   } = ctx;
@@ -52,11 +50,11 @@ export function readTools(ctx) {
       let { value } = await query(
         browser,
         "read_page",
-        { ...opts, ref_id: longRef(ref_id), bare: frame !== browser.browsingContext },
+        { ...opts, ref_id, bare: frame !== browser.browsingContext },
         30000,
         frame,
       );
-      value = shortRefs(await expandFrames(browser, value, opts));
+      value = await expandFrames(browser, value, opts);
       if (value.length > max_chars) {
         const end = value.lastIndexOf("\n", max_chars);
         value =
@@ -65,7 +63,7 @@ export function readTools(ctx) {
       }
       return readOutput(
         browser,
-        ["read_page", filter || "all", depth ?? 30, longRef(ref_id) || null, max_chars],
+        ["read_page", filter || "all", depth ?? 30, ref_id || null, max_chars],
         context,
         value,
         diff,
@@ -87,12 +85,10 @@ export function readTools(ctx) {
       if (!results.length) return text(`Nothing matches "${q}". Look at the page structure with read_page.`);
       results.sort((a, b) => b.score - a.score);
       return text(
-        shortRefs(
-          results
-            .slice(0, 20)
-            .map((r) => r.line)
-            .join("\n"),
-        ),
+        results
+          .slice(0, 20)
+          .map((r) => r.line)
+          .join("\n"),
       );
     },
 
@@ -270,7 +266,7 @@ export function readTools(ctx) {
         call.check();
         assertSiteAccess(browser);
         try {
-          const { value } = await query(browser, "react", { ...options, ref: longRef(ref) }, 30000, frame);
+          const { value } = await query(browser, "react", { ...options, ref }, 30000, frame);
           results.push({ frame: frame.id, ...value });
         } catch (error) {
           call.check();
@@ -284,7 +280,7 @@ export function readTools(ctx) {
         )
           throw new Error("Page or permissions changed during React inspection; retry.");
       }
-      return text(shortRefs(JSON.stringify({ frames: results, untrusted: true })));
+      return text({ frames: results, untrusted: true });
     },
 
     async accessibility({ tabId, ref, ...options }, call) {
@@ -305,7 +301,7 @@ export function readTools(ctx) {
           const { value } = await query(
             browser,
             "axe",
-            { ...options, ref: longRef(ref), timeout_ms: Math.min(20000, deadline - Date.now()) },
+            { ...options, ref, timeout_ms: Math.min(20000, deadline - Date.now()) },
             Math.min(25000, deadline - Date.now() + 2000),
             frame,
           );
@@ -322,17 +318,13 @@ export function readTools(ctx) {
         )
           throw new Error("Page or permissions changed during accessibility scan; retry.");
       }
-      return text(
-        shortRefs(
-          JSON.stringify({
-            frames: results,
-            untrusted: true,
-            coverage: ref
-              ? "Referenced subtree in its frame; nested frames are not scanned."
-              : "Each accessible frame scanned independently; cross-frame relationships are not evaluated.",
-          }),
-        ),
-      );
+      return text({
+        frames: results,
+        untrusted: true,
+        coverage: ref
+          ? "Referenced subtree in its frame; nested frames are not scanned."
+          : "Each accessible frame scanned independently; cross-frame relationships are not evaluated.",
+      });
     },
   };
 }

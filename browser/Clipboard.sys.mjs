@@ -98,13 +98,7 @@ export function systemClipboard(ctx) {
           context.frame = input.ref ? ctx.frameOf(browser, input.ref) : await ctx.focusedFrame(browser);
           context.frameDocument = context.frame.currentWindowGlobal;
           context.target = (
-            await ctx.query(
-              browser,
-              "clipboard_prepare",
-              { action: input.action, ref: input.ref && ctx.longRef(input.ref) },
-              5000,
-              context.frame,
-            )
+            await ctx.query(browser, "clipboard_prepare", { action: input.action, ref: input.ref }, 5000, context.frame)
           ).value;
         }
         check(context);

@@ -49,8 +49,12 @@ function harness(run) {
   const actor = new Actor();
   actor.document = { nodePrincipal: { isContentPrincipal: true } };
   actor.contentWindow = { document: actor.document };
-  actor.browsingContext = { id: 1 };
-  return { actor, sandboxes, timers, send: (name, data = {}) => actor.receiveMessage({ name, data }) };
+  return {
+    actor,
+    sandboxes,
+    timers,
+    send: (name, data = {}) => actor.receiveMessage({ name, data: { documentNumber: 1, ...data } }),
+  };
 }
 const result = (nodes) => ({
   testEngine: { version: "test" },
@@ -79,7 +83,7 @@ test("axe actor scopes its sandbox, disables iframe messaging and bounds output 
   assert(!reply.error, reply.error);
   assert.equal(reply.value.violations[0].nodes.length, 2);
   assert(reply.value.violations[0].truncated);
-  assert.equal(reply.value.violations[0].nodes[0].ref, "ref_1");
+  assert.equal(reply.value.violations[0].nodes[0].ref, "ref_1b");
   assert.equal(reply.value.violations[0].nodes[0].html.length, 1000);
   assert(h.sandboxes[0].nuked);
   assert.equal(h.timers.size, 0);

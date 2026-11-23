@@ -26,6 +26,14 @@ const MAX_TEXT = 100000;
 const RECORDING_KEY = "zen-mcp:recording";
 const RECORD_EVENTS = new Set(["click", "change", "keydown", "input", "pagehide"]);
 
+// why: Letters keep refs short; these form no words and none looks like a digit in an annotated screenshot.
+const REF_LETTERS = "bcdfghjkmnpqrstvwxyz";
+function refLetters(n) {
+  let letters = "";
+  for (; n >= 0; n = Math.floor(n / REF_LETTERS.length) - 1) letters = REF_LETTERS[n % REF_LETTERS.length] + letters;
+  return letters;
+}
+
 // why: A sandbox inherits the document's principal; on a browser-internal page that is chrome privilege.
 function pageSandbox(win) {
   if (!win.document.nodePrincipal.isContentPrincipal && !win.document.nodePrincipal.isNullPrincipal)
@@ -37,7 +45,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   #operations = new Map();
   #refs = new Map();
   #ids = new WeakMap();
-  #next = 1;
+  #next = 0;
+  #documentNumber;
   #agent = agentTheme({ id: "claude" });
   #eventUtils = null;
   #consoleSince = 0;
@@ -135,6 +144,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         this.#agent = agentTheme(data.agent);
         this.#cursor.paint();
       }
+      if (data?.documentNumber) this.#documentNumber = data.documentNumber;
       switch (name) {
         case "annotate":
           return { value: this.#annotate(data.enabled) };
@@ -486,8 +496,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #ref(el) {
     let id = this.#ids.get(el);
     if (!id) {
-      const bc = this.browsingContext;
-      id = `ref_${this.#next++}${bc.parent ? `_f${bc.id}` : ""}`;
+      id = `ref_${this.#documentNumber}${refLetters(this.#next++)}`;
       this.#ids.set(el, id);
       this.#refs.set(id, new WeakRef(el));
     }

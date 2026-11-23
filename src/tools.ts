@@ -326,7 +326,7 @@ tool(
     ref: z
       .string()
       .optional()
-      .describe('Element reference from read_page or find (e.g. "ref_12"), instead of coordinate.'),
+      .describe('Element reference from read_page or find (e.g. "ref_12c"), instead of coordinate.'),
     start_coordinate: z.array(z.number()).length(2).optional().describe("Drag start [x, y]."),
     text: z.string().optional().describe("Text to type, keys to press, or click modifiers."),
     scroll_direction: z.enum(["up", "down", "left", "right"]).optional(),
@@ -346,9 +346,9 @@ tool(
 tool(
   "read_page",
   [
-    "Get the page as an accessibility-style tree: roles, names, values and states, each element with a ref (e.g. ref_12) usable in computer, form_input and read_page.",
+    "Get the page as an accessibility-style tree: roles, names, values and states, each element with a ref (e.g. ref_12c) usable in computer, form_input and read_page.",
     "Cheaper and more precise than a screenshot for finding and operating controls. Refs stay valid until the page navigates.",
-    "Iframes (cross-origin too) are included under [iframe url]; their refs look like ref_3_f12 and work with every tool.",
+    "Iframes (cross-origin too) are included under [iframe url]; their refs work with every tool.",
     '"clickable" marks an element without a control role that has a pointer cursor or its own click listener. filter: "interactive" lists only controls (buttons, links, inputs...) and clickables as a flat list; default "all" includes headings, landmarks and text.',
   ].join(" "),
   {

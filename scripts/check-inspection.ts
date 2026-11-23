@@ -101,7 +101,7 @@ try {
       JSON.stringify(frameScan),
     );
     const childRef = frameScan.frames[1].violations.find((v: any) => v.id === "image-alt").nodes[0].ref;
-    assert.match(childRef, /_f\d+$/);
+    assert.match(childRef, /^ref_\w+$/);
     const childScan = JSON.parse(await tool("accessibility", { tabId, ref: childRef, tags: ["wcag2a"] }));
     assert(childScan.frames[0].violations.some((v: any) => v.id === "image-alt"));
     assert.equal(childScan.frames.length, 1);

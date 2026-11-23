@@ -11,34 +11,19 @@ export function pageQueries(ctx) {
   const framesOf = (browser) =>
     browser.browsingContext.getAllBrowsingContextsInSubtree().filter((bc) => bc.currentWindowGlobal);
 
-  // why: Compact frame IDs keep tool output short while maintaining a mapping to Gecko's frame IDs.
-  const frameNumbers = ctx.frameNumbers;
-  function shortRefs(value) {
-    return value.replace(/(ref_\d+)_f(\d{6,})\b/g, (_, ref, id) => {
-      let n = frameNumbers.byId.get(id);
-      if (!n) {
-        n = frameNumbers.next++;
-        frameNumbers.byId.set(id, n);
-        frameNumbers.byNumber.set(n, id);
-      }
-      return `${ref}_f${n}`;
-    });
+  // why: A ref names its document, so it can't resolve to an element of a later one.
+  const documents = new WeakMap();
+  function documentNumber(wg) {
+    if (!documents.has(wg)) documents.set(wg, ctx.refDocuments.next++);
+    return documents.get(wg);
   }
 
-  function longRef(ref) {
-    const m = /^(ref_\d+)_f(\d+)$/.exec(ref ?? "");
-    const id = m && frameNumbers.byNumber.get(Number(m[2]));
-    return id ? `${m[1]}_f${id}` : ref;
-  }
-
-  // why: A supplied frame ID must be checked against the authorized tab.
   function frameOf(browser, ref) {
-    const id = /_f(\d+)$/.exec(ctx.longRef(ref) ?? "")?.[1];
-    if (!id) return browser.browsingContext;
-    const bc = bcById(browser, Number(id));
-    if (!bc || bc.top !== browser.browsingContext)
-      throw new Error(`${ref} not found (its frame may be gone); get refs again with read_page or find.`);
-    return bc;
+    if (!ref) return browser.browsingContext;
+    const number = Number(/^ref_(\d+)[a-z]+$/.exec(ref)?.[1]);
+    const frame = ctx.framesOf(browser).find((bc) => documents.get(bc.currentWindowGlobal) === number);
+    if (!frame) throw new Error(`${ref} not found (the page may have changed); get refs again with read_page or find.`);
+    return frame;
   }
 
   const queryRef = (browser, name, data, timeout) =>
@@ -85,13 +70,7 @@ export function pageQueries(ctx) {
   async function target(browser, args, key = "coordinate") {
     if (args.ref && key === "coordinate") {
       const frame = ctx.frameOf(browser, args.ref);
-      const { x, y } = await ctx.query(
-        browser,
-        "locate",
-        { ref: ctx.longRef(args.ref), forClick: !!args.forClick },
-        30000,
-        frame,
-      );
+      const { x, y } = await ctx.query(browser, "locate", { ref: args.ref, forClick: !!args.forClick }, 30000, frame);
       return ctx.toTop(browser, frame, x, y, !!args.forClick);
     }
     if (args[key] == null) throw new Error(`${args.action} needs ${key}${key === "coordinate" ? " or ref" : ""}.`);
@@ -182,7 +161,13 @@ export function pageQueries(ctx) {
     try {
       const result = await ctx.guard(
         Promise.race([
-          actor.sendQuery(name, { ...data, agent: scope?.agent ?? ctx.lastAgent, session: scope?.session, requestId }),
+          actor.sendQuery(name, {
+            ...data,
+            agent: scope?.agent ?? ctx.lastAgent,
+            session: scope?.session,
+            documentNumber: documentNumber(wg),
+            requestId,
+          }),
           watchDialog,
           watcher.wait(timeout, timers).then(() => {
             throw new Error(`The page did not respond within ${timeout / 1000} s.`);
@@ -191,7 +176,7 @@ export function pageQueries(ctx) {
         scope,
       );
       scope?.check();
-      if (result?.error) throw new Error(ctx.shortRefs(result.error));
+      if (result?.error) throw new Error(result.error);
       return result;
     } finally {
       done = true;
@@ -326,14 +311,12 @@ export function pageQueries(ctx) {
   }
 
   // why: JSON indentation adds token cost to every call.
-  const text = (t) => [{ type: "text", text: ctx.shortRefs(typeof t === "string" ? t : JSON.stringify(t)) }];
+  const text = (t) => [{ type: "text", text: typeof t === "string" ? t : JSON.stringify(t) }];
 
   return {
     pendingListeners,
     bcById,
     framesOf,
-    shortRefs,
-    longRef,
     frameOf,
     queryRef,
     toPagePoint,

@@ -16,7 +16,6 @@ export function inputTools(ctx) {
     input,
     keyName,
     localFile,
-    longRef,
     openDialog,
     operationSleep,
     pressKeys,
@@ -30,7 +29,6 @@ export function inputTools(ctx) {
     framesOf,
     assertSiteURL,
     scroll,
-    shortRefs,
     target,
     text,
     typeInFocus,
@@ -213,7 +211,7 @@ export function inputTools(ctx) {
             ...comparison,
             {
               type: "text",
-              text: `${shot.id ? `${shot.id}: ` : ""}${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}`,
+              text: `${shot.id ? `${shot.id}: ` : ""}${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${labels.join(", ")}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}`,
             },
           ];
         }
@@ -294,7 +292,7 @@ export function inputTools(ctx) {
             kind: "mouse_down",
             x,
             y,
-            ref: args.ref && longRef(args.ref),
+            ref: args.ref,
             button: { left: 0, middle: 1, right: 2 }[args.button || "left"],
           });
           ({ hit } = result.value);
@@ -325,7 +323,7 @@ export function inputTools(ctx) {
     },
 
     async form_input({ tabId, ref, value }, call) {
-      const { value: result } = await queryRef(browserFor(call, tabId), "form_input", { ref: longRef(ref), value });
+      const { value: result } = await queryRef(browserFor(call, tabId), "form_input", { ref, value });
       return text(result);
     },
 
@@ -346,7 +344,7 @@ export function inputTools(ctx) {
         } catch {}
         files.push({ name: file.leafName, type, lastModified: file.lastModifiedTime, bytes: await IOUtils.read(path) });
       }
-      const { value } = await queryRef(browser, "file_upload", { ref: longRef(ref), files }, 60000);
+      const { value } = await queryRef(browser, "file_upload", { ref, files }, 60000);
       return text(value);
     },
 

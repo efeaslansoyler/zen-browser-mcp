@@ -65,7 +65,6 @@ function harness() {
     innerHeight: 600,
     getComputedStyle: () => ({ paddingLeft: "0", paddingTop: "0" }),
   };
-  actor.browsingContext = { id: 1 };
   actor.document = {
     activeElement: null,
     hidden: true,
@@ -75,7 +74,7 @@ function harness() {
     getElementById: (id) => nodes.get(id),
     documentElement: { append() {} },
   };
-  const send = (name, data = {}) => actor.receiveMessage({ name, data });
+  const send = (name, data = {}) => actor.receiveMessage({ name, data: { documentNumber: 1, ...data } });
   const refFor = async (el) => {
     const result = await send("find", { query: el.id });
     assert(!result.error, result.error);
@@ -223,10 +222,9 @@ test("ref coordinates check every enclosing iframe; hover coordinates skip the c
       return name === "locate" ? { x: 10, y: 20 } : name === "frame_rect" ? { x: 100, y: 50 } : { value: true };
     },
     frameOf: () => leaf,
-    longRef: (ref) => ref,
     toPagePoint: (_, xy) => xy,
   });
-  const result = await context.target({}, { ref: "ref_1_f3", forClick: true });
+  const result = await context.target({}, { ref: "ref_3b", forClick: true });
   assert.deepEqual(Array.from(result), [210, 120]);
   assert.deepEqual(
     calls.filter((c) => c.name === "frame_hit").map((c) => [c.frame, c.data.bcId, c.data.x, c.data.y]),
@@ -236,7 +234,7 @@ test("ref coordinates check every enclosing iframe; hover coordinates skip the c
     ],
   );
   calls.length = 0;
-  await context.target({}, { ref: "ref_1_f3" });
+  await context.target({}, { ref: "ref_3b" });
   assert(!calls.some((c) => c.name === "frame_hit"));
 });
 
@@ -253,7 +251,7 @@ test("routing refuses a ref click if the deepest hit frame changes", async () =>
     },
   });
   await assert.rejects(
-    context.input({}, { kind: "click", ref: "ref_1_f2", x: 50, y: 50 }),
+    context.input({}, { kind: "click", ref: "ref_2b", x: 50, y: 50 }),
     /iframe is covered or changed/,
   );
   assert.equal(sent, false);

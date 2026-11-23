@@ -117,7 +117,7 @@ try {
   await tool(a, "navigate", { tabId, url: `http://127.0.0.1:${port}/` });
   assert.match(await tool(a, "downloads", { tabId }), /No downloads from this tab yet/);
 
-  const ref = /\b(ref_\d+)\b/.exec(await tool(a, "find", { tabId, query: "Get file" }))![1];
+  const ref = /\b(ref_\w+)\b/.exec(await tool(a, "find", { tabId, query: "Get file" }))![1];
   const click = () => tool(a, "computer", { tabId, action: "left_click", ref });
   await click();
   if (nativeDialog) {
