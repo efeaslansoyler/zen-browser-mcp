@@ -18,7 +18,8 @@ const page = `<!doctype html><title>Deep</title><p>Near</p>${nest(60, "<button>D
 ${nest(60, '<span style="display:none">hidden</span>')}
 ${"<p>More</p>".repeat(100)}`;
 const shallow = `<!doctype html><title>Shallow</title><p>Near</p>${nest(60, "<span hidden>hidden</span><script>0</script>")}`;
-const pages: Record<string, string> = { "/frame": inner, "/shallow": shallow };
+const wide = `<!doctype html><title>Wide</title>${"<p>Shallow paragraph</p>".repeat(200)}${nest(5, "<button>Deep</button>")}`;
+const pages: Record<string, string> = { "/frame": inner, "/shallow": shallow, "/wide": wide };
 const server = http.createServer((request, response) => {
   response.setHeader("content-type", "text/html; charset=utf-8").end(pages[request.url!] ?? page);
 });
@@ -39,6 +40,9 @@ try {
   }
   console.log("✓ Without a depth, elements at any depth are read, in iframes too");
 
+  const { tabId: wideTab } = JSON.parse((await command("tabs_create_mcp", { url: "about:blank" })).split("\n")[0]);
+  tabs.push(wideTab);
+  await command("navigate", { tabId: wideTab, url: `${origin}/wide` });
   for (const filter of ["all", "interactive"]) {
     const top = await command("read_page", { tabId, filter, depth: 30 });
     assert.match(top, notice);
@@ -55,6 +59,11 @@ try {
   const cut = await command("read_page", { tabId, depth: 1, max_chars: 500 });
   assert.match(cut, notice);
   assert.match(cut, /truncated at 500 characters/);
+  for (const max_chars of [500, 1500]) {
+    const early = await command("read_page", { tabId: wideTab, depth: 2, max_chars });
+    assert.match(early, notice);
+    assert.match(early, /truncated at/);
+  }
   const nothing = await command("read_page", { tabId, filter: "interactive", depth: 1 });
   assert.match(nothing, notice);
   assert.doesNotMatch(nothing, /no visible elements/);
