@@ -41,7 +41,7 @@ export function processInfo(pid: number): { args: string[]; ppid: number } | nul
 const LAUNCHER = /^-?((ba|da|z|k|fi)?sh|npm|npx|pnpm|yarn)(-cli)?(\.[cm]?js)?$/;
 const programName = (word = "") => path.basename(word.split(" ")[0]);
 
-// why: npx or a shell may stand between the client and this server.
+// why: npx or a shell may stand between the client and the MCP server or prompt hook it starts.
 export function clientPid(): number {
   let pid = process.ppid;
   for (let proc = processInfo(pid); proc && proc.ppid > 1; proc = processInfo(pid)) {
@@ -72,18 +72,6 @@ export function inheritedFromAncestor(name: string, value: string, pid = clientP
     }
   }
   return false;
-}
-
-// why: Prompt hooks identify the client through its place in the process ancestry.
-export function ancestorPids(depth = 8): number[] {
-  const pids: number[] = [];
-  for (let pid = process.ppid; pid > 1 && pids.length < depth;) {
-    pids.push(pid);
-    const parent = processInfo(pid)?.ppid;
-    if (!parent || parent === pid) break;
-    pid = parent;
-  }
-  return pids;
 }
 
 // why: Claude titles come from an undocumented per-PID format, so menus need a fallback short ID.

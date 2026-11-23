@@ -43,3 +43,9 @@ test("an agent started inside a Claude with a channel has no channel of its own"
   assert.equal(delivery(client({}, CHANNEL), shell, client(), server).channel, false);
   assert.equal(delivery(client({}, CHANNEL), client({}, CHANNEL), server).channel, true);
 });
+
+test("a prompt hook asks for its own client only, not for the agents that client was started in", () => {
+  assert.deepEqual(delivery(client(), server).hook, ["client"]);
+  assert.deepEqual(delivery(client(), shell).hook, ["client"]);
+  assert.deepEqual(delivery(client(), shell, client(), shell).hook, ["client"]);
+});

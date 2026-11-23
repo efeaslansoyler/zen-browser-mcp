@@ -1,5 +1,5 @@
 // why: Opt-in prompt hooks support clients without a usable channel.
-// why: Match a client's conversation ID when supplied; Antigravity needs a common parent process.
+// why: Match a client's conversation ID when supplied; Antigravity is matched by its process.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +7,7 @@ import { L } from "./i18n.ts";
 import { PACKAGE_DIR } from "./paths.ts";
 import { call } from "./zen.ts";
 import { configureCodexHooks } from "./codex-hooks.ts";
-import { ancestorPids } from "./claude.ts";
+import { clientPid } from "./claude.ts";
 import { configureOpenCodePlugin, openCodePluginFile } from "./opencode.ts";
 
 export type HookClient = "claude" | "codex" | "antigravity";
@@ -22,7 +22,7 @@ export async function promptHook(
   client: HookClient,
   value: unknown,
   browser: typeof call = call,
-  pids: number[] = ancestorPids(),
+  pids: number[] = [clientPid()],
 ): Promise<string> {
   const input = value as { session_id?: unknown; conversationId?: unknown } | null;
   if (!input || typeof input !== "object") return "";
