@@ -744,10 +744,11 @@ export class PageReader {
         let inner;
         if (isControl(child) || (this.#clickable(child) && this.#whole(child))) {
           inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? allText(child) : "";
+          const raw = normalize(inner);
+          // why: The name may be a label or cut off, and textContent joins lines and includes what isn't shown.
+          if (words.some((w) => raw.includes(w))) inner = clean(shownText(child));
           if (holds(inner)) {
-            // why: The name may be a label or cut off, and textContent includes what isn't shown.
-            const shown = clean(shownText(child));
-            if (holds(shown)) found.push({ el: child, text: shown });
+            found.push({ el: child, text: inner });
             inner = null;
           }
         } else inner = visit(child);
