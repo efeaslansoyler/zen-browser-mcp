@@ -19,9 +19,15 @@ const codex = as("codex", "Codex");
 // why: A directory argument keeps pictures of every island state to look at.
 const pictures = process.argv[2];
 
+let slow!: http.ServerResponse;
 const server = http.createServer((request, response) => {
   response.setHeader("content-type", "text/html; charset=utf-8");
   if (request.url!.startsWith("/data")) return void response.end("{}");
+  if (request.url === "/slow") {
+    response.setHeader("content-type", "text/plain");
+    slow = response;
+    return void response.write("before,");
+  }
   response.end(
     `<!doctype html><title>Shop ${request.url}</title><h1>Cart</h1><input id="field" style="display:block;margin:120px"><button onclick="hits++">Buy</button><script>hits=0</script>`,
   );
@@ -175,10 +181,45 @@ try {
   assert.match(await claude("read_network_requests", { tabId }), /./);
   console.log("✓ Requests made meanwhile aren't in the network log");
 
+  for (const [name, finish] of [
+    ["during", () => slow.end("typed by the user")],
+    ["after", () => slow.write("typed by the user,")],
+  ] as const) {
+    await chrome(
+      `await h.backgroundQuery(tab.linkedBrowser, "eval", { code: "void fetch('/slow').then((r) => r.text())" }, tab.linkedBrowser.browsingContext); return true;`,
+    );
+    await sleep(800);
+    await takeOver();
+    finish();
+    await sleep(500);
+    const hold = await claude("watch", { tabId, hold: true, timeout: 60 });
+    assert.match(hold, /"by":"the user"/);
+    await giveBack();
+    if (name === "after") slow.end("after");
+    await sleep(800);
+    const released = hold.match(/"events":"([^"]+)"/)![1];
+    for (let i = 0; i < 40 && !/released/.test(fs.readFileSync(released, "utf8")); i++) await sleep(100);
+    assert.match(fs.readFileSync(released, "utf8"), /released/);
+    await claude("read_page", { tabId });
+    const list = await claude("read_network_requests", { tabId });
+    const id = Number(
+      list
+        .split("\n")
+        .filter((line) => line.includes("/slow"))
+        .at(-1)!
+        .match(/#(\d+)/)![1],
+    );
+    const details = await claude("read_network_requests", { tabId, id });
+    assert.match(details, /not recorded \(the user took over/);
+    assert.doesNotMatch(details, /typed by the user|before,/);
+  }
+  console.log("✓ A response that was running when the user took over isn't in the log; a hold watch reports the end");
+
   const ref = (await claude("find", { tabId, query: "buy" })).match(/\[(ref_\w+)\]/)![1];
   await takeOver();
   await giveBack();
   await assert.rejects(claude("computer", { tabId, action: "left_click", ref }), /read it again/);
+  await assert.rejects(claude("computer", { tabId, action: "hover", ref }), /read it again/);
   assert.equal(await pageEval(tabId, "hits"), "0");
   await claude("read_page", { tabId });
   await claude("computer", { tabId, action: "left_click", ref });

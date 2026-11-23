@@ -30,6 +30,7 @@ export class Watches {
       events: this.env.events.path(`${id}`),
       matched: false,
       last: undefined,
+      cuts: 0,
       started: Date.now(),
     };
     this.list.set(id, watch);
@@ -70,20 +71,21 @@ export class Watches {
     }
     const browser = this.env.owned(watch.tabId, watch.session);
     if (!browser) return this.end(watch.id, "tab closed, or this session no longer works in it");
+    if (this.env.paused?.(watch.tabId)) {
+      if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
+      return this.#schedule(watch, watch.interval);
+    }
     try {
       this.env.assertSite(browser);
     } catch (e) {
       return this.end(watch.id, e.message);
     }
-    if (this.env.paused?.(watch.tabId)) {
-      if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
-      return this.#schedule(watch, watch.interval);
-    }
-    const { spec } = watch;
+    const { spec, cuts } = watch;
     const url = browser.currentURI?.spec;
     try {
       if (spec.change) {
         const value = await this.env.sample(browser, spec.selector);
+        if (watch.cuts !== cuts) return this.#schedule(watch, watch.interval);
         if (watch.last === undefined) watch.last = value;
         else if (value !== watch.last) {
           this.#write(watch, { event: "changed", url, value, previous: watch.last });
@@ -91,6 +93,7 @@ export class Watches {
         }
       } else {
         const found = await this.env.check(browser, { text: spec.text, selector: spec.selector });
+        if (watch.cuts !== cuts) return this.#schedule(watch, watch.interval);
         const ok = spec.gone ? !found : found;
         // why: Emit transitions so an unchanged match does not fill the events file.
         if (ok && !watch.matched) {
@@ -105,6 +108,11 @@ export class Watches {
     if (!this.list.has(watch.id)) return;
     if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
     this.#schedule(watch, watch.interval);
+  }
+
+  // why: A read that is still running may see the page as the user leaves it.
+  cut(tabId) {
+    for (const watch of this.list.values()) if (watch.tabId === tabId) watch.cuts++;
   }
 
   end(id, reason, extra = {}) {

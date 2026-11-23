@@ -311,6 +311,16 @@ export class HarCapture {
     }
   }
 
+  // why: Nothing of a request that is still running may be recorded once the user has the tab.
+  cut(tabId) {
+    const capture = this.tabs.get(tabId);
+    for (const [key, row] of capture?.rows ?? [])
+      if (row.tabId === tabId && !row.done) {
+        capture.rows.delete(key);
+        capture.omitted++;
+      }
+  }
+
   async write(data) {
     await IOUtils.makeDirectory(this.env.dir, { permissions: 0o700 });
     const name = Services.uuid.generateUUID().toString().slice(1, -1);

@@ -30,6 +30,7 @@ export class NetworkLog {
   constructor(logs, env) {
     this.logs = logs;
     this.env = env;
+    this.unrecorded = new Set();
     this.observer = { observe: (subject, topic) => this.#observe(subject, topic) };
   }
 
@@ -51,9 +52,22 @@ export class NetworkLog {
     this.logs.delete(browserId);
   }
 
+  // why: Nothing of a request that is still running may be recorded once the user has the tab.
+  cut(browserId) {
+    const log = this.logs.get(browserId);
+    for (const [channelId, entry] of log?.byChannel ?? []) {
+      entry.cut = true;
+      delete entry.body;
+      this.unrecorded.add(channelId);
+    }
+    log?.byChannel.clear();
+  }
+
   // why: Ignore long polling and streams so they cannot block network-idle waits indefinitely.
   busy(browserId, now = Date.now()) {
-    return (this.logs.get(browserId)?.list ?? []).some((r) => r.duration == null && !r.error && now - r.start < 10000);
+    return (this.logs.get(browserId)?.list ?? []).some(
+      (r) => r.duration == null && !r.error && !r.cut && now - r.start < 10000,
+    );
   }
 
   #observe(subject, topic) {
@@ -99,7 +113,12 @@ export class NetworkLog {
       if (rule?.action === "block") channel.cancel(Cr.NS_ERROR_ABORT);
       if (rule?.action === "offline") channel.cancel(Cr.NS_ERROR_OFFLINE);
     }
-    if (this.env.unrecorded?.(browserId)) return;
+    const ends = topic === "http-on-stop-request" || topic === "http-on-failed-opening-request";
+    if (this.env.unrecorded?.(browserId)) this.unrecorded.add(channel.channelId);
+    if (this.unrecorded.has(channel.channelId)) {
+      if (ends) this.unrecorded.delete(channel.channelId);
+      return;
+    }
     this.env.capture?.(channel, browserId, type, topic);
     let log = this.logs.get(browserId);
     if (!log) this.logs.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
@@ -176,7 +195,8 @@ export class NetworkLog {
     lines.push("", "Request headers:", headers(r.requestHeaders));
     if (r.requestBody) lines.push("", "Request body:", decode(win, r.requestBody, maxChars));
     lines.push("", "Response headers:", headers(r.responseHeaders));
-    if (r.body === undefined) lines.push("", "Response body: not recorded (only for fetch/XHR and documents).");
+    if (r.cut) lines.push("", "Response: not recorded (the user took over the tab).");
+    else if (r.body === undefined) lines.push("", "Response body: not recorded (only for fetch/XHR and documents).");
     else if (r.body === null) lines.push("", "Response body: dropped (memory limit).");
     else if (!/json|text|xml|javascript|html|csv|graphql|x-www-form-urlencoded/i.test(r.mime ?? "")) {
       lines.push("", `Response body: binary (${r.mime ?? "unknown type"}, ${r.bodySize} bytes).`);
@@ -248,8 +268,8 @@ function captureBody(channel, entry, log, projectBody) {
       bin.setInputStream(stream);
       const data = bin.readBytes(count);
       try {
-        entry.bodySize += count;
-        if (entry.body.length < MAX_BODY) entry.body += data.slice(0, MAX_BODY - entry.body.length);
+        if (!entry.cut) entry.bodySize += count;
+        if (!entry.cut && entry.body.length < MAX_BODY) entry.body += data.slice(0, MAX_BODY - entry.body.length);
       } catch {}
       const copy = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
       copy.setByteStringData(data);
@@ -257,7 +277,7 @@ function captureBody(channel, entry, log, projectBody) {
     },
     onStopRequest(request, status) {
       try {
-        projectBody();
+        if (!entry.cut) projectBody();
         trimBodies(log);
       } catch {}
       original.onStopRequest(request, status);
