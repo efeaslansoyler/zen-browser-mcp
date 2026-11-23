@@ -85,6 +85,7 @@ browser you use:
 | `check-loading-reads.ts` | Reads of pages and iframes that are still loading, loaded without content, or filled later |
 | `check-skipped-text.ts` | Reads, searches and waits on text in off-screen `content-visibility: auto` sections, which stay unrendered |
 | `check-boxless.ts` | Reads, searches, clicks and annotated screenshots of `display: contents` elements |
+| `check-tall-iframes.ts` | Scrolling to, clicking and outlining refs in iframes larger than the viewport: nested, cross-origin, in scrollers, under fixed bars |
 | `check-shadow.ts` | Reads, searches, clicks, fields, uploads, iframes, hand-overs and selectors in open, closed and nested shadow roots; slots; reading times |
 | `check-read-depth.ts` | Reads at any depth, the notice when a depth leaves something out, a very deep page |
 | `check-island.ts` | Requests that shrink to a line, hover, notes, the time a request stays open, a hand-over's buttons |

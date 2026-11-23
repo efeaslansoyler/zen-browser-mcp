@@ -246,6 +246,13 @@ test("ref coordinates check every enclosing iframe; hover coordinates skip the c
       [1, 2, 210, 120],
     ],
   );
+  assert.deepEqual(
+    calls.filter((c) => c.name === "frame_rect").map((c) => [c.frame, c.data.point]),
+    [
+      [2, [10, 20]],
+      [1, [110, 70]],
+    ],
+  );
   calls.length = 0;
   await context.target({}, { ref: "ref_3b" });
   assert(!calls.some((c) => c.name === "frame_hit"));
@@ -322,4 +329,24 @@ test("scaled screenshot coordinates round-trip with size caps rather than the re
     context.toPagePoint(browser, [100 * 0.5, 80 * 0.5])[0] > 100,
     "The old fixture assumption targeted the wrong point",
   );
+});
+
+test("an outline in an iframe is scrolled to in the pages around it, and a failure doesn't matter", async () => {
+  const calls = [];
+  const root = { id: 1 };
+  let frame = { id: 2, parent: root };
+  const context = bridgeContext({
+    query: async (_, name) => {
+      calls.push(name);
+      if (name === "frame_rect") throw new Error("gone");
+      return { x: 10, y: 20 };
+    },
+    frameOf: () => frame,
+  });
+  await context.reveal({}, "ref_2b");
+  assert.deepEqual(calls, ["locate", "frame_rect"]);
+  frame = root;
+  await context.reveal({}, "ref_1b");
+  await context.reveal({}, undefined);
+  assert.equal(calls.length, 2);
 });

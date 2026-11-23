@@ -20,6 +20,7 @@ export function tabTools(ctx) {
         line: handOver,
       },
     );
+    if (browser) void ctx.reveal(browser, ref);
     const notified = ctx.notifyAsk(browser, message, call.agent);
     let result;
     try {
@@ -239,6 +240,7 @@ export function tabTools(ctx) {
           if (frameItems.length) throw e;
         }
       }
+      await ctx.reveal(browser, items[0]?.ref);
       return text(
         clear
           ? "Highlights removed."
