@@ -261,3 +261,20 @@ test("annotated screenshots label clickables", async () => {
   actor.document.documentElement.append = () => {};
   assert.equal((await send("annotate", { enabled: true })).length, 2);
 });
+
+test("find sees the words of a labelled control that stand on separate lines", async () => {
+  const lines = (tag, ...texts) => h(tag, {}, ...texts.map((text) => h("div", {}, text)));
+  const twoLines = h("button", { "aria-label": "Setup" }, lines("span", "Connect", "Printer"));
+  const deep = h("a", { href: "/x", "aria-label": "More" }, lines("div", "Scan", "Papers"), h("div", {}, "Queue"));
+  const hidden = h("button", { "aria-label": "Close" }, h("div", {}, "Delete"), h("div", { hidden: "" }, "Account"));
+  const row = h("div", {}, lines("button", "Wake", "Display"), h("div", {}, "tonight"));
+  const { find } = page(twoLines, deep, hidden, row);
+  assert.match((await find("connect printer"))[0], /^button "Setup"/);
+  assert.match((await find("scan papers queue"))[0], /^link "More"/);
+  assert.deepEqual(
+    (await find("connectprinter")).filter((line) => /Setup/.test(line)),
+    [],
+  );
+  assert((await find("wake display tonight")).length, "words inside and beside a control");
+  assert.doesNotMatch((await find("delete account")).join("\n"), /Close/);
+});

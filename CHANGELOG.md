@@ -25,7 +25,7 @@ change tool names, parameters or results.
   opens it again. A hand-over keeps Cancel and Done on the line. The asking agent is no longer
   repeated below its card; the mode and Stop are on the card. The recording review can be folded.
 - `find` ranks an element that holds every word of the query above any that holds only some, and
-  sees the whole text of a control whose name is a label or cut off.
+  sees the whole shown text of a control whose name is a label or cut off, also over several lines.
 - The server instructions, `hand_to_user` and the skill tell agents to number several elements
   with `highlight` before handing over; `hand_to_user` and the skill also say not to name the
   card's buttons, whose language agents don't know.
