@@ -340,7 +340,7 @@ tool(
     "Get the page as an accessibility-style tree: roles, names, values and states, each element with a ref (e.g. ref_12) usable in computer, form_input and read_page.",
     "Cheaper and more precise than a screenshot for finding and operating controls. Refs stay valid until the page navigates.",
     "Iframes (cross-origin too) are included under [iframe url]; their refs look like ref_3_f12 and work with every tool.",
-    'filter: "interactive" lists only controls (buttons, links, inputs...) as a flat list; default "all" includes headings, landmarks and text.',
+    '"clickable" marks an element without a control role that has a pointer cursor or its own click listener. filter: "interactive" lists only controls (buttons, links, inputs...) and clickables as a flat list; default "all" includes headings, landmarks and text.',
   ].join(" "),
   {
     tabId,
@@ -354,7 +354,7 @@ tool(
 
 tool(
   "find",
-  "Find elements by keywords matched against their accessible name, text, placeholder, title, id, name and href (not natural-language understanding: use words that appear on the element). Returns up to 20 matches with refs, interactive elements first.",
+  "Find elements by keywords matched against their accessible name, visible text, placeholder, title, id, name and href (not natural-language understanding: use words that appear on the element). Returns up to 20 matches with refs, controls and clickables first; a text match is the innermost element that holds all the words.",
   {
     tabId,
     query: z.string().describe('Keywords, e.g. "search", "sign in", "email".'),

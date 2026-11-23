@@ -80,6 +80,7 @@ browser you use:
 | `check-permissions.ts` | Permission modes, the site blocklist, batch re-checks, redirects, iframes |
 | `check-tab-access.ts` | Tab access between sessions: joining, turns in a shared tab, parallel tabs, share and take-back menus, leaving, shutdown, the ask-mode join prompt |
 | `check-cancellation.ts`, `check-hit-test.ts` | Stop, covered-click detection |
+| `check-clickables.ts` | Refs for clickables without a role, text search in `find`, reading a large page |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |
 | `check-delivery-ack.ts` | Legacy and structured delivery acknowledgements, inbox fallback and failure logging in `sandbox.ts` |
 | `check-source-stacks.ts [dir] [stack…]` | Source locations on real Next.js (Turbopack, webpack), Vite React 19/18, Svelte, Vue, Astro and Angular dev servers; run in `sandbox.ts`, rerun after a framework major release |
