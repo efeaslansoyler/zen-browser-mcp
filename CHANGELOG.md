@@ -57,7 +57,8 @@ change tool names, parameters or results.
 - `handle_dialog` returns once the dialog it answered is gone, so the next call isn't refused
   because of it, and fails if the dialog stays open.
 - A new conversation title no longer cancels the session's running and queued calls or releases its
-  holds, for Claude and for Codex conversations found through the Codex service.
+  holds, for Claude and for Codex conversations found through the Codex service. Neither does a
+  prompt in a Codex conversation connected through hooks.
 - `read_page` and `find` give the right level for headings made with `role="heading"` (it was a letter)
   and for `h1` to `h6` with an `aria-level`.
 

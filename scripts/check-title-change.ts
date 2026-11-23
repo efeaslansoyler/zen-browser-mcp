@@ -7,6 +7,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ensureCodexRelay, stopCodexRelays } from "../src/codex-relay.ts";
 import { call, subscribe } from "../src/zen.ts";
 import { assertBridgeRunsCheckout } from "./support/bridge.ts";
 
@@ -107,14 +108,52 @@ try {
   tabs.push(codexTab);
   const waiting = call("computer", { tabId: codexTab, action: "wait", duration: 4 }, 20_000, agent, session);
   await sleep(500);
-  relay.setTitle(`${token} codex two`);
+  relay.update({ title: `${token} codex two` });
   await until(async () => !!(await named(`${token} codex two`)), 3000, "The new Codex title never reached the menus.");
   assert.equal((await named(`${token} codex two`))!.id, session);
   const waited = await waiting;
   assert(!waited.isError, text({ content: waited }));
-  relay.setTitle(undefined);
+  relay.update({ title: undefined });
   await until(async () => !(await named(token + " codex")), 3000, "A removed title stayed in the menus.");
   console.log("✓ Codex: a new title keeps the running call and shows in menus; a removed title leaves them");
+
+  const hookThread = "00000000-0000-4000-8000-000000000049";
+  const hookSession = `codex:${hookThread}`;
+  const label = `${token}-label`;
+  await ensureCodexRelay({ threadId: hookThread, cwd: process.cwd(), label });
+  const hookNamed = async (name: string) =>
+    (await names()).some((target) => target.id === hookSession && target.name.includes(name));
+  await until(() => hookNamed(label), 5000, "The hook receiver never reached the menus.");
+  const hookCall = (name: string, args: object) => call(name, args, 20_000, agent, hookSession);
+  const hookOpen = async () => {
+    const content = await hookCall("tabs_create_mcp", { url: fixture });
+    const { tabId } = JSON.parse(text({ content }));
+    tabs.push(tabId);
+    return tabId as number;
+  };
+  const hookTab = await hookOpen();
+  const hookHeld = await hookOpen();
+  await hookCall("tab_work", { tabId: hookHeld, action: "hold", summary: "refresh test", minutes: 3 });
+  const settled = (promise: ReturnType<typeof call>) =>
+    promise.then(
+      (content) => (content.isError ? `error: ${text({ content })}` : text({ content })),
+      (error) => `error: ${error.message}`,
+    );
+  const prompted = settled(hookCall("computer", { tabId: hookTab, action: "wait", duration: 6 }));
+  await sleep(500);
+  const behind = settled(hookCall("get_page_text", { tabId: hookTab }));
+  for (const cwd of [process.cwd(), path.join(os.tmpdir(), `${token}-moved`)]) {
+    await ensureCodexRelay({ threadId: hookThread, cwd });
+    await until(() => hookNamed(path.basename(cwd)), 3000, "A changed directory never reached the menus.");
+    await sleep(500);
+  }
+  assert.equal(await chrome(`!!h.holdOf(${hookHeld})`), true, "The prompt released the hold.");
+  assert.doesNotMatch(await prompted, /^error/);
+  assert.match(await behind, /Disposable/);
+  console.log("✓ Codex hooks: a prompt keeps the running call, the queued call and the hold; a new directory shows");
+  await stopCodexRelays({ threadId: hookThread });
+  await until(async () => !(await hookNamed("")), 3000, "A stopped hook receiver stayed in the menus.");
+  assert.equal(await chrome(`!!h.holdOf(${hookHeld})`), false, "A stopped hook receiver kept its hold.");
 
   const last = call("computer", { tabId: codexTab, action: "wait", duration: 10 }, 20_000, agent, session).then(
     (content) => text({ content }),
@@ -133,6 +172,7 @@ try {
   console.log("✓ A closed client still cancels its call, loses its hold and leaves the menus");
 } finally {
   relay?.close();
+  await stopCodexRelays({ threadId: "00000000-0000-4000-8000-000000000049" });
   await client.close().catch(() => {});
   for (const tabId of tabs)
     await chrome(

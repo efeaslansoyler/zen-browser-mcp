@@ -130,7 +130,7 @@ test("ownership lifecycle subscription and tool requests use the same process se
   }
 });
 
-test("a title goes out on the open connection, and a reconnect carries the latest one", async (t) => {
+test("a new name goes out on the open connection, and a reconnect carries the latest one", async (t) => {
   const { subscribe } = await import("../dist/zen.js");
   const sockets = [];
   t.mock.method(net, "createConnection", () => {
@@ -152,21 +152,23 @@ test("a title goes out on the open connection, and a reconnect carries the lates
   const sub = subscribe(() => {}, { cwd: "/project", toolsOnly: true, agent: { id: "claude" }, title: "One" });
   try {
     await settle();
-    sub.setTitle("Two");
-    assert.deepEqual(sockets[0].writes, [], "a title before the subscription would be read as the request");
+    sub.update({ title: "Two" });
+    assert.deepEqual(sockets[0].writes, [], "an update before the subscription would be read as the request");
     connect(sockets[0]);
     assert.equal(sockets[0].writes[0].args.title, "Two");
-    sub.setTitle("Üç");
-    sub.setTitle(undefined);
-    sub.setTitle("Four");
+    sub.update({ title: "Üç" });
+    sub.update({ title: undefined });
+    sub.update({ cwd: "/moved", label: "Label" });
+    sub.update({ title: "Four", label: undefined });
     assert.deepEqual(sockets[0].writes.slice(1), [
-      { event: "title", title: "Üç" },
-      { event: "title", title: null },
-      { event: "title", title: "Four" },
+      { event: "update", cwd: "/project", label: null, title: "Üç" },
+      { event: "update", cwd: "/project", label: null, title: null },
+      { event: "update", cwd: "/moved", label: "Label", title: null },
+      { event: "update", cwd: "/moved", label: null, title: "Four" },
     ]);
     assert.equal(sockets.length, 1);
     sockets[0].destroy();
-    sub.setTitle("Five");
+    sub.update({ title: "Five" });
     t.mock.timers.tick(3000);
     await settle();
     connect(sockets[1]);

@@ -91,11 +91,15 @@ test("a connected watcher leaves hooks available for unconfirmed threads; relay 
   });
   const clients = new Set();
   const registrations = [];
+  const updates = [];
   const browser = net.createServer((socket) => {
     clients.add(socket);
     socket.on("close", () => clients.delete(socket));
     socket.on("error", () => {});
-    socket.once("data", (bytes) => registrations.push(JSON.parse(bytes.toString())));
+    socket.once("data", (bytes) => {
+      registrations.push(JSON.parse(bytes.toString()));
+      socket.on("data", (update) => updates.push(JSON.parse(update.toString())));
+    });
   });
   await new Promise((resolve) => browser.listen(process.env.ZEN_MCP_SOCKET, resolve));
   await new Promise((resolve) => watcher.listen(watchSocket, resolve));
@@ -105,8 +109,11 @@ test("a connected watcher leaves hooks available for unconfirmed threads; relay 
     await Promise.all([handleCodexHook(input), handleCodexHook(input)]);
     await waitUntil(() => clients.size === 1 && registrations.length >= 1);
     const first = await readControl(threadId);
-    await handleCodexHook({ ...input, hook_event_name: "UserPromptSubmit" });
-    await waitUntil(() => clients.size === 1 && registrations.length >= 2);
+    const [connection] = clients;
+    await handleCodexHook({ ...input, cwd: "/moved", hook_event_name: "UserPromptSubmit" });
+    await waitUntil(() => updates.length === 1);
+    assert.deepEqual(updates[0], { event: "update", cwd: "/moved", label: null, title: null });
+    assert.deepEqual([...clients], [connection], "refresh must keep the connection");
     assert.equal((await readControl(threadId)).pid, first.pid, "refresh must not spawn another process");
     assert.equal(registrations.at(-1).args.threadId, threadId);
     assert.equal(registrations.at(-1).args.session, `codex:${threadId}`);

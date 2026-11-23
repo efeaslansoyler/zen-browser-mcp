@@ -194,11 +194,12 @@ export function subscribe(
   };
   connect();
   return {
-    // why: The bridge takes a closed connection for a lost client, so a title must not need a new one.
-    setTitle(title: string | undefined) {
-      info.title = title;
+    // why: The bridge takes a closed connection for a lost client, so a new name must not need a new one.
+    update(changes: Partial<Pick<SubscriptionInfo, "cwd" | "label" | "title">>) {
+      Object.assign(info, changes);
+      const { cwd, label = null, title = null } = info;
       if (current && !current.connecting && !current.destroyed)
-        current.write(ascii(JSON.stringify({ event: "title", title: title ?? null })) + "\n");
+        current.write(ascii(JSON.stringify({ event: "update", cwd, label, title })) + "\n");
     },
     close() {
       closed = true;

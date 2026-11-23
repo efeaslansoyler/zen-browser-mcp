@@ -121,7 +121,6 @@ export async function runCodexRelay(initial: RelayOptions, target: Selection) {
   };
   const connect = () => {
     touch();
-    subscription?.close();
     subscription = subscribe(
       (event) => {
         touch();
@@ -160,7 +159,8 @@ export async function runCodexRelay(initial: RelayOptions, target: Selection) {
             cwd: String(request.cwd || options.cwd),
             label: typeof request.label === "string" ? request.label : undefined,
           };
-          connect();
+          touch();
+          subscription?.update({ cwd: options.cwd, label: options.label });
         }
         socket.end(JSON.stringify({ ok: true, threadId: options.threadId, pid: process.pid }) + "\n");
         if (request.action === "stop") {
@@ -172,11 +172,11 @@ export async function runCodexRelay(initial: RelayOptions, target: Selection) {
       }
     });
   });
-  const listen = () =>
-    server.listen(socketPath, () => {
-      fs.chmodSync(socketPath, 0o600);
-      connect();
-    });
+  const listen = () => server.listen(socketPath);
+  server.once("listening", () => {
+    fs.chmodSync(socketPath, 0o600);
+    connect();
+  });
   server.on("error", (error) => {
     if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
       console.error(error.message);
