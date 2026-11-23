@@ -371,7 +371,9 @@ another tab isn't found; a page restored from the bfcache keeps its refs. `read_
 each iframe's tree under `[iframe url]` and says `(still loading)` for a document that has
 nothing to show while its browsing context is loading, `find` searches all frames, and mouse events are sent
 from the actor of the innermost frame under the point, because events dispatched from the top
-page don't reach out-of-process iframes.
+page don't reach out-of-process iframes. A ref in an iframe is scrolled into view by every page
+around it, to the element's point rather than to the iframe, which may be larger than the viewport
+(`toTop`, `frame_rect`).
 
 Screenshot coordinates are resolved per session and tab (`ScreenshotHistory`): each viewport
 screenshot gets an ID and its scale, a call can name the image its coordinate comes from, and

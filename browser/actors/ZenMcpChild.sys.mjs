@@ -218,7 +218,7 @@ export class ZenMcpChild extends JSWindowActorChild {
         case "find":
           return { value: this.#reader.find(data.query) };
         case "frame_rect":
-          return this.#frameRect(data.bcId, data.scroll !== false);
+          return this.#frameRect(data.bcId, data.scroll !== false, data.point);
         case "frame_at":
           return { value: this.#frameAt(data.x, data.y) };
         case "active_frame":
@@ -517,11 +517,18 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   // why: Recordings must not scroll the user's page to locate a frame.
-  #frameRect(bcId, scroll = true) {
+  #frameRect(bcId, scroll = true, point) {
     const el = this.#frameElement(bcId);
     if (!el) throw new Error("iframe not found (the page may have changed).");
-    if (scroll && !reader.fullyInViewport(el, this.contentWindow))
+    const at = () => {
+      const { x, y } = this.#contentOrigin(el);
+      return [x + point[0], y + point[1]];
+    };
+    const shows = () => reader.hitAt(this.document, ...at()) === el;
+    if (scroll && !reader.fullyInViewport(el, this.contentWindow) && !shows()) {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+      if (!shows()) reader.scrollPointIntoView(el, at);
+    }
     return this.#contentOrigin(el);
   }
 

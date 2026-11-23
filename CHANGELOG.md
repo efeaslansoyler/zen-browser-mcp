@@ -69,6 +69,8 @@ change tool names, parameters or results.
   the outer session.
 - A coordinate call that waits for its tab is read with the screenshots from before it arrived. It
   could take the scale of one taken while it waited and click the wrong place.
+- Elements in an iframe larger than the viewport can be clicked and scrolled to; before, the middle of
+  the iframe was. `highlight`, `ask_user` and `hand_to_user` also scroll to elements in an iframe.
 
 ### Security
 

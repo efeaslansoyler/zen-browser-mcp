@@ -39,7 +39,7 @@ export function pageQueries(ctx) {
 
   async function toTop(browser, frame, x, y, forClick = false) {
     for (let bc = frame; bc.parent; bc = bc.parent) {
-      const o = await ctx.query(browser, "frame_rect", { bcId: bc.id }, 30000, bc.parent);
+      const o = await ctx.query(browser, "frame_rect", { bcId: bc.id, point: [x, y] }, 30000, bc.parent);
       x += o.x;
       y += o.y;
       if (forClick) await ctx.query(browser, "frame_hit", { bcId: bc.id, x, y }, 30000, bc.parent);
@@ -67,6 +67,16 @@ export function pageQueries(ctx) {
       frame = bc;
     }
     return frame;
+  }
+
+  // why: An iframe's own actor can't scroll the pages around it. Best effort: the outline is there without it.
+  async function reveal(browser, ref) {
+    const frame = ref && ctx.frameOf(browser, ref);
+    if (!frame?.parent) return;
+    try {
+      const { x, y } = await ctx.query(browser, "locate", { ref }, 5000, frame);
+      await ctx.toTop(browser, frame, x, y);
+    } catch {}
   }
 
   async function target(browser, args, key = "coordinate") {
@@ -341,6 +351,7 @@ export function pageQueries(ctx) {
     queryRef,
     toPagePoint,
     toTop,
+    reveal,
     deepest,
     focusedFrame,
     target,

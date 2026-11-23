@@ -330,6 +330,27 @@ export function scrollIntoView(el, options) {
   target.scrollIntoView({ block: "center", behavior: "instant", ...options });
 }
 
+// why: An iframe larger than the viewport has no scrollIntoView for a part of it.
+export function scrollPointIntoView(el, at) {
+  const root = el.ownerDocument.scrollingElement;
+  for (let up = el; up && up !== root; up = composedParent(up)) {
+    const box = up !== el && up.getBoundingClientRect?.();
+    if (box) scrollToMiddle(up, at, box.left + up.clientLeft, box.top + up.clientTop);
+    if (up.nodeType === 1 && styleOf(up).position === "fixed") return;
+  }
+  if (root) scrollToMiddle(root, at, 0, 0);
+}
+
+function scrollToMiddle(scroller, at, left, top) {
+  const [x, y] = at();
+  const { clientWidth, clientHeight } = scroller;
+  scroller.scrollBy({
+    left: x - left - clientWidth / 2,
+    top: y - top - clientHeight / 2,
+    behavior: "instant",
+  });
+}
+
 function showsText(el, node) {
   if (el.openOrClosedShadowRoot && !shadowRootOf(el) && !node.openOrClosedAssignedSlot) return false;
   return !hidesContent(el) && isRendered(el, { visibilityProperty: true });
