@@ -195,6 +195,9 @@ export function deepActiveElement(doc) {
 }
 
 export const clean = (s) => (s ?? "").replace(/\s+/g, " ").trim();
+// why: The bridge's refs and states stand outside the quotes, where page text must not reach.
+const quoted = (text) => JSON.stringify(text.replace(/[\u0085\u2028\u2029]/g, "\n"));
+const asWord = (s) => truncate(s.replace(/[^\p{L}\p{N}_-]+/gu, "_"), 40);
 export const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 // why: No locale's lowercasing fits every page: Turkish turns "WIFI" into "wıfı", English splits "İ" in two.
 export const normalize = (s) => clean(s).replace(/[Iİı]/g, "i").toLowerCase();
@@ -453,7 +456,7 @@ export function accessibleName(el, fromContent = NAME_FROM_CONTENT.has(roleOf(el
     const labelText = label && clean(shownText(label));
     if (labelText) return truncate(labelText, MAX_NAME);
     if (tag === "INPUT" && ["button", "submit", "reset"].includes(el.type) && el.value)
-      return truncate(el.value, MAX_NAME);
+      return truncate(clean(el.value), MAX_NAME);
     if (el.getAttribute("placeholder")) return truncate(clean(el.getAttribute("placeholder")), MAX_NAME);
   }
   if (tag === "IMG" || (tag === "INPUT" && el.type === "image")) {
@@ -727,7 +730,7 @@ export class PageReader {
         if (interactive && role !== "listbox" && role !== "combobox") return;
         if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !this.#hasTargets(el)) {
           const t = clean(shownText(el));
-          if (t) push(level, childIndent, () => `text "${truncate(t, 500)}"`);
+          if (t) push(level, childIndent, () => `text ${quoted(truncate(t, 500))}`);
           return;
         }
       }
@@ -736,7 +739,7 @@ export class PageReader {
         if (child.nodeType === 1) walk(child, childIndent, level + 1, ownNamed);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          if (t && !ownNamed && showsText(el, child)) push(level, childIndent, () => `text "${t}"`);
+          if (t && !ownNamed && showsText(el, child)) push(level, childIndent, () => `text ${quoted(t)}`);
         }
       }
     };
@@ -761,38 +764,41 @@ export class PageReader {
   }
 
   describeElement(el, role, { clickable = false, nameFromContent } = {}) {
-    const parts = [role || (clickable ? "clickable" : "text")];
+    const parts = [role ? asWord(role) : clickable ? "clickable" : "text"];
     const { name, mark } = this.#name(el, clickable, nameFromContent);
-    if (name) parts.push(`"${name}"`);
+    if (name) parts.push(quoted(name));
     else if (!role) parts.push(elementLabel(el));
     if (mark) parts.push(mark);
     parts.push(`[${this.env.ref(el)}]`);
     const tag = el.tagName.toUpperCase();
     if (role === "heading") parts.push(`level=${headingLevel(el)}`);
-    if (role === "link" && el.getAttribute("href")) parts.push(`href="${truncate(el.getAttribute("href"), 120)}"`);
+    if (role === "link" && el.getAttribute("href"))
+      parts.push(`href=${quoted(truncate(el.getAttribute("href"), 120))}`);
     if (tag === "INPUT" || tag === "TEXTAREA") {
       const type = el.getAttribute("type");
-      if (type && tag === "INPUT" && !INPUT_ROLES[type]) parts.push(`type=${type}`);
+      if (type && tag === "INPUT" && !INPUT_ROLES[type]) parts.push(`type=${asWord(type)}`);
       if (el.type === "checkbox" || el.type === "radio") parts.push(el.checked ? "checked" : "unchecked");
-      else if (el.type !== "password" && el.value) parts.push(`value="${truncate(el.value, MAX_NAME)}"`);
-      if (el.placeholder && el.placeholder !== name) parts.push(`placeholder="${truncate(el.placeholder, MAX_NAME)}"`);
+      else if (el.type !== "password" && el.value) parts.push(`value=${quoted(truncate(el.value, MAX_NAME))}`);
+      if (el.placeholder && el.placeholder !== name)
+        parts.push(`placeholder=${quoted(truncate(el.placeholder, MAX_NAME))}`);
     }
     if (tag === "SELECT") {
       const opt = el.selectedOptions?.[0];
-      if (opt) parts.push(`value="${truncate(clean(opt.text), MAX_NAME)}"`);
+      if (opt) parts.push(`value=${quoted(truncate(clean(opt.text), MAX_NAME))}`);
       parts.push(
         `options=[${[...el.options]
           .slice(0, 20)
-          .map((o) => `"${truncate(clean(o.text), 40)}"`)
+          .map((o) => quoted(truncate(clean(o.text), 40)))
           .join(", ")}${el.options.length > 20 ? ", …" : ""}]`,
       );
     }
-    if (el.isContentEditable && role === "textbox") parts.push(`value="${truncate(clean(shownText(el)), MAX_NAME)}"`);
+    if (el.isContentEditable && role === "textbox")
+      parts.push(`value=${quoted(truncate(clean(shownText(el)), MAX_NAME))}`);
     if (el.disabled || el.getAttribute("aria-disabled") === "true") parts.push("disabled");
     const expanded = el.getAttribute("aria-expanded");
-    if (expanded) parts.push(`expanded=${expanded}`);
+    if (expanded) parts.push(`expanded=${asWord(expanded)}`);
     if (el.getAttribute("aria-selected") === "true") parts.push("selected");
-    if (el.getAttribute("aria-checked")) parts.push(`checked=${el.getAttribute("aria-checked")}`);
+    if (el.getAttribute("aria-checked")) parts.push(`checked=${asWord(el.getAttribute("aria-checked"))}`);
     if (clickable && role) parts.push("clickable");
     if (!inViewport(el, this.env.window())) parts.push("(off-screen)");
     return parts.join(" ");
@@ -946,7 +952,7 @@ export class PageReader {
         listens ||= NATIVELY_CLICKABLE.has(tagOf(up)) || this.#listens(up);
         continue;
       }
-      const role = roleOf(target) || "clickable";
+      const role = asWord(roleOf(target) || "clickable");
       const { name, mark } = this.#name(target, clickable, clickable || undefined);
       const shown = name
         ? `"${truncate(name, MAX_HIT_NAME).replaceAll('"', "'")}"${mark && ` ${mark}`}`
@@ -960,7 +966,7 @@ export class PageReader {
     const doc = this.env.document();
     const el = ref ? this.env.element(ref) : hitAt(doc, x, y);
     if (!el) return this.env.L("an empty spot", "boş bir yer");
-    const role = roleOf(el) || el.localName;
+    const role = asWord(roleOf(el) || el.localName);
     const name = accessibleName(el) || truncate(clean(el.innerText ?? ""), 40);
     return name ? `${role} "${truncate(name, 60)}"` : role;
   }
