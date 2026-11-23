@@ -88,8 +88,8 @@ export class Channels {
     }
   }
 
-  rename(session, transport, title) {
-    const name = this.env.renameOwner(session, transport, title);
+  update(session, transport, { cwd, label, title }) {
+    const name = this.env.updateOwner(session, transport, label || cwd, title);
     const sub = this.subscribers.get(session);
     if (name && sub?.transport === transport) sub.name = name;
   }

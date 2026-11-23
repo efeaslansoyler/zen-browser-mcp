@@ -261,7 +261,7 @@ export async function serve(launch = createBrowserLauncher()) {
     const now = claudeTitle();
     if (now === title) return;
     title = now;
-    ownerSubscription?.setTitle(title);
+    ownerSubscription?.update({ title });
   }, 15_000).unref();
   // why: Closing stdio must end the server even if a browser subscription is still open.
   const shutdown = async (code: number) => {

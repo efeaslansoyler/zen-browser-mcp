@@ -342,7 +342,7 @@ export async function runCodexWatch(target: Selection) {
       const title = threads.get(id)?.name;
       if (receiver.title === title) continue;
       receiver.title = title;
-      receiver.subscription.setTitle(title);
+      receiver.subscription.update({ title });
     }
     for (const id of visible) {
       if (receivers.has(id)) continue;

@@ -457,7 +457,7 @@ function logError(where, e) {
     ctx.channels = new Channels(ctx.lastUse, {
       theme: agentTheme,
       connectOwner: (...args) => ctx.connectOwnerSession(...args),
-      renameOwner: (...args) => ctx.renameOwnerSession(...args),
+      updateOwner: (...args) => ctx.updateOwnerSession(...args),
       sessionName: (...args) => ctx.sessionName(...args),
       disconnectOwner: (session, transport) => {
         if (!ctx.shuttingDown) ctx.disconnectOwnerSession(session, transport);
@@ -787,7 +787,7 @@ function logError(where, e) {
               continue;
             }
             if (session) {
-              if (request?.event === "title") ctx.channels.rename(session, transport, request.title);
+              if (request?.event === "update") ctx.channels.update(session, transport, request);
               else ctx.channels.acknowledge(session, transport, request);
               continue;
             }
