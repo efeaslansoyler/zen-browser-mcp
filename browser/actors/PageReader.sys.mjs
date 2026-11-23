@@ -234,6 +234,12 @@ export function roleOf(el) {
   return "";
 }
 
+// why: Gecko's accessibility tree resolves levels the same way, invalid values included.
+function headingLevel(el) {
+  const level = parseInt(el.getAttribute("aria-level"), 10);
+  return level > 0 ? level : (/^H([1-6])$/.exec(el.tagName.toUpperCase())?.[1] ?? 2);
+}
+
 // why: An element with display: contents has no box of its own, so checkVisibility denies it.
 const styleOf = (el) => el.ownerDocument.defaultView.getComputedStyle(el);
 const isBoxless = (el) => styleOf(el).display === "contents";
@@ -683,7 +689,7 @@ export class PageReader {
     if (mark) parts.push(mark);
     parts.push(`[${this.env.ref(el)}]`);
     const tag = el.tagName.toUpperCase();
-    if (role === "heading") parts.push(`level=${tag[1] || el.getAttribute("aria-level") || ""}`);
+    if (role === "heading") parts.push(`level=${headingLevel(el)}`);
     if (role === "link" && el.getAttribute("href")) parts.push(`href="${truncate(el.getAttribute("href"), 120)}"`);
     if (tag === "INPUT" || tag === "TEXTAREA") {
       const type = el.getAttribute("type");
