@@ -7,6 +7,8 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
 ### Added
 
 - `read_page`, `find` and annotated screenshots give refs to clickable elements without a control
@@ -263,6 +265,7 @@ the commit log.
 - Auto/ask modes, sensitive sites, the activity log, the CLI and package layout, README and
   MIT license.
 
-[Unreleased]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/efeaslansoyler/zen-browser-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/efeaslansoyler/zen-browser-mcp/releases/tag/v0.1.0
