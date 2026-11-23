@@ -355,7 +355,10 @@ tool(
     tabId,
     ...readDiff,
     filter: z.enum(["all", "interactive"]).optional(),
-    depth: z.number().optional().describe("Maximum DOM depth to walk (default 30)."),
+    depth: z
+      .number()
+      .optional()
+      .describe("Only walk this many DOM levels (default: all); the result says if that left something out."),
     ref_id: z.string().optional().describe("Only return the subtree of this element."),
     max_chars: z.number().optional().describe("Output size limit (default 50000)."),
   },

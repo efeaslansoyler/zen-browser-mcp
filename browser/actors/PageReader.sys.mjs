@@ -470,7 +470,7 @@ export class PageReader {
     return [...this.env.document().querySelectorAll("*")].filter((el) => el.matches(selector) || this.#clickable(el));
   }
 
-  readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false, loading = false }) {
+  readPage({ filter = "all", depth = Infinity, ref_id, max_chars = MAX_TREE, bare = false, loading = false }) {
     this.#startRead();
     const doc = this.env.document();
     const root = ref_id ? this.env.element(ref_id) : doc.body;
@@ -478,10 +478,12 @@ export class PageReader {
     const lines = [];
     let size = 0;
     let truncated = false;
+    let leftOut = false;
     const interactiveOnly = filter === "interactive";
 
-    const push = (indent, line) => {
-      if (truncated) return;
+    const push = (level, indent, line) => {
+      if (level > depth) leftOut = true;
+      if (truncated || level > depth) return;
       const text = "  ".repeat(indent) + line;
       if (size + text.length > max_chars) {
         truncated = true;
@@ -492,7 +494,8 @@ export class PageReader {
     };
 
     const walk = (el, indent, level) => {
-      if (truncated || level > depth) return;
+      // why: Below the depth limit, only whether there is anything to read matters.
+      if (truncated || (level > depth && leftOut)) return;
       if (!isVisible(el)) return;
       const clickable = this.#clickable(el);
       if (isSkipped(el, clickable)) return;
@@ -503,13 +506,14 @@ export class PageReader {
       // why: Leave a marker because the content of a frame belongs to its own actor.
       const frameId = frameIdOf(el);
       if (frameId) {
-        if (!interactiveOnly) push(indent, this.describeElement(el, role));
-        push(interactiveOnly ? indent : indent + 1, `{{frame:${frameId}}}`);
+        if (!interactiveOnly) push(level, indent, this.describeElement(el, role));
+        push(level, interactiveOnly ? indent : indent + 1, `{{frame:${frameId}}}`);
         return;
       }
       if (printed) {
         const whole = clickable && this.#whole(el);
         push(
+          level,
           indent,
           this.describeElement(el, role, {
             clickable,
@@ -522,7 +526,7 @@ export class PageReader {
         if (interactive && role !== "listbox" && role !== "combobox") return;
         if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !this.#hasTargets(el)) {
           const t = clean(shownText(el));
-          if (t) push(childIndent, `text "${truncate(t, 500)}"`);
+          if (t) push(level, childIndent, `text "${truncate(t, 500)}"`);
           return;
         }
       }
@@ -530,7 +534,8 @@ export class PageReader {
         if (child.nodeType === 1) walk(child, childIndent, level + 1);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          if (t && !(printed && NAME_FROM_CONTENT.has(role)) && showsText(el, child)) push(childIndent, `text "${t}"`);
+          if (t && !(printed && NAME_FROM_CONTENT.has(role)) && showsText(el, child))
+            push(level, childIndent, `text "${t}"`);
         }
       }
     };
@@ -540,6 +545,11 @@ export class PageReader {
       const hint = interactiveOnly ? "search with find" : 'use filter: "interactive"';
       lines.push(`…(truncated at ${max_chars} characters; focus on a subtree with ref_id or ${hint})`);
     }
+    // why: At the start, so that cutting a long result can't remove it.
+    if (leftOut)
+      lines.unshift(
+        `(depth ${depth}: deeper elements are left out; read without depth, or focus on a subtree with ref_id)`,
+      );
     const tree = lines.join("\n") || (loading ? STILL_LOADING : "");
     if (bare) return tree;
     return `${doc.title}\n${doc.URL}\n\n${tree || "(no visible elements)"}`;
