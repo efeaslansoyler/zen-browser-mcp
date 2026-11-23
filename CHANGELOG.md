@@ -7,6 +7,10 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+### Fixed
+
+- `find`, `wait_for` text and select options match capital I: "WIFI" on a page now equals "wifi".
+
 ## [0.2.0] - 2026-11-21
 
 ### Added

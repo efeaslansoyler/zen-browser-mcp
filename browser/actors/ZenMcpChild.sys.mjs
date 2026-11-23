@@ -553,6 +553,7 @@ export class ZenMcpChild extends JSWindowActorChild {
       const wanted = String(value);
       const opt =
         [...el.options].find((o) => o.value === wanted) ||
+        [...el.options].find((o) => reader.clean(o.text) === reader.clean(wanted)) ||
         [...el.options].find((o) => reader.normalize(o.text) === reader.normalize(wanted));
       if (!opt)
         // why: Errors reach the activity log, which must not keep what the agent typed.
