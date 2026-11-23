@@ -90,6 +90,8 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   `currentWindowGlobal` changes. Return structured errors explicitly because rejected actor
   queries do not reliably carry the original message. Page alerts, confirms and prompts block
   page JavaScript, so monitor for a dialog instead of relying on the pending query to finish.
+- A page dialog stays in its manager for a while after `acceptDialog()` or `cancelDialog()`. The
+  next dialog of the page gets a new window.
 - With bfcache, a navigation can move the old page into the cache together with its own
   BrowsingContext: that context's `currentWindowGlobal` never changes and the tab's
   `browser.browsingContext` becomes a new object. Check `bc.isInBFCache` / `bc.top.isInBFCache`

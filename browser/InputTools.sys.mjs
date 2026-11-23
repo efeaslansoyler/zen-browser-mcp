@@ -360,7 +360,11 @@ export function inputTools(ctx) {
       const dialog = win.document.querySelector("dialog");
       if (accept) dialog.acceptDialog();
       else dialog.cancelDialog();
-      await operationSleep(200, call);
+      // why: A dialog outlives its answer (docs/gecko-pitfalls.md, Input and frames).
+      for (let waited = 0; openDialog(browser) === win; waited += 50) {
+        if (waited >= 5000) throw new Error(`${promptType} "${message}" is still open after the answer.`);
+        await operationSleep(50, call);
+      }
       return text(
         `${promptType} "${message}" ${accept ? "accepted" : "dismissed"}${answer != null && accept ? ` (text: "${answer}")` : ""}.`,
       );
