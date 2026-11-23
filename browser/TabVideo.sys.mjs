@@ -101,6 +101,11 @@ export class TabVideo {
     this.#tabs.delete(id);
   }
 
+  endTab(id, reason) {
+    const record = this.#tabs.get(id);
+    if (record) this.#finish(record, reason);
+  }
+
   dropSession(session) {
     for (const id of this.#tabs.keys()) this.dropTab(id, session);
   }

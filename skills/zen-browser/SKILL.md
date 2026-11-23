@@ -43,7 +43,9 @@ tab others still use; closing it only takes you out of it.
 For a few steps nobody may interrupt (a checkout, a multi-page form), `tab_work hold` the tab
 with a reason that says what the others must not do, add `noWorkaround: true` if they must not
 do it on the same site in another tab either, and `release` it right after. A tab someone
-else holds refuses your calls with the holder and the reason. Don't retry in a loop: start
+else holds refuses your calls with the holder and the reason. The user can also take over one tab
+for a while (`user_control`); its page may be different afterwards, so read it again before you
+act. In both cases don't retry in a loop: start
 `watch` with that tab's id and `hold: true` (it answers at once and its events file gets a
 `released` line when the hold ends), do other work meanwhile, and follow the file with a
 background monitor if you have one. Don't open the same site elsewhere to get around it.

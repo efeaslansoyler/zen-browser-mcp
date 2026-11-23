@@ -824,6 +824,10 @@ tool(
     ),
 );
 
+// why: A call on a tab the user took over waits for it first (WAIT_MS in browser/Takeover.sys.mjs).
+const TAKEOVER_WAIT = 45_000;
+
 export function callTimeout(name: string, args: any): number | undefined {
-  return TOOLS.find((t) => t.name === name)?.timeout?.(args) ?? consentTimeout(name, args);
+  const own = TOOLS.find((t) => t.name === name)?.timeout?.(args) ?? consentTimeout(name, args);
+  return args.tabId == null ? own : (own ?? 60_000) + TAKEOVER_WAIT;
 }

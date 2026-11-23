@@ -21,3 +21,11 @@ _Avoid_: Selection, review, show to agent (that is the menu item that starts a p
 The file and line in the user's project that produced a picked element, as far as the page's
 dev-mode metadata reveals it.
 _Avoid_: Mapping, label
+
+## Sharing a tab with agents
+
+**Takeover**:
+The user takes control of one agent tab for a while and gives it back. The agents keep their place
+in the tab but can neither act nor look there meanwhile.
+_Avoid_: Hold (an agent keeps other agents out), take back (the agents lose the tab), hand-over (the
+agent asks the user to do a step)

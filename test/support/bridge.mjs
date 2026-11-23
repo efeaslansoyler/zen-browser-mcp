@@ -11,6 +11,7 @@ import { clipboardShortcut, systemClipboard } from "../../browser/Clipboard.sys.
 import { config } from "../../browser/Config.sys.mjs";
 import { sessionManager } from "../../browser/Sessions.sys.mjs";
 import { tabWork } from "../../browser/TabWork.sys.mjs";
+import { takeover } from "../../browser/Takeover.sys.mjs";
 import { tabs, MARK } from "../../browser/Tabs.sys.mjs";
 import { pageQueries, DialogOpen, PageGone } from "../../browser/PageQuery.sys.mjs";
 import { pageInput, keyName } from "../../browser/PageInput.sys.mjs";
@@ -82,6 +83,7 @@ export function bridgeContext(fakes = {}) {
     config(ctx),
     sessionManager(ctx),
     tabWork(ctx),
+    takeover(ctx),
     tabs(ctx),
     pageQueries(ctx),
     pageInput(ctx),
@@ -109,6 +111,7 @@ export function testCall(ctx, { session = "A", agent = { id: "codex" }, tabs = [
     agent: agentTheme(agent),
     tabs: new Set(tabs),
     tabVersions: new Map(),
+    fresh: new Set(),
     userNotes: [],
   });
   ctx.calls.add(call);

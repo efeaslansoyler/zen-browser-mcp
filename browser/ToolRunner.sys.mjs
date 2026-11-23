@@ -12,6 +12,8 @@ export function toolRunner(ctx) {
       if (call.tabVersions.has(args.tabId))
         access.checkTicket([[args.tabId, call.tabVersions.get(args.tabId)]], call.session);
       ctx.browserFor(call, args.tabId);
+      ctx.assertFree(call, args.tabId, tool);
+      ctx.assertRead(call, args.tabId, tool, args);
     }
     const browser =
       !["request_tab", "tab_work"].includes(tool) && state.tabs.has(args.tabId)
@@ -104,6 +106,8 @@ export function toolRunner(ctx) {
       }
       ran = true;
       const result = await ctx.tools[tool](args, call);
+      if (browser && (tool === "navigate" || PAGE_READS.has(ctx.policy.operationOf(tool, args))))
+        call.fresh.add(args.tabId);
       if (browser && !cleanup) ctx.assertSiteAccess(browser);
       // why: Keep successful steps and the cancellation error when only part of a batch completed.
       if (!result?.isError) call.check();
@@ -190,6 +194,8 @@ export function toolRunner(ctx) {
       agent: ctx.agentTheme(agent ?? { id: "claude" }),
       tabs: new Set(),
       reads: new Set(),
+      fresh: new Set(),
+      notices: [],
       tabVersions: new Map(ticket),
       userNotes: [],
       screenshots: ctx.screenshots.snapshot(),
@@ -215,6 +221,7 @@ export function toolRunner(ctx) {
   async function handle(line, transport, output) {
     const { access, sessions, sessionVersions, state } = ctx;
     let message;
+    let notices = [];
     try {
       const { tool, args = {}, session, agent } = JSON.parse(line);
       const fn = ctx.tools[tool] || ctx.commands[tool];
@@ -240,13 +247,28 @@ export function toolRunner(ctx) {
         if (!["request_tab", "tabs_close_mcp"].includes(tool))
           for (const id of referenced)
             if (id != null && ctx.access.has(id, session)) ctx.assertNotHeld(id, session, null, { site: false });
-        const ticket = access.ticket(
-          referenced.filter((id) => id != null),
-          session,
-        );
-        const lock = ctx.locks.acquire(referenced.filter((id) => id != null).map((id) => `tab:${id}`));
+        const tabIds = referenced.filter((id) => id != null);
+        const ticket = access.ticket(tabIds, session);
+        const waiting = newCall(session, agent);
+        notices = waiting.notices;
+        const until = ctx.waitEnd();
+        let lock;
         const run = async () => {
-          await lock.ready;
+          for (;;) {
+            if (ctx.waitsForUser(tool, tabIds)) {
+              ctx.calls.add(waiting);
+              try {
+                const status = await ctx.whenFree(waiting, tabIds, until);
+                if (status) return Object.assign(status, { isError: true });
+              } finally {
+                ctx.calls.delete(waiting);
+              }
+            }
+            lock = ctx.locks.acquire(tabIds.map((id) => `tab:${id}`));
+            await lock.ready;
+            if (!ctx.waitsForUser(tool, tabIds)) break;
+            lock.release();
+          }
           if (state.paused) throw new ctx.Stopped();
           if (generation !== ctx.stopGeneration) throw new ctx.Stopped(ctx.cancelMessage);
           access.checkTicket(ticket, session);
@@ -257,6 +279,7 @@ export function toolRunner(ctx) {
           ctx.setLastAgent(call.agent);
           try {
             const content = await runTool(call, tool, args);
+            for (const tabId of call.fresh) ctx.wasRead(tabId, session);
             content.push(...meanwhile(call));
             const sent = ctx.inbox?.take(session) ?? [];
             if (sent.length) content.push({ type: "text", text: ctx.inboxText(sent) });
@@ -279,7 +302,7 @@ export function toolRunner(ctx) {
         try {
           content = await run();
         } finally {
-          lock.release();
+          lock?.release();
         }
         message = { ok: true, content, ...(content.isError ? { isError: true } : {}) };
       } else message = { ok: true, content: await fn(args) };
@@ -291,6 +314,10 @@ export function toolRunner(ctx) {
       } else {
         message = { ok: false, error: String(e?.message ?? e) };
       }
+    }
+    for (const notice of notices) {
+      if (message.ok) message.content.push(...ctx.text(notice));
+      else message.error += `\n${JSON.stringify(notice)}`;
     }
     try {
       ctx.reply(transport, output, message);

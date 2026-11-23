@@ -146,7 +146,9 @@ export function tabs(ctx) {
   function describeTab(tab, viewer) {
     const b = tab.linkedBrowser;
     if (!ctx.siteAllowed(ctx.hostOf(b))) return { tabId: b.browserId, blocked: true };
-    const info = { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
+    const info = ctx.takenOver(b.browserId)
+      ? { tabId: b.browserId, userControl: true }
+      : { tabId: b.browserId, title: b.contentTitle || tab.label, url: b.currentURI?.spec };
     const members = ctx.access.members(b.browserId);
     if (members.length && !(members.length === 1 && members[0] === viewer))
       info.members = members.map((session) => ({

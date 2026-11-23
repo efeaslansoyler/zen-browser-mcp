@@ -99,6 +99,7 @@ export class NetworkLog {
       if (rule?.action === "block") channel.cancel(Cr.NS_ERROR_ABORT);
       if (rule?.action === "offline") channel.cancel(Cr.NS_ERROR_OFFLINE);
     }
+    if (this.env.unrecorded?.(browserId)) return;
     this.env.capture?.(channel, browserId, type, topic);
     let log = this.logs.get(browserId);
     if (!log) this.logs.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));

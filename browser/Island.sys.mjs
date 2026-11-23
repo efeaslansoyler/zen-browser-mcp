@@ -11,6 +11,8 @@ const ID = "zen-mcp-island";
 const HIDE_AFTER = 4000;
 const PREVIEW_WIDTH = 340;
 const PREVIEW_EVERY = 400;
+// why: An agent often thinks longer than HIDE_AFTER between its calls, and the user must still reach the row.
+const STAY_ON_TAB = 120_000;
 const SWITCH_EVERY = 1500;
 const RECENT = 1200;
 const UNPIN_AFTER = 5000;
@@ -73,7 +75,8 @@ const CSS = `
     &[state="working"] .main { display: none; }
     & .workers { display: none; }
     &[state="working"] .workers { display: flex; }
-    &[state="ask"][open] .workers[others] {
+    &[taken] .workers[others] { display: flex; }
+    &:is([state="ask"][open], [taken]:not([state="working"])) .workers[others] {
       display: flex;
       height: 30px;
       margin: 0 6px;
@@ -239,6 +242,30 @@ const CSS = `
       &:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
       &[mode="ask"] { opacity: 0.9; color: var(--zen-agent-accent, #e8a58e); }
     }
+
+    /* take over: on the row of the tab the user looks at; the same place gives it back */
+    & .take {
+      padding: 0 9px;
+      font-size: 11px;
+      &[hidden] { display: none; }
+      &[on] {
+        background: var(--zen-agent-accent, #d97757);
+        color: var(--zen-agent-foreground, #fff);
+        &:hover { background: var(--zen-agent-hover, #e08667); }
+      }
+    }
+    &[taken] .workers .mode, &[taken]:not([state="working"]) .workers .stop { display: none; }
+    &[taken] .workers :is(.host, .favicon) { display: none; }
+    &[taken] .preview { display: none !important; }
+    & .back-note {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.22s ease;
+      overflow: hidden;
+      & textarea { min-height: 0; height: 0; padding-block: 0; width: auto; margin: 0 10px; visibility: hidden; }
+    }
+    &[giving] .back-note { grid-template-rows: 1fr; }
+    &[giving] .back-note textarea { height: 32px; padding-block: 7px; margin-bottom: 9px; visibility: visible; }
 
     /* stop: a small round ■; once stopped, a colored "Resume" */
     & .stop {
@@ -439,6 +466,8 @@ export class Island {
   #message = "";
   #browser = null;
   #workers = new Map();
+  #lastOn = new WeakMap();
+  #drafts = new WeakMap();
   #shownWorker = null;
   #switchedAt = 0;
   // why: Manual row selection must stay in place while the user examines it.
@@ -542,8 +571,16 @@ export class Island {
     pager.append(prev, icons, next);
     const mode = node("button", "mode");
     mode.addEventListener("click", () => this.#actions.toggleMode());
+    const take = node("button", "take");
     const wStop = node("button", "stop");
-    workers.append(wIcon, wInfo, lock, pager, mode, wStop);
+    workers.append(wIcon, wInfo, lock, pager, mode, take, wStop);
+    const backNote = node("div", "back-note");
+    const backField = node("textarea", "back-field");
+    backField.placeholder = L("Note for the agent (optional)", "Ajana not (isteğe bağlı)");
+    backField.rows = 1;
+    backField.maxLength = 2000;
+    backField.setAttribute("aria-label", backField.placeholder);
+    backNote.append(backField);
     const holdline = node("div", "holdline");
     const holdText = node("span");
     const removeHold = node("button", "", L("Remove hold", "Tutmayı kaldır"));
@@ -572,7 +609,7 @@ export class Island {
     const elementNotes = node("div", "element-notes");
     compose.append(note, elementNotes, composeFooter);
     const reviewHost = node("div", "review-host");
-    el.append(row, fold, workers, holdline, reviewHost, compose, preview);
+    el.append(row, fold, workers, backNote, holdline, reviewHost, compose, preview);
     doc.documentElement.append(el);
 
     const submit = () => {
@@ -660,6 +697,31 @@ export class Island {
     removeHold.addEventListener("click", () => {
       const browser = this.#worker()?.browser.deref();
       if (browser) this.#actions.releaseHold?.(browser);
+      this.#render();
+    });
+    const giveBack = (browser) => {
+      const note = this.#drafts.get(browser) ?? "";
+      this.#drafts.delete(browser);
+      backField.value = "";
+      backField.blur();
+      // why: The row stays to show that the agent has the tab again, however long the user had it.
+      const here = this.#here(win);
+      if (here) this.#lastOn.set(browser, { session: here.session, agent: here.agent, at: Date.now() });
+      this.#actions.giveBack(browser, note);
+    };
+    take.addEventListener("click", () => {
+      const browser = win.gBrowser.selectedBrowser;
+      if (this.#actions.takeover?.(browser)?.taken) giveBack(browser);
+      else this.#actions.takeOver(browser);
+      this.#render();
+    });
+    backField.addEventListener("input", () => {
+      this.#drafts.set(win.gBrowser.selectedBrowser, backField.value);
+    });
+    backField.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      giveBack(win.gBrowser.selectedBrowser);
       this.#render();
     });
     cardPrev.addEventListener("click", () => this.#stepCard(-1));
@@ -754,6 +816,9 @@ export class Island {
       wHost,
       wText,
       wStop,
+      take,
+      backField,
+      backFor: null,
       lock,
       pager,
       prev,
@@ -809,7 +874,7 @@ export class Island {
   #stateNow() {
     if (["stopped", "recording", "review", "dialog"].includes(this.#state)) return this.#state;
     if (this.#cards.length) return "ask";
-    return this.#workers.size ? "working" : "hidden";
+    return this.#workers.size || this.#hereNow() ? "working" : "hidden";
   }
 
   refresh() {
@@ -828,6 +893,7 @@ export class Island {
     Object.assign(worker, { agent: agentTheme(agent), browser: new WeakRef(browser), text, at: Date.now() });
     worker.ending = null;
     this.#workers.set(session, worker);
+    this.#lastOn.set(browser, { session, agent: worker.agent, at: worker.at });
     this.#render();
   }
 
@@ -836,6 +902,8 @@ export class Island {
     const worker = this.#workers.get(session);
     if (!worker) return;
     this.#clearTimeout(worker.ending);
+    const last = this.#lastOn.get(worker.browser.deref());
+    if (last?.session === session) last.at = Date.now();
     const end = () => {
       if (this.#hovering && this.#shownWorker === session) {
         worker.ending = this.#setTimeout(end, HIDE_AFTER);
@@ -847,11 +915,59 @@ export class Island {
     worker.ending = this.#setTimeout(end, HIDE_AFTER);
   }
 
+  // why: The row of the tab the user looks at, also while its agent thinks, so that taking over stays in reach.
+  #here(win) {
+    const browser = win?.gBrowser?.selectedBrowser;
+    const state = browser && this.#actions.takeover?.(browser);
+    if (!state) return null;
+    const last = this.#lastOn.get(browser);
+    const left = last ? last.at + STAY_ON_TAB - Date.now() : 0;
+    if (!state.taken) {
+      const active = [...this.#workers.values()].filter((w) => w.browser.deref() === browser);
+      if (active.length) return active.reduce((a, b) => (b.at > a.at ? b : a));
+      if (left <= 0) return null;
+      this.#later(left);
+    }
+    let host = "";
+    try {
+      host = browser.currentURI.host;
+    } catch {}
+    const { session, agent } = last ?? state;
+    const doing = state.taken
+      ? L("you have control", "kontrol sende")
+      : this.#workers.has(session)
+        ? L("working in another tab", "başka sekmede çalışıyor")
+        : L("waiting", "bekliyor");
+    return {
+      session,
+      agent: agentTheme(agent),
+      browser: new WeakRef(browser),
+      text: `${host} — ${doing}`,
+      at: last?.at ?? 0,
+      taken: state.taken,
+    };
+  }
+
+  #hereNow() {
+    const active = Services.focus?.activeWindow;
+    return this.#here(this.#windows.has(active) ? active : Services.wm?.getMostRecentWindow?.("navigator:browser"));
+  }
+
+  #rows(here = this.#hereNow()) {
+    const rows = new Map(this.#workers);
+    if (here) rows.set(here.session, here);
+    return rows;
+  }
+
   // why: Limit automatic switches so multiple busy agents do not make the row flicker.
-  #worker() {
-    const workers = [...this.#workers.values()];
+  #worker(here = this.#hereNow(), rows = this.#rows(here)) {
+    const workers = [...rows.values()];
     if (!workers.length) return null;
-    let shown = this.#workers.get(this.#shownWorker);
+    if (here && !(this.#pinned || this.#hovering)) {
+      this.#shownWorker = here.session;
+      return here;
+    }
+    let shown = rows.get(this.#shownWorker);
     if (shown && (this.#pinned || this.#hovering)) return shown;
     const latest = workers.reduce((a, b) => (b.at > a.at ? b : a));
     const wait = SWITCH_EVERY - (Date.now() - this.#switchedAt);
@@ -864,9 +980,10 @@ export class Island {
   }
 
   #stepWorker(step) {
-    const workers = [...this.#workers.values()];
+    const workers = [...this.#rows().values()];
     if (workers.length < 2) return;
-    const i = workers.indexOf(this.#worker());
+    const shown = this.#worker().session;
+    const i = workers.findIndex((w) => w.session === shown);
     this.#selectWorker(workers[(i + step + workers.length) % workers.length].session);
   }
 
@@ -1065,6 +1182,8 @@ export class Island {
   }
 
   release(browser) {
+    this.#lastOn.delete(browser);
+    this.#drafts.delete(browser);
     for (const [session, worker] of this.#workers) {
       if (worker.browser.deref() !== browser) continue;
       this.#clearTimeout(worker.ending);
@@ -1208,7 +1327,9 @@ export class Island {
     const state = pick ? pick.mode : this.#stateNow();
     const stopped = state === "stopped";
     const card = state === "ask" ? this.#card() : null;
-    const worker = this.#worker();
+    const here = this.#hereNow();
+    const rows = this.#rows(here);
+    const worker = this.#worker(here, rows);
     const browser = this.#mainBrowser(state);
     const shownBrowser = state === "working" ? worker?.browser.deref() : browser;
     const owner = shownBrowser?.ownerDocument?.defaultView;
@@ -1241,7 +1362,7 @@ export class Island {
     };
     const icon = iconOf(browser);
     const cardIndex = card ? this.#cards.indexOf(card) : -1;
-    const all = [...this.#workers.values()];
+    const all = [...rows.values()];
     const asking = (w) => (card.session ? w.session === card.session : w.browser.deref() === browser);
     const workers = card ? all.filter((w) => !asking(w)) : all;
     const rowWorker = workers.includes(worker) ? worker : workers[0];
@@ -1255,16 +1376,23 @@ export class Island {
 
     for (const [win, parts] of this.#windows) {
       const { el, spark, favicon, host, text, hint, stop, message, cancel, goto, ok, target } = parts;
-      applyTheme(el, theme);
       spark.title = theme.name;
       spark.style.background = `url("${agentIcon(theme)}") center / contain no-repeat`;
       spark.style.animation = theme.id === "claude" && !stopped ? "" : "none";
       el.setAttribute("aria-label", theme.name);
       const anywhere = (state === "ask" && !card?.browser) || stopped;
-      const visible = anywhere || (state !== "hidden" && win === owner);
-      el.setAttribute("state", state);
+      const own = this.#here(win);
+      const taken = own?.taken ? own : null;
+      const main = anywhere || (state !== "hidden" && win === owner);
+      const visible = main || !!taken;
+      // why: The way to give a tab back must not depend on what the island shows about another one.
+      const winState = main ? state : taken ? "working" : state;
+      const winWorker = taken && (winState !== "working" || !this.#pinned) ? taken : rowWorker;
+      el.setAttribute("state", winState);
+      el.toggleAttribute("taken", !!taken);
       el.toggleAttribute("fresh", state === "recording" && this.#fresh);
-      this.#renderReview(win, parts, visible);
+      applyTheme(el, main || !taken ? theme : taken.agent);
+      this.#renderReview(win, parts, main);
       if (!visible) parts.hovered = parts.focused = false;
       if (state !== "review") parts.folded = false;
       el.toggleAttribute("folded", parts.folded);
@@ -1335,7 +1463,9 @@ export class Island {
 
       this.#renderMode(parts.mode);
       this.#renderMode(parts.cardMode);
-      this.#renderWorkers(win, parts, rowWorker, workerHolds, workers, now);
+      const winRows = winWorker === taken ? [taken, ...workers.filter((w) => w.session !== taken.session)] : workers;
+      this.#renderWorkers(win, parts, winWorker, winWorker === rowWorker ? workerHolds : null, winRows, now);
+      this.#renderTake(win, parts, winWorker, winState);
       if (visible) this.#place(win);
       el.hidden = !visible;
     }
@@ -1397,6 +1527,26 @@ export class Island {
       icons.replaceChildren(...buttons);
     }
     wStop.title = L("Stop all agents (Ctrl+Shift+Esc)", "Tüm ajanları durdur (Ctrl+Shift+Esc)");
+  }
+
+  #renderTake(win, parts, worker, state) {
+    const browser = win.gBrowser.selectedBrowser;
+    const here = !!browser && worker?.browser.deref() === browser;
+    const takeover = here ? this.#actions.takeover?.(browser) : null;
+    const { take, backField, el } = parts;
+    take.hidden = !takeover || (!takeover.taken && state !== "working");
+    el.toggleAttribute("giving", !!takeover?.taken && state === "working" && (parts.hovered || parts.focused));
+    if (!takeover) return;
+    take.toggleAttribute("on", takeover.taken);
+    take.textContent = takeover.taken ? L("Give back", "Geri ver") : L("Take over", "Devral");
+    take.title = takeover.taken
+      ? L("The agent continues in this tab", "Ajan bu sekmede devam eder")
+      : L("The agent waits; the tab stays with it", "Ajan bekler; sekme onda kalır");
+    if (parts.backFor !== browser) {
+      parts.backFor = browser;
+      backField.value = this.#drafts.get(browser) ?? "";
+    }
+    if (takeover.taken && this.#drafts.get(browser)?.trim()) parts.wText.textContent = `✎ ${parts.wText.textContent}`;
   }
 
   #renderMode(mode) {

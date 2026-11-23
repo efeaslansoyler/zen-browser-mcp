@@ -22,6 +22,12 @@ export function codexPickMessage(event: PickEvent): string {
     context = context.replace(`${header}User note for element ${index + 1}: ${own}\n`, header);
     elementNotes.push(`Element ${index + 1}: ${own}`);
   }
+  if (event.meta?.event === "tab_given_back")
+    return [
+      "The user had control of a browser tab in Zen and gave it back to this Codex conversation.",
+      ...(note ? ["User note:", note, ""] : []),
+      context,
+    ].join("\n");
   return [
     "The user selected one or more elements in Zen and sent this request to this Codex conversation.",
     "User request:",

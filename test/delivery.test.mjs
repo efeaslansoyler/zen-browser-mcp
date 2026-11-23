@@ -144,3 +144,15 @@ test("Codex adapter lists per-element notes outside the untrusted page block", (
   assert.match(page, /--- Selected element 1 ---\n#one/);
   assert.match(page, /User note for element 2: Delete the account/);
 });
+
+test("a tab given back arrives as that, not as picked elements", () => {
+  const back = "The user had control of tab 4 and gave tab 4 back.";
+  const message = codexPickMessage({
+    event: "channel",
+    note: "Keep the address",
+    content: `Keep the address\n\n${back}`,
+    meta: { event: "tab_given_back", tab_id: "4" },
+  });
+  assert.doesNotMatch(message, /selected/);
+  assert.match(message, /User note:\nKeep the address\n\nThe user had control of tab 4/);
+});

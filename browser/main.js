@@ -132,6 +132,7 @@ function logError(where, e) {
     const policy = load("Policy");
     const { sessionManager } = load("Sessions");
     const { tabWork } = load("TabWork");
+    const { takeover } = load("Takeover");
     const { tabs, MARK, MARK_CSS } = load("Tabs");
     const { pageQueries, DialogOpen, PageGone } = load("PageQuery");
     const { pageInput, keyName, MAX_EDGE } = load("PageInput");
@@ -288,6 +289,7 @@ function logError(where, e) {
       config(ctx),
       sessionManager(ctx),
       tabWork(ctx),
+      takeover(ctx),
       tabs(ctx),
       pageQueries(ctx),
       pageInput(ctx),
@@ -584,6 +586,7 @@ function logError(where, e) {
         }
       },
       tracked: (browserId) => state.tabs.has(browserId),
+      unrecorded: (browserId) => ctx.takenOver(browserId),
       control: (channel, id, topDocument) => {
         if (!ctx.networkControl.has(id)) return null;
         const tab = ctx.findTab(id);
@@ -633,12 +636,13 @@ function logError(where, e) {
       },
       check: async (browser, condition) => !!(await ctx.acrossFrames(browser, "check", condition, (value) => value)),
       sample: (browser, selector) => ctx.acrossFrames(browser, "sample", { selector }, (value) => value != null),
+      paused: (tabId) => ctx.takenOver(tabId),
       assertSite: (browser) => ctx.assertSiteAccess(browser),
       wake: (browser) => ctx.tabWake.hold(browser),
       held: (tabId, session) => {
         if (!access.shared(tabId) || !ctx.findTab(tabId)) return "gone";
         const hold = ctx.holdOf(tabId);
-        return hold && hold.session !== session ? "held" : "free";
+        return ctx.takenOver(tabId) || (hold && hold.session !== session) ? "held" : "free";
       },
       setTimeout,
       clearTimeout,
@@ -874,6 +878,9 @@ function logError(where, e) {
             return hold ? { session: hold.session, ...ctx.describeHold(browser.browserId, hold, null) } : null;
           },
           releaseHold: (browser) => ctx.access.release(browser.browserId),
+          takeover: (browser) => ctx.takeoverOf(browser),
+          takeOver: (browser) => ctx.takeOver(browser),
+          giveBack: (browser, note) => ctx.giveBack(browser, note),
         },
         { setTimeout, clearTimeout },
       );

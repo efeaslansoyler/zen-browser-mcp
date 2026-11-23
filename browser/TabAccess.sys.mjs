@@ -51,6 +51,7 @@ export class TabAccess {
     this.tasks.delete(tabId);
     this.holds.delete(tabId);
     this.versions.set(tabId, this.version(tabId) + 1);
+    this.onClear?.(tabId);
   }
 
   check(tabId, session) {

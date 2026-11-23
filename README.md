@@ -16,8 +16,8 @@ your logins, real input, and an island at the top of the window that shows what 
 - **Your own browser.** Agents open their own background tabs next to yours, or work in a tab
   you share. No separate automation browser, no remote debugging port.
 - **You stay in control.** The island shows each agent's work. By default, form submissions,
-  password fields, uploads and page JavaScript wait for your approval, and **Stop** or **Take back**
-  ends an agent's work at once.
+  password fields, uploads and page JavaScript wait for your approval, **Take over** lends you an
+  agent's tab for a moment, and **Stop** or **Take back** ends an agent's work at once.
 - **The parts only you should do stay yours.** Agents hand you logins, 2FA and payments and
   continue when you press **Done**, so credentials never pass through them.
 - **Point instead of describing.** Pick elements on any page and send them to a session with
