@@ -72,6 +72,9 @@ class Element {
   get parentNode() {
     return this.parentElement;
   }
+  get ownerDocument() {
+    return { defaultView: { getComputedStyle: ({ display }) => ({ display, whiteSpace: "normal" }) } };
+  }
   getRootNode() {
     return {};
   }

@@ -27,6 +27,10 @@ change tool names, parameters or results.
 
 ### Fixed
 
+- Names and text in off-screen sections that the browser doesn't render yet (`content-visibility:
+  auto`) are no longer empty in `read_page`, `find`, `get_page_text`, `wait_for` and `watch`.
+- Text hidden by a closed `details` element or `content-visibility: hidden` is no longer read as
+  shown.
 - `read_page` says `(still loading)` instead of `(empty page)` or `(no visible elements)` for a page
   or iframe that is still loading and has shown nothing yet.
 - `handle_dialog` answers in English; parts of its result were Turkish.

@@ -142,12 +142,84 @@ export function roleOf(el) {
   return "";
 }
 
+// why: An element with display: contents has no box of its own, so checkVisibility denies it.
+function isRendered(el, style, options) {
+  if (el.checkVisibility(options)) return true;
+  const parent = style.display === "contents" && composedParent(el);
+  return (
+    parent?.nodeType === 1 && isRendered(parent, parent.ownerDocument.defaultView.getComputedStyle(parent), options)
+  );
+}
+
+// why: checkVisibility answers for the element, but these hide only what is inside it.
+function showsText(el, node, style) {
+  if (tagOf(el) === "DETAILS" && !el.open) return false;
+  if (el.openOrClosedShadowRoot && !node.openOrClosedAssignedSlot) return false;
+  return style.contentVisibility !== "hidden" && isRendered(el, style, { visibilityProperty: true });
+}
+
+// why: innerText, built from the DOM where Gecko leaves it empty (docs/gecko-pitfalls.md, Input and frames).
+// why: As in its specification, a number is how many line breaks must separate what is around it.
+function textItems(el, isNative) {
+  const win = el.ownerDocument.defaultView;
+  const style = win.getComputedStyle(el);
+  const items = [];
+  for (const child of el.childNodes) {
+    if (child.nodeType === 3 && showsText(el, child, style))
+      items.push(style.whiteSpace.startsWith("pre") ? child.data : child.data.replace(/\s+/g, " "));
+    if (child.nodeType !== 1) continue;
+    const childStyle = win.getComputedStyle(child);
+    if (!isRendered(child, childStyle)) continue;
+    const tag = tagOf(child);
+    if (tag === "BR") items.push("\n");
+    if (tag === "BR" || SKIP_TAGS.has(tag) || frameIdOf(child)) continue;
+    const { display } = childStyle;
+    const inline = /^(inline|contents|ruby)/.test(display);
+    const inner = !inline && isNative?.(child) ? [child.innerText] : textItems(child, isNative);
+    const gap = tag === "P" ? 2 : 1;
+    if (inline) items.push(...inner);
+    else if (display === "table-cell") items.push(...inner, "\t");
+    else items.push(gap, ...inner, gap);
+  }
+  return items;
+}
+
+function joinItems(items) {
+  let out = "";
+  let gap = 0;
+  for (const item of items) {
+    if (typeof item === "number") gap = Math.max(gap, item);
+    else if (item.trim() || (out && !gap)) {
+      if (gap && out) out = out.trimEnd() + "\n".repeat(gap);
+      out += /\s/.test(out.at(-1)) ? item.replace(/^ /, "") : item;
+      gap = 0;
+    }
+  }
+  return out.replace(/ +(?=[\t\n])/g, "").trim();
+}
+
+// why: Hidden text stays out, so for an element that really shows nothing both parts are empty.
+export const shownText = (el) =>
+  (el.innerText ?? el.textContent) || (clean(el.textContent) && joinItems(textItems(el)));
+
+export function pageText(root) {
+  const win = root.ownerDocument.defaultView;
+  const skipped = [root, ...root.querySelectorAll("*")].filter(
+    (el) => win.getComputedStyle(el).contentVisibility === "auto" && !el.innerText && clean(el.textContent),
+  );
+  if (!skipped.length) return shownText(root);
+  return joinItems(textItems(root, (el) => !skipped.some((section) => el.contains(section) || section.contains(el))));
+}
+
 export function accessibleName(el, doc, fromContent = NAME_FROM_CONTENT.has(roleOf(el))) {
   const labelledby = el.getAttribute("aria-labelledby");
   if (labelledby) {
     const text = labelledby
       .split(/\s+/)
-      .map((id) => doc.getElementById(id)?.innerText ?? "")
+      .map((id) => {
+        const target = doc.getElementById(id);
+        return target ? shownText(target) : "";
+      })
       .join(" ");
     if (clean(text)) return truncate(clean(text), MAX_NAME);
   }
@@ -156,7 +228,8 @@ export function accessibleName(el, doc, fromContent = NAME_FROM_CONTENT.has(role
   const tag = el.tagName.toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     const label = el.labels?.[0];
-    if (label && clean(label.innerText)) return truncate(clean(label.innerText), MAX_NAME);
+    const labelText = label && clean(shownText(label));
+    if (labelText) return truncate(labelText, MAX_NAME);
     if (tag === "INPUT" && ["button", "submit", "reset"].includes(el.type) && el.value)
       return truncate(el.value, MAX_NAME);
     if (el.getAttribute("placeholder")) return truncate(clean(el.getAttribute("placeholder")), MAX_NAME);
@@ -166,7 +239,7 @@ export function accessibleName(el, doc, fromContent = NAME_FROM_CONTENT.has(role
     if (alt) return truncate(clean(alt), MAX_NAME);
   }
   if (fromContent) {
-    const text = clean(el.innerText ?? el.textContent);
+    const text = clean(shownText(el));
     if (text) return truncate(text, MAX_NAME);
     const inner = el.querySelector("img[alt], svg title, [aria-label]");
     const innerName = inner?.getAttribute("alt") || inner?.getAttribute("aria-label") || inner?.textContent;
@@ -260,6 +333,10 @@ export class PageReader {
     return answers.get(el);
   }
 
+  #style(el) {
+    return this.env.window().getComputedStyle(el);
+  }
+
   #listens(el) {
     return this.env.listenerTypes(el).some((type) => CLICK_EVENTS.has(type));
   }
@@ -277,7 +354,7 @@ export class PageReader {
   #whole(el) {
     return this.#remember(this.#wholes, el, () => {
       if (tagOf(el) === "SVG") return true;
-      const shown = (el.innerText ?? "").trim();
+      const shown = shownText(el).trim();
       if (shown.length > MAX_NAME || /[\n\t]/.test(shown)) return false;
       const all = clean(el.textContent);
       return ![...el.querySelectorAll("*")].some((part) => {
@@ -325,25 +402,24 @@ export class PageReader {
       };
     });
     if (field !== el || cell.querySelector(LAYOUT_SELECTOR)) return "";
-    const labels = cells.slice(0, cells.indexOf(cell)).filter((before) => tokens(before.innerText).length);
+    const labels = cells.slice(0, cells.indexOf(cell)).filter((before) => tokens(shownText(before)).length);
     if (labels.length !== 1) return "";
-    const text = labels[0].innerText.trim();
+    const text = shownText(labels[0]).trim();
     if (text.length > MAX_NAME || /[\n\t]/.test(text)) return "";
     const holdsControl = [...labels[0].querySelectorAll("*")].some(
-      (inner) => isControl(inner) && clean(inner.innerText),
+      (inner) => isControl(inner) && clean(shownText(inner)),
     );
     return holdsControl ? "" : clean(text);
   }
 
   // why: Text of a submenu or of an inner control doesn't name the element around it.
   #hiddenText(el) {
-    if (clean(el.innerText ?? el.textContent)) return "";
+    if (clean(shownText(el))) return "";
     const texts = [];
     const collect = (node, own) => {
       for (const child of node.childNodes) {
         if (texts.length > 1) return;
-        // why: innerText is also empty for shown text in an off-screen content-visibility: auto section.
-        if (child.nodeType === 3 && clean(child.data)) texts.push(own && !isVisible(node) ? clean(child.data) : "");
+        if (child.nodeType === 3 && clean(child.data)) texts.push(own ? clean(child.data) : "");
         else if (child.nodeType === 1 && !SKIP_TAGS.has(tagOf(child)) && !frameIdOf(child))
           collect(child, own && !isControl(child) && !this.#listens(child));
       }
@@ -418,7 +494,7 @@ export class PageReader {
         // why: Avoid repeating names and splitting text from a single logical block into markup fragments.
         if (interactive && role !== "listbox" && role !== "combobox") return;
         if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !this.#hasTargets(el)) {
-          const t = clean(el.innerText);
+          const t = clean(shownText(el));
           if (t) push(childIndent, `text "${truncate(t, 500)}"`);
           return;
         }
@@ -427,7 +503,8 @@ export class PageReader {
         if (child.nodeType === 1) walk(child, childIndent, level + 1);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          if (t && !(printed && NAME_FROM_CONTENT.has(role))) push(childIndent, `text "${t}"`);
+          if (t && !(printed && NAME_FROM_CONTENT.has(role)) && showsText(el, child, this.#style(el)))
+            push(childIndent, `text "${t}"`);
         }
       }
     };
@@ -475,7 +552,7 @@ export class PageReader {
           .join(", ")}${el.options.length > 20 ? ", …" : ""}]`,
       );
     }
-    if (el.isContentEditable && role === "textbox") parts.push(`value="${truncate(clean(el.innerText), MAX_NAME)}"`);
+    if (el.isContentEditable && role === "textbox") parts.push(`value="${truncate(clean(shownText(el)), MAX_NAME)}"`);
     if (el.disabled || el.getAttribute("aria-disabled") === "true") parts.push("disabled");
     const expanded = el.getAttribute("aria-expanded");
     if (expanded) parts.push(`expanded=${expanded}`);
@@ -499,7 +576,7 @@ export class PageReader {
       let own = false;
       let covered = false;
       for (const child of el.childNodes) {
-        if (child.nodeType === 3) {
+        if (child.nodeType === 3 && showsText(el, child, this.#style(el))) {
           text += child.data;
           own ||= !!clean(child.data);
         }
@@ -513,7 +590,7 @@ export class PageReader {
           inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? child.textContent : "";
           if (holds(inner)) {
             // why: The name may be a label or cut off, and textContent includes what isn't shown.
-            const shown = clean(child.innerText ?? inner);
+            const shown = clean(shownText(child));
             if (holds(shown)) found.push({ el: child, text: shown });
             inner = null;
           }
@@ -586,7 +663,7 @@ export class PageReader {
 
   check({ text, selector }) {
     const doc = this.env.document();
-    const has = (el) => !text || normalize(el.innerText ?? "").includes(normalize(text));
+    const has = (el) => !text || normalize(pageText(el)).includes(normalize(text));
     if (selector) {
       return [...doc.querySelectorAll(selector)].some((el) => isVisible(el) && has(el));
     }
@@ -595,7 +672,7 @@ export class PageReader {
 
   sample({ selector }) {
     const el = [...this.env.document().querySelectorAll(selector)].find((el) => isVisible(el));
-    return el ? truncate(clean(el.innerText ?? el.textContent ?? ""), 500) : null;
+    return el ? truncate(clean(shownText(el)), 500) : null;
   }
 
   risk({ ref, x, y, focused = false, enter = false, space = false }) {
