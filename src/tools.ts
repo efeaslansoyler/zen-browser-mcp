@@ -39,6 +39,13 @@ function consentTimeout(name: string, args: any): number | undefined {
 
 const tabId = z.number().describe("Tab ID from tabs_create_mcp or tabs_context_mcp.");
 
+const screenshotId = z
+  .string()
+  .optional()
+  .describe(
+    "ID of the screenshot the coordinates come from (e.g. shot_3); default: your latest viewport screenshot of the tab.",
+  );
+
 const inputOptions = {
   if_changed: z
     .boolean()
@@ -188,6 +195,7 @@ tool(
     ref: z.string().optional(),
     coordinate: z.array(z.number()).length(2).optional(),
     start_coordinate: z.array(z.number()).length(2).optional(),
+    screenshot: screenshotId,
     text: z.string().optional(),
     query: z.string().optional(),
     value: z.union([z.string(), z.number(), z.boolean()]).optional(),
@@ -277,9 +285,9 @@ tool(
   "computer",
   [
     "Mouse, keyboard and screenshots in a browser tab, as real (trusted) input.",
-    "Coordinates are pixels of the tab's latest viewport screenshot (not a full-page one). Clicks, hover and scroll also take ref (from read_page or find): prefer ref for controls.",
+    "Coordinates are pixels of your latest viewport screenshot of the tab (not a full-page one), or of the one named in screenshot; after two screenshots of different scales you must name it. Clicks, hover and scroll also take ref (from read_page or find): prefer ref for controls.",
     'Actions: screenshot, left_click, right_click, double_click, triple_click, hover, left_click_drag (start_coordinate → coordinate), scroll (scroll_direction, scroll_amount), scroll_to (ref), type (text), key (text, e.g. "Return", "ctrl+a", "Tab Tab Return"; repeat), wait (duration in seconds), key_down/key_up (hold one key across calls), mouse_move/mouse_down/mouse_up.',
-    "A ref click on a covered, moved or disabled target fails before mouse-down and reports the blocker. Never bypass an obstruction with page JavaScript.",
+    'Click results name the element that was hit; "no click handler detected" means the click may have missed. A ref click on a covered, moved or disabled target fails before mouse-down and reports the blocker. Never bypass an obstruction with page JavaScript.',
     'Held keys and buttons are released on Stop, errors, navigation or after 30 s. For clicks, text can name held modifiers such as "shift" or "ctrl+shift". Human-like input options do not guarantee passing bot detection.',
   ].join(" "),
   {
@@ -314,6 +322,7 @@ tool(
       .optional()
       .describe("Deploy baselines can compare across reloads and owned tabs."),
     coordinate: z.array(z.number()).length(2).optional().describe("[x, y] in screenshot pixels."),
+    screenshot: screenshotId,
     ref: z
       .string()
       .optional()
@@ -463,7 +472,8 @@ tool(
       .array(z.number())
       .length(2)
       .optional()
-      .describe("Or a point in the latest screenshot; the element there is outlined."),
+      .describe("Or a point in a screenshot; the element there is outlined."),
+    screenshot: screenshotId,
     options: z
       .array(z.string().min(1).max(80))
       .min(2)
@@ -487,7 +497,7 @@ tool(
       .array(
         z.object({
           ref: z.string().optional().describe("Element from read_page or find."),
-          coordinate: z.array(z.number()).length(2).optional().describe("Or a point in the latest screenshot."),
+          coordinate: z.array(z.number()).length(2).optional().describe("Or a point in a screenshot."),
           label: z
             .string()
             .max(60)
@@ -501,6 +511,7 @@ tool(
       .max(20)
       .optional()
       .describe("Elements to highlight (each with ref or coordinate)."),
+    screenshot: screenshotId,
     clear: z.boolean().optional().describe("Remove this tab's highlights."),
   },
 );
@@ -559,7 +570,8 @@ tool(
       .array(z.number())
       .length(2)
       .optional()
-      .describe("Or a point in the latest screenshot; the element there is outlined."),
+      .describe("Or a point in a screenshot; the element there is outlined."),
+    screenshot: screenshotId,
     wait: z.enum(["click", "done"]).optional(),
     timeout: z.number().optional().describe("Seconds to wait (default 600)."),
   },
@@ -785,7 +797,7 @@ tool(
   "browser_batch",
   [
     "Run several of the tools above in one call: each item is {name, input} with exactly the input you would pass to that tool. Items run sequentially and stop at the first error; text results come back as one numbered block, screenshots in place.",
-    "Use it whenever you can predict two or more steps, e.g. several form_input calls or wait_for then read_page. Coordinates in a batch refer to the screenshot taken before this call. browser_batch cannot be nested.",
+    "Use it whenever you can predict two or more steps, e.g. several form_input calls or wait_for then read_page. Coordinates in a batch refer to your latest screenshot from before this call. browser_batch cannot be nested.",
   ].join(" "),
   {
     actions: z

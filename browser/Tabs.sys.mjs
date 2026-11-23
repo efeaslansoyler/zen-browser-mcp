@@ -278,7 +278,7 @@ export function tabs(ctx) {
     ctx.networkControl?.dropTab(id);
     ctx.video?.dropTab(id);
     if (cancel) ctx.cancelTabWork(id);
-    ctx.state.scale.delete(id);
+    ctx.screenshots.clearTab(id);
     ctx.network.delete(id);
     ctx.cancelAsk(browser, "taken_back");
     ctx.tabRequests.get(browser)?.("cancelled");

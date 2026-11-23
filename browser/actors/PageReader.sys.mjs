@@ -214,8 +214,11 @@ export const MAX_TREE = 50000;
 
 const CLICK_EVENTS = new Set(["click", "mousedown", "mouseup", "pointerdown", "pointerup"]);
 const MAX_JOINED_TEXT = 2000;
+const MAX_HIT_NAME = 60;
+const NATIVELY_CLICKABLE = new Set(["VIDEO", "AUDIO", "EMBED", "OBJECT"]);
 
 const tagOf = (el) => el.tagName?.toUpperCase();
+const composedParent = (node) => node.assignedSlot || node.parentNode || node.getRootNode?.().host;
 const isControl = (el) => INTERACTIVE_ROLES.has(roleOf(el));
 const isSkipped = (el, clickable) => SKIP_TAGS.has(tagOf(el)) && !(clickable && tagOf(el) === "SVG");
 
@@ -530,6 +533,27 @@ export class PageReader {
       submit: ((enter || space) && submitsForm(el)) || (enter && textField && !!el.form),
       secret: isSecretField(el),
     };
+  }
+
+  // why: A click that lands beside its target otherwise looks exactly like one that hit it.
+  describeHit(el, expected) {
+    this.#startRead();
+    const doc = this.env.document();
+    let listens = false;
+    for (let up = el; up && tagOf(up) !== "BODY" && tagOf(up) !== "HTML"; up = composedParent(up)) {
+      if (up.nodeType !== 1) continue;
+      const target = tagOf(up) === "LABEL" && up.control ? up.control : up;
+      const clickable = !isControl(target) && this.#clickable(target);
+      if (!clickable && !isControl(target)) {
+        listens ||= NATIVELY_CLICKABLE.has(tagOf(up)) || this.#listens(up);
+        continue;
+      }
+      const role = roleOf(target) || "clickable";
+      const name = accessibleName(target, doc, clickable || undefined);
+      const shown = name ? `"${truncate(name, MAX_HIT_NAME).replaceAll('"', "'")}"` : elementLabel(target);
+      return `${role} ${shown}${target === expected ? "" : ` [${this.env.ref(target)}]`}`;
+    }
+    return `${elementLabel(el)}${listens ? "" : " (no click handler detected)"}`;
   }
 
   describeTarget({ ref, x, y }) {

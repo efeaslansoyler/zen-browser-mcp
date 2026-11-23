@@ -192,6 +192,7 @@ export function toolRunner(ctx) {
       reads: new Set(),
       tabVersions: new Map(ticket),
       userNotes: [],
+      screenshots: ctx.screenshots.snapshot(),
     });
   }
 

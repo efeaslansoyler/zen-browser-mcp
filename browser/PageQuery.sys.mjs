@@ -44,8 +44,9 @@ export function pageQueries(ctx) {
   const queryRef = (browser, name, data, timeout) =>
     ctx.query(browser, name, data, timeout, ctx.frameOf(browser, data.ref));
 
-  function toPagePoint(browser, [x, y]) {
-    const s = ctx.state.scale.get(browser.browserId) || 1;
+  function toPagePoint(browser, [x, y], screenshot) {
+    const call = ctx.callOf(browser);
+    const s = (call?.screenshots ?? ctx.screenshots).scale(call?.session, browser.browserId, screenshot);
     return [x / s, y / s];
   }
 
@@ -94,7 +95,7 @@ export function pageQueries(ctx) {
       return ctx.toTop(browser, frame, x, y, !!args.forClick);
     }
     if (args[key] == null) throw new Error(`${args.action} needs ${key}${key === "coordinate" ? " or ref" : ""}.`);
-    return ctx.toPagePoint(browser, args[key]);
+    return ctx.toPagePoint(browser, args[key], args.screenshot);
   }
 
   function openDialog(browser) {

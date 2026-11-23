@@ -145,7 +145,7 @@ export function pageInput(ctx) {
 
   async function click(browser, [x, y], { button = 0, count = 1, modifiers, ref, ...motion } = {}) {
     if (typeof button === "string") button = { left: 0, middle: 1, right: 2 }[button];
-    await ctx.input(browser, {
+    const result = await ctx.input(browser, {
       ...motion,
       kind: "click",
       x,
@@ -155,6 +155,7 @@ export function pageInput(ctx) {
       ref: ref && ctx.longRef(ref),
       modifiers: parseModifiers(modifiers),
     });
+    return result.value.hit;
   }
 
   async function scroll(browser, [x, y], direction, amount = 3) {
@@ -245,9 +246,16 @@ export function pageInput(ctx) {
     } finally {
       bitmap.close();
     }
-    if (!fullPage) ctx.state.scale.set(browser.browserId, s);
+    const id = fullPage
+      ? null
+      : ctx.screenshots.add(ctx.callOf(browser)?.session, browser.browserId, {
+          scale: s,
+          width: canvas.width,
+          height: canvas.height,
+        });
     const data = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
     return {
+      id,
       data,
       width: canvas.width,
       height: canvas.height,

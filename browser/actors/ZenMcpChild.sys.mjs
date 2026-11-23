@@ -71,6 +71,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     reader,
     info,
     elementLabel: reader.elementLabel,
+    describeHit: (el, expected) => this.#reader.describeHit(el, expected),
     ripple: (x, y) => ripple(this.#env, x, y),
   };
   #reader = new reader.PageReader(this.#env);

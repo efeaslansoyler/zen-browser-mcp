@@ -120,9 +120,9 @@ try {
     "✓ Descendant span is clickable; pointer-events:none overlay passes; mousemove overlay blocks before mouse-down",
   );
 
-  await command("computer", { tabId, action: "screenshot", scale: 0.5 });
+  const shot = text(await command("computer", { tabId, action: "screenshot", scale: 0.5 }));
   // why: Capture limits can shrink the image further than requested; use the actual coordinate ratio.
-  const effectiveScale = await chrome(`h.state.scale.get(${tabId})`);
+  const effectiveScale = Number(shot.match(/shot_\d+: (\d+)x/)![1]) / Number(await page("innerWidth"));
   assert(effectiveScale > 0 && effectiveScale <= 0.5, `Invalid screenshot scale: ${effectiveScale}`);
   const coordinate = JSON.parse(
     await page(
