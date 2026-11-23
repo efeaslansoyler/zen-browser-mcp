@@ -70,6 +70,12 @@ change tool names, parameters or results.
 - A coordinate call that waits for its tab is read with the screenshots from before it arrived. It
   could take the scale of one taken while it waited and click the wrong place.
 
+### Security
+
+- The text and default value of a page dialog stand in a JSON line of their own (`pageText`,
+  `defaultValue`, `untrusted`). Before, a page could write text there that looked like a note of
+  yours. Option texts in `form_input` results can't leave their quotes any more.
+
 ## [0.3.0] - 2026-11-23
 
 ### Added

@@ -563,17 +563,18 @@ export class ZenMcpChild extends JSWindowActorChild {
 
     if (tag === "SELECT") {
       const wanted = String(value);
+      const quoted = (text) => JSON.stringify(reader.truncate(reader.clean(text), 100));
       const opt =
         [...el.options].find((o) => o.value === wanted) ||
         [...el.options].find((o) => reader.clean(o.text) === reader.clean(wanted)) ||
         [...el.options].find((o) => reader.normalize(o.text) === reader.normalize(wanted));
       if (!opt)
         // why: Errors reach the activity log, which must not keep what the agent typed.
-        throw new Error(`No such option. Options: ${[...el.options].map((o) => o.text.trim()).join(", ")}`);
+        throw new Error(`No such option. Options: ${[...el.options].map((o) => quoted(o.text)).join(", ")}`);
       el.value = opt.value;
       fire("input");
       fire("change");
-      return `${ref}: selected "${opt.text.trim()}".`;
+      return `${ref}: selected ${quoted(opt.text)}.`;
     }
     if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) {
       const checked = value === true || value === "true" || value === 1 || value === "1" || value === "on";

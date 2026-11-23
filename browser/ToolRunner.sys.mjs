@@ -383,7 +383,8 @@ export function batchTool(ctx) {
         } catch (e) {
           content.isError = true;
           if (e instanceof ctx.DialogOpen) {
-            lines.push(`${label}: ${e.message}${rest}`);
+            const [first, ...data] = e.message.split("\n");
+            lines.push([`${label}: ${first}${rest}`, ...data].join("\n"));
             if (e.browser) ctx.showDialog(e.browser);
           } else {
             lines.push(`${label}: ERROR: ${e?.message ?? e}${rest}`);
