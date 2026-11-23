@@ -27,6 +27,9 @@ change tool names, parameters or results.
 
 ### Fixed
 
+- `read_page` and `find` no longer leave out everything inside an element with `display: contents`,
+  such as the whole article on MDN. Refs to such elements can be clicked and highlighted, and
+  `wait_for` and `watch` selectors match them.
 - Names and text in off-screen sections that the browser doesn't render yet (`content-visibility:
   auto`) are no longer empty in `read_page`, `find`, `get_page_text`, `wait_for` and `watch`.
 - Text hidden by a closed `details` element or `content-visibility: hidden` is no longer read as

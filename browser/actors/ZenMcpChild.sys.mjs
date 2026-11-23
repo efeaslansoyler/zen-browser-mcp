@@ -478,7 +478,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const controls = 'a[href],button,input,textarea,select,[role="button"],[tabindex]';
     for (const element of this.#reader.targets(controls)) {
       if (!reader.isVisible(element) || !reader.inViewport(element, this.contentWindow)) continue;
-      const box = element.getBoundingClientRect();
+      const box = reader.clickRectOf(element);
       if (!box.width || !box.height) continue;
       const ref = this.#ref(element),
         label = this.document.createElement("span");
@@ -547,8 +547,8 @@ export class ZenMcpChild extends JSWindowActorChild {
   #locate(ref, forClick = false) {
     const el = this.#element(ref);
     const win = this.contentWindow;
-    if (!reader.fullyInViewport(el, win)) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-    const r = el.getBoundingClientRect();
+    if (!reader.fullyInViewport(el, win)) reader.scrollIntoView(el, { inline: "center" });
+    const r = reader.clickRectOf(el);
     if (!r.width && !r.height) throw new Error(`${ref} is not visible (no size).`);
     // why: Use the visible portion so large elements do not target a point outside the viewport.
     const x = (Math.max(0, r.left) + Math.min(win.innerWidth, r.right)) / 2;
@@ -631,8 +631,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#ask?.finish("replaced");
     const doc = this.document;
     const target = ref ? this.#element(ref) : x != null ? doc.elementFromPoint(x, y) : null;
-    if (target && !reader.fullyInViewport(target, this.contentWindow))
-      target.scrollIntoView({ block: "center", behavior: "instant" });
+    if (target && !reader.fullyInViewport(target, this.contentWindow)) reader.scrollIntoView(target);
     const ask = outlineAndWait(this.#env, { target, wait, timeout });
     this.#ask = ask;
     return ask.answer.finally(() => {
@@ -650,8 +649,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#highlights?.remove();
     this.#highlights = resolved.length ? highlight(this.#env, resolved) : null;
     const first = resolved[0]?.element;
-    if (first && !reader.inViewport(first, this.contentWindow))
-      first.scrollIntoView({ block: "center", behavior: "instant" });
+    if (first && !reader.inViewport(first, this.contentWindow)) reader.scrollIntoView(first);
     return resolved.length;
   }
 
