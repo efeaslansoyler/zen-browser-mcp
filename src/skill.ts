@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { L } from "./i18n.ts";
-import { PACKAGE_DIR } from "./paths.ts";
+import { PACKAGE_DIR, VERSION } from "./paths.ts";
 
 const SKILL = "zen-browser";
 const SOURCE = path.join(PACKAGE_DIR, "skills", SKILL);
@@ -29,17 +29,24 @@ const hashOf = (dir: string) =>
     .update(fs.readFileSync(path.join(dir, "SKILL.md")))
     .digest("hex");
 
-const stamp = (dir: string) => fs.writeFileSync(path.join(dir, STAMP), hashOf(SOURCE) + "\n");
+const stamp = (dir: string) => fs.writeFileSync(path.join(dir, STAMP), `${hashOf(SOURCE)} ${VERSION}\n`);
 
 function stampOf(dir: string) {
   try {
-    return fs.readFileSync(path.join(dir, STAMP), "utf8").trim();
+    const [hash, version = "0.0.0"] = fs.readFileSync(path.join(dir, STAMP), "utf8").trim().split(" ");
+    return { hash, version };
   } catch {
     return null;
   }
 }
 
-function statusOf(dir: string): "missing" | "current" | "outdated" | "edited" {
+function compareVersions(a: string, b: string) {
+  const [[core, pre], [otherCore, otherPre]] = [a.split("-", 2), b.split("-", 2)];
+  const compare = (x = "", y = "") => x.localeCompare(y, "en", { numeric: true });
+  return compare(core, otherCore) || Number(!pre) - Number(!otherPre) || compare(pre, otherPre);
+}
+
+function statusOf(dir: string): "missing" | "current" | "outdated" | "newer" | "edited" {
   if (!fs.existsSync(dir)) return "missing";
   let hash;
   try {
@@ -48,7 +55,11 @@ function statusOf(dir: string): "missing" | "current" | "outdated" | "edited" {
     return "edited";
   }
   if (hash === hashOf(SOURCE)) return "current";
-  return hash === stampOf(dir) || UNSTAMPED.has(hash) ? "outdated" : "edited";
+  if (UNSTAMPED.has(hash)) return "outdated";
+  const stamped = stampOf(dir);
+  if (hash !== stamped?.hash) return "edited";
+  // why: Servers of several versions can share one copy, and must not replace it in turns.
+  return compareVersions(stamped.version, VERSION) > 0 ? "newer" : "outdated";
 }
 
 export function skillStatus(targets = skillTargets()) {
@@ -68,7 +79,8 @@ export function refreshSkills(targets = skillTargets()) {
         fs.copyFileSync(path.join(SOURCE, "SKILL.md"), next);
         fs.renameSync(next, file);
       }
-      if (stampOf(dir) !== hashOf(SOURCE)) stamp(dir);
+      const stamped = stampOf(dir);
+      if (stamped?.hash !== hashOf(SOURCE) || compareVersions(stamped.version, VERSION) < 0) stamp(dir);
     } catch {
       // why: A copy that can't be written must not stop the server or the other copies.
     }

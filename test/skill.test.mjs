@@ -47,13 +47,17 @@ test("skill install and uninstall touch only present clients and only the skill 
   }
 });
 
-function installedSkill(content, stamp) {
+const hash = (content) => createHash("sha256").update(content).digest("hex");
+const VERSION = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+
+function installedSkill(content, stamp, version) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "zen-skill-"));
   const dir = path.join(home, ".claude/skills/zen-browser");
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "SKILL.md");
   fs.writeFileSync(file, content);
-  if (stamp) fs.writeFileSync(path.join(dir, ".installed"), createHash("sha256").update(stamp).digest("hex") + "\n");
+  const stampFile = path.join(dir, ".installed");
+  if (stamp) fs.writeFileSync(stampFile, hash(stamp) + (version ? ` ${version}` : "") + "\n");
   const targets = skillTargets(home, {});
   return {
     home,
@@ -62,6 +66,7 @@ function installedSkill(content, stamp) {
     targets,
     status: () => skillStatus(targets)[0].status,
     read: () => fs.readFileSync(file, "utf8"),
+    stamp: () => fs.readFileSync(stampFile, "utf8").trim(),
     remove: () => fs.rmSync(home, { recursive: true, force: true }),
   };
 }
@@ -75,10 +80,53 @@ test("an untouched older copy is refreshed, and again after the next update", ()
     assert.equal(skill.read(), source);
     assert.equal(skill.status(), "current");
     assert.deepEqual(fs.readdirSync(skill.dir).sort(), [".installed", "SKILL.md", "notes.md"]);
-    const stamp = fs.readFileSync(path.join(skill.dir, ".installed"), "utf8").trim();
-    assert.equal(stamp, createHash("sha256").update(source).digest("hex"));
+    assert.equal(skill.stamp(), `${hash(source)} ${VERSION}`);
   } finally {
     skill.remove();
+  }
+});
+
+test("a server replaces an untouched copy of an older version, never of a newer one", () => {
+  for (const version of ["0.2.0", "0.0.99", `${VERSION}-next.1`, VERSION]) {
+    const skill = installedSkill("other", "other", version);
+    try {
+      assert.equal(skill.status(), "outdated", version);
+      refreshSkills(skill.targets);
+      assert.equal(skill.read(), source, version);
+      assert.equal(skill.stamp(), `${hash(source)} ${VERSION}`);
+    } finally {
+      skill.remove();
+    }
+  }
+  for (const version of ["0.100.0", "10.0.0", "99.0.0-next.1"]) {
+    const skill = installedSkill("other", "other", version);
+    try {
+      assert.equal(skill.status(), "newer", version);
+      refreshSkills(skill.targets);
+      assert.equal(skill.read(), "other", version);
+      assert.equal(skill.stamp(), `${hash("other")} ${version}`);
+      fs.writeFileSync(skill.file, "mine");
+      assert.equal(skill.status(), "edited");
+    } finally {
+      skill.remove();
+    }
+  }
+});
+
+test("a server that has the same skill raises the version of the copy, and never lowers it", () => {
+  for (const [version, expected] of [
+    [undefined, VERSION],
+    ["0.2.0", VERSION],
+    ["99.0.0", "99.0.0"],
+  ]) {
+    const skill = installedSkill(source, source, version);
+    try {
+      assert.equal(skill.status(), "current");
+      refreshSkills(skill.targets);
+      assert.equal(skill.stamp(), `${hash(source)} ${expected}`);
+    } finally {
+      skill.remove();
+    }
   }
 });
 
