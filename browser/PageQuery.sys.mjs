@@ -214,6 +214,8 @@ export function pageQueries(ctx) {
     return null;
   }
 
+  const isLoading = (bc) => !!bc.webProgress?.isLoadingDocument;
+
   async function expandFrames(browser, value, opts, level = 0) {
     const parts = [];
     let last = 0;
@@ -229,7 +231,13 @@ export function pageQueries(ctx) {
       }
       let inner;
       try {
-        ({ value: inner } = await ctx.query(browser, "read_page", { ...opts, bare: true }, 30000, bc));
+        ({ value: inner } = await ctx.query(
+          browser,
+          "read_page",
+          { ...opts, bare: true, loading: isLoading(bc) },
+          30000,
+          bc,
+        ));
         inner = await expandFrames(browser, inner, opts, level + 1);
       } catch (e) {
         if (e instanceof DialogOpen) throw e;
@@ -331,6 +339,7 @@ export function pageQueries(ctx) {
     query,
     backgroundQuery,
     acrossFrames,
+    isLoading,
     expandFrames,
     waitForLoad,
     readContext,

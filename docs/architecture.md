@@ -345,7 +345,8 @@ letters for the element (`ref_12c`). The bridge gives every window global a new 
 (`PageQuery`) and sends it with each query, and the actor builds the refs. A ref is looked up
 only in the tab's current documents, so one from before a navigation, a bridge reload or from
 another tab isn't found; a page restored from the bfcache keeps its refs. `read_page` splices
-each iframe's tree under `[iframe url]`, `find` searches all frames, and mouse events are sent
+each iframe's tree under `[iframe url]` and says `(still loading)` for a document that has
+nothing to show while its browsing context is loading, `find` searches all frames, and mouse events are sent
 from the actor of the innermost frame under the point, because events dispatched from the top
 page don't reach out-of-process iframes.
 

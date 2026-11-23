@@ -211,6 +211,7 @@ export function frameIdOf(el) {
 }
 
 export const MAX_TREE = 50000;
+const STILL_LOADING = "(still loading)";
 
 const FIELD_ROLES = new Set([
   "textbox",
@@ -366,11 +367,11 @@ export class PageReader {
     return [...this.env.document().querySelectorAll("*")].filter((el) => el.matches(selector) || this.#clickable(el));
   }
 
-  readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false }) {
+  readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false, loading = false }) {
     this.#startRead();
     const doc = this.env.document();
     const root = ref_id ? this.env.element(ref_id) : doc.body;
-    if (!root) return "(empty page)";
+    if (!root) return loading ? STILL_LOADING : "(empty page)";
     const lines = [];
     let size = 0;
     let truncated = false;
@@ -436,8 +437,9 @@ export class PageReader {
       const hint = interactiveOnly ? "search with find" : 'use filter: "interactive"';
       lines.push(`…(truncated at ${max_chars} characters; focus on a subtree with ref_id or ${hint})`);
     }
-    if (bare) return lines.join("\n");
-    return `${doc.title}\n${doc.URL}\n\n${lines.join("\n") || "(no visible elements)"}`;
+    const tree = lines.join("\n") || (loading ? STILL_LOADING : "");
+    if (bare) return tree;
+    return `${doc.title}\n${doc.URL}\n\n${tree || "(no visible elements)"}`;
   }
 
   #hasTargets(el) {
