@@ -30,11 +30,15 @@ function harness() {
         return this.rect;
       },
       querySelector: () => null,
-      getRootNode: () => ({}),
+      getRootNode: () => actor.document,
       scrollIntoView() {
         this.scrolled = true;
       },
       closest: () => null,
+      querySelectorAll: () => [],
+      get ownerDocument() {
+        return actor.document;
+      },
     };
     nodes.set(id, el);
     return el;
@@ -46,6 +50,9 @@ function harness() {
   const Actor = loadActor({
     Ci: {},
     Cc: {},
+    BrowsingContext: {
+      get: (id) => ({ embedderElement: [...nodes.values()].find((el) => el.browsingContext?.id === id) }),
+    },
     Services: {
       locale: { appLocaleAsBCP47: "en" },
       els: { getListenerInfoFor: () => [] },
@@ -63,13 +70,20 @@ function harness() {
   actor.contentWindow = {
     innerWidth: 800,
     innerHeight: 600,
-    getComputedStyle: () => ({ paddingLeft: "0", paddingTop: "0" }),
+    getComputedStyle: () => ({ paddingLeft: "0", paddingTop: "0", visibility: "visible", whiteSpace: "normal" }),
   };
   actor.document = {
+    defaultView: actor.contentWindow,
     activeElement: null,
     hidden: true,
     elementFromPoint: () => hit,
-    body: { childNodes: [], querySelectorAll: () => [...nodes.values()] },
+    body: {
+      childNodes: [],
+      querySelectorAll: () => [...nodes.values()],
+      get ownerDocument() {
+        return actor.document;
+      },
+    },
     querySelectorAll: () => [...nodes.values()],
     getElementById: (id) => nodes.get(id),
     documentElement: { append() {} },
@@ -130,17 +144,16 @@ test("shadow descendants and slotted descendants belong to the target", async ()
   for (const slotted of [false, true]) {
     const h = harness(),
       ref = await h.refFor(h.target);
-    const root = {
-      parentNode: null,
-      host: h.target,
-      getRootNode() {
-        return this;
-      },
-    };
+    const root = { nodeType: 11, parentNode: null, host: h.target, isUAWidget: () => false };
     const icon = h.node("icon", slotted ? null : root);
     Object.assign(icon, { tagName: "SPAN", localName: "span" });
-    if (slotted) icon.assignedSlot = h.node("slot", root);
-    h.target.shadowRoot = { elementFromPoint: () => icon };
+    icon.getRootNode = () => root;
+    if (slotted) icon.openOrClosedAssignedSlot = Object.assign(h.node("slot", root), { getRootNode: () => root });
+    h.target.openOrClosedShadowRoot = Object.assign(root, {
+      elementFromPoint: () => icon,
+      childNodes: [{ nodeType: 3, data: "target" }],
+      querySelectorAll: () => [],
+    });
     assert.match((await h.click({ ref, button: 2 })).value.hit, /^button "target"$/);
   }
 });

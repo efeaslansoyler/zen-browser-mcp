@@ -317,7 +317,9 @@ export function outlineAndWait(env, { target, wait, timeout }) {
   let finish;
   const answer = new Promise((resolve) => {
     const onClick = (event) => {
-      if (event.isTrusted && wait === "click" && target && event.composedPath().includes(target)) finish("clicked");
+      if (!event.isTrusted || wait !== "click" || !target) return;
+      // why: composedPath() leaves out what is inside closed shadow roots.
+      for (let el = event.composedTarget; el; el = env.reader.composedParent(el)) if (el === target) finish("clicked");
     };
     const timer = env.setTimeout(() => finish("timeout"), timeout * 1000);
     try {

@@ -297,7 +297,7 @@ export class Picker {
       label: elementLabel(el),
       selector: cssPath(el, win),
       role: roleOf(el),
-      name: accessibleName(el, doc),
+      name: accessibleName(el),
       text: truncate(clean(el.innerText ?? el.textContent), MAX_PICK_TEXT),
       html: truncate(el.outerHTML, MAX_PICK_HTML),
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },

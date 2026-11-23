@@ -27,6 +27,11 @@ change tool names, parameters or results.
 
 ### Fixed
 
+- `read_page`, `find`, `get_page_text`, annotated screenshots and click results see inside web
+  components (open and closed shadow roots), in the order in which the content shows; refs to what
+  is inside work with every tool. Light content a component doesn't show stays out. `wait_for` and
+  `watch` selectors match inside each shadow root. A submit button inside one is treated as a
+  submit for permissions.
 - `read_page` reads elements at any depth. It silently stopped after 30 levels, which left out most
   of a GitHub page. When you pass `depth` and it leaves something out, the result says so.
 - `read_page` and `find` no longer leave out everything inside an element with `display: contents`,

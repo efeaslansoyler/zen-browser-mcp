@@ -156,10 +156,9 @@ export class Recorder {
 
   #describe(el) {
     const { roleOf, accessibleName, elementLabel, clean, truncate } = this.env.reader;
-    const doc = this.env.document();
     const target = {
       role: roleOf(el),
-      name: accessibleName(el, doc),
+      name: accessibleName(el),
       label: elementLabel(el),
       selector: this.env.info.cssPath(el, this.env.window()),
     };

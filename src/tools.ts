@@ -382,7 +382,10 @@ tool(
   {
     tabId,
     text: z.string().optional().describe("Text to wait for (case-insensitive)."),
-    selector: z.string().optional().describe("CSS selector to wait for."),
+    selector: z
+      .string()
+      .optional()
+      .describe("CSS selector to wait for; also searched in shadow roots, each on its own."),
     gone: z.boolean().optional().describe("Wait for text/selector to disappear instead."),
     network_idle: z.boolean().optional().describe("Also wait until no request is in flight for 0.5 s."),
     timeout: z.number().optional().describe("Seconds (default 10, max 60)."),
@@ -402,7 +405,10 @@ tool(
     action: z.enum(["start", "list", "stop"]).optional().describe("Default start (needs tabId)."),
     id: z.number().int().optional().describe("Watch id for stop."),
     text: z.string().optional().describe("Text to watch for (case-insensitive)."),
-    selector: z.string().optional().describe("CSS selector to watch for, or whose text to follow with change."),
+    selector: z
+      .string()
+      .optional()
+      .describe("CSS selector to watch for, or whose text to follow with change; also searched in shadow roots."),
     gone: z.boolean().optional().describe("Report when text/selector disappears instead."),
     change: z.boolean().optional().describe("Report every change of selector's text instead of a condition."),
     repeat: z.boolean().optional().describe("Keep watching after a match and report each new match."),

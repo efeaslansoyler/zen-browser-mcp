@@ -200,9 +200,8 @@ test("the page tells submit buttons, Enter in a form field and secret fields apa
   const form = {};
   const el = (props) => ({
     getAttribute: (name) => props[name] ?? null,
-    closest() {
-      return ["button", "input"].includes(props.localName) ? this : (props.parent ?? null);
-    },
+    matches: () => ["button", "input"].includes(props.localName),
+    parentNode: props.parent,
     ...props,
   });
   const button = el({ localName: "button", type: "submit", form });

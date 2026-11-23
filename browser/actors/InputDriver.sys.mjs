@@ -257,11 +257,11 @@ export class InputDriver {
   // why: Background clicks do not move focus (docs/gecko-pitfalls.md, Input and frames).
   #focusAt(x, y) {
     const doc = this.env.document();
-    const target = doc.elementFromPoint(x, y);
-    const focusable = target?.closest(
+    const focusable = this.env.reader.closestShown(
+      this.hitAt(x, y),
       'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [contenteditable=""], [contenteditable="true"], [tabindex]',
     );
-    if (focusable && doc.activeElement !== focusable) focusable.focus();
+    if (focusable && this.env.reader.deepActiveElement(doc) !== focusable) focusable.focus();
   }
 
   // why: Background wheel events reach listeners but do not scroll (docs/gecko-pitfalls.md, Input and frames).
@@ -302,7 +302,8 @@ export class InputDriver {
   #scrollerAt(x, y) {
     const doc = this.env.document();
     const win = this.env.window();
-    for (let el = doc.elementFromPoint(x, y); el && el !== doc.documentElement; el = el.parentElement) {
+    const { composedParent } = this.env.reader;
+    for (let el = this.hitAt(x, y); el?.nodeType === 1 && el !== doc.documentElement; el = composedParent(el)) {
       const style = win.getComputedStyle(el);
       const scrollable = /(auto|scroll|overlay)/.test(style.overflowY + style.overflowX);
       if (scrollable && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)) return el;
@@ -311,13 +312,7 @@ export class InputDriver {
   }
 
   hitAt(x, y) {
-    let hit = this.env.document().elementFromPoint(x, y);
-    for (let depth = 0; depth < 16 && hit?.shadowRoot?.elementFromPoint; depth++) {
-      const inner = hit.shadowRoot.elementFromPoint(x, y);
-      if (!inner || inner === hit) break;
-      hit = inner;
-    }
-    return hit;
+    return this.env.reader.hitAt(this.env.document(), x, y);
   }
 
   assertHit(expected, x, y, label) {
@@ -330,7 +325,7 @@ export class InputDriver {
     if (expected.matches?.(":disabled")) throw new Error(`Click blocked: ${label} is disabled.`);
     const hit = this.hitAt(x, y);
     // why: Use composed ancestry to accept a descendant or shadow child hit inside the intended target.
-    for (let node = hit; node; node = node.assignedSlot || node.parentNode || node.getRootNode?.().host) {
+    for (let node = hit; node; node = this.env.reader.composedParent(node)) {
       if (node === expected) return;
     }
     const blocker = hit ? `${this.env.elementLabel(hit)} [${this.env.ref(hit)}]` : "no element";
