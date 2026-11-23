@@ -284,18 +284,49 @@ export function rectOf(el) {
 }
 
 // why: The middle of everything inside a boxless element can be a gap between its parts.
+function firstPart(el) {
+  for (const node of shownChildren(el)) {
+    if (node.nodeType !== 1 && node.nodeType !== 3) continue;
+    const box = node.nodeType === 1 ? node : el.ownerDocument.createRange();
+    if (node.nodeType === 3) box.selectNodeContents(node);
+    const rect = [...box.getClientRects()].find(({ width, height }) => width && height);
+    const part = rect ? { node, rect } : node.nodeType === 1 && isBoxless(node) && firstPart(node);
+    if (part) return part;
+  }
+  return null;
+}
+
 export function clickRectOf(el) {
   const rect = el.getBoundingClientRect();
-  if (!lacksBox(rect, el)) return rect;
-  return [...contentRects(el)].find((part) => part.width && part.height) ?? rect;
+  return lacksBox(rect, el) ? (firstPart(el)?.rect ?? rect) : rect;
+}
+
+// why: Text has no scrollIntoView. Pages don't use this selection, so the user's own stays.
+function scrollTextIntoView(node) {
+  const controller = node.ownerDocument.defaultView.docShell
+    .QueryInterface(Ci.nsIInterfaceRequestor)
+    .getInterface(Ci.nsISelectionDisplay)
+    .QueryInterface(Ci.nsISelectionController);
+  const type = controller.SELECTION_URLSECONDARY;
+  const range = node.ownerDocument.createRange();
+  const start = Math.max(0, node.data.search(/\S/));
+  range.setStart(node, start);
+  range.setEnd(node, start + 1);
+  const selection = controller.getSelection(type);
+  selection.addRange(range);
+  controller.scrollSelectionIntoView(
+    type,
+    controller.SELECTION_WHOLE_SELECTION,
+    controller.SCROLL_SYNCHRONOUS | controller.SCROLL_VERTICAL_CENTER | controller.SCROLL_OVERFLOW_HIDDEN,
+  );
+  selection.removeRange(range);
 }
 
 export function scrollIntoView(el, options) {
-  let target = el;
-  if (lacksBox(el.getBoundingClientRect(), el)) {
-    target = shownElements(el).find((inner) => inner.getClientRects().length);
-    for (target ??= el; isBoxless(target) && composedParent(target)?.nodeType === 1;) target = composedParent(target);
-  }
+  const part = lacksBox(el.getBoundingClientRect(), el) ? firstPart(el)?.node : el;
+  if (part?.nodeType === 3) return scrollTextIntoView(part);
+  let target = part ?? el;
+  while (isBoxless(target) && composedParent(target)?.nodeType === 1) target = composedParent(target);
   target.scrollIntoView({ block: "center", behavior: "instant", ...options });
 }
 
