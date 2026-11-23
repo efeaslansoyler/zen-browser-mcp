@@ -132,6 +132,13 @@ try {
   console.log("✓ A coordinate after screenshots of two scales needs its image; either image lands on the target");
 
   await shotOf();
+  await shotOf();
+  await pageEval(tabId, "hits.length=0");
+  await Promise.all([shotOf(0.5), command("computer", fromBig)]);
+  assert.deepEqual(await hits(), ["listener"]);
+  console.log("✓ A click sent together with a screenshot of another scale keeps the scale from before it");
+
+  await shotOf();
   const both = await shotOf();
   const results: Record<string, string> = {};
   for (const id of ["delegated", "css", "more"])

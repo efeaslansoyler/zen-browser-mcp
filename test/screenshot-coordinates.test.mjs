@@ -52,11 +52,11 @@ function harness({ rule = () => "allow" } = {}) {
   });
   for (const session of ["a", "b"]) context.access.join(1, session);
   Object.assign(context.tools, inputTools(context));
+  context.reply = (transport, _, message) => (transport.message = message);
   const run = async (tool, args, session = "a") => {
-    const replies = [];
-    context.reply = (_, __, message) => replies.push(message);
-    await context.handle(JSON.stringify({ session, agent: { id: "codex" }, tool, args }), null, {});
-    const [{ ok, error, content, isError }] = replies;
+    const transport = {};
+    await context.handle(JSON.stringify({ session, agent: { id: "codex" }, tool, args }), transport, {});
+    const { ok, error, content, isError } = transport.message;
     const text = ok
       ? content
           .filter((c) => c.type === "text")
@@ -126,6 +126,33 @@ test("another session's screenshot does not change how this session's coordinate
     [30, 30],
     [60, 60],
   ]);
+});
+
+test("a call that waits for the tab doesn't use a screenshot taken after it arrived", async () => {
+  const h = harness();
+  const step = { name: "computer", input: { tabId: 1, action: "left_click", coordinate: [30, 30] } };
+  const [, plain, batch, named] = await Promise.all([
+    h.shot({ scale: 0.5 }),
+    h.click([25, 25]),
+    h.run("browser_batch", { actions: [step] }),
+    h.click([5, 5], { screenshot: "shot_1" }),
+  ]);
+  assert.deepEqual([plain.ok, batch.ok], [true, true]);
+  assert.match(named.text, /shot_1 is not one of your recent viewport screenshots.*from before this call/);
+  await h.click([25, 25]);
+  assert.deepEqual(h.clicks, [
+    [25, 25],
+    [30, 30],
+    [50, 50],
+  ]);
+});
+
+test("a call that waits isn't confused by later screenshots of other scales", async () => {
+  const h = harness();
+  await h.shot({ scale: 0.5 });
+  const [, click] = await Promise.all([h.shot(), h.click([10, 10])]);
+  assert.equal(click.ok, true, click.text);
+  assert.deepEqual(h.clicks, [[20, 20]]);
 });
 
 test("batch coordinates refer to the screenshot taken before the batch", async () => {

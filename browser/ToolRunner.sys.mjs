@@ -188,7 +188,7 @@ export function toolRunner(ctx) {
     });
   }
 
-  function newCall(session, agent, ticket = []) {
+  function newCall(session, agent, ticket = [], screenshots = ctx.screenshots.snapshot()) {
     return Object.assign(new ctx.Cancellation(), {
       session,
       agent: ctx.agentTheme(agent ?? { id: "claude" }),
@@ -198,7 +198,7 @@ export function toolRunner(ctx) {
       notices: [],
       tabVersions: new Map(ticket),
       userNotes: [],
-      screenshots: ctx.screenshots.snapshot(),
+      screenshots,
     });
   }
 
@@ -274,7 +274,7 @@ export function toolRunner(ctx) {
           access.checkTicket(ticket, session);
           if (sessionGeneration !== (sessionVersions.get(session) || 0) || !sessions.has(session))
             throw new Error("This browser session disconnected while the request was queued.");
-          const call = newCall(session, agent, ticket);
+          const call = newCall(session, agent, ticket, waiting.screenshots);
           ctx.calls.add(call);
           ctx.setLastAgent(call.agent);
           try {
