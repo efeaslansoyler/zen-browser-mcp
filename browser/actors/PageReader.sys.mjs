@@ -143,37 +143,68 @@ export function roleOf(el) {
 }
 
 // why: An element with display: contents has no box of its own, so checkVisibility denies it.
-function isRendered(el, style, options) {
+const styleOf = (el) => el.ownerDocument.defaultView.getComputedStyle(el);
+const isBoxless = (el) => styleOf(el).display === "contents";
+
+// why: These hide what is inside them while they are shown themselves.
+const hidesContent = (el) => (tagOf(el) === "DETAILS" && !el.open) || styleOf(el).contentVisibility === "hidden";
+
+function isRendered(el, options) {
   if (el.checkVisibility(options)) return true;
-  const parent = style.display === "contents" && composedParent(el);
-  return (
-    parent?.nodeType === 1 && isRendered(parent, parent.ownerDocument.defaultView.getComputedStyle(parent), options)
-  );
+  const style = styleOf(el);
+  if (style.display !== "contents" || (options?.visibilityProperty && style.visibility !== "visible")) return false;
+  const parent = composedParent(el);
+  return parent?.nodeType === 1 && !hidesContent(parent) && isRendered(parent);
 }
 
-// why: checkVisibility answers for the element, but these hide only what is inside it.
-function showsText(el, node, style) {
-  if (tagOf(el) === "DETAILS" && !el.open) return false;
+function contentRange(el) {
+  const range = el.ownerDocument.createRange();
+  range.selectNodeContents(el);
+  return range;
+}
+
+const lacksBox = ({ width, height }, el) => !width && !height && isBoxless(el);
+
+export function rectOf(el) {
+  const rect = el.getBoundingClientRect();
+  return lacksBox(rect, el) ? contentRange(el).getBoundingClientRect() : rect;
+}
+
+// why: The middle of everything inside a boxless element can be a gap between its parts.
+export function clickRectOf(el) {
+  const rect = el.getBoundingClientRect();
+  if (!lacksBox(rect, el)) return rect;
+  return [...contentRange(el).getClientRects()].find((part) => part.width && part.height) ?? rect;
+}
+
+export function scrollIntoView(el, options) {
+  let target = el;
+  if (lacksBox(el.getBoundingClientRect(), el)) {
+    target = [...el.querySelectorAll("*")].find((inner) => inner.getClientRects().length);
+    for (target ??= el; isBoxless(target) && target.parentElement;) target = target.parentElement;
+  }
+  target.scrollIntoView({ block: "center", behavior: "instant", ...options });
+}
+
+function showsText(el, node) {
   if (el.openOrClosedShadowRoot && !node.openOrClosedAssignedSlot) return false;
-  return style.contentVisibility !== "hidden" && isRendered(el, style, { visibilityProperty: true });
+  return !hidesContent(el) && isRendered(el, { visibilityProperty: true });
 }
 
 // why: innerText, built from the DOM where Gecko leaves it empty (docs/gecko-pitfalls.md, Input and frames).
 // why: As in its specification, a number is how many line breaks must separate what is around it.
 function textItems(el, isNative) {
-  const win = el.ownerDocument.defaultView;
-  const style = win.getComputedStyle(el);
+  const style = styleOf(el);
   const items = [];
   for (const child of el.childNodes) {
-    if (child.nodeType === 3 && showsText(el, child, style))
+    if (child.nodeType === 3 && showsText(el, child))
       items.push(style.whiteSpace.startsWith("pre") ? child.data : child.data.replace(/\s+/g, " "));
     if (child.nodeType !== 1) continue;
-    const childStyle = win.getComputedStyle(child);
-    if (!isRendered(child, childStyle)) continue;
+    if (!isRendered(child)) continue;
     const tag = tagOf(child);
     if (tag === "BR") items.push("\n");
     if (tag === "BR" || SKIP_TAGS.has(tag) || frameIdOf(child)) continue;
-    const { display } = childStyle;
+    const { display } = styleOf(child);
     const inline = /^(inline|contents|ruby)/.test(display);
     const inner = !inline && isNative?.(child) ? [child.innerText] : textItems(child, isNative);
     const gap = tag === "P" ? 2 : 1;
@@ -263,17 +294,17 @@ export function isVisible(el) {
   if (el.getAttribute?.("aria-hidden") === "true" || el.hidden) return false;
   if (el.tagName?.toUpperCase() === "INPUT" && el.type === "hidden") return false;
   // why: Visibility must include ancestor and content-visibility checks, beyond the element's own display value.
-  if (el.checkVisibility && !el.checkVisibility({ visibilityProperty: true })) return false;
-  return true;
+  if (!el.checkVisibility || el.checkVisibility({ visibilityProperty: true })) return true;
+  return isRendered(el, { visibilityProperty: true }) && contentRange(el).getClientRects().length > 0;
 }
 
 export function inViewport(el, win) {
-  const r = el.getBoundingClientRect();
+  const r = rectOf(el);
   return r.bottom > 0 && r.right > 0 && r.top < win.innerHeight && r.left < win.innerWidth;
 }
 
 export function fullyInViewport(el, win) {
-  const r = el.getBoundingClientRect();
+  const r = rectOf(el);
   return r.top >= 0 && r.left >= 0 && r.bottom <= win.innerHeight && r.right <= win.innerWidth;
 }
 
@@ -333,10 +364,6 @@ export class PageReader {
     return answers.get(el);
   }
 
-  #style(el) {
-    return this.env.window().getComputedStyle(el);
-  }
-
   #listens(el) {
     return this.env.listenerTypes(el).some((type) => CLICK_EVENTS.has(type));
   }
@@ -382,7 +409,7 @@ export class PageReader {
     if (pointer) return true;
     // why: Frameworks put delegated listeners on wrappers, which are not themselves a target.
     if (clean(el.textContent).length > MAX_NAME) return false;
-    const { width, height } = el.getBoundingClientRect();
+    const { width, height } = rectOf(el);
     if (!width || !height) return false;
     return ![...el.querySelectorAll("*")].some(
       (inner) => isControl(inner) || this.#startsPointer(inner) || this.#listens(inner),
@@ -503,8 +530,7 @@ export class PageReader {
         if (child.nodeType === 1) walk(child, childIndent, level + 1);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          if (t && !(printed && NAME_FROM_CONTENT.has(role)) && showsText(el, child, this.#style(el)))
-            push(childIndent, `text "${t}"`);
+          if (t && !(printed && NAME_FROM_CONTENT.has(role)) && showsText(el, child)) push(childIndent, `text "${t}"`);
         }
       }
     };
@@ -576,7 +602,7 @@ export class PageReader {
       let own = false;
       let covered = false;
       for (const child of el.childNodes) {
-        if (child.nodeType === 3 && showsText(el, child, this.#style(el))) {
+        if (child.nodeType === 3 && showsText(el, child)) {
           text += child.data;
           own ||= !!clean(child.data);
         }

@@ -258,7 +258,7 @@ export function highlight(env, items) {
     for (const { element, ring, tag } of parts) {
       ring.hidden = tag.hidden = !element.isConnected;
       if (!element.isConnected) continue;
-      const r = element.getBoundingClientRect();
+      const r = env.reader.rectOf(element);
       Object.assign(ring.style, {
         left: `${r.left - GAP}px`,
         top: `${r.top - GAP}px`,
@@ -302,7 +302,7 @@ export function outlineAndWait(env, { target, wait, timeout }) {
 
   let frame = 0;
   const place = () => {
-    const r = target.getBoundingClientRect();
+    const r = env.reader.rectOf(target);
     const pad = 6;
     Object.assign(box.style, {
       left: `${r.left - pad}px`,
