@@ -99,6 +99,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - `Services.els.getListenerInfoFor(element)` lists page listeners from an actor (`onclick`
   attributes and properties included) but not ones delegated to an ancestor. Computed `cursor`
   is inherited, so a whole subtree reports `pointer`.
+- Text has no `scrollIntoView`; a selection can scroll to it. `SELECTION_URLSECONDARY` is never used in
+  pages, also takes ranges inside shadow roots, and leaves the user's selection and
+  `selectionchange` alone (`PageReader.scrollTextIntoView`).
 - A closed shadow root's contents don't appear in a window listener's `composedPath()`;
   `event.composedTarget` is the real target there too.
 - `openOrClosedShadowRoot` and `openOrClosedAssignedSlot` also return browser-internal roots and

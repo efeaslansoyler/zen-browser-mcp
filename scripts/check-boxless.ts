@@ -27,8 +27,35 @@ const page = `<!doctype html><meta charset="utf-8"><title>Boxless</title><style>
 <div style="height:5000px"></div>
 <a class="c" id="far" href="#far"><div>Far link</div></a>
 <script>window.hits=[]</script>`;
-const server = http.createServer((_, response) => {
-  response.setHeader("content-type", "text/html; charset=utf-8").end(page);
+const gap = (height: number) => `<p style="height:${height}px">gap</p>`;
+const pay = `<span class="c" onclick="hits++">Pay now</span>`;
+const inTall = (inner = pay) => `<div>${gap(1000)}${inner}${gap(9000)}</div>`;
+const scroller = (overflow: string) =>
+  `${gap(3000)}<div style="height:200px;overflow:${overflow}">${inTall()}</div>${gap(5000)}`;
+const inShadow = (content: string, light = "") =>
+  `<div id="host">${light}</div><script>host.attachShadow({mode:"closed"}).innerHTML=\`<style>.c{display:contents}</style>${content}\`</script>`;
+const bar = (side: string) => `<div style="position:fixed;${side}:0;left:0;right:0;height:200px;background:red"></div>`;
+const tall: Record<string, string> = {
+  block: inTall(),
+  smooth: `<style>html{scroll-behavior:smooth}</style>${inTall()}`,
+  bars: bar("top") + bar("bottom") + inTall(),
+  wide: `<div style="width:9000px;white-space:nowrap"><i style="display:inline-block;width:5000px"></i>${pay}</div>`,
+  auto: scroller("auto"),
+  hidden: scroller("hidden"),
+  before: inTall(`<span class="c" onclick="hits++">Pay now<div style="height:6000px">rest</div></span>`),
+  space: inTall(`<span class="c" onclick="hits++">&nbsp;<b style="display:none">x</b>\n  Pay now</span>`),
+  shadow: inShadow(inTall()),
+  slotted: inShadow(inTall("<slot></slot>"), pay),
+};
+const server = http.createServer((request, response) => {
+  const inner = tall[request.url!.slice(1)];
+  response
+    .setHeader("content-type", "text/html; charset=utf-8")
+    .end(
+      inner
+        ? `<!doctype html><title>Tall</title><style>.c{display:contents}</style><b id="chosen">Chosen</b><script>hits=0;changes=0</script>${inner}`
+        : page,
+    );
 });
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const tabs: number[] = [];
@@ -36,7 +63,8 @@ const tabs: number[] = [];
 try {
   const { tabId } = JSON.parse((await command("tabs_create_mcp", { url: "about:blank" })).split("\n")[0]);
   tabs.push(tabId);
-  await command("navigate", { tabId, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/` });
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  await command("navigate", { tabId, url });
   const read = await command("read_page", { tabId });
   const lines = read.split("\n").map((line) => line.trim().replace(/ \[ref_\w+\]/, ""));
   for (const line of [
@@ -77,6 +105,21 @@ try {
   for (const name of ["Save", "Card title Card body", "Bare clickable"])
     assert.match(annotated, new RegExp(`\\b${refOf(name)}\\b`), name);
   console.log("✓ wait_for selectors match them; annotated screenshots label them");
+
+  for (const name of Object.keys(tall)) {
+    await command("navigate", { tabId, url: url + name });
+    await pageEval(
+      tabId,
+      `getSelection().selectAllChildren(chosen); setTimeout(() => document.addEventListener("selectionchange", () => changes++), 100); 1`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const ref = (await command("find", { tabId, query: "pay now" })).match(/\[(ref_\w+)\]/)![1];
+    await command("computer", { tabId, action: "scroll_to", ref });
+    assert.equal(await pageEval(tabId, "getSelection().toString() + changes"), "Chosen0", name);
+    await command("computer", { tabId, action: "left_click", ref });
+    assert.equal(await pageEval(tabId, "String(hits)"), "1", name);
+  }
+  console.log("✓ Text of a boxless element is scrolled to and clicked anywhere; the user's selection stays");
   console.log("All live boxless checks passed.");
 } catch (error) {
   console.error(error instanceof Error ? error.stack : error);
