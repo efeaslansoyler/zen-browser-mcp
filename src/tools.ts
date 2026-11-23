@@ -557,14 +557,13 @@ tool(
   [
     "Hand a step to the user when they must do it themselves in a tab: logging in or any credentials, 2FA codes, captchas, confirming a payment or a deletion, accepting terms.",
     "Never ask the user for passwords or codes to type them yourself; hand the step over instead, so credentials never pass through you.",
-    'Shows your message in the browser and outlines the element (ref or screenshot coordinate). wait: "done" (default) returns when the user presses Done or Cancel; "click" when they click the outlined element. Afterwards, check the page before continuing.',
-    "Write the message in the user's language and say exactly what to do.",
+    "Shows your message on a card in the browser and outlines the element (ref or screenshot coordinate). When the user has several elements to use, such as the fields and button of a login form, number all of them with highlight first, then call this without ref.",
+    'wait: "done" (default) returns when the user confirms or cancels on the card; "click" when they click the outlined element. Afterwards, check the page before continuing.',
+    "Write the message in the user's language and say exactly what to do in the page. Don't name the card's buttons: the card shows them, in a language you don't know.",
   ].join(" "),
   {
     tabId,
-    message: z
-      .string()
-      .describe('What the user should do, e.g. "Log in to your account, then press Done." In the user\'s language.'),
+    message: z.string().describe('What the user should do, e.g. "Log in to your account." In the user\'s language.'),
     ref: z.string().optional().describe("Element to outline (from read_page or find)."),
     coordinate: z
       .array(z.number())

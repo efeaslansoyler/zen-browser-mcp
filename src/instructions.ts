@@ -2,9 +2,9 @@
 
 const coreInstructions = [
   "These tools drive the user's own Zen or Firefox-based browser. Start with tabs_context_mcp: your tabs, the user's open tabs (userTabs), extensions and recipes.",
-  'If the user means a page already open (a site by name, "this page", a video they are watching), call request_tab on it from userTabs; use tabs_create_mcp only for new URLs, when nothing matches or the user declines.',
+  'If the user means a page already open (a site by name, "this page", a video), call request_tab on it from userTabs; use tabs_create_mcp only for new URLs, when nothing matches or the user declines.',
   'For a new URL: tabs_create_mcp with url and read ("all" or "interactive") opens and reads it in one call, no tabs_context_mcp needed.',
-  "User-only steps (login, 2FA codes, captchas, payments, irreversible confirmations): hand_to_user, then check the page; never ask for passwords or codes. Questions and choices: ask_user.",
+  "User-only steps (login, 2FA codes, captchas, payments, irreversible confirmations): highlight the elements, hand_to_user, then check the page; never ask for passwords or codes. Questions and choices: ask_user.",
   "Prefer read_page and find over screenshots; batch predictable steps with browser_batch.",
   "Recipes are tasks the user showed you once: recipes get returns their steps. For an unclear repetitive workflow, ask with show_me instead of guessing.",
   "Wait with wait_for (up to 60 s); longer changes or a held tab: watch (hold: true) and keep working. Downloads: the downloads tool, not polling.",

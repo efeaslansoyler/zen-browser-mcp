@@ -7,6 +7,16 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+### Changed
+
+- The server instructions, `hand_to_user` and the skill tell agents to number several elements
+  with `highlight` before handing over; `hand_to_user` and the skill also say not to name the
+  card's buttons, whose language agents don't know.
+
+### Fixed
+
+- `handle_dialog` answers in English; parts of its result were Turkish.
+
 ## [0.3.0] - 2026-11-23
 
 ### Added
