@@ -12,8 +12,7 @@ test("highlight groups items by frame, numbers unlabeled ones and clears the oth
   const ctx = bridgeContext({
     browserFor: () => browser,
     framesOf: () => [top, child],
-    frameOf: (_, ref) => (ref.includes("_f") ? child : top),
-    longRef: (ref) => ref,
+    frameOf: (_, ref) => (ref.startsWith("ref_2") ? child : top),
     toPagePoint: (_, point) => point,
     deepest: async (_, x, y) => ({ frame: top, x, y }),
     query: async (_, name, data, __, frame) => {
@@ -25,9 +24,9 @@ test("highlight groups items by frame, numbers unlabeled ones and clears the oth
   await ctx.tools.highlight({
     tabId: 1,
     items: [
-      { ref: "ref_1", label: "Username" },
-      { ref: "ref_2" },
-      { ref: "ref_3_f2", label: " " },
+      { ref: "ref_1b", label: "Username" },
+      { ref: "ref_1c" },
+      { ref: "ref_2b", label: " " },
       { coordinate: [5, 6] },
     ],
   });
@@ -35,12 +34,12 @@ test("highlight groups items by frame, numbers unlabeled ones and clears the oth
     {
       frame: 1,
       items: [
-        { ref: "ref_1", label: "Username", number: "1" },
-        { ref: "ref_2", label: "", number: "2" },
+        { ref: "ref_1b", label: "Username", number: "1" },
+        { ref: "ref_1c", label: "", number: "2" },
         { x: 5, y: 6, label: "", number: "4" },
       ],
     },
-    { frame: 2, items: [{ ref: "ref_3_f2", label: "", number: "3" }] },
+    { frame: 2, items: [{ ref: "ref_2b", label: "", number: "3" }] },
   ]);
   sent.length = 0;
   assert.match((await ctx.tools.highlight({ tabId: 1, clear: true }))[0].text, /removed/);
@@ -58,16 +57,15 @@ test("a frame that disappears doesn't fail clearing, but does fail drawing", asy
   const ctx = bridgeContext({
     browserFor: () => ({ browsingContext: top }),
     framesOf: () => [top, gone],
-    frameOf: (_, ref) => (ref.includes("_f") ? gone : top),
-    longRef: (ref) => ref,
+    frameOf: (_, ref) => (ref.startsWith("ref_2") ? gone : top),
     query: async (_, __, ___, ____, frame) => {
       if (frame === gone) throw new Error("The page has not loaded yet.");
       return { value: 0 };
     },
     text: (value) => [{ type: "text", text: value }],
   });
-  await ctx.tools.highlight({ tabId: 1, items: [{ ref: "ref_1" }] });
-  await assert.rejects(ctx.tools.highlight({ tabId: 1, items: [{ ref: "ref_2_f2" }] }), /not loaded/);
+  await ctx.tools.highlight({ tabId: 1, items: [{ ref: "ref_1b" }] });
+  await assert.rejects(ctx.tools.highlight({ tabId: 1, items: [{ ref: "ref_2b" }] }), /not loaded/);
 });
 
 class Node {

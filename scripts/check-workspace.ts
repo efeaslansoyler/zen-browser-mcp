@@ -69,7 +69,7 @@ try {
   console.log("ok  new agent tab opened in the configured space; your space stayed active");
 
   await tool("navigate", { tabId, url: "https://example.com/" });
-  const ref = /\b(ref_\d+)\b/.exec(await tool("find", { tabId, query: "Learn more" }))![1];
+  const ref = /\b(ref_\w+)\b/.exec(await tool("find", { tabId, query: "Learn more" }))![1];
   await tool("computer", { tabId, action: "left_click", ref });
   await tool("wait_for", { tabId, text: "Example Domains", timeout: 20 });
   const shot = await client.callTool({ name: "computer", arguments: { tabId, action: "screenshot", scale: 0.3 } });

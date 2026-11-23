@@ -53,7 +53,7 @@ export function bridgeContext(fakes = {}) {
     lastUse: new Map(),
     readSnapshots: new ReadSnapshots(),
     screenshots: new ScreenshotHistory(),
-    frameNumbers: { byId: new Map(), byNumber: new Map(), next: 1 },
+    refDocuments: { next: 1 },
     tools: {},
     commands: {},
     lastAgent: agentTheme({ id: "codex" }),

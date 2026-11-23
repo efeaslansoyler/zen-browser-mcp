@@ -132,7 +132,6 @@ export function page(...children) {
     },
   });
   const actor = new Actor();
-  actor.browsingContext = { id: 1 };
   actor.contentWindow = {
     innerWidth: 800,
     innerHeight: 600,
@@ -147,7 +146,7 @@ export function page(...children) {
     getElementById: () => null,
   };
   const send = async (name, data = {}) => {
-    const result = await actor.receiveMessage({ name, data });
+    const result = await actor.receiveMessage({ name, data: { documentNumber: 1, ...data } });
     if (result.error) throw new Error(result.error);
     return result.value;
   };
@@ -159,20 +158,20 @@ export function page(...children) {
     async click(el, data = {}) {
       actor.document.elementFromPoint = () => el;
       const { hit } = await send("input", { kind: "click", x: 5, y: 5, silent: true, session: "a", ...data });
-      return hit.replace(/ref_\d+/, "ref");
+      return hit.replace(/ref_\d+[a-z]+/, "ref");
     },
     async ref(query) {
-      return (await send("find", { query }))[0].line.match(/ref_\d+/)[0];
+      return (await send("find", { query }))[0].line.match(/ref_\d+[a-z]+/)[0];
     },
     send,
     read: async (data = {}) =>
       (await send("read_page", { bare: true, ...data }))
-        .replace(/ref_\d+/g, "ref")
+        .replace(/ref_\d+[a-z]+/g, "ref")
         .split("\n")
         .filter(Boolean),
     find: async (query) =>
       (await send("find", { query }))
         .sort((a, b) => b.score - a.score)
-        .map((hit) => hit.line.replace(/ref_\d+/g, "ref")),
+        .map((hit) => hit.line.replace(/ref_\d+[a-z]+/g, "ref")),
   };
 }

@@ -175,7 +175,6 @@ test("real parent batch and a call queued on its tab stay cancelled across immed
     agentTheme: () => ({ id: "codex" }),
     text: (value) => [{ type: "text", text: value }],
     reply: (_, __, result) => replies.push(result),
-    shortRefs: (x) => x,
     tools: {
       wait: async (_args, call) => {
         started();

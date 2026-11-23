@@ -72,7 +72,7 @@ try {
   const find = async (query: string) => {
     for (let i = 0; i < 50; i++) {
       const found = text(await command("find", { tabId, query }));
-      const ref = found.match(/\[(ref_\d+(?:_f\d+)?)\]/)?.[1];
+      const ref = found.match(/\[(ref_\w+)\]/)?.[1];
       if (ref) return ref;
       await sleep(100);
     }

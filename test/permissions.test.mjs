@@ -39,7 +39,6 @@ function harness({ mode = "auto", sites = {}, site = "https://ordinary.test", an
     paintTab() {},
     describeAction: () => "",
     logActivity() {},
-    shortRefs: (x) => x,
     askIsland: async (...args) => {
       prompts.push({ host: browser.currentURI.host, message: args[3] });
       return answer ? answer({ prompts, browser, navigate, settings }) : "done";
@@ -234,7 +233,6 @@ test("an origin change invalidates approval even before the document identity ch
 test("navigation while describing a target discards the old permission description", async () => {
   const h = harness({ mode: "ask" });
   let descriptions = 0;
-  h.context.longRef = (x) => x;
   h.context.queryRef = async () => {
     if (++descriptions === 2) h.navigate("https://other.test/");
     return { value: `target on ${h.browser.currentURI.host}` };
@@ -338,7 +336,6 @@ test("permission module describes actions and scopes approvals without slicing m
     Stopped: class extends Error {},
     access,
     queryRef: async () => ({ value: 'button "Pay"' }),
-    longRef: (x) => x,
     readConfig: () => settings,
     policy,
     rule: (key) => policy.ruleOf(key, settings.mode),

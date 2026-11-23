@@ -27,7 +27,7 @@ export function tabTools(ctx) {
           .query(
             browser,
             "ask_user",
-            { ref: ctx.longRef(ref), x, y, message, wait, timeout },
+            { ref, x, y, message, wait, timeout },
             (timeout + 10) * 1000,
             ctx.frameOf(browser, ref),
           )
@@ -42,7 +42,7 @@ export function tabTools(ctx) {
         ({ value: result } = await ctx.query(
           browser,
           "ask_user",
-          { ref: ctx.longRef(ref), x, y, message, wait, timeout },
+          { ref, x, y, message, wait, timeout },
           (timeout + 10) * 1000,
           ctx.frameOf(browser, ref),
         ));
@@ -218,7 +218,7 @@ export function tabTools(ctx) {
         let frame, data;
         if (item?.ref != null) {
           frame = ctx.frameOf(browser, item.ref);
-          data = { ref: ctx.longRef(item.ref), label, number };
+          data = { ref: item.ref, label, number };
         } else if (Array.isArray(item?.coordinate)) {
           const [x, y] = ctx.toPagePoint(browser, item.coordinate, screenshot);
           const inner = await ctx.deepest(browser, x, y);

@@ -111,7 +111,7 @@ try {
     `document.body.insertAdjacentHTML("beforeend", '<iframe id="input-frame"></iframe>');document.getElementById("input-frame").src=${JSON.stringify(frameUrl)}`,
   );
   await tool("wait_for", { tabId, text: "Frame target" });
-  const frameRef = text(await tool("read_page", { tabId })).match(/button "Frame target" \[(ref_\d+_f\d+)\]/)?.[1];
+  const frameRef = text(await tool("read_page", { tabId })).match(/button "Frame target" \[(ref_\w+)\]/)?.[1];
   assert(frameRef, "Missing cross-origin frame button");
   await computer("left_click", { ref: frameRef, movement: "instant" });
   assert.match(text(await tool("read_page", { tabId })), /Frame clicked/);

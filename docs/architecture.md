@@ -340,11 +340,14 @@ works; a call refused by a hold says to start one instead of retrying. A hold wa
 
 ## Frames
 
-The actor runs in every frame (`allFrames: true`). Refs inside a subframe carry its browsing
-context id (`ref_3_f150323855361`); the bridge shows agents a short form (`ref_3_f2`) and maps
-it back. `read_page` splices each iframe's tree under `[iframe url]`, `find` searches all
-frames, and mouse events are sent from the actor of the innermost frame under the point,
-because events dispatched from the top page don't reach out-of-process iframes.
+The actor runs in every frame (`allFrames: true`). A ref is the number of its document and
+letters for the element (`ref_12c`). The bridge gives every window global a new number
+(`PageQuery`) and sends it with each query, and the actor builds the refs. A ref is looked up
+only in the tab's current documents, so one from before a navigation, a bridge reload or from
+another tab isn't found; a page restored from the bfcache keeps its refs. `read_page` splices
+each iframe's tree under `[iframe url]`, `find` searches all frames, and mouse events are sent
+from the actor of the innermost frame under the point, because events dispatched from the top
+page don't reach out-of-process iframes.
 
 Screenshot coordinates are resolved per session and tab (`ScreenshotHistory`): each viewport
 screenshot gets an ID and its scale, a call can name the image its coordinate comes from, and

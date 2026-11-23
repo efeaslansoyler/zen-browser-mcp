@@ -49,7 +49,7 @@ const open = async (path: string): Promise<[number, string]> => {
 const refIn = (output: string, label: string) => {
   const line = output.split("\n").find((l) => l.includes(`"${label}"`));
   assert(line, `No line for ${label} in:\n${output}`);
-  return line.match(/\[(ref_\d+(?:_f\d+)?)\]/)![1];
+  return line.match(/\[(ref_\w+)\]/)![1];
 };
 
 try {
@@ -67,7 +67,7 @@ try {
   ]);
   assert.match(interactive, /clickable svg#icon\.gear \[ref_/);
   assert.doesNotMatch(interactive, /"Visible box".*clickable/);
-  assert.match(interactive, /label "Custom box" \[ref_\d+\] clickable/);
+  assert.match(interactive, /label "Custom box" \[ref_\w+\] clickable/);
   assert.match(interactive, /button "Framed button"/);
   console.log("✓ Pointer cursors, inline handlers, handler properties and listeners give refs; a delegated one can't");
 
@@ -111,7 +111,7 @@ try {
   assert.deepEqual(await hits(), []);
   assert.match(
     await command("computer", { ...fromBig, screenshot: big.id }),
-    /^left_click done: clickable "Uygulama" \[ref_\d+\]\.$/m,
+    /^left_click done: clickable "Uygulama" \[ref_\w+\]\.$/m,
   );
   await command("computer", { ...fromBig, coordinate: await at("listener", small.ratio), screenshot: small.id });
   assert.deepEqual(await hits(), ["listener", "listener"]);
@@ -132,7 +132,7 @@ try {
 
   const [framed] = await open("/");
   const found = await command("find", { tabId: framed, query: "WLAN" });
-  assert.match(found, /^clickable "WLAN" \[ref_\d+_f\d+\]/);
+  assert.match(found, /^clickable "WLAN" \[ref_\w+\]/);
   const framedShot = await command("computer", { tabId: framed, action: "screenshot" });
   assert.match(framedShot, /shot_\d+: /);
   const box = JSON.parse(
@@ -147,7 +147,7 @@ try {
     action: "left_click",
     coordinate: [(box[0] + 30) * ratio, (box[1] + 25) * ratio],
   });
-  assert.match(inFrame, /left_click done: clickable "WLAN" \[ref_\d+_f\d+\]\./);
+  assert.match(inFrame, /left_click done: clickable "WLAN" \[ref_\w+\]\./);
   const annotated = await command("computer", { tabId, action: "screenshot", annotate: true });
   assert.match(annotated, /Annotated refs: ref_/);
   console.log("✓ Clickables in an iframe are found; annotated screenshots label them");

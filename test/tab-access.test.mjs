@@ -101,7 +101,6 @@ function harness() {
     hostOf: () => "fixture.test",
     describeAction: () => "",
     logActivity() {},
-    shortRefs: (x) => x,
     setTimeout(fn) {
       chromeTimers.set(++timerId, fn);
       return timerId;

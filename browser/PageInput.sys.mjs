@@ -152,7 +152,7 @@ export function pageInput(ctx) {
       y,
       button,
       count,
-      ref: ref && ctx.longRef(ref),
+      ref,
       modifiers: parseModifiers(modifiers),
     });
     return result.value.hit;

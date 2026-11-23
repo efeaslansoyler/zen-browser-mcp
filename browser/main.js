@@ -232,7 +232,7 @@ function logError(where, e) {
       sessions: (state.sessions ||= new Map()),
       sessionVersions: (state.sessionVersions ||= new Map()),
       lastUse: (globalThis.zenMcpLastUse ||= new Map()),
-      frameNumbers: (globalThis.zenMcpFrames ||= { byId: new Map(), byNumber: new Map(), next: 1 }),
+      refDocuments: (globalThis.zenMcpRefDocuments ||= { next: 1 }),
       ownerConnections: new Map(),
       disconnectTimers: new Map(),
       heldInputFrames: new Map(),

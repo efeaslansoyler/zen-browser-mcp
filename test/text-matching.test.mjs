@@ -22,7 +22,7 @@ test("a select option is chosen by its exact text before one that only matches f
     { value: "2", text: "ılık" },
   ];
   const { send } = page(select);
-  const ref = (await send("find", { query: "temperature" }))[0].line.match(/ref_\d+/)[0];
+  const ref = (await send("find", { query: "temperature" }))[0].line.match(/ref_\w+/)[0];
   await send("form_input", { ref, value: "ılık" });
   assert.equal(select.value, "2");
   await send("form_input", { ref, value: "ilik" });
