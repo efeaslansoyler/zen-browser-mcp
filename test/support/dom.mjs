@@ -52,6 +52,7 @@ class Element {
   get innerText() {
     if (this.localName === "br") return "\n";
     return this.childNodes
+      .filter((node) => !node.hidden)
       .map((node) =>
         node.nodeType === 3 ? node.data : node.display === "inline" ? node.innerText : `\n${node.innerText}\n`,
       )

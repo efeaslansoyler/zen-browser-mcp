@@ -212,6 +212,20 @@ export function frameIdOf(el) {
 
 export const MAX_TREE = 50000;
 
+const FIELD_ROLES = new Set([
+  "textbox",
+  "searchbox",
+  "checkbox",
+  "radio",
+  "combobox",
+  "listbox",
+  "slider",
+  "switch",
+  "spinbutton",
+]);
+const FIELD_SELECTOR = "input, select, textarea, [role], [contenteditable]";
+// why: A cell that holds one of these is a part of the page's layout, not the place of one field.
+const LAYOUT_SELECTOR = "h1, h2, h3, h4, h5, h6, table, ul, ol, form, main, nav, section";
 const CLICK_EVENTS = new Set(["click", "mousedown", "mouseup", "pointerdown", "pointerup"]);
 const MAX_JOINED_TEXT = 2000;
 const FULL_MATCH = 10;
@@ -221,11 +235,13 @@ const NATIVELY_CLICKABLE = new Set(["VIDEO", "AUDIO", "EMBED", "OBJECT"]);
 const tagOf = (el) => el.tagName?.toUpperCase();
 const composedParent = (node) => node.assignedSlot || node.parentNode || node.getRootNode?.().host;
 const isControl = (el) => INTERACTIVE_ROLES.has(roleOf(el));
+const isField = (el) => FIELD_ROLES.has(roleOf(el)) || (tagOf(el) === "INPUT" && ["file", "color"].includes(el.type));
 const isSkipped = (el, clickable) => SKIP_TAGS.has(tagOf(el)) && !(clickable && tagOf(el) === "SVG");
 
 export class PageReader {
   #clickables = new Map();
   #wholes = new Map();
+  #rowLabels = new Map();
 
   constructor(env) {
     this.env = env;
@@ -235,6 +251,7 @@ export class PageReader {
   #startRead() {
     this.#clickables.clear();
     this.#wholes.clear();
+    this.#rowLabels.clear();
   }
 
   #remember(answers, el, answer) {
@@ -292,6 +309,56 @@ export class PageReader {
     return ![...el.querySelectorAll("*")].some(
       (inner) => isControl(inner) || this.#startsPointer(inner) || this.#listens(inner),
     );
+  }
+
+  // why: A wrong name makes an agent change the wrong setting, so any doubt leaves the field unnamed.
+  #rowLabel(el) {
+    const cell = el.closest("td, th");
+    const row = cell?.parentElement;
+    if (!row || tagOf(row) !== "TR") return "";
+    const { field, cells } = this.#remember(this.#rowLabels, row, () => {
+      const fields = [...row.querySelectorAll(FIELD_SELECTOR)].filter((inner) => isField(inner) && isVisible(inner));
+      return {
+        field: fields.length === 1 && fields[0],
+        cells: [...row.children].filter((child) => isVisible(child)),
+      };
+    });
+    if (field !== el || cell.querySelector(LAYOUT_SELECTOR)) return "";
+    const labels = cells.slice(0, cells.indexOf(cell)).filter((before) => tokens(before.innerText).length);
+    if (labels.length !== 1) return "";
+    const text = labels[0].innerText.trim();
+    if (text.length > MAX_NAME || /[\n\t]/.test(text)) return "";
+    const holdsControl = [...labels[0].querySelectorAll("*")].some(
+      (inner) => isControl(inner) && clean(inner.innerText),
+    );
+    return holdsControl ? "" : clean(text);
+  }
+
+  // why: Text of a submenu or of an inner control doesn't name the element around it.
+  #hiddenText(el) {
+    if (clean(el.innerText ?? el.textContent)) return "";
+    const texts = [];
+    const collect = (node, own) => {
+      for (const child of node.childNodes) {
+        if (texts.length > 1) return;
+        // why: innerText is also empty for shown text in an off-screen content-visibility: auto section.
+        if (child.nodeType === 3 && clean(child.data)) texts.push(own && !isVisible(node) ? clean(child.data) : "");
+        else if (child.nodeType === 1 && !SKIP_TAGS.has(tagOf(child)) && !frameIdOf(child))
+          collect(child, own && !isControl(child) && !this.#listens(child));
+      }
+    };
+    collect(el, true);
+    return texts.length === 1 && texts[0].length <= MAX_NAME ? texts[0] : "";
+  }
+
+  // why: An inferred name is marked, because the page declares no relation between the text and the element.
+  #name(el, clickable, fromContent) {
+    const declared = accessibleName(el, this.env.document(), fromContent);
+    if (declared) return { name: declared, mark: "" };
+    const fromRow = isField(el) && this.#rowLabel(el);
+    if (fromRow) return { name: fromRow, mark: "(from row)" };
+    const hidden = (clickable || (isControl(el) && NAME_FROM_CONTENT.has(roleOf(el)))) && this.#hiddenText(el);
+    return hidden ? { name: hidden, mark: "(hidden text)" } : { name: "", mark: "" };
   }
 
   targets(selector) {
@@ -381,9 +448,10 @@ export class PageReader {
 
   describeElement(el, role, { clickable = false, nameFromContent } = {}) {
     const parts = [role || (clickable ? "clickable" : "text")];
-    const name = accessibleName(el, this.env.document(), nameFromContent);
+    const { name, mark } = this.#name(el, clickable, nameFromContent);
     if (name) parts.push(`"${name}"`);
     else if (!role) parts.push(elementLabel(el));
+    if (mark) parts.push(mark);
     parts.push(`[${this.env.ref(el)}]`);
     const tag = el.tagName.toUpperCase();
     if (role === "heading") parts.push(`level=${tag[1] || el.getAttribute("aria-level") || ""}`);
@@ -488,7 +556,7 @@ export class PageReader {
       const clickable = this.#clickable(el);
       if ((!role && !clickable) || !isVisible(el)) continue;
       if (isSkipped(el, clickable)) continue;
-      const name = accessibleName(el, doc, clickable || undefined);
+      const { name } = this.#name(el, clickable, clickable || undefined);
       const haystack = tokens(
         [
           name,
@@ -544,7 +612,6 @@ export class PageReader {
   // why: A click that lands beside its target otherwise looks exactly like one that hit it.
   describeHit(el, expected) {
     this.#startRead();
-    const doc = this.env.document();
     let listens = false;
     for (let up = el; up && tagOf(up) !== "BODY" && tagOf(up) !== "HTML"; up = composedParent(up)) {
       if (up.nodeType !== 1) continue;
@@ -555,8 +622,10 @@ export class PageReader {
         continue;
       }
       const role = roleOf(target) || "clickable";
-      const name = accessibleName(target, doc, clickable || undefined);
-      const shown = name ? `"${truncate(name, MAX_HIT_NAME).replaceAll('"', "'")}"` : elementLabel(target);
+      const { name, mark } = this.#name(target, clickable, clickable || undefined);
+      const shown = name
+        ? `"${truncate(name, MAX_HIT_NAME).replaceAll('"', "'")}"${mark && ` ${mark}`}`
+        : elementLabel(target);
       return `${role} ${shown}${target === expected ? "" : ` [${this.env.ref(target)}]`}`;
     }
     return `${elementLabel(el)}${listens ? "" : " (no click handler detected)"}`;

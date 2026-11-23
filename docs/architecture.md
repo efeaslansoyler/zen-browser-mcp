@@ -80,7 +80,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `ReadSnapshots`, `ScreenshotCache`, `ScreenshotHistory`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, screenshot IDs and scales, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
 | `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe. Its one message to the parent is a recorded step |
 | `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |
-| `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles, component chains and raw source hints for picks |
+| `actors/PageReader`, `ElementInfo` | Roles, declared and inferred names, and the `read_page`/`find` tree; selectors, styles, component chains and raw source hints for picks |
 | `actors/InputDriver`, `Overlays`, `Picker` | Input through the browser's own `EventUtils` with hit testing; virtual cursor, ripple, `ask_user` outline and `highlight` frames; the element picker |
 | `actors/WebVitals` | Local TTFB, FCP, LCP, CLS and INP for the current document, or why one is unsupported |
 | `actors/Recorder` | Turns the user's input in a recorded tab into steps (click, type, select, check, upload, key); secret fields never carry values |
