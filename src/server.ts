@@ -12,7 +12,7 @@ import { createBrowserLauncher, type LaunchApproval } from "./launch.ts";
 import { ensureCodexRelay } from "./codex-relay.ts";
 import { ensureCodexWatch } from "./codex-watch.ts";
 import { THREAD_ID, runT3Send, t3Message, t3Thread } from "./delivery.ts";
-import { channelEnabled, claudeTitle } from "./claude.ts";
+import { channelEnabled, claudeTitle, clientPid } from "./claude.ts";
 import { antigravityHookInstalled, claudeHookInstalled } from "./hooks.ts";
 import { openCodePluginInstalled, pushToOpenCode } from "./opencode.ts";
 import { channelInstructions, clientInstructions } from "./instructions.ts";
@@ -161,7 +161,7 @@ function connectOwner(server: McpServer, agent: { id: string; name: string }) {
     title,
     push: channel ? "channel" : t3 ? "t3" : opencode ? "opencode" : null,
     // why: The prompt hook only knows the client conversation ID or the client's process.
-    clientPid: process.ppid,
+    clientPid: clientPid(),
     ...(agent.id === "claude" && process.env.CLAUDE_CODE_SESSION_ID
       ? { clientSession: process.env.CLAUDE_CODE_SESSION_ID, hook: claudeHookInstalled() }
       : agent.id === "antigravity"

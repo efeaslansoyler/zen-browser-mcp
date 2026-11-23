@@ -64,6 +64,8 @@ change tool names, parameters or results.
 - What you send to an agent started inside a T3 Code session no longer reaches the outer thread as
   your message, and one started inside a Claude Code with a channel is no longer taken to have that
   channel. It waits for the agent's next call or your next message there.
+- The prompt hook of an agent started inside an Antigravity session no longer takes what you sent to
+  the outer session.
 
 ## [0.3.0] - 2026-11-23
 

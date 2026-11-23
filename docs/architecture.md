@@ -300,8 +300,9 @@ asks for a note and a target session) and recipes the user recorded go through
    (`cli.js hook claude|antigravity`) asks the bridge (`inbox_take`) with the client's own
    conversation ID, which the MCP process reported when it connected (Claude Code's
    `CLAUDE_CODE_SESSION_ID`). Antigravity gives its MCP servers no conversation ID, so the hook
-   also sends its ancestor PIDs and the bridge matches the MCP process's parent (the `agy`
-   process) among them.
+   also sends the PID of its client (the `agy` process, skipping shells), and the bridge compares
+   it with the client PID of each MCP process. Never match further up: an agent started inside
+   another one has that one among its ancestors.
 3. If the session ends first, or there is no target, the text is copied to the clipboard.
 
 On the wire, a `delivery` acknowledgement keeps its `ok` boolean. With `ok: false`,

@@ -679,13 +679,13 @@ function logError(where, e) {
         let session = null;
         if (client === "codex") session = clientSession ? `codex:${clientSession}` : null;
         else {
-          const ancestors = new Set(Array.isArray(pids) ? pids : []);
+          const clientPids = new Set(Array.isArray(pids) ? pids : []);
           for (const sub of ctx.channels.subscribers.values())
             if (clientSession && sub.clientSession === clientSession) session = sub.id;
-          // why: Use the Antigravity ancestor PID because it supplies no conversation ID to its MCP process.
+          // why: Use the Antigravity process ID because it supplies no conversation ID to its MCP process.
           if (!session)
             for (const sub of ctx.channels.subscribers.values())
-              if (!sub.clientSession && sub.clientPid && ancestors.has(sub.clientPid)) session = sub.id;
+              if (!sub.clientSession && sub.clientPid && clientPids.has(sub.clientPid)) session = sub.id;
         }
         return ctx.text(session ? ctx.inboxText(ctx.inbox.take(session)) : "");
       },
