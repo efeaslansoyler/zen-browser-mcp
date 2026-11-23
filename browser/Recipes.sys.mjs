@@ -260,7 +260,7 @@ export function recipeTools(ctx) {
           true,
           { ok: L("Delete", "Sil"), cancel: L("Keep", "Kalsın") },
           [],
-          { key, agent: call.agent },
+          { key, agent: call.agent, session: call.session },
         );
         let answer;
         try {

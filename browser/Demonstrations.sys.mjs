@@ -122,7 +122,7 @@ export function demonstrationTools(ctx) {
             false,
             {},
             [],
-            { key, agent: call.agent },
+            { key, agent: call.agent, session: call.session },
           );
           const gaveUp = ctx.waitIslandAnswer(call, timeout, key);
           let first;

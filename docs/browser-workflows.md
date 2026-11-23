@@ -11,6 +11,11 @@ the activity to go to the agent's tab. Ctrl+Shift+Esc also stops browser
 automation. When several agents are active, use the arrows or agent icons to
 switch between them.
 
+A request opens on the island for a few seconds while you look at its tab, then
+shrinks to one pulsing line so the page stays free. Hover over the line to open
+it again; it stays open while you type a note. When an agent hands you a step,
+**Cancel** and **Done** stay on the line.
+
 `tabs_context_mcp` separates the caller's tabs, other sessions' agent tabs
 (`agentTabs`), and open user tabs (`userTabs`). The latter includes tab metadata.
 Live page access needs tab membership. Use **Give to session…** from the tab
