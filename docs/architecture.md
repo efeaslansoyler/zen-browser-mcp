@@ -92,6 +92,8 @@ One JSON line per connection: request `{tool, args, session, agent}`, reply `{ok
 `{ok: false, error}`. JSON is converted to pure ASCII on both ends so encodings never matter.
 `subscribe` is the exception: the connection stays open, the bridge writes events line by
 line and, for acknowledged subscriptions, the client answers `{event: "delivery", id, ok}`.
+A changed conversation title is sent as `{event: "title", title}` on the open connection:
+closing it would end the session's running calls and holds.
 
 Closing a request connection does not cancel the call. When the MCP process gives up after the
 tool's answer timeout (`callTimeout` in `tools.ts`), it closes the socket and reports

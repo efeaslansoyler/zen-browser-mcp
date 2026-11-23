@@ -151,10 +151,8 @@ export function createServer(
 }
 
 let ownerSubscription: ReturnType<typeof subscribe> | undefined;
-let ownerAgent: { id: string; name: string } | undefined;
 let title = claudeTitle();
 function connectOwner(server: McpServer, agent: { id: string; name: string }) {
-  ownerAgent = agent;
   ownerSubscription = subscribe((event) => push(server, event), {
     cwd: process.cwd(),
     toolsOnly: true,
@@ -259,15 +257,11 @@ export async function serve(launch = createBrowserLauncher()) {
   syncBrowserFiles().catch(() => {});
   if (!runsFromCheckout()) refreshSkills();
 
-  // why: Reconnect when the conversation title changes so the browser's menus show its current name.
   setInterval(() => {
     const now = claudeTitle();
     if (now === title) return;
     title = now;
-    if (ownerSubscription) {
-      ownerSubscription.close();
-      connectOwner(server, ownerAgent!);
-    }
+    ownerSubscription?.setTitle(title);
   }, 15_000).unref();
   // why: Closing stdio must end the server even if a browser subscription is still open.
   const shutdown = async (code: number) => {

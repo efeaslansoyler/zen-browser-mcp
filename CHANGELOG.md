@@ -56,6 +56,8 @@ change tool names, parameters or results.
 - `handle_dialog` answers in English; parts of its result were Turkish.
 - `handle_dialog` returns once the dialog it answered is gone, so the next call isn't refused
   because of it, and fails if the dialog stays open.
+- A new conversation title no longer cancels the session's running and queued calls or releases its
+  holds, for Claude and for Codex conversations found through the Codex service.
 
 ## [0.3.0] - 2026-11-23
 

@@ -427,6 +427,40 @@ test("tool lifecycle subscriptions never become element-delivery targets", () =>
   assert.equal(h.context.sessions.get("A").disconnected, true);
 });
 
+test("a new title renames the session and its pick target without ending its work", async () => {
+  const h = harness();
+  const c = h.context;
+  const tabId = h.own("A");
+  const channels = new Channels(new Map(), {
+    theme: agentTheme,
+    connectOwner: (...args) => c.connectOwnerSession(...args),
+    renameOwner: (...args) => c.renameOwnerSession(...args),
+    disconnectOwner: (...args) => c.disconnectOwnerSession(...args),
+    sessionName: (...args) => c.sessionName(...args),
+  });
+  const transport = {};
+  const id = channels.subscribe(
+    { session: "A", toolsOnly: true, ack: true, agent: { id: "codex" }, cwd: "/project", title: "One" },
+    transport,
+    {},
+  );
+  c.access.hold(tabId, "A", { reason: "paying" });
+  const pending = h.request("A", "wait", { tabId });
+  await h.first;
+  const names = () => [c.sessions.get("A").name, channels.subscribers.get("A").name];
+  channels.rename(id, transport, "Two");
+  assert.deepEqual(names(), ["Two · project", "Two · project"]);
+  channels.rename(id, {}, "Stranger");
+  assert.deepEqual(names(), ["Two · project", "Two · project"]);
+  channels.rename(id, transport, null);
+  assert.deepEqual(names(), ["Codex · project · A", "Codex · project · A"]);
+  for (const call of c.calls) call.check();
+  assert.deepEqual(c.access.holdsOf("A"), [tabId]);
+  channels.unsubscribe(id, transport);
+  assert.match((await pending).error, /disconnected/);
+  assert.deepEqual(c.access.holdsOf("A"), []);
+});
+
 test("pick access metadata is specific to the destination, not to agent branding", () => {
   const h = harness();
   const tabId = h.own("A");

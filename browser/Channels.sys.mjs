@@ -88,6 +88,12 @@ export class Channels {
     }
   }
 
+  rename(session, transport, title) {
+    const name = this.env.renameOwner(session, transport, title);
+    const sub = this.subscribers.get(session);
+    if (name && sub?.transport === transport) sub.name = name;
+  }
+
   target() {
     let best = null;
     let bestTime = -1;
