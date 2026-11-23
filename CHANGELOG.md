@@ -18,6 +18,8 @@ change tool names, parameters or results.
 ### Fixed
 
 - `handle_dialog` answers in English; parts of its result were Turkish.
+- `handle_dialog` returns once the dialog it answered is gone, so the next call isn't refused
+  because of it, and fails if the dialog stays open.
 
 ## [0.3.0] - 2026-11-23
 
