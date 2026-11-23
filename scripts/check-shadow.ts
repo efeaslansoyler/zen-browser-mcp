@@ -60,7 +60,11 @@ const many = shell(
   `<main>${Array.from({ length: 2000 }, (_, i) => `<x-row><span>Row ${i}</span></x-row>`).join("")}</main>`,
   `for (const el of document.querySelectorAll("x-row")) el.attachShadow({ mode: "open" }).innerHTML = "<div><slot></slot><button>Do</button><p>more text</p></div>";`,
 );
-const pages: Record<string, string> = { "/frame": frame, "/plain": plain, "/many": many };
+const order = shell(
+  `<x-a id="host"><p slot="late">Late</p><p slot="early">Early</p><p id="unslotted" slot="none">Unslotted</p></x-a>`,
+  `attach("host", "closed", "<h3>Inner</h3><div><h4>Deep</h4></div><slot name=early></slot><slot name=late></slot>");`,
+);
+const pages: Record<string, string> = { "/frame": frame, "/plain": plain, "/many": many, "/order": order };
 const server = http.createServer((request, response) => {
   response.setHeader("content-type", "text/html; charset=utf-8").end(pages[request.url!] ?? page);
 });
@@ -224,6 +228,7 @@ try {
   ])
     assert.match(await command("wait_for", { tabId, ...condition, timeout: 2 }), /^Done/);
   await assert.rejects(command("wait_for", { tabId, selector: "x-tree h3", timeout: 1 }));
+  assert.match(await command("wait_for", { tabId, selector: ":scope > body", timeout: 2 }), /^Done/);
   console.log("✓ wait_for sees text and selectors inside; a selector matches within one root");
 
   const annotated = await command("computer", { tabId, action: "screenshot", annotate: true });
@@ -237,6 +242,23 @@ try {
   await assert.rejects(command("computer", { tabId, action: "left_click", ref: refOf("Send it") }));
   assert.equal(await pageEval(tabId, "hits.length"), "0");
   console.log("✓ Their stale refs are refused");
+
+  for (const [path, matching, others] of [
+    ["/plain", [":scope > body", ":scope", ":root > body"], [":scope > button", ":host"]],
+    [
+      "/order",
+      [":scope > body", ":scope", ":host > h3", ":host h4", ":not(:scope) > h3", "p"],
+      [":scope > h3", "x-a h3", ":host", "::slotted(p)", "#unslotted"],
+    ],
+  ] as const) {
+    await command("navigate", { tabId, url: origin + path });
+    for (const selector of matching)
+      assert.match(await command("wait_for", { tabId, selector, timeout: 2 }), /^Done/, selector);
+    for (const selector of others)
+      await assert.rejects(command("wait_for", { tabId, selector, timeout: 0.5 }), /Not met/, selector);
+  }
+  assert.equal(JSON.parse(text(await inPage("sample", { selector: "p" }))).value, "Early");
+  console.log("✓ :scope and :host match as in a query of each root; the first match is the first shown");
 
   for (const [url, query] of [
     ["/plain", "row"],
