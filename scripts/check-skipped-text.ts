@@ -33,7 +33,22 @@ const page = `<!doctype html><meta charset="utf-8"><title>Skipped</title><p>Befo
 <p>After</p><section style="content-visibility:hidden"><p>gone seven</p></section>`;
 const large = `<!doctype html><title>Large</title>${Array.from({ length: 200 }, (_, i) => `<section style="content-visibility:auto;contain-intrinsic-size:500px">${`<p><a href="#">Link ${i}</a> text</p>`.repeat(20)}</section>`).join("")}`;
 const innerMain = `<!doctype html><title>Main</title><div style="height:6000px"></div><div style="content-visibility:auto"><main>Main text</main></div>`;
-const pages: Record<string, string> = { "/large": large, "/inner-main": innerMain };
+const cased = ["uppercase", "lowercase", "capitalize", "uppercase full-size-kana", "none"].flatMap((transform) =>
+  ["", "tr", "az", "lt", "de", "en-US", "x_bad"].flatMap((lang) =>
+    [
+      "istanbul ılık IŞIK İĞNE",
+      "straße well-known it's don’t o'neil",
+      "(hello) «foo» ¿qué? 3d 2nd-hand a.b.c foo/bar foo_bar",
+      "email@site.com 日本 中文abc 😀smile #tag",
+      "<b>f</b>oo <i>bar</i>-<i>baz</i> don<b>'</b>t",
+      "one<br>two <span style='display:block'>three</span>four",
+      "<span style='text-transform:none'>keep me</span> other",
+    ].map((text) => `<button lang="${lang}" style="text-transform:${transform}">${text}</button>`),
+  ),
+);
+const casing = `<!doctype html><meta charset="utf-8"><title>Casing</title>${cased.join("\n")}<div style="height:6000px"></div>
+<section style="content-visibility:auto;contain-intrinsic-size:100px">${cased.join("\n")}</section>`;
+const pages: Record<string, string> = { "/large": large, "/inner-main": innerMain, "/casing": casing };
 const server = http.createServer((request, response) => {
   response.setHeader("content-type", "text/html; charset=utf-8").end(pages[request.url!] ?? page);
 });
@@ -95,6 +110,21 @@ try {
   await command("navigate", { tabId, url: `${origin}/inner-main` });
   assert.match(await command("get_page_text", { tabId }), /Main text$/);
   console.log("✓ A main element inside such a section is read too");
+
+  await command("navigate", { tabId, url: `${origin}/casing` });
+  const buttons = plain(await command("read_page", { tabId, filter: "interactive", max_chars: 200_000 }))
+    .split("\n")
+    .filter((line) => line.startsWith("button"));
+  assert.equal(buttons.length, 2 * cased.length);
+  const differ = cased.flatMap((html, i) =>
+    buttons[i] === buttons[cased.length + i] ? [] : [`${html}\n  ${buttons[i]}\n  ${buttons[cased.length + i]}`],
+  );
+  assert.deepEqual(differ, []);
+  assert.equal(
+    await pageEval(tabId, "String([...document.querySelectorAll('section button')].every((el) => !el.innerText))"),
+    "true",
+  );
+  console.log(`✓ text-transform reads the same in ${cased.length} rendered and unrendered buttons`);
 
   await command("navigate", { tabId, url: `${origin}/large` });
   const times = [];
