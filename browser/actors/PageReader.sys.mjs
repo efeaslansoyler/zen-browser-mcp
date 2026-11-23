@@ -658,7 +658,7 @@ export class PageReader {
     const push = (level, indent, line) => {
       if (level > depth) leftOut = true;
       if (truncated || level > depth) return;
-      const text = "  ".repeat(indent) + line;
+      const text = "  ".repeat(indent) + line();
       if (size + text.length > max_chars) {
         truncated = true;
         return;
@@ -667,9 +667,16 @@ export class PageReader {
       lines.push(text);
     };
 
+    const tooDeep = new Map();
+    const goesTooDeep = (el, level) =>
+      level > depth ||
+      this.#remember(tooDeep, el, () =>
+        [...shownChildren(el)].some((child) => child.nodeType === 1 && goesTooDeep(child, level + 1)),
+      );
+
     const walk = (el, indent, level, named = false) => {
-      // why: Below the depth limit, only whether there is anything to read matters.
-      if (truncated || (level > depth && leftOut)) return;
+      // why: Below the depth limit or past max_chars, only whether anything is too deep matters.
+      if ((truncated || level > depth) && (leftOut || depth === Infinity || !goesTooDeep(el, level))) return;
       if (!isVisible(el)) return;
       const clickable = this.#clickable(el);
       if (isSkipped(el, clickable)) return;
@@ -680,15 +687,13 @@ export class PageReader {
       // why: Leave a marker because the content of a frame belongs to its own actor.
       const frameId = frameIdOf(el);
       if (frameId) {
-        if (!interactiveOnly) push(level, indent, this.describeElement(el, role));
-        push(level, interactiveOnly ? indent : indent + 1, `{{frame:${frameId}}}`);
+        if (!interactiveOnly) push(level, indent, () => this.describeElement(el, role));
+        push(level, interactiveOnly ? indent : indent + 1, () => `{{frame:${frameId}}}`);
         return;
       }
       if (printed) {
         const whole = clickable && this.#whole(el);
-        push(
-          level,
-          indent,
+        push(level, indent, () =>
           this.describeElement(el, role, {
             clickable,
             nameFromContent: whole || (clickable && interactiveOnly) || undefined,
@@ -700,7 +705,7 @@ export class PageReader {
         if (interactive && role !== "listbox" && role !== "combobox") return;
         if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !this.#hasTargets(el)) {
           const t = clean(shownText(el));
-          if (t) push(level, childIndent, `text "${truncate(t, 500)}"`);
+          if (t) push(level, childIndent, () => `text "${truncate(t, 500)}"`);
           return;
         }
       }
@@ -709,7 +714,7 @@ export class PageReader {
         if (child.nodeType === 1) walk(child, childIndent, level + 1, ownNamed);
         else if (!interactiveOnly && child.nodeType === 3) {
           const t = clean(child.data);
-          if (t && !ownNamed && showsText(el, child)) push(level, childIndent, `text "${t}"`);
+          if (t && !ownNamed && showsText(el, child)) push(level, childIndent, () => `text "${t}"`);
         }
       }
     };
