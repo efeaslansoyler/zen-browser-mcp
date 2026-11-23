@@ -69,7 +69,7 @@ function harness() {
     activeElement: null,
     hidden: true,
     elementFromPoint: () => hit,
-    body: { querySelectorAll: () => [...nodes.values()] },
+    body: { childNodes: [], querySelectorAll: () => [...nodes.values()] },
     querySelectorAll: () => [...nodes.values()],
     getElementById: (id) => nodes.get(id),
     documentElement: { append() {} },

@@ -3,6 +3,13 @@
 A bridge between the user's own Zen or Firefox-based browser and their coding agents. It carries
 precise context between the two; the agent, never the bridge, edits the user's code.
 
+## Reading and acting on a page
+
+**Clickable**:
+An element without a control role that the page signals as reacting to a click, such as a menu
+entry built from a plain block. Controls (buttons, links, fields) are never called clickables.
+_Avoid_: Interactive element, hotspot
+
 ## Sending to an agent
 
 **Pick**:

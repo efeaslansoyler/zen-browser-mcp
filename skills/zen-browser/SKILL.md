@@ -55,7 +55,9 @@ background monitor if you have one. Don't open the same site elsewhere to get ar
   so use those directly. Omit `read` when you only need navigation, such as starting a download.
   This view is capped at 8,000 characters and does not set a diff baseline.
 - `read_page` (`filter: "interactive"` for controls only) and `find` give refs such as `ref_12`
-  that every tool accepts. They are cheaper and more exact than screenshots.
+  that every tool accepts. They are cheaper and more exact than screenshots. `clickable` marks an
+  element without a control role that reacts to clicks; when `read_page` shows text without a
+  ref, `find` with that text returns one.
 - For repeated reads of the same page, pass `diff: true`, then `since` with the snapshot ID from
   your previous read: you get only what changed.
 - Take a screenshot for visual questions (layout, images, "does it look right"); pass

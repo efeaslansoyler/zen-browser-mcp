@@ -94,6 +94,9 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
   BrowsingContext: that context's `currentWindowGlobal` never changes and the tab's
   `browser.browsingContext` becomes a new object. Check `bc.isInBFCache` / `bc.top.isInBFCache`
   (and `isDiscarded`) as well.
+- `Services.els.getListenerInfoFor(element)` lists page listeners from an actor (`onclick`
+  attributes and properties included) but not ones delegated to an ancestor. Computed `cursor`
+  is inherited, so a whole subtree reports `pointer`.
 - A closed shadow root's contents don't appear in a window listener's `composedPath()`.
 - A progress listener added to a fresh tab may receive `about:blank`'s STOP after
   the requested navigation begins. Ignore that initial stop and hold a strong reference

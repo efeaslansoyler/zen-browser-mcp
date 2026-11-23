@@ -142,7 +142,7 @@ export function roleOf(el) {
   return "";
 }
 
-export function accessibleName(el, doc) {
+export function accessibleName(el, doc, fromContent = NAME_FROM_CONTENT.has(roleOf(el))) {
   const labelledby = el.getAttribute("aria-labelledby");
   if (labelledby) {
     const text = labelledby
@@ -165,8 +165,7 @@ export function accessibleName(el, doc) {
     const alt = el.getAttribute("alt");
     if (alt) return truncate(clean(alt), MAX_NAME);
   }
-  const role = roleOf(el);
-  if (NAME_FROM_CONTENT.has(role)) {
+  if (fromContent) {
     const text = clean(el.innerText ?? el.textContent);
     if (text) return truncate(text, MAX_NAME);
     const inner = el.querySelector("img[alt], svg title, [aria-label]");
@@ -183,7 +182,8 @@ export function elementLabel(el) {
   if (el.id) s += "#" + el.id;
   const classes = [...el.classList].slice(0, 2);
   if (classes.length) s += "." + classes.join(".");
-  return truncate(s, 60);
+  // why: An id can hold quotes and line breaks, which would let the page write its own lines here.
+  return truncate(s.replace(/[^\p{L}\p{N}_.#:-]+/gu, "_"), 60);
 }
 
 export function isVisible(el) {
@@ -212,12 +212,91 @@ export function frameIdOf(el) {
 
 export const MAX_TREE = 50000;
 
+const CLICK_EVENTS = new Set(["click", "mousedown", "mouseup", "pointerdown", "pointerup"]);
+const MAX_JOINED_TEXT = 2000;
+
+const tagOf = (el) => el.tagName?.toUpperCase();
+const isControl = (el) => INTERACTIVE_ROLES.has(roleOf(el));
+const isSkipped = (el, clickable) => SKIP_TAGS.has(tagOf(el)) && !(clickable && tagOf(el) === "SVG");
+
 export class PageReader {
+  #clickables = new Map();
+  #wholes = new Map();
+
   constructor(env) {
     this.env = env;
   }
 
+  // why: Answers hold only while one synchronous read runs; within it each element is measured once.
+  #startRead() {
+    this.#clickables.clear();
+    this.#wholes.clear();
+  }
+
+  #remember(answers, el, answer) {
+    if (!answers.has(el)) answers.set(el, answer());
+    return answers.get(el);
+  }
+
+  #listens(el) {
+    return this.env.listenerTypes(el).some((type) => CLICK_EVENTS.has(type));
+  }
+
+  #pointer(el) {
+    return !!el && this.env.window().getComputedStyle(el)?.cursor?.endsWith("pointer") === true;
+  }
+
+  // why: The cursor is inherited, so only the element where it starts says what is clickable.
+  #startsPointer(el) {
+    return this.#pointer(el) && !this.#pointer(el.parentElement ?? el.parentNode?.host);
+  }
+
+  // why: Only a short clickable without parts of its own can be read and clicked as one line.
+  #whole(el) {
+    return this.#remember(this.#wholes, el, () => {
+      if (tagOf(el) === "SVG") return true;
+      const shown = (el.innerText ?? "").trim();
+      if (shown.length > MAX_NAME || /[\n\t]/.test(shown)) return false;
+      const all = clean(el.textContent);
+      return ![...el.querySelectorAll("*")].some((part) => {
+        const role = roleOf(part);
+        return (role && role !== "img") || frameIdOf(part) || (this.#listens(part) && clean(part.textContent) !== all);
+      });
+    });
+  }
+
+  #insideControl(el) {
+    for (let up = el.parentElement; up && tagOf(up) !== "BODY"; up = up.parentElement)
+      if (isControl(up) || (this.#startsPointer(up) && this.#whole(up))) return true;
+    return false;
+  }
+
+  #clickable(el) {
+    return this.#remember(this.#clickables, el, () => this.#reactsToClicks(el));
+  }
+
+  #reactsToClicks(el) {
+    if (tagOf(el) === "HTML" || tagOf(el) === "BODY" || isControl(el)) return false;
+    if (tagOf(el) === "LABEL" && el.control && isVisible(el.control)) return false;
+    const pointer = this.#startsPointer(el);
+    if ((!pointer && !this.#listens(el)) || this.#insideControl(el)) return false;
+    if (pointer) return true;
+    // why: Frameworks put delegated listeners on wrappers, which are not themselves a target.
+    if (clean(el.textContent).length > MAX_NAME) return false;
+    const { width, height } = el.getBoundingClientRect();
+    if (!width || !height) return false;
+    return ![...el.querySelectorAll("*")].some(
+      (inner) => isControl(inner) || this.#startsPointer(inner) || this.#listens(inner),
+    );
+  }
+
+  targets(selector) {
+    this.#startRead();
+    return [...this.env.document().querySelectorAll("*")].filter((el) => el.matches(selector) || this.#clickable(el));
+  }
+
   readPage({ filter = "all", depth = 30, ref_id, max_chars = MAX_TREE, bare = false }) {
+    this.#startRead();
     const doc = this.env.document();
     const root = ref_id ? this.env.element(ref_id) : doc.body;
     if (!root) return "(empty page)";
@@ -239,10 +318,12 @@ export class PageReader {
 
     const walk = (el, indent, level) => {
       if (truncated || level > depth) return;
-      if (SKIP_TAGS.has(el.tagName?.toUpperCase()) || !isVisible(el)) return;
+      if (!isVisible(el)) return;
+      const clickable = this.#clickable(el);
+      if (isSkipped(el, clickable)) return;
       const role = roleOf(el);
       const interactive = INTERACTIVE_ROLES.has(role);
-      const printed = interactiveOnly ? interactive : !!role;
+      const printed = interactiveOnly ? interactive || clickable : !!role || clickable;
       let childIndent = indent;
       // why: Leave a marker because the content of a frame belongs to its own actor.
       const frameId = frameIdOf(el);
@@ -252,11 +333,19 @@ export class PageReader {
         return;
       }
       if (printed) {
-        push(indent, this.describeElement(el, role));
+        const whole = clickable && this.#whole(el);
+        push(
+          indent,
+          this.describeElement(el, role, {
+            clickable,
+            nameFromContent: whole || (clickable && interactiveOnly) || undefined,
+          }),
+        );
+        if (whole) return;
         childIndent = interactiveOnly ? indent : indent + 1;
         // why: Avoid repeating names and splitting text from a single logical block into markup fragments.
         if (interactive && role !== "listbox" && role !== "combobox") return;
-        if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !el.querySelector(CONTROL_SELECTOR)) {
+        if (!interactiveOnly && TEXT_CONTAINERS.has(role) && !this.#hasTargets(el)) {
           const t = clean(el.innerText);
           if (t) push(childIndent, `text "${truncate(t, 500)}"`);
           return;
@@ -280,10 +369,17 @@ export class PageReader {
     return `${doc.title}\n${doc.URL}\n\n${lines.join("\n") || "(no visible elements)"}`;
   }
 
-  describeElement(el, role) {
-    const parts = [role];
-    const name = accessibleName(el, this.env.document());
+  #hasTargets(el) {
+    return (
+      !!el.querySelector(CONTROL_SELECTOR) || [...el.querySelectorAll("*")].some((inner) => this.#clickable(inner))
+    );
+  }
+
+  describeElement(el, role, { clickable = false, nameFromContent } = {}) {
+    const parts = [role || (clickable ? "clickable" : "text")];
+    const name = accessibleName(el, this.env.document(), nameFromContent);
     if (name) parts.push(`"${name}"`);
+    else if (!role) parts.push(elementLabel(el));
     parts.push(`[${this.env.ref(el)}]`);
     const tag = el.tagName.toUpperCase();
     if (role === "heading") parts.push(`level=${tag[1] || el.getAttribute("aria-level") || ""}`);
@@ -311,22 +407,76 @@ export class PageReader {
     if (expanded) parts.push(`expanded=${expanded}`);
     if (el.getAttribute("aria-selected") === "true") parts.push("selected");
     if (el.getAttribute("aria-checked")) parts.push(`checked=${el.getAttribute("aria-checked")}`);
+    if (clickable && role) parts.push("clickable");
     if (!inViewport(el, this.env.window())) parts.push("(off-screen)");
     return parts.join(" ");
   }
 
+  // why: An element whose match lies in one of its children, or in a control listed by name, is not a separate hit.
+  #textMatches(words) {
+    const win = this.env.window();
+    const found = [];
+    const holds = (text) => {
+      const there = tokens(text);
+      return words.every((w) => there.some((t) => t.startsWith(w)));
+    };
+    const visit = (el) => {
+      let text = "";
+      let own = false;
+      let covered = false;
+      for (const child of el.childNodes) {
+        if (child.nodeType === 3) {
+          text += child.data;
+          own ||= !!clean(child.data);
+        }
+        if (child.nodeType !== 1) continue;
+        if (tagOf(child) === "BR" || SKIP_TAGS.has(tagOf(child)) || frameIdOf(child) || !isVisible(child)) {
+          text += " ";
+          continue;
+        }
+        let inner;
+        if (isControl(child) || (this.#clickable(child) && this.#whole(child))) {
+          inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? child.textContent : "";
+          if (holds(inner)) inner = null;
+        } else inner = visit(child);
+        if (inner === null) covered = true;
+        else text += win.getComputedStyle(child)?.display === "inline" ? inner : ` ${inner} `;
+      }
+      if (covered) return null;
+      // why: Joined text of large wrappers is not worth searching; text of their own is.
+      if (text.length > MAX_JOINED_TEXT && !own) return null;
+      if (!holds(text)) return text;
+      found.push({ el, text: clean(text) });
+      return null;
+    };
+    const { body } = this.env.document();
+    if (body) visit(body);
+    return found;
+  }
+
   find(query) {
+    this.#startRead();
     const doc = this.env.document();
     const win = this.env.window();
     const words = tokens(query);
     if (!words.length) throw new Error("Empty query.");
-    const results = [];
+    const results = new Map();
+    const add = (el, name, base, weight, details) => {
+      let score = base;
+      if (normalize(name) === normalize(query)) score += 0.4 * weight;
+      // why: Check whole names so package.json does not match package-lock.json.
+      else if (normalize(name).includes(normalize(query))) score += 0.2 * weight;
+      if (inViewport(el, win)) score += 0.1 * weight;
+      if (score > (results.get(el)?.score ?? 0)) results.set(el, { el, score, ...details });
+    };
     const all = doc.body?.querySelectorAll("*") ?? [];
     for (const el of all) {
-      if (SKIP_TAGS.has(el.tagName.toUpperCase())) continue;
+      if (el.ownerSVGElement) continue;
       const role = roleOf(el);
-      if (!role || !isVisible(el)) continue;
-      const name = accessibleName(el, doc);
+      const clickable = this.#clickable(el);
+      if ((!role && !clickable) || !isVisible(el)) continue;
+      if (isSkipped(el, clickable)) continue;
+      const name = accessibleName(el, doc, clickable || undefined);
       const haystack = tokens(
         [
           name,
@@ -335,22 +485,24 @@ export class PageReader {
           el.id,
           el.getAttribute("name"),
           el.getAttribute("href"),
-          role,
+          role || "clickable",
         ].join(" "),
       );
       const hits = words.filter((w) => haystack.some((t) => t.startsWith(w))).length;
-      if (!hits) continue;
-      let score = hits / words.length;
-      // why: Prefer an actionable control to a surrounding node with the same name.
-      if (INTERACTIVE_ROLES.has(role)) score += 0.5;
-      if (normalize(name) === normalize(query)) score += 0.4;
-      // why: Check whole names so package.json does not match package-lock.json.
-      else if (normalize(name).includes(normalize(query))) score += 0.2;
-      if (inViewport(el, win)) score += 0.1;
-      results.push({ el, role, score });
+      // why: Prefer an actionable element to a surrounding node with the same name, and a real control to a guessed one.
+      const bonus = INTERACTIVE_ROLES.has(role) ? 0.5 : clickable ? 0.45 : 0;
+      if (hits) add(el, name, hits / words.length + bonus, 1, { clickable, nameFromContent: clickable || undefined });
     }
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, 20).map(({ el, role, score }) => ({ line: this.describeElement(el, role), score }));
+    // why: Even the best text match stays below a full name match (1).
+    for (const { el, text } of this.#textMatches(words))
+      add(el, text, 0.7, 0.5, { clickable: this.#clickable(el), nameFromContent: true });
+    return [...results.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20)
+      .map(({ el, score, clickable, nameFromContent }) => ({
+        line: this.describeElement(el, roleOf(el), { clickable, nameFromContent }),
+        score,
+      }));
   }
 
   check({ text, selector }) {

@@ -7,6 +7,16 @@ change tool names, parameters or results.
 
 ## [Unreleased]
 
+### Added
+
+- `read_page`, `find` and annotated screenshots give refs to clickable elements without a control
+  role, such as menu entries built from a `div`.
+
+### Changed
+
+- `find` also matches visible text anywhere on the page and returns the innermost element that
+  holds all the words.
+
 ### Fixed
 
 - `find`, `wait_for` text and select options match capital I: "WIFI" on a page now equals "wifi".

@@ -56,6 +56,11 @@ export class ZenMcpChild extends JSWindowActorChild {
     contextTarget: () => this.#contextTarget?.deref(),
     unwrap: (value) => Cu.waiveXrays(value),
     inspector: () => inspectorUtils(),
+    listenerTypes: (el) =>
+      Services.els
+        .getListenerInfoFor(el)
+        .filter((listener) => !listener.inSystemEventGroup)
+        .map((listener) => listener.type),
     applyTheme,
     mousePath,
     typingPlan,
@@ -459,9 +464,8 @@ export class ZenMcpChild extends JSWindowActorChild {
     host.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483647";
     const root = host.attachShadow({ mode: "closed" });
     const refs = [];
-    for (const element of this.document.querySelectorAll(
-      'a[href],button,input,textarea,select,[role="button"],[tabindex]',
-    )) {
+    const controls = 'a[href],button,input,textarea,select,[role="button"],[tabindex]';
+    for (const element of this.#reader.targets(controls)) {
       if (!reader.isVisible(element) || !reader.inViewport(element, this.contentWindow)) continue;
       const box = element.getBoundingClientRect();
       if (!box.width || !box.height) continue;
