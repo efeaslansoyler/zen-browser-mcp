@@ -12,6 +12,7 @@ export function readTools(ctx) {
     expandFrames,
     frameOf,
     framesOf,
+    isLoading,
     network,
     operationSleep,
     permissionContext,
@@ -50,7 +51,7 @@ export function readTools(ctx) {
       let { value } = await query(
         browser,
         "read_page",
-        { ...opts, ref_id, bare: frame !== browser.browsingContext },
+        { ...opts, ref_id, bare: frame !== browser.browsingContext, loading: isLoading(frame) },
         30000,
         frame,
       );
