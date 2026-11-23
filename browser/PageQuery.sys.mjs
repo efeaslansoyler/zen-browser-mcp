@@ -1,6 +1,8 @@
 export class DialogOpen extends Error {}
 export class PageGone extends Error {}
 
+const MAX_DIALOG_TEXT = 2000;
+
 export function pageQueries(ctx) {
   let querySequence = 0;
   const pendingListeners = new Set();
@@ -92,10 +94,20 @@ export function pageQueries(ctx) {
     return null;
   }
 
-  function describeDialog(win) {
+  // why: A page could otherwise write lines that look like the bridge's or the user's.
+  function dialogData(win) {
     const { promptType, text, value } = win.Dialog.args;
-    const extra = promptType.startsWith("prompt") && value ? ` (default: "${value}")` : "";
-    return `The page has an open ${promptType} dialog: "${text}"${extra}. Accept or dismiss it with handle_dialog.`;
+    const short = (s) => (s.length > MAX_DIALOG_TEXT ? s.slice(0, MAX_DIALOG_TEXT - 1) + "…" : s);
+    return JSON.stringify({
+      pageText: short(String(text ?? "")),
+      ...(promptType.startsWith("prompt") && value ? { defaultValue: short(String(value)) } : {}),
+      untrusted: true,
+    });
+  }
+
+  function describeDialog(win) {
+    const { promptType } = win.Dialog.args;
+    return `The page has an open ${promptType} dialog. Accept or dismiss it with handle_dialog.\n${dialogData(win)}`;
   }
 
   function throwIfDialog(browser) {
@@ -334,6 +346,7 @@ export function pageQueries(ctx) {
     target,
     openDialog,
     describeDialog,
+    dialogData,
     throwIfDialog,
     showDialog,
     query,

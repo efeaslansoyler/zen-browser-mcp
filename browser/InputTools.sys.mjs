@@ -8,6 +8,7 @@ export function inputTools(ctx) {
     clipboardShortcut,
     controlledSource,
     describeDialog,
+    dialogData,
     describeTab,
     focusedFrame,
     guard,
@@ -352,7 +353,8 @@ export function inputTools(ctx) {
       const browser = browserFor(call, tabId);
       const win = openDialog(browser);
       if (!win) return text("No dialog is open.");
-      const { promptType, text: message } = win.Dialog.args;
+      const { promptType } = win.Dialog.args;
+      const data = dialogData(win);
       if (answer != null && accept) {
         const box = promptType === "promptPassword" ? win.Dialog.ui.password1Textbox : win.Dialog.ui.loginTextbox;
         box.value = String(answer);
@@ -362,11 +364,11 @@ export function inputTools(ctx) {
       else dialog.cancelDialog();
       // why: A dialog outlives its answer (docs/gecko-pitfalls.md, Input and frames).
       for (let waited = 0; openDialog(browser) === win; waited += 50) {
-        if (waited >= 5000) throw new Error(`${promptType} "${message}" is still open after the answer.`);
+        if (waited >= 5000) throw new Error(`${promptType} is still open after the answer.\n${data}`);
         await operationSleep(50, call);
       }
       return text(
-        `${promptType} "${message}" ${accept ? "accepted" : "dismissed"}${answer != null && accept ? ` (text: "${answer}")` : ""}.`,
+        `${promptType} ${accept ? "accepted" : "dismissed"}${answer != null && accept ? ` (text: "${answer}")` : ""}.\n${data}`,
       );
     },
   };
