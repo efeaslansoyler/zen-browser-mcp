@@ -67,6 +67,8 @@ change tool names, parameters or results.
   channel. It waits for the agent's next call or your next message there.
 - The prompt hook of an agent started inside an Antigravity session no longer takes what you sent to
   the outer session.
+- A coordinate call that waits for its tab is read with the screenshots from before it arrived. It
+  could take the scale of one taken while it waited and click the wrong place.
 
 ## [0.3.0] - 2026-11-23
 

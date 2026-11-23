@@ -376,5 +376,6 @@ page don't reach out-of-process iframes.
 Screenshot coordinates are resolved per session and tab (`ScreenshotHistory`): each viewport
 screenshot gets an ID and its scale, a call can name the image its coordinate comes from, and
 without a name the latest one counts. If the last two have different scales, the call is
-refused before any input. A call only sees images from before it started, so a batch keeps
-the scale its coordinates were read with.
+refused before any input. A call only sees images from before it arrived, also when it
+waits for the tab or the user, so it and the steps of a batch keep the scale their coordinates
+were read with.
