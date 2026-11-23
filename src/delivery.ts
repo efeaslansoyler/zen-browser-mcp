@@ -1,5 +1,6 @@
 // why: Pass page-derived text as data and keep client-specific delivery out of the browser.
 import { execFile } from "node:child_process";
+import { inheritedFromAncestor } from "./claude.ts";
 
 export const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PickEvent = {
@@ -101,9 +102,13 @@ export function t3Message(event: PickEvent): string {
   ].join("\n");
 }
 
-// why: Use T3's supplied identity to target the exact originating thread.
-export function t3Thread(env: NodeJS.ProcessEnv = process.env): { cli: string; threadId: string } | null {
+// why: Use T3's supplied identity to target the exact originating thread; an agent started inside one inherits it.
+export function t3Thread(
+  env: NodeJS.ProcessEnv = process.env,
+  inherited: (name: string, value: string) => boolean = inheritedFromAncestor,
+): { cli: string; threadId: string } | null {
   const threadId = env.T3CODE_THREAD_ID ?? "";
   const cli = env.T3CODE_CLI_PATH ?? "";
-  return /^[\w-]{8,80}$/.test(threadId) && cli ? { cli, threadId } : null;
+  if (!/^[\w-]{8,80}$/.test(threadId) || !cli) return null;
+  return inherited("T3CODE_THREAD_ID", threadId) ? null : { cli, threadId };
 }

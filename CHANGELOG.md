@@ -61,6 +61,9 @@ change tool names, parameters or results.
   prompt in a Codex conversation connected through hooks.
 - `read_page` and `find` give the right level for headings made with `role="heading"` (it was a letter)
   and for `h1` to `h6` with an `aria-level`.
+- What you send to an agent started inside a T3 Code session no longer reaches the outer thread as
+  your message, and one started inside a Claude Code with a channel is no longer taken to have that
+  channel. It waits for the agent's next call or your next message there.
 
 ## [0.3.0] - 2026-11-23
 
