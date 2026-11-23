@@ -95,6 +95,14 @@ export function sessionManager(ctx) {
     ctx.ownerConnections.get(id).add(transport);
   }
 
+  function renameOwnerSession(id, transport, title) {
+    const info = ctx.sessions.get(id);
+    if (!info || !ctx.ownerConnections.get(id)?.has(transport)) return undefined;
+    info.title = title || undefined;
+    info.name = sessionName(info.agent, info.project, info.title, id);
+    return info.name;
+  }
+
   function disconnectOwnerSession(id, transport) {
     const connections = ctx.ownerConnections.get(id);
     if (!connections?.delete(transport) || connections.size) return;
@@ -149,6 +157,7 @@ export function sessionManager(ctx) {
     cancelTabWork,
     endOwnerSession,
     connectOwnerSession,
+    renameOwnerSession,
     disconnectOwnerSession,
     awaitReconnects,
     sweepSessions,

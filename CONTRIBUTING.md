@@ -92,6 +92,7 @@ browser you use:
 | `check-dialogs.ts` | Calls right after an answered alert, confirm or prompt, dialogs opened one after another |
 | `check-stale-refs.ts` | Refs from before navigations, back/forward, reloads and iframe navigations, or from another tab, send no input |
 | `check-read-diff.ts`, `check-multi-pick.ts` | Read diffs, multi-element picks |
+| `check-title-change.ts` | A new conversation title during a running call, a queued call and a hold, for Claude and Codex; takes about 30 s |
 | `check-delivery-ack.ts` | Legacy and structured delivery acknowledgements, inbox fallback and failure logging in `sandbox.ts` |
 | `check-source-stacks.ts [dir] [stack…]` | Source locations on real Next.js (Turbopack, webpack), Vite React 19/18, Svelte, Vue, Astro and Angular dev servers; run in `sandbox.ts`, rerun after a framework major release |
 | `check-screenshots.ts`, `check-opened-tabs.ts` | Deploy and full-page screenshots, opener tracking |

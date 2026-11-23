@@ -334,9 +334,15 @@ export async function runCodexWatch(target: Selection) {
     if (stopped) return;
     if (!daemon) visible.clear();
     for (const [id, receiver] of receivers) {
-      if (visible.has(id) && receiver.title === threads.get(id)?.name) continue;
-      receiver.subscription.close();
-      receivers.delete(id);
+      if (!visible.has(id)) {
+        receiver.subscription.close();
+        receivers.delete(id);
+        continue;
+      }
+      const title = threads.get(id)?.name;
+      if (receiver.title === title) continue;
+      receiver.title = title;
+      receiver.subscription.setTitle(title);
     }
     for (const id of visible) {
       if (receivers.has(id)) continue;

@@ -129,7 +129,10 @@ type DeliveryAck = { ok: true } | { ok: false; status: "unavailable" | "failed";
 // why: Older bridges use this exact error field to recognize ordinary unavailability.
 const LEGACY_NO_PUSH = "no push path";
 
-export function subscribe(onEvent: (event: any) => DeliveryResult | Promise<DeliveryResult>, info: SubscriptionInfo) {
+export function subscribe(
+  onEvent: (event: any) => DeliveryResult | Promise<DeliveryResult>,
+  { ...info }: SubscriptionInfo,
+) {
   let closed = false;
   let current: net.Socket | undefined;
   let reconnect: ReturnType<typeof setTimeout> | undefined;
@@ -191,6 +194,12 @@ export function subscribe(onEvent: (event: any) => DeliveryResult | Promise<Deli
   };
   connect();
   return {
+    // why: The bridge takes a closed connection for a lost client, so a title must not need a new one.
+    setTitle(title: string | undefined) {
+      info.title = title;
+      if (current && !current.connecting && !current.destroyed)
+        current.write(ascii(JSON.stringify({ event: "title", title: title ?? null })) + "\n");
+    },
     close() {
       closed = true;
       clearTimeout(reconnect);

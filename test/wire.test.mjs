@@ -129,3 +129,49 @@ test("ownership lifecycle subscription and tool requests use the same process se
     sub.close();
   }
 });
+
+test("a title goes out on the open connection, and a reconnect carries the latest one", async (t) => {
+  const { subscribe } = await import("../dist/zen.js");
+  const sockets = [];
+  t.mock.method(net, "createConnection", () => {
+    const socket = Object.assign(new EventEmitter(), { connecting: true, destroyed: false, writes: [] });
+    socket.write = (packet) => socket.writes.push(JSON.parse(packet));
+    socket.destroy = () => {
+      socket.destroyed = true;
+      socket.emit("close");
+    };
+    sockets.push(socket);
+    return socket;
+  });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  const connect = (socket) => {
+    socket.connecting = false;
+    socket.emit("connect");
+  };
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const sub = subscribe(() => {}, { cwd: "/project", toolsOnly: true, agent: { id: "claude" }, title: "One" });
+  try {
+    await settle();
+    sub.setTitle("Two");
+    assert.deepEqual(sockets[0].writes, [], "a title before the subscription would be read as the request");
+    connect(sockets[0]);
+    assert.equal(sockets[0].writes[0].args.title, "Two");
+    sub.setTitle("Üç");
+    sub.setTitle(undefined);
+    sub.setTitle("Four");
+    assert.deepEqual(sockets[0].writes.slice(1), [
+      { event: "title", title: "Üç" },
+      { event: "title", title: null },
+      { event: "title", title: "Four" },
+    ]);
+    assert.equal(sockets.length, 1);
+    sockets[0].destroy();
+    sub.setTitle("Five");
+    t.mock.timers.tick(3000);
+    await settle();
+    connect(sockets[1]);
+    assert.equal(sockets[1].writes[0].args.title, "Five");
+  } finally {
+    sub.close();
+  }
+});
