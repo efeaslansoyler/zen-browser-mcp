@@ -272,13 +272,17 @@ asks for a note and a target session) and recipes the user recorded go through
    bridge its push path when it connects:
    - **Claude Code** through [channels](https://code.claude.com/docs/en/channels): when Claude
      runs with `--dangerously-load-development-channels server:zen`, `claude.ts` detects the
-     flag from `/proc`, declares `claude/channel` and forwards events as
+     flag on the client's own process, declares `claude/channel` and forwards events as
      `notifications/claude/channel`. Claude Code ignores the flag in `-p` mode and under the
      Agent SDK (stream-json input, e.g. T3 Code), so those sessions have no push path.
    - **Codex** through `codex queue` (see [codex.md](codex.md)).
    - **T3 Code** threads (`T3CODE_THREAD_ID` and `T3CODE_CLI_PATH` in the environment) through
      `t3 thread send <thread> -`: the message arrives as the thread's next turn, marked as
-     coming from zen.
+     coming from zen. Agents started inside a T3 session (from an agent's shell or T3's terminal)
+     inherit these variables, so a process above the client that has the same thread ID, or a
+     client adopted by init or systemd, means the thread isn't the client's own and there is no
+     push path. A client that T3 starts through a wrapper process that stays alive looks nested
+     too.
    - **OpenCode** through the plugin `hooks install` writes to
      `~/.config/opencode/plugins/zen-browser.js` (`opencode.ts`). OpenCode gives its MCP
      servers only `OPENCODE_PID`, but a plugin runs inside OpenCode with its API client: it

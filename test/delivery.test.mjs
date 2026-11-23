@@ -105,10 +105,11 @@ test("a T3 Code thread gets the event through `t3 thread send`, the message on s
   const path = await import("node:path");
   assert.equal(t3Thread({}), null);
   assert.equal(t3Thread({ T3CODE_THREAD_ID: "x; rm -rf /", T3CODE_CLI_PATH: "/bin/t3" }), null);
-  assert.deepEqual(t3Thread({ T3CODE_THREAD_ID: "32e2affa-2d8e", T3CODE_CLI_PATH: "/bin/t3" }), {
-    cli: "/bin/t3",
-    threadId: "32e2affa-2d8e",
-  });
+  const env = { T3CODE_THREAD_ID: "32e2affa-2d8e", T3CODE_CLI_PATH: "/bin/t3" };
+  assert.deepEqual(
+    t3Thread(env, () => false),
+    { cli: "/bin/t3", threadId: "32e2affa-2d8e" },
+  );
 
   const message = t3Message({ event: "channel", content: "Make the button blue", meta: { url: "https://x.test/" } });
   assert.match(message, /^\[zen\] The user sent you this from the browser/);

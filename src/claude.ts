@@ -6,14 +6,8 @@ import { NAME, SERVER_NAME } from "./paths.ts";
 
 export function channelEnabled(): boolean {
   if (process.env.ZEN_MCP_CHANNEL) return process.env.ZEN_MCP_CHANNEL === "1";
-  let pid = process.ppid;
-  for (let i = 0; i < 3 && pid > 1; i++) {
-    const proc = processInfo(pid);
-    if (!proc) return false;
-    if (proc.args.some((a) => /^--(dangerously-load-development-)?channels\b/.test(a))) return channelArgs(proc.args);
-    pid = proc.ppid;
-  }
-  return false;
+  const args = processInfo(clientPid())?.args ?? [];
+  return args.some((a) => /^--(dangerously-load-development-)?channels\b/.test(a)) && channelArgs(args);
 }
 
 // why: Claude Code ignores channel flags in print or stream-json mode.
@@ -42,6 +36,42 @@ export function processInfo(pid: number): { args: string[]; ppid: number } | nul
   } catch {
     return null;
   }
+}
+
+const LAUNCHER = /^-?((ba|da|z|k|fi)?sh|npm|npx|pnpm|yarn)(-cli)?(\.[cm]?js)?$/;
+const programName = (word = "") => path.basename(word.split(" ")[0]);
+
+// why: npx or a shell may stand between the client and this server.
+export function clientPid(): number {
+  let pid = process.ppid;
+  for (let proc = processInfo(pid); proc && proc.ppid > 1; proc = processInfo(pid)) {
+    const [command, script] = proc.args;
+    if (!LAUNCHER.test(programName(programName(command) === "node" ? script : command))) break;
+    pid = proc.ppid;
+  }
+  return pid;
+}
+
+function environmentValue(pid: number, name: string): string | undefined {
+  const entries =
+    process.platform === "linux"
+      ? readFileSync(`/proc/${pid}/environ`, "utf8").split("\0")
+      : execFileSync("ps", ["-E", "-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).split(/\s+/);
+  return entries.find((entry) => entry.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+// why: A shell passes an agent's variables on to agents started in it; init and systemd adopt orphans, whose starter is unknown.
+export function inheritedFromAncestor(name: string, value: string, pid = clientPid()): boolean {
+  const parent = processInfo(pid)?.ppid ?? 0;
+  if (parent <= 1 || programName(processInfo(parent)?.args[0]) === "systemd") return true;
+  for (let above = parent; above > 1; above = processInfo(above)?.ppid ?? 0) {
+    try {
+      if (environmentValue(above, name) === value) return true;
+    } catch {
+      if (above === parent) return true;
+    }
+  }
+  return false;
 }
 
 // why: Prompt hooks identify the client through its place in the process ancestry.
