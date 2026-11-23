@@ -41,7 +41,12 @@ try {
 
   await pageEval(tabId, "window.scrollTo(0, 300); window.scrollY");
   await screenshot(tabId, { scale: 0.5 });
-  const scale = async () => json(await call("chrome_eval", { code: `h.state.scale.get(${tabId})` }));
+  const scale = async () =>
+    json(
+      await call("chrome_eval", {
+        code: `[...h.state.screenshots.values()].find((entry) => entry.tabId === ${tabId}).shots.at(-1).scale`,
+      }),
+    );
   const previousScale = await scale();
   const position = () => pageEval(tabId, "window.scrollY");
   const previousY = await position();

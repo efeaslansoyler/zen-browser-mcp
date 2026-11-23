@@ -68,6 +68,9 @@ background monitor if you have one. Don't open the same site elsewhere to get ar
 
 - Prefer refs over coordinates. Use `form_input` for fields, selects and checkboxes; use
   `computer` for clicks and keys.
+- A click result names the element it hit. If that isn't what you meant, or it says "no click
+  handler detected", check the page before you go on. Name the image with `screenshot` (its ID)
+  when a coordinate doesn't come from your latest screenshot.
 - A click blocked because the target is covered or moved is not an error to retry blindly:
   read the reported blocker, close it (a cookie banner, a modal) or re-read the page.
 - Batch steps you can predict (several `form_input` calls, a click, or `wait_for` then `read_page`) with

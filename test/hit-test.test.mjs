@@ -14,8 +14,8 @@ function harness() {
     const el = {
       id,
       nodeType: 1,
-      localName: "button",
-      tagName: "BUTTON",
+      localName: parentNode ? "span" : "button",
+      tagName: parentNode ? "SPAN" : "BUTTON",
       isConnected: true,
       parentNode,
       innerText: id,
@@ -48,6 +48,7 @@ function harness() {
     Cc: {},
     Services: {
       locale: { appLocaleAsBCP47: "en" },
+      els: { getListenerInfoFor: () => [] },
       scriptloader: {
         loadSubScript(_, eu) {
           eu.synthesizeMouseAtPoint = (x, y, event) => {
@@ -122,7 +123,7 @@ test("a child icon inside the target is hit-testable", async () => {
   const h = harness(),
     ref = await h.refFor(h.target);
   h.hit(h.node("icon", h.target));
-  assert.equal((await h.click({ ref, button: 2 })).value, "done");
+  assert.match((await h.click({ ref, button: 2 })).value.hit, /^button "target"$/);
   assert.deepEqual(h.events, ["mousemove", "mousedown", "mouseup"]);
 });
 
@@ -138,9 +139,10 @@ test("shadow descendants and slotted descendants belong to the target", async ()
       },
     };
     const icon = h.node("icon", slotted ? null : root);
+    Object.assign(icon, { tagName: "SPAN", localName: "span" });
     if (slotted) icon.assignedSlot = h.node("slot", root);
     h.target.shadowRoot = { elementFromPoint: () => icon };
-    assert.equal((await h.click({ ref, button: 2 })).value, "done");
+    assert.match((await h.click({ ref, button: 2 })).value.hit, /^button "target"$/);
   }
 });
 
@@ -162,7 +164,7 @@ test("coordinate clicks detect target replacement during mousemove", async () =>
 test("coordinate clicks can deliberately click the currently visible overlay", async () => {
   const h = harness();
   h.hit(h.blocker);
-  assert.equal((await h.click({ button: 2 })).value, "done");
+  assert.match((await h.click({ button: 2 })).value.hit, /^button "modal" \[ref_/);
   assert.deepEqual(h.events, ["mousemove", "mousedown", "mouseup"]);
 });
 
@@ -287,7 +289,6 @@ test("all four computer click actions request hit testing and return after input
 });
 
 test("scaled screenshot coordinates round-trip with size caps rather than the requested scale", async () => {
-  const state = { scale: new Map() };
   const canvas = { getContext: () => ({ drawImage() {} }), toDataURL: () => "data:image/jpeg;base64,fixture" };
   const browser = {
     browserId: 7,
@@ -299,13 +300,13 @@ test("scaled screenshot coordinates round-trip with size caps rather than the re
       },
     },
   };
-  const context = bridgeContext({ assertSiteAccess() {}, state, query: async () => {} });
-  await context.screenshot(browser, 0.5);
-  const scale = state.scale.get(7);
+  const context = bridgeContext({ assertSiteAccess() {}, query: async () => {} });
+  const { width } = await context.screenshot(browser, 0.5);
+  const scale = width / 2400;
   assert(scale > 0 && scale < 0.5, "Large viewport should trigger the additional screenshot cap");
   const point = context.toPagePoint(browser, [100 * scale, 80 * scale]);
-  assert(Math.abs(point[0] - 100) < 1e-9);
-  assert(Math.abs(point[1] - 80) < 1e-9);
+  assert(Math.abs(point[0] - 100) < 0.2);
+  assert(Math.abs(point[1] - 80) < 0.2);
   assert(
     context.toPagePoint(browser, [100 * 0.5, 80 * 0.5])[0] > 100,
     "The old fixture assumption targeted the wrong point",

@@ -6,6 +6,7 @@ import { TabActivity } from "../../browser/TabActivity.sys.mjs";
 import { TabAccess } from "../../browser/TabAccess.sys.mjs";
 import { ReadSnapshots, sameReadContext } from "../../browser/ReadSnapshots.sys.mjs";
 import { siteAllowed, normalizeConfig } from "../../browser/SiteRules.sys.mjs";
+import { ScreenshotHistory } from "../../browser/ScreenshotHistory.sys.mjs";
 import { clipboardShortcut, systemClipboard } from "../../browser/Clipboard.sys.mjs";
 import { config } from "../../browser/Config.sys.mjs";
 import { sessionManager } from "../../browser/Sessions.sys.mjs";
@@ -41,7 +42,7 @@ export function bridgeContext(fakes = {}) {
     policy,
     sameReadContext,
     clipboardShortcut,
-    state: { tabs: new Set(), scale: new Map(), pickedTabs: new Set(), paused: false },
+    state: { tabs: new Set(), pickedTabs: new Set(), paused: false },
     access: new TabAccess(),
     sessions: new Map(),
     sessionVersions: new Map(),
@@ -51,6 +52,7 @@ export function bridgeContext(fakes = {}) {
     tabRequests: new Map(),
     lastUse: new Map(),
     readSnapshots: new ReadSnapshots(),
+    screenshots: new ScreenshotHistory(),
     frameNumbers: { byId: new Map(), byNumber: new Map(), next: 1 },
     tools: {},
     commands: {},

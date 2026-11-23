@@ -91,9 +91,63 @@ try {
   ]);
   console.log("✓ Clicks on those refs, and on text that find returned, reach the right elements");
 
+  const shotOf = async (scale?: number) => {
+    const taken = await command("computer", { tabId, action: "screenshot", scale });
+    const [, id, width] = taken.match(/(shot_\d+): (\d+)x/)!;
+    return { id, ratio: Number(width) / Number(await pageEval(tabId, "innerWidth")) };
+  };
+  const at = async (id: string, ratio: number) =>
+    JSON.parse(
+      await pageEval(
+        tabId,
+        `JSON.stringify((({left,top,width,height})=>[(left+width/2)*${ratio},(top+height/2)*${ratio}])(document.getElementById("${id}").firstChild.getBoundingClientRect?.()??document.getElementById("${id}").getBoundingClientRect()))`,
+      ),
+    );
+  const hits = async () => JSON.parse(await pageEval(tabId, "JSON.stringify(hits)"));
+  const [big, small] = [await shotOf(), await shotOf(0.5)];
+  await pageEval(tabId, "hits.length=0");
+  const fromBig = { tabId, action: "left_click", coordinate: await at("listener", big.ratio) };
+  await assert.rejects(command("computer", fromBig), new RegExp(`${big.id} .*${small.id} `));
+  assert.deepEqual(await hits(), []);
+  assert.match(
+    await command("computer", { ...fromBig, screenshot: big.id }),
+    /^left_click done: clickable "Uygulama" \[ref_\d+\]\.$/m,
+  );
+  await command("computer", { ...fromBig, coordinate: await at("listener", small.ratio), screenshot: small.id });
+  assert.deepEqual(await hits(), ["listener", "listener"]);
+  console.log("✓ A coordinate after screenshots of two scales needs its image; either image lands on the target");
+
+  await shotOf();
+  const both = await shotOf();
+  const results: Record<string, string> = {};
+  for (const id of ["delegated", "css", "more"])
+    results[id] = await command("computer", { tabId, action: "left_click", coordinate: await at(id, both.ratio) });
+  assert.match(results.delegated, /left_click done: div#delegated \(no click handler detected\)\./);
+  assert.match(results.css, /left_click done: clickable "WLAN" \[ref_/);
+  assert.match(results.more, /left_click done: clickable "more" \[ref_/);
+  const held = await command("computer", { tabId, action: "mouse_down", coordinate: await at("css", both.ratio) });
+  await command("computer", { tabId, action: "mouse_up" });
+  assert.match(held, /mouse_down done: clickable "WLAN" \[ref_/);
+  console.log("✓ Click results name the clickable, or say that nothing there listens");
+
   const [framed] = await open("/");
   const found = await command("find", { tabId: framed, query: "WLAN" });
   assert.match(found, /^clickable "WLAN" \[ref_\d+_f\d+\]/);
+  const framedShot = await command("computer", { tabId: framed, action: "screenshot" });
+  assert.match(framedShot, /shot_\d+: /);
+  const box = JSON.parse(
+    await pageEval(
+      framed,
+      "JSON.stringify((({left,top})=>[left,top])(document.querySelector('iframe').getBoundingClientRect()))",
+    ),
+  );
+  const ratio = Number(framedShot.match(/: (\d+)x/)![1]) / Number(await pageEval(framed, "innerWidth"));
+  const inFrame = await command("computer", {
+    tabId: framed,
+    action: "left_click",
+    coordinate: [(box[0] + 30) * ratio, (box[1] + 25) * ratio],
+  });
+  assert.match(inFrame, /left_click done: clickable "WLAN" \[ref_\d+_f\d+\]\./);
   const annotated = await command("computer", { tabId, action: "screenshot", annotate: true });
   assert.match(annotated, /Annotated refs: ref_/);
   console.log("✓ Clickables in an iframe are found; annotated screenshots label them");

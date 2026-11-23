@@ -119,6 +119,7 @@ function logError(where, e) {
     const { TabAccess } = load("TabAccess");
     const { normalizeConfig, siteAllowed, siteEntry, isAutonomousMode, isTemporaryMode } = load("SiteRules");
     const { ScreenshotCache, VisualBaselines } = load("ScreenshotCache");
+    const { ScreenshotHistory } = load("ScreenshotHistory");
     const { BrowserSettings, DEVICE_PRESETS } = load("BrowserSettings");
     const { clipboardShortcut, systemClipboard } = load("Clipboard");
     const { ExtensionPanels } = load("ExtensionPanels");
@@ -174,14 +175,14 @@ function logError(where, e) {
       ({ SessionStore } = ChromeUtils.importESModule("resource:///modules/sessionstore/SessionStore.sys.mjs"));
     }
 
-    const state = (globalThis.zenMcpState ||= { tabs: new Set(), scale: new Map() });
+    const state = (globalThis.zenMcpState ||= { tabs: new Set() });
     state.pickedTabs ||= new Set();
     // why: Migrate old single-owner state on reload so existing access still works with shared tabs.
     if (state.owners && !state.tabMembers) {
       state.tabMembers = new Map();
       for (const [tabId, session] of state.owners) state.tabMembers.set(tabId, new Map([[session, 0]]));
     }
-    for (const old of ["owners", "ownerVersions", "tabWork", "tabQueues", "tabHandoffs"]) delete state[old];
+    for (const old of ["owners", "ownerVersions", "tabWork", "tabQueues", "tabHandoffs", "scale"]) delete state[old];
     const access = new TabAccess(
       (state.tabMembers ||= new Map()),
       (state.tabVersions ||= new Map()),
@@ -236,6 +237,7 @@ function logError(where, e) {
       disconnectTimers: new Map(),
       heldInputFrames: new Map(),
       tabRequests: new Map(),
+      screenshots: new ScreenshotHistory((state.screenshots ||= new Map()), (state.screenshotIds ||= { next: 1 })),
       screenshotCache: new ScreenshotCache(),
       visualBaselines: new VisualBaselines(),
       readSnapshots: new ReadSnapshots(), // why: A snapshot taken by the old bridge is no longer a valid baseline after reload.

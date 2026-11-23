@@ -130,6 +130,7 @@ export class InputDriver {
         const expected = ref ? this.env.element(ref) : this.hitAt(x, y);
         const label = ref || "Coordinate target";
         this.assertHit(expected, x, y, label);
+        const hit = this.env.describeHit(this.hitAt(x, y), ref && expected);
         try {
           if (!silent) {
             await move(x, y);
@@ -144,7 +145,7 @@ export class InputDriver {
           }
           if (button === 0) this.#focusAt(x, y);
           if (!silent) this.env.ripple(x, y);
-          return "done";
+          return { hit };
         } finally {
           cursor.unpress();
         }
@@ -194,12 +195,13 @@ export class InputDriver {
         if (this.#heldButtons.has(button)) return this.state();
         const expected = ref ? this.env.element(ref) : this.hitAt(x, y);
         this.assertHit(expected, x, y, ref || "Coordinate target");
+        const hit = this.env.describeHit(this.hitAt(x, y), ref && expected);
         await move(x, y);
         this.assertHit(expected, x, y, ref || "Coordinate target");
         mouse(x, y, { type: "mousemove" });
         mouse(x, y, { type: "mousedown", button });
         this.#heldButtons.set(button, [x, y]);
-        return this.state();
+        return { ...this.state(), hit };
       }
       case "mouse_up": {
         const point = this.#heldButtons.get(button);

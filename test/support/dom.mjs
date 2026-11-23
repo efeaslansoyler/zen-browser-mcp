@@ -68,6 +68,12 @@ class Element {
   get cursor() {
     return this.style.cursor ?? this.parentElement?.cursor ?? "auto";
   }
+  get parentNode() {
+    return this.parentElement;
+  }
+  getRootNode() {
+    return {};
+  }
   getAttribute(key) {
     return this.attrs[key] ?? null;
   }
@@ -111,8 +117,16 @@ export const h = (tag, attrs = {}, ...children) => new Element(tag, attrs, child
 export function page(...children) {
   const root = h("html", {}, h("body", {}, ...children));
   const body = root.children[0];
+  const events = [];
   const Actor = loadActor({
+    Ci: {},
+    Cc: {},
     Services: {
+      scriptloader: {
+        loadSubScript(_, eu) {
+          eu.synthesizeMouseAtPoint = (x, y, event) => events.push(event.type);
+        },
+      },
       locale: { appLocaleAsBCP47: "en" },
       els: { getListenerInfoFor: (el) => el.listeners.map((type) => ({ type, inSystemEventGroup: false })) },
     },
@@ -140,6 +154,16 @@ export function page(...children) {
   return {
     actor,
     body,
+    events,
+    // why: Answers the click's hit test with this element.
+    async click(el, data = {}) {
+      actor.document.elementFromPoint = () => el;
+      const { hit } = await send("input", { kind: "click", x: 5, y: 5, silent: true, session: "a", ...data });
+      return hit.replace(/ref_\d+/, "ref");
+    },
+    async ref(query) {
+      return (await send("find", { query }))[0].line.match(/ref_\d+/)[0];
+    },
     send,
     read: async (data = {}) =>
       (await send("read_page", { bare: true, ...data }))

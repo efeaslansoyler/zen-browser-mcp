@@ -20,11 +20,12 @@ export function permissions(ctx) {
   // why: The activity log is kept on disk, so it gets the description without typed values.
   async function describeWrite(tool, args, browser, { values = true } = {}) {
     const target = async () => {
+      // why: Nobody should be asked about a coordinate that can't be placed, so its error goes to the agent.
+      const point = args.ref || !args.coordinate ? null : ctx.toPagePoint(browser, args.coordinate, args.screenshot);
       try {
         if (args.ref) return (await ctx.queryRef(browser, "describe", { ref: ctx.longRef(args.ref) })).value;
-        if (args.coordinate) {
-          const [x, y] = ctx.toPagePoint(browser, args.coordinate);
-          const inner = await ctx.deepest(browser, x, y);
+        if (point) {
+          const inner = await ctx.deepest(browser, ...point);
           return (await ctx.query(browser, "describe", { x: inner.x, y: inner.y }, 30000, inner.frame)).value;
         }
       } catch (e) {
@@ -150,7 +151,7 @@ export function permissions(ctx) {
     const at = async (coordinate = args.coordinate, ref = args.ref) => {
       if (ref) return ask({ ref: ctx.longRef(ref) }, ctx.frameOf(browser, ref));
       if (!coordinate) return {};
-      const [x, y] = ctx.toPagePoint(browser, coordinate);
+      const [x, y] = ctx.toPagePoint(browser, coordinate, args.screenshot);
       const inner = await ctx.deepest(browser, x, y);
       return ask({ x: inner.x, y: inner.y }, inner.frame);
     };

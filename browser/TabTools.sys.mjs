@@ -1,9 +1,9 @@
 export function tabTools(ctx) {
   const { L, text } = ctx;
-  async function waitForUser(call, tool, { tabId, ref, coordinate, message, wait, options, timeout }) {
+  async function waitForUser(call, tool, { tabId, ref, coordinate, screenshot, message, wait, options, timeout }) {
     const handOver = tool === "hand_to_user";
     const browser = tabId == null ? null : ctx.browserFor(call, tabId);
-    const [x, y] = coordinate ? ctx.toPagePoint(browser, coordinate) : [];
+    const [x, y] = coordinate ? ctx.toPagePoint(browser, coordinate, screenshot) : [];
     const labels = handOver ? { ok: L("Done", "Bitti") } : {};
     const key = browser ?? {}; // why: Separate answer keys let several questions without tabs coexist.
     const card = ctx.island?.ask(
@@ -183,7 +183,7 @@ export function tabTools(ctx) {
       return text(`Tab ${tabId} closed.`);
     },
 
-    async ask_user({ tabId, ref, coordinate, message, options, timeout = 300 }, call) {
+    async ask_user({ tabId, ref, coordinate, screenshot, message, options, timeout = 300 }, call) {
       if (
         options != null &&
         (!Array.isArray(options) ||
@@ -194,10 +194,19 @@ export function tabTools(ctx) {
         throw new Error("options must be 2 to 6 non-empty answers of at most 80 characters.");
       }
       if (tabId == null && (ref != null || coordinate != null)) throw new Error("ref and coordinate need a tabId.");
-      return waitForUser(call, "ask_user", { tabId, ref, coordinate, message, wait: "done", options, timeout });
+      return waitForUser(call, "ask_user", {
+        tabId,
+        ref,
+        coordinate,
+        screenshot,
+        message,
+        wait: "done",
+        options,
+        timeout,
+      });
     },
 
-    async highlight({ tabId, items, clear = false }, call) {
+    async highlight({ tabId, items, screenshot, clear = false }, call) {
       const browser = ctx.browserFor(call, tabId);
       if (clear) items = [];
       else if (!Array.isArray(items) || !items.length || items.length > 20)
@@ -211,7 +220,7 @@ export function tabTools(ctx) {
           frame = ctx.frameOf(browser, item.ref);
           data = { ref: ctx.longRef(item.ref), label, number };
         } else if (Array.isArray(item?.coordinate)) {
-          const [x, y] = ctx.toPagePoint(browser, item.coordinate);
+          const [x, y] = ctx.toPagePoint(browser, item.coordinate, screenshot);
           const inner = await ctx.deepest(browser, x, y);
           frame = inner.frame;
           data = { x: inner.x, y: inner.y, label, number };
@@ -236,9 +245,9 @@ export function tabTools(ctx) {
     },
 
     // why: Leave credentials and other user-only steps with the user.
-    async hand_to_user({ tabId, ref, coordinate, message, wait = "done", timeout = 600 }, call) {
+    async hand_to_user({ tabId, ref, coordinate, screenshot, message, wait = "done", timeout = 600 }, call) {
       if (tabId == null) throw new Error("hand_to_user needs the tabId of the tab where the user should act.");
-      return waitForUser(call, "hand_to_user", { tabId, ref, coordinate, message, wait, timeout });
+      return waitForUser(call, "hand_to_user", { tabId, ref, coordinate, screenshot, message, wait, timeout });
     },
 
     async request_tab({ tabId, reason, timeout = 120 }, call) {

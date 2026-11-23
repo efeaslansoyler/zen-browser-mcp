@@ -58,6 +58,7 @@ export function sessionManager(ctx) {
     ctx.sessionVersions.set(id, (ctx.sessionVersions.get(id) || 0) + 1);
     ctx.sessions.delete(id);
     ctx.readSnapshots.clearSession(id);
+    ctx.screenshots.clearSession(id);
     for (const call of ctx.calls)
       if (call.session === id) call.cancel(new Error("The browser session disconnected; its operation was cancelled."));
     for (const tabId of ctx.access.tabsOf(id)) {

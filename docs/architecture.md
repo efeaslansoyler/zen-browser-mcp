@@ -77,7 +77,7 @@ shared context lets tests replace helpers with fakes (see `test/support/bridge.m
 | `NetworkLog.sys.mjs`, `NetworkFilters.sys.mjs`, `NetworkControl.sys.mjs`, `HarCapture.sys.mjs`, `DownloadLog.sys.mjs` | Tab network logs and their URL, method, status and type filters, in-memory HTTP rules, redacted HAR lifecycle and download tracking |
 | `Artifacts.sys.mjs`, `TabVideo.sys.mjs` | Silent PDF printing, bounded tab snapshots encoded by a bridge-side ffmpeg subprocess, private file expiry |
 | `AgentData.sys.mjs` | Agent-mode first-party cookies through the Gecko cookie service and top-level Web Storage through a dedicated page actor query |
-| `ReadSnapshots`, `ScreenshotCache`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
+| `ReadSnapshots`, `ScreenshotCache`, `ScreenshotHistory`, `InputMotion`, `BrowserSettings`, `ExtensionPanels`, `Clipboard`, `ReactInspect` | Read diffs, `if_changed` screenshots, screenshot IDs and scales, human-like input, per-tab emulation, extension popups, clipboard consent, React tree |
 | `actors/ZenMcpChild.sys.mjs` | Runs in every frame: answers the parent's queries and owns per-page state (refs, held input, cursor, pending questions); `form_input`, `file_upload`, console, clipboard targets, axe. Its one message to the parent is a recorded step |
 | `actors/ZenMcpParent.sys.mjs` | Passes recorded steps to `Recordings` (observer topic), adding the tab and page URL itself |
 | `actors/PageReader`, `ElementInfo` | Roles, names and the `read_page`/`find` tree; selectors, styles, component chains and raw source hints for picks |
@@ -345,3 +345,9 @@ context id (`ref_3_f150323855361`); the bridge shows agents a short form (`ref_3
 it back. `read_page` splices each iframe's tree under `[iframe url]`, `find` searches all
 frames, and mouse events are sent from the actor of the innermost frame under the point,
 because events dispatched from the top page don't reach out-of-process iframes.
+
+Screenshot coordinates are resolved per session and tab (`ScreenshotHistory`): each viewport
+screenshot gets an ID and its scale, a call can name the image its coordinate comes from, and
+without a name the latest one counts. If the last two have different scales, the call is
+refused before any input. A call only sees images from before it started, so a batch keeps
+the scale its coordinates were read with.

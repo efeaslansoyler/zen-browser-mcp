@@ -11,14 +11,22 @@ change tool names, parameters or results.
 
 - `read_page`, `find` and annotated screenshots give refs to clickable elements without a control
   role, such as menu entries built from a `div`.
+- Clicks report the element they hit, and say when it shows no sign of reacting to clicks.
+- Screenshots have an ID. `computer`, `extensions`, `highlight`, `ask_user` and `hand_to_user`
+  take it as `screenshot` to say which image a coordinate comes from.
 
 ### Changed
 
+- **Breaking:** after two screenshots of a tab at different scales, a coordinate without
+  `screenshot` is refused instead of being read with the latest scale. Pass the ID of the image
+  the coordinate comes from.
 - `find` also matches visible text anywhere on the page and returns the innermost element that
   holds all the words.
 
 ### Fixed
 
+- Coordinates in a `browser_batch` refer to the screenshot from before the batch, as documented,
+  and another session's screenshot in a shared tab no longer changes how yours are read.
 - `find`, `wait_for` text and select options match capital I: "WIFI" on a page now equals "wifi".
 
 ## [0.2.0] - 2026-11-21

@@ -255,7 +255,7 @@ for (const kind of ["drag", "wheel", "click"]) {
     const { actor, events, first } = actorHarness();
     if (kind === "click") {
       actor.document.hidden = false;
-      const hit = { isConnected: true };
+      const hit = { isConnected: true, localName: "body", tagName: "BODY", classList: [] };
       actor.document.elementFromPoint = () => hit;
     }
     const pending = actor.receiveMessage({

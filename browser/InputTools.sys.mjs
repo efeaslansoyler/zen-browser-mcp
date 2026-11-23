@@ -89,6 +89,7 @@ export function inputTools(ctx) {
         if (args[key] == null) throw new Error(`${args.action} needs ${key}.`);
         return args[key];
       };
+      let hit;
       switch (args.action) {
         case "screenshot": {
           if ((args.since || args.baseline_scope) && !args.diff)
@@ -117,7 +118,13 @@ export function inputTools(ctx) {
               !!args.annotate,
             ];
             if (screenshotCache.unchanged(`${call.session}:${browser.browserId}`, context, shot.data)) {
-              return text({ unchanged: true, tabId: args.tabId, width: shot.width, height: shot.height });
+              return text({
+                unchanged: true,
+                tabId: args.tabId,
+                screenshot: shot.id,
+                width: shot.width,
+                height: shot.height,
+              });
             }
           }
           let comparison = [];
@@ -180,6 +187,7 @@ export function inputTools(ctx) {
                   height: shot.height,
                   changed,
                   ratio: changed / (shot.width * shot.height),
+                  ...(changed ? {} : { screenshot: shot.id }),
                 });
                 if (!changed) return comparison;
                 shot.painter.putImageData(shot.pixels, 0, 0);
@@ -205,33 +213,33 @@ export function inputTools(ctx) {
             ...comparison,
             {
               type: "text",
-              text: `${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}`,
+              text: `${shot.id ? `${shot.id}: ` : ""}${shot.width}x${shot.height}, tabId ${args.tabId}${labels ? `\nAnnotated refs: ${shortRefs(labels.join(", "))}` : ""}${dialog ? `\n${describeDialog(dialog)}` : ""}`,
             },
           ];
         }
         case "left_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), {
+          hit = await click(browser, await target(browser, { ...args, forClick: true }), {
             ...args,
             ref: args.ref,
             modifiers: args.text,
           });
           break;
         case "right_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), {
+          hit = await click(browser, await target(browser, { ...args, forClick: true }), {
             ref: args.ref,
             button: 2,
             modifiers: args.text,
           });
           break;
         case "double_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), {
+          hit = await click(browser, await target(browser, { ...args, forClick: true }), {
             ref: args.ref,
             count: 2,
             modifiers: args.text,
           });
           break;
         case "triple_click":
-          await click(browser, await target(browser, { ...args, forClick: true }), {
+          hit = await click(browser, await target(browser, { ...args, forClick: true }), {
             ref: args.ref,
             count: 3,
             modifiers: args.text,
@@ -281,7 +289,7 @@ export function inputTools(ctx) {
         }
         case "mouse_down": {
           const [x, y] = await target(browser, { ...args, forClick: true });
-          await input(browser, {
+          const result = await input(browser, {
             ...args,
             kind: "mouse_down",
             x,
@@ -289,6 +297,7 @@ export function inputTools(ctx) {
             ref: args.ref && longRef(args.ref),
             button: { left: 0, middle: 1, right: 2 }[args.button || "left"],
           });
+          ({ hit } = result.value);
           break;
         }
         case "mouse_up": {
@@ -312,7 +321,7 @@ export function inputTools(ctx) {
         default:
           throw new Error(`Unsupported action: ${args.action}`);
       }
-      return text(`${args.action} done.`);
+      return text(`${args.action} done${hit ? `: ${hit}` : ""}.`);
     },
 
     async form_input({ tabId, ref, value }, call) {
