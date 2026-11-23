@@ -77,6 +77,9 @@ change tool names, parameters or results.
 - The text and default value of a page dialog stand in a JSON line of their own (`pageText`,
   `defaultValue`, `untrusted`). Before, a page could write text there that looked like a note of
   yours. Option texts in `form_input` results can't leave their quotes any more.
+- Names, values, placeholders, options and addresses in `read_page` and `find` are quoted with escapes
+  (`\"`, `\n`), and roles and states are single words. Before, a page could write lines there that
+  looked like those of other elements, refs included.
 
 ## [0.3.0] - 2026-11-23
 
