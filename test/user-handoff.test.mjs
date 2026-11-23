@@ -25,10 +25,10 @@ function harness(answer) {
 test("hand_to_user needs a tab, shows Done and tells the agent to check the page", async () => {
   const h = harness("done");
   await assert.rejects(h.call("hand_to_user", { message: "Log in" }), /needs the tabId/);
-  const result = await h.call("hand_to_user", { tabId: 1, message: "Log in, then press Done" });
+  const result = await h.call("hand_to_user", { tabId: 1, message: "Log in" });
   assert.match(result, /says the step is done.*Check the page/);
   const [, , message, done, labels] = h.asks[0];
-  assert.equal(message, "Log in, then press Done");
+  assert.equal(message, "Log in");
   assert.equal(done, true);
   assert.equal(labels.ok, "Done");
   assert.equal(h.queries[0].data.timeout, 600);
@@ -73,7 +73,7 @@ test("a hand-over survives the pages the user goes through and ends on the islan
       }),
     text: (value) => [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
   });
-  const pending = ctx.tools.hand_to_user({ tabId: 1, message: "Log in, then press Done" }, testCall(ctx));
+  const pending = ctx.tools.hand_to_user({ tabId: 1, message: "Log in" }, testCall(ctx));
   await new Promise((resolve) => setImmediate(resolve));
   outlineEnded();
   await new Promise((resolve) => setImmediate(resolve));

@@ -362,7 +362,7 @@ export function inputTools(ctx) {
       else dialog.cancelDialog();
       await operationSleep(200, call);
       return text(
-        `${promptType} "${message}" ${accept ? "kabul edildi" : "iptal edildi"}${answer != null && accept ? ` (metin: "${answer}")` : ""}.`,
+        `${promptType} "${message}" ${accept ? "accepted" : "dismissed"}${answer != null && accept ? ` (text: "${answer}")` : ""}.`,
       );
     },
   };
