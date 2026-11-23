@@ -170,6 +170,14 @@ from real accounts: they hold URLs, typed text and page data.
 
 ## Pull requests
 
+`main` is the development branch; users get what a version tag publishes
+([docs/releasing.md](docs/releasing.md)). Every change except the release commit reaches `main`
+through a pull request.
+
+- Branch from `origin/main` with a prefix such as `fix/`, `feat/` or `docs/`, and put
+  `Closes #<issue>` in the pull request body.
+- It can merge when CI is green, the matching live checks passed for a `browser/` change (CI has
+  no browser) and the maintainer approved.
 - Open an issue first for a new feature or a change in behavior, so the approach can be agreed
   before you write it.
 - Keep one topic per pull request. It is squash-merged, so its title becomes the commit
