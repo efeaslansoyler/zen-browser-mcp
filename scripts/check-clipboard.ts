@@ -10,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { fixtureTransportEnv, pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 import { reloadBridge } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 const text = (r: Content[]) =>
   r
     .filter((c) => c.type === "text")

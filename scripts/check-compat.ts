@@ -4,6 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { call, type AgentIdentity, type Content } from "../src/zen.ts";
 import { identifyAgent } from "../browser/Agent.sys.mjs";
 import { reloadBridge } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 
 const text = (content: Content[]) =>
   content

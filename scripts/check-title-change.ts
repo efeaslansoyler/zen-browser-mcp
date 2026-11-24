@@ -10,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { ensureCodexRelay, stopCodexRelays } from "../src/codex-relay.ts";
 import { call, subscribe } from "../src/zen.ts";
 import { assertBridgeRunsCheckout } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 
 await assertBridgeRunsCheckout();
 

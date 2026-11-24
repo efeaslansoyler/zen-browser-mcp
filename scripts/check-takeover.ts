@@ -6,6 +6,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
 import { pageEval } from "./support/fixture.ts";
+import "./support/require-sandbox.ts";
 
 const text = (content: Content[]) =>
   content

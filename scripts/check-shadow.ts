@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { call, type Content } from "../src/zen.ts";
 import { approveWhile, pageEval } from "./support/fixture.ts";
+import "./support/require-sandbox.ts";
 
 const agent = { id: "codex", name: "Codex" };
 const text = (content: Content[]) =>
