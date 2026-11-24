@@ -867,9 +867,11 @@ export class PageReader {
           inner = NAME_FROM_CONTENT.has(roleOf(child)) || !isControl(child) ? allText(child) : "";
           const raw = normalize(inner);
           // why: The name may be a label or cut off, and textContent joins lines and includes what isn't shown.
-          if (words.some((w) => raw.includes(w))) inner = clean(shownText(child));
+          // why: Shown text comes without the spaces at its edges, which can be all that separates two words.
+          if (words.some((w) => raw.includes(w)))
+            inner = `${/^\s/.test(inner) ? " " : ""}${shownText(child)}${/\s$/.test(inner) ? " " : ""}`;
           if (holds(inner)) {
-            found.push({ el: child, text: inner });
+            found.push({ el: child, text: clean(inner) });
             inner = null;
           }
         } else inner = visit(child);
