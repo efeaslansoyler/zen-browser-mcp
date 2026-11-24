@@ -557,6 +557,20 @@ export function frameIdOf(el) {
   return el.browsingContext?.id ?? null;
 }
 
+// why: A loop, because a page can be deeper than the stack.
+function leadingPast(root, depth) {
+  const leading = new Set();
+  const open = [{ el: root, level: 0 }];
+  for (let at = open.pop(); at; at = open.pop()) {
+    if (at.level > depth) {
+      for (let up = at.up; up && !leading.has(up.el); up = up.up) leading.add(up.el);
+      continue;
+    }
+    for (const el of shownChildren(at.el)) if (el.nodeType === 1) open.push({ el, level: at.level + 1, up: at });
+  }
+  return leading;
+}
+
 export const MAX_TREE = 50000;
 const STILL_LOADING = "(still loading)";
 
@@ -741,12 +755,8 @@ export class PageReader {
       lines.push(text);
     };
 
-    const tooDeep = new Map();
-    const goesTooDeep = (el, level) =>
-      level > depth ||
-      this.#remember(tooDeep, el, () =>
-        [...shownChildren(el)].some((child) => child.nodeType === 1 && goesTooDeep(child, level + 1)),
-      );
+    let deep;
+    const goesTooDeep = (el, level) => level > depth || (deep ??= leadingPast(root, depth)).has(el);
 
     const walk = (el, indent, level, named = false) => {
       // why: Below the depth limit or past max_chars, only whether anything is too deep matters.

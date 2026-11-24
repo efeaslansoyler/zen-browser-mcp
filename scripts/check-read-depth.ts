@@ -79,11 +79,17 @@ try {
   for (const levels of [1000, 20000]) {
     await pageEval(
       tabId,
-      `document.body.innerHTML = "<p>Near</p>"; let at = document.body; for (let i = 0; i < ${levels}; i++) at = at.appendChild(document.createElement("div")); at.innerHTML = "<button>Bottom</button>"; 0`,
+      `document.body.innerHTML = "<p>Near</p>".repeat(30); let at = document.body; for (let i = 0; i < ${levels}; i++) at = at.appendChild(document.createElement("div")); at.innerHTML = "<button>Bottom</button>"; 0`,
     );
     const start = performance.now();
     assert.match(await command("read_page", { tabId }), levels === 1000 ? /button "Bottom"/ : /text "Near"/);
     times.push(Math.round(performance.now() - start));
+    for (const depth of [2, levels / 2, levels - 1, levels * 2])
+      for (const max_chars of [400, 50_000]) {
+        const limited = await command("read_page", { tabId, depth, max_chars });
+        assert.match(limited, /Near|truncated/, `depth ${depth}, max_chars ${max_chars}`);
+        if (levels === 1000) assert.equal(notice.test(limited), depth <= levels, `depth ${depth}, ${max_chars}`);
+      }
   }
   assert(
     times.every((ms) => ms < 3000),
