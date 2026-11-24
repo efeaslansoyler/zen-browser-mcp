@@ -529,7 +529,12 @@ export class ZenMcpChild extends JSWindowActorChild {
       if (!shows()) reader.scrollPointIntoView(el, at);
     }
     const [x, y] = at();
-    return { x, y };
+    const { width, height } = reader.contentSize(el);
+    return { x, y, frameSize: [width, height], size: this.#size() };
+  }
+
+  #size() {
+    return [this.contentWindow.innerWidth, this.contentWindow.innerHeight];
   }
 
   // why: Between the frame's own coordinates and this document's; transforms and zoom can lie between them.
@@ -578,7 +583,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const x = (Math.max(0, r.left) + Math.min(win.innerWidth, r.right)) / 2;
     const y = (Math.max(0, r.top) + Math.min(win.innerHeight, r.bottom)) / 2;
     if (forClick) this.#input.assertHit(el, x, y, ref);
-    return { x, y };
+    return { x, y, size: this.#size() };
   }
 
   #formInput(ref, value) {

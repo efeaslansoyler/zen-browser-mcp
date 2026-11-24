@@ -312,6 +312,28 @@ test("ref coordinates check every enclosing iframe; hover coordinates skip the c
   assert(!calls.some((c) => c.name === "frame_hit"));
 });
 
+test("a ref in a frame that hasn't its size yet is located again, for a second at most", async () => {
+  for (const [sizedAfter, expected] of [
+    [0, 1],
+    [3, 4],
+    [Infinity, 21],
+  ]) {
+    let located = 0;
+    const leaf = { id: 2, parent: { id: 1 } };
+    const context = bridgeContext({
+      query: async (_, name) => {
+        if (name === "locate") return { x: 1, y: 2, size: ++located > sizedAfter ? [500, 400] : [300, 150] };
+        return { x: 11, y: 12, frameSize: [500.4, 400], size: [800, 600] };
+      },
+      frameOf: () => leaf,
+      callOf: () => null,
+      operationSleep: async () => {},
+    });
+    assert.deepEqual([...(await context.target({}, { ref: "ref_2b" }))], [11, 12]);
+    assert.equal(located, expected);
+  }
+});
+
 test("routing refuses a ref click if the deepest hit frame changes", async () => {
   const expected = {},
     actual = {};

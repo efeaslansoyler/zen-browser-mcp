@@ -3,6 +3,7 @@ export class PageGone extends Error {}
 
 const MAX_DIALOG_TEXT = 2000;
 const MAX_FRAME_URL = 200;
+const FRAME_SIZE_WAIT = 1000;
 
 export function pageQueries(ctx) {
   let querySequence = 0;
@@ -38,12 +39,17 @@ export function pageQueries(ctx) {
     return [x / s, y / s];
   }
 
-  async function toTop(browser, frame, x, y, forClick = false) {
+  // why: A new frame in another process has its default size until the page around it tells it the real one.
+  const isSized = (size, shown) => size.every((n, i) => Math.abs(n - shown[i]) <= 1 + shown[i] * 0.03);
+
+  async function toTop(browser, frame, at, { forClick = false, sizedOnly = false } = {}) {
     for (let bc = frame; bc.parent; bc = bc.parent) {
-      ({ x, y } = await ctx.query(browser, "frame_point", { bcId: bc.id, point: [x, y] }, 30000, bc.parent));
-      if (forClick) await ctx.query(browser, "frame_hit", { bcId: bc.id, x, y }, 30000, bc.parent);
+      const { size } = at;
+      at = await ctx.query(browser, "frame_point", { bcId: bc.id, point: [at.x, at.y] }, 30000, bc.parent);
+      if (sizedOnly && size && !isSized(size, at.frameSize)) return null;
+      if (forClick) await ctx.query(browser, "frame_hit", { bcId: bc.id, x: at.x, y: at.y }, 30000, bc.parent);
     }
-    return [x, y];
+    return [at.x, at.y];
   }
 
   async function toFrame(browser, frame, x, y) {
@@ -82,16 +88,20 @@ export function pageQueries(ctx) {
     const frame = ref && ctx.frameOf(browser, ref);
     if (!frame?.parent) return;
     try {
-      const { x, y } = await ctx.query(browser, "locate", { ref }, 5000, frame);
-      await ctx.toTop(browser, frame, x, y);
+      await ctx.toTop(browser, frame, await ctx.query(browser, "locate", { ref }, 5000, frame));
     } catch {}
   }
 
   async function target(browser, args, key = "coordinate") {
     if (args.ref && key === "coordinate") {
       const frame = ctx.frameOf(browser, args.ref);
-      const { x, y } = await ctx.query(browser, "locate", { ref: args.ref, forClick: !!args.forClick }, 30000, frame);
-      return ctx.toTop(browser, frame, x, y, !!args.forClick);
+      const forClick = !!args.forClick;
+      for (let waited = 0; ; waited += 50) {
+        const at = await ctx.query(browser, "locate", { ref: args.ref, forClick }, 30000, frame);
+        const point = await ctx.toTop(browser, frame, at, { forClick, sizedOnly: waited < FRAME_SIZE_WAIT });
+        if (point) return point;
+        await ctx.operationSleep(50, ctx.callOf(browser));
+      }
     }
     if (args[key] == null) throw new Error(`${args.action} needs ${key}${key === "coordinate" ? " or ref" : ""}.`);
     return ctx.toPagePoint(browser, args[key], args.screenshot);
