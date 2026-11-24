@@ -508,35 +508,48 @@ export function contains(el, node) {
   return false;
 }
 
+const CLIPS = /auto|scroll|hidden|clip/;
 // why: Only scrollers the user can move too; moving others, such as a collapsed panel, can break the page.
-function isScrolledAway(el, { left, top, right, bottom }) {
+const SCROLLS = /auto|scroll/;
+
+function isClipped(el, { left, top, right, bottom }, by) {
   const { documentElement, body } = el.ownerDocument;
   // why: The body's overflow applies to the viewport unless the root has its own.
   const last = styleOf(documentElement).overflow === "visible" ? body : documentElement;
+  let escapes = false;
   for (let up = el; up && up !== last && up !== documentElement; up = composedParent(up)) {
     if (up.nodeType !== 1) continue;
-    const { position, overflowX, overflowY } = styleOf(up);
-    const box = up !== el && /auto|scroll/.test(overflowX + overflowY) && up.getBoundingClientRect();
+    const { position, overflowX, overflowY, transform } = styleOf(up);
+    // why: An absolutely positioned element is placed, and clipped, by the next positioned one around it.
+    if (up !== el && escapes && position === "static" && transform === "none") continue;
+    escapes = position === "absolute";
+    const box = up !== el && by.test(overflowX + overflowY) && up.getBoundingClientRect();
     if (box && (right < box.left || left >= box.right || bottom < box.top || top >= box.bottom)) return true;
     if (position === "fixed") return false;
   }
   return false;
 }
 
-// why: Boxes alone can't tell, because an element can be positioned out of a scroller around it.
-export function showsAt(el, x, y, part = { left: x, top: y, right: x, bottom: y }) {
-  return contains(el, hitAt(el.ownerDocument, x, y)) || !isScrolledAway(el, part);
+// why: Boxes don't tell everything; the hit test does, but for thousands of elements it takes seconds.
+function showsAt(el, x, y, part, by) {
+  return !isClipped(el, part, by) || contains(el, hitAt(el.ownerDocument, x, y));
+}
+
+export function isScrolledAway(el, x, y) {
+  return !showsAt(el, x, y, { left: x, top: y, right: x, bottom: y }, SCROLLS);
 }
 
 const middle = ({ left, top, right, bottom }) => [(left + right) / 2, (top + bottom) / 2];
 
 export function isFullyShown(el, win) {
-  return fullyInViewport(el, win) && showsAt(el, ...middle(clickRectOf(el)));
+  return fullyInViewport(el, win) && !isScrolledAway(el, ...middle(clickRectOf(el)));
 }
 
-export function isPartlyShown(el, win) {
-  return inViewport(el, win) && showsAt(el, ...middle(clickRectOf(el)), rectOf(el));
+export function isPartlyShown(el, win, by = CLIPS) {
+  return inViewport(el, win) && showsAt(el, ...middle(clickRectOf(el)), rectOf(el), by);
 }
+
+export const isInScrollView = (el, win) => isPartlyShown(el, win, SCROLLS);
 
 export function frameIdOf(el) {
   const tag = el?.localName;
@@ -836,7 +849,7 @@ export class PageReader {
     if (el.getAttribute("aria-selected") === "true") parts.push("selected");
     if (el.getAttribute("aria-checked")) parts.push(`checked=${asWord(el.getAttribute("aria-checked"))}`);
     if (clickable && role) parts.push("clickable");
-    if (!inViewport(el, this.env.window())) parts.push("(off-screen)");
+    if (!isPartlyShown(el, this.env.window())) parts.push("(off-screen)");
     return parts.join(" ");
   }
 
