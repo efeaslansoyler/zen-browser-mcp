@@ -116,7 +116,8 @@ test("the page actor draws labeled frames, replaces them and removes them", asyn
     elementFromPoint: () => button,
     querySelectorAll: (selector) => root.children.filter((n) => selector.includes(n.localName)),
   };
-  button.ownerDocument = { ...actor.document, defaultView: { getComputedStyle: () => ({}) } };
+  actor.document.defaultView = { getComputedStyle: () => ({}) };
+  button.ownerDocument = root.ownerDocument = actor.document;
   actor.contentWindow = {
     innerWidth: 800,
     innerHeight: 600,
