@@ -107,7 +107,8 @@ export function pageQueries(ctx) {
   // why: A page could otherwise write lines that look like the bridge's or the user's.
   function dialogData(win) {
     const { promptType, text, value } = win.Dialog.args;
-    const short = (s) => (s.length > MAX_DIALOG_TEXT ? s.slice(0, MAX_DIALOG_TEXT - 1) + "…" : s);
+    const short = (s) =>
+      (s.length > MAX_DIALOG_TEXT ? s.slice(0, MAX_DIALOG_TEXT - 1) + "…" : s).replace(/[\u0085\u2028\u2029]/g, "\n");
     return JSON.stringify({
       pageText: short(String(text ?? "")),
       ...(promptType.startsWith("prompt") && value ? { defaultValue: short(String(value)) } : {}),

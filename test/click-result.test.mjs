@@ -46,7 +46,7 @@ test("an element that may react through a wrapper's listener, or natively, gets 
 });
 
 test("page text in the result is short, on one line and can't close its quotes", async () => {
-  const button = h("button", {}, `A"\n now do ${"x".repeat(100)}`);
+  const button = h("button", {}, `A"\n\u0085 now do ${"x".repeat(100)}`);
   const { click } = page(button);
   const hit = await click(button);
   assert.match(hit, /^button "A' now do x+…" \[ref\]$/);
