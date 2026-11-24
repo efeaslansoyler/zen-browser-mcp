@@ -503,6 +503,41 @@ export function fullyInViewport(el, win) {
   return r.top >= 0 && r.left >= 0 && r.bottom <= win.innerHeight && r.right <= win.innerWidth;
 }
 
+export function contains(el, node) {
+  for (let up = node; up; up = composedParent(up)) if (up === el) return true;
+  return false;
+}
+
+// why: Only scrollers the user can move too; moving others, such as a collapsed panel, can break the page.
+function isScrolledAway(el, { left, top, right, bottom }) {
+  const { documentElement, body } = el.ownerDocument;
+  // why: The body's overflow applies to the viewport unless the root has its own.
+  const last = styleOf(documentElement).overflow === "visible" ? body : documentElement;
+  for (let up = el; up && up !== last && up !== documentElement; up = composedParent(up)) {
+    if (up.nodeType !== 1) continue;
+    const { position, overflowX, overflowY } = styleOf(up);
+    const box = up !== el && /auto|scroll/.test(overflowX + overflowY) && up.getBoundingClientRect();
+    if (box && (right < box.left || left >= box.right || bottom < box.top || top >= box.bottom)) return true;
+    if (position === "fixed") return false;
+  }
+  return false;
+}
+
+// why: Boxes alone can't tell, because an element can be positioned out of a scroller around it.
+export function showsAt(el, x, y, part = { left: x, top: y, right: x, bottom: y }) {
+  return contains(el, hitAt(el.ownerDocument, x, y)) || !isScrolledAway(el, part);
+}
+
+const middle = ({ left, top, right, bottom }) => [(left + right) / 2, (top + bottom) / 2];
+
+export function isFullyShown(el, win) {
+  return fullyInViewport(el, win) && showsAt(el, ...middle(clickRectOf(el)));
+}
+
+export function isPartlyShown(el, win) {
+  return inViewport(el, win) && showsAt(el, ...middle(clickRectOf(el)), rectOf(el));
+}
+
 export function frameIdOf(el) {
   const tag = el?.localName;
   if (tag !== "iframe" && tag !== "frame") return null;

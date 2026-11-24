@@ -87,6 +87,7 @@ directory other than your own; import `./support/require-sandbox.ts` in a new on
 | `check-skipped-text.ts` | Reads, searches and waits on text in off-screen `content-visibility: auto` sections, which stay unrendered |
 | `check-boxless.ts` | Reads, searches, clicks and annotated screenshots of `display: contents` elements |
 | `check-tall-iframes.ts` | Scrolling to, clicking and outlining refs in iframes larger than the viewport: nested, cross-origin, in scrollers, under fixed bars |
+| `check-scrollers.ts` | Elements, iframes and boxless controls clipped by a scroller inside the window: clicks, `scroll_to`, hover, `highlight`, `ask_user`; covered and collapsed ones stay refused |
 | `check-shadow.ts` | Reads, searches, clicks, fields, uploads, iframes, hand-overs and selectors in open, closed and nested shadow roots; slots; reading times |
 | `check-read-depth.ts` | Reads at any depth, the notice when a depth leaves something out, a very deep page |
 | `check-island.ts` | Requests that shrink to a line, hover, notes, the time a request stays open, a hand-over's buttons |

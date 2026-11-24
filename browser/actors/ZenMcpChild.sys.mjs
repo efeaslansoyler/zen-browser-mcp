@@ -525,7 +525,8 @@ export class ZenMcpChild extends JSWindowActorChild {
       return [x + point[0], y + point[1]];
     };
     const shows = () => reader.hitAt(this.document, ...at()) === el;
-    if (scroll && !reader.fullyInViewport(el, this.contentWindow) && !shows()) {
+    const inView = () => reader.fullyInViewport(el, this.contentWindow) && reader.showsAt(el, ...at());
+    if (scroll && !shows() && !inView()) {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
       if (!shows()) reader.scrollPointIntoView(el, at);
     }
@@ -552,7 +553,7 @@ export class ZenMcpChild extends JSWindowActorChild {
   #locate(ref, forClick = false) {
     const el = this.#element(ref);
     const win = this.contentWindow;
-    if (!reader.fullyInViewport(el, win)) reader.scrollIntoView(el, { inline: "center" });
+    if (!reader.isFullyShown(el, win)) reader.scrollIntoView(el, { inline: "center" });
     const r = reader.clickRectOf(el);
     if (!r.width && !r.height) throw new Error(`${ref} is not visible (no size).`);
     // why: Use the visible portion so large elements do not target a point outside the viewport.
@@ -639,7 +640,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#ask?.finish("replaced");
     const doc = this.document;
     const target = ref ? this.#element(ref) : x != null ? reader.hitAt(doc, x, y) : null;
-    if (target && !reader.fullyInViewport(target, this.contentWindow)) reader.scrollIntoView(target);
+    if (target && !reader.isFullyShown(target, this.contentWindow)) reader.scrollIntoView(target);
     const ask = outlineAndWait(this.#env, { target, wait, timeout });
     this.#ask = ask;
     return ask.answer.finally(() => {
@@ -657,7 +658,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#highlights?.remove();
     this.#highlights = resolved.length ? highlight(this.#env, resolved) : null;
     const first = resolved[0]?.element;
-    if (first && !reader.inViewport(first, this.contentWindow)) reader.scrollIntoView(first);
+    if (first && !reader.isPartlyShown(first, this.contentWindow)) reader.scrollIntoView(first);
     return resolved.length;
   }
 

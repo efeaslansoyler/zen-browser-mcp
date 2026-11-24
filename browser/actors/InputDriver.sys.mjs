@@ -325,9 +325,7 @@ export class InputDriver {
     if (expected.matches?.(":disabled")) throw new Error(`Click blocked: ${label} is disabled.`);
     const hit = this.hitAt(x, y);
     // why: Use composed ancestry to accept a descendant or shadow child hit inside the intended target.
-    for (let node = hit; node; node = this.env.reader.composedParent(node)) {
-      if (node === expected) return;
-    }
+    if (this.env.reader.contains(expected, hit)) return;
     const blocker = hit ? `${this.env.elementLabel(hit)} [${this.env.ref(hit)}]` : "no element";
     throw new Error(
       `Click blocked: ${label} is covered or moved at (${Math.round(x)}, ${Math.round(y)}); hit ${blocker}. Refresh screenshot/read_page and resolve the obstruction before retrying. No click was sent to the blocker.`,
