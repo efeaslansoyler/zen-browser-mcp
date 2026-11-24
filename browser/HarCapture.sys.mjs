@@ -138,6 +138,8 @@ export function validateHarProjection(input, origin) {
   return { url: url.href, fields: input.fields };
 }
 
+const rowBytes = (url) => url.length * 2 + 2048;
+
 export class HarCapture {
   constructor(env) {
     this.env = env;
@@ -276,7 +278,7 @@ export class HarCapture {
     if (topic === "http-on-modify-request") {
       if (row) return;
       const url = sanitizeHarURL(channel.URI.spec);
-      capture.bytes += url.length * 2 + 2048;
+      capture.bytes += rowBytes(url);
       if (capture.rows.size >= MAX_ENTRIES || capture.bytes > MAX_BYTES) {
         capture.omitted++;
         this.freeze(capture, "capacity limit");
@@ -317,6 +319,7 @@ export class HarCapture {
     for (const [key, row] of capture?.rows ?? [])
       if (row.tabId === tabId && !row.done) {
         capture.rows.delete(key);
+        capture.bytes -= rowBytes(row.url);
         capture.omitted++;
       }
   }

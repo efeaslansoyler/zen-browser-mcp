@@ -501,4 +501,45 @@ test("a HAR capture leaves out requests that were running when the user took ove
   har.observe(channel(2), 1, "fetch", "http-on-stop-request");
   assert.deepEqual([...capture.rows.keys()], ["1:1"]);
   assert.equal(har.status(capture).omitted, 1);
+
+  const { bytes } = capture;
+  for (let id = 3; id < 5000; id++) {
+    har.observe(channel(id), 1, "fetch", "http-on-modify-request");
+    har.cut(1);
+  }
+  assert.equal(capture.bytes, bytes, "what a takeover leaves out takes no room");
+  assert.equal(capture.reason, undefined);
+});
+
+test("a request left out of the network log is forgotten when it ends, also after its tab closed", async () => {
+  globalThis.Ci ??= {};
+  globalThis.ChromeUtils ??= { importESModule: () => ({}) };
+  const { NetworkLog } = await import("../browser/NetworkLog.sys.mjs");
+  for (const closed of [false, true]) {
+    let taken = true;
+    let tracked = true;
+    const log = new NetworkLog(new Map(), {
+      tracked: () => tracked,
+      blocked: () => false,
+      unrecorded: () => taken,
+    });
+    const channel = {
+      channelId: 7,
+      requestMethod: "GET",
+      loadInfo: { externalContentPolicyType: 1, browsingContext: { browserId: 1 } },
+      URI: { spec: "https://a.test/x", host: "a.test" },
+      QueryInterface: () => channel,
+    };
+    log.observer.observe(channel, "http-on-modify-request");
+    assert.equal(log.unrecorded.size, 1);
+    taken = false;
+    if (closed) {
+      tracked = false;
+      log.delete(1);
+    }
+    log.observer.observe(channel, "http-on-examine-response");
+    log.observer.observe(channel, "http-on-stop-request");
+    assert.equal(log.unrecorded.size, 0, `closed: ${closed}`);
+    assert.equal(log.get(1), undefined);
+  }
 });
