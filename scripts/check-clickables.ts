@@ -27,6 +27,7 @@ const menu = `<!doctype html><meta charset="utf-8"><title>Menu</title><style>.it
 <div class="item"><iframe srcdoc="<button>Framed button</button>" width="200" height="60"></iframe></div>
 <button aria-label="Close">Discard draft <span hidden>secretly</span></button>
 <button aria-label="Setup"><span><div>Connect</div><div>Printer</div></span></button><a href="#more" aria-label="More"><div>Scan<br>papers</div><div>later</div></a>
+<p>Read our<a href="#policy"> privacy policy </a>today</p><p>Hello<span role="button" aria-label="Switch"> world</span></p><p>Over<a href="#o">flow</a>ing</p>
 <div id="devices">Wi-Fi devices(13)</div><div class="item">Wi-Fi settings</div><svg class="item" id="wi-icon" width="20" height="20"></svg>
 <div>${"<button>Wi-Fi</button>".repeat(25)}</div>
 <table><tr><td id="cell">Cell <b>WIFI</b></td></tr></table>
@@ -108,6 +109,8 @@ try {
   assert.match((await search(tabId, "connect printer"))[0], /^button "Setup" \[ref_/);
   assert.match((await search(tabId, "scan papers later"))[0], /^link "More" \[ref_/);
   assert.match((await search(tabId, "connectprinter"))[0], /^Nothing matches/);
+  for (const query of ["our privacy policy today", "hello world", "overflowing"])
+    assert.match((await search(tabId, query))[0], /^paragraph/, query);
   console.log("✓ A full match ranks above partial ones; a control's shown text counts, its hidden text doesn't");
 
   const shotOf = async (scale?: number) => {

@@ -262,6 +262,19 @@ test("annotated screenshots label clickables", async () => {
   assert.equal((await send("annotate", { enabled: true })).length, 2);
 });
 
+test("find keeps the space at the edge of an inline control", async () => {
+  const inline = (tag, attrs, text) => h(tag, { style: { display: "inline" }, ...attrs }, text);
+  const { find } = page(
+    h("p", {}, "Read our", inline("a", { href: "/x" }, " privacy policy "), "today"),
+    h("p", {}, "Hello", inline("span", { role: "button", "aria-label": "Switch" }, "\n world")),
+    h("p", {}, "Over", inline("a", { href: "/y" }, "flow"), "ing"),
+  );
+  assert.match((await find("our privacy policy today"))[0], /^paragraph/);
+  assert.match((await find("hello world"))[0], /^paragraph/);
+  assert.match((await find("overflowing"))[0], /^paragraph/);
+  assert.doesNotMatch((await find("over flow ing")).join("\n"), /^paragraph/m);
+});
+
 test("find sees the words of a labelled control that stand on separate lines", async () => {
   const lines = (tag, ...texts) => h(tag, {}, ...texts.map((text) => h("div", {}, text)));
   const twoLines = h("button", { "aria-label": "Setup" }, lines("span", "Connect", "Printer"));
