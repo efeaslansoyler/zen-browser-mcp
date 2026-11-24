@@ -551,8 +551,11 @@ export function isPartlyShown(el, win, by = CLIPS) {
 
 export const isInScrollView = (el, win) => isPartlyShown(el, win, SCROLLS);
 
-// why: As its own document measures it, before transforms and zoom.
+// why: As its own document measures it, before transforms and zoom. With zoom Gecko rounds that by up to 3%,
+// why: which only the frame's own window tells, and that is out of reach in another process.
 export function contentSize(el) {
+  const inner = el.browsingContext?.docShell?.domWindow;
+  if (inner) return { width: inner.innerWidth, height: inner.innerHeight };
   const style = styleOf(el);
   const sum = (names) => names.reduce((total, name) => total + (parseFloat(style[name]) || 0), 0);
   const inside = style.boxSizing === "border-box";

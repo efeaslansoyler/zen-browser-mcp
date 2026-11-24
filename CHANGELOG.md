@@ -77,6 +77,8 @@ change tool names, parameters or results.
   over something else, and is marked `(off-screen)` in `read_page` and `find`.
 - Clicks, drags and scrolling reach the right place in iframes that are scaled, zoomed, rotated or
   otherwise transformed. They were refused or went to another place in the iframe.
+- A click by ref in an iframe that just loaded waits up to a second until it has its size, instead of
+  being refused as covered.
 - A watch writes nothing after its last event, and nothing it read after its session lost the tab.
 
 ### Security

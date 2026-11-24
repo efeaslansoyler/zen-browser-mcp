@@ -57,9 +57,13 @@ const server = http.createServer((request, response) => {
   const body =
     name === "inner"
       ? inner
-      : name === "crossBack"
-        ? frame("transform:scale(.5)", "", `http://127.0.0.1:${port}/inner`)
-        : (cases()[name]?.[0] ?? "");
+      : name.startsWith("tiny")
+        ? frame(`width:900px;zoom:${name.slice(4)}`, "", "/small")
+        : name === "small"
+          ? `<body style="margin:0"><button aria-label="tiny" style="position:absolute;left:800px;top:20px;width:8px;height:8px;padding:0" onclick="parent.postMessage('tiny','*')"></button>`
+          : name === "crossBack"
+            ? frame("transform:scale(.5)", "", `http://127.0.0.1:${port}/inner`)
+            : (cases()[name]?.[0] ?? "");
   response
     .setHeader("content-type", "text/html; charset=utf-8")
     .end(
@@ -112,6 +116,14 @@ try {
     }
   }
   assert.deepEqual(failed, []);
+  // why: With these Gecko rounds the zoom, which moves a point at 800 px by more than the button's width.
+  for (const name of ["tiny0.77", "tiny1.1"]) {
+    await command("navigate", { tabId, url: `http://127.0.0.1:${port}/${name}` });
+    await sleep(500);
+    const ref = (await command("find", { tabId, query: "tiny" })).match(/button "tiny" \[(ref_\w+)\]/)![1];
+    await command("computer", { tabId, action: "left_click", ref });
+    await hit("tiny");
+  }
   console.log(
     "✓ Refs, coordinates, drags and the wheel reach what shows there in scaled, zoomed, rotated, mirrored and nested iframes",
   );
