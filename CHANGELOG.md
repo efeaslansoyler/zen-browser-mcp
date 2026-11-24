@@ -80,6 +80,8 @@ change tool names, parameters or results.
 - Names, values, placeholders, options and addresses in `read_page` and `find` are quoted with escapes
   (`\"`, `\n`), and roles and states are single words. Before, a page could write lines there that
   looked like those of other elements, refs included.
+- Page text in those results, in click results and in `form_input` results can't hold the Unicode line
+  breaks U+0085, U+2028 and U+2029 either.
 
 ## [0.3.0] - 2026-11-23
 

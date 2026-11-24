@@ -194,7 +194,8 @@ export function deepActiveElement(doc) {
   return el;
 }
 
-export const clean = (s) => (s ?? "").replace(/\s+/g, " ").trim();
+// why: JSON.stringify leaves U+0085 as it is, and \s doesn't match it, but some readers take it for a line break.
+export const clean = (s) => (s ?? "").replace(/[\s\u0085]+/g, " ").trim();
 // why: The bridge's refs and states stand outside the quotes, where page text must not reach.
 const quoted = (text) => JSON.stringify(text.replace(/[\u0085\u2028\u2029]/g, "\n"));
 const asWord = (s) => truncate(s.replace(/[^\p{L}\p{N}_-]+/gu, "_"), 40);
