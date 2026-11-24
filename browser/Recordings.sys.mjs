@@ -137,12 +137,22 @@ async function topRect(browserId, rect, frameId) {
   let frame = BrowsingContext.get(frameId);
   if (!rect || frame?.top?.browserId !== browserId) return null;
   for (; frame.parent; frame = frame.parent) {
-    const o = await frame.parent.currentWindowGlobal
-      ?.getActor("ZenMcp")
-      .sendQuery("frame_rect", { bcId: frame.id, scroll: false })
-      .catch(() => null);
-    if (!o || o.error) return null;
-    rect = { ...rect, x: rect.x + o.x, y: rect.y + o.y };
+    const corners = [];
+    for (const right of [0, rect.width])
+      for (const down of [0, rect.height]) {
+        const point = [rect.x + right, rect.y + down];
+        const corner = await frame.parent.currentWindowGlobal
+          ?.getActor("ZenMcp")
+          .sendQuery("frame_point", { bcId: frame.id, point, scroll: false })
+          .catch(() => null);
+        if (!corner || corner.error) return null;
+        corners.push(corner);
+      }
+    const x = Math.min(...corners.map((corner) => corner.x));
+    const y = Math.min(...corners.map((corner) => corner.y));
+    const width = Math.max(...corners.map((corner) => corner.x)) - x;
+    const height = Math.max(...corners.map((corner) => corner.y)) - y;
+    rect = { ...rect, x, y, width, height };
   }
   return rect;
 }

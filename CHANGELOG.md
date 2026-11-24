@@ -75,6 +75,8 @@ change tool names, parameters or results.
   into view. Clicks on them were refused as covered, and `scroll_to` did nothing.
 - What a list, sidebar or collapsed panel clips gets no label in an annotated screenshot, where it stood
   over something else, and is marked `(off-screen)` in `read_page` and `find`.
+- Clicks, drags and scrolling reach the right place in iframes that are scaled, zoomed, rotated or
+  otherwise transformed. They were refused or went to another place in the iframe.
 - A watch writes nothing after its last event, and nothing it read after its session lost the tab.
 
 ### Security

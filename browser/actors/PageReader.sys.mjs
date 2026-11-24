@@ -551,6 +551,17 @@ export function isPartlyShown(el, win, by = CLIPS) {
 
 export const isInScrollView = (el, win) => isPartlyShown(el, win, SCROLLS);
 
+// why: As its own document measures it, before transforms and zoom.
+export function contentSize(el) {
+  const style = styleOf(el);
+  const sum = (names) => names.reduce((total, name) => total + (parseFloat(style[name]) || 0), 0);
+  const inside = style.boxSizing === "border-box";
+  const size = (length, start, end) =>
+    sum([length]) -
+    (inside ? sum([`padding${start}`, `padding${end}`, `border${start}Width`, `border${end}Width`]) : 0);
+  return { width: size("width", "Left", "Right"), height: size("height", "Top", "Bottom") };
+}
+
 export function frameIdOf(el) {
   const tag = el?.localName;
   if (tag !== "iframe" && tag !== "frame") return null;

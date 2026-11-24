@@ -77,6 +77,10 @@ See the [compatibility matrix](browser-compatibility.md) for exact test versions
 - Mouse and keyboard events sent with the top page's `windowUtils` don't reach out-of-process
   (Fission) iframes; same-site ones work. Bind Gecko's `EventUtils` to the frame window and
   send from its actor to dispatch trusted input even in a background tab.
+- `EventUtils` places an event sent through the window of a same-process iframe by the frame's
+  offset alone, without transforms and zoom, so it lands elsewhere. Send it through the outermost
+  window of the process, at the mapped point (`ZenMcpChild`). `getBoxQuads({ box: "content" })`
+  has the transforms, also those of ancestors; the bounding rect doesn't tell rotation.
 - A page can stop propagation in its own event group without suppressing a listener in
   Gecko's system event group. For a user's answer or a recording, check event trust separately.
 - In a background tab a click doesn't move focus (call `focus()` yourself) and the wheel

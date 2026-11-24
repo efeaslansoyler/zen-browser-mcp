@@ -28,6 +28,11 @@ export class InputDriver {
     return mods;
   }
 
+  #mouse(x, y, event) {
+    const at = this.env.processRoot(x, y);
+    this.env.eventUtils().synthesizeMouseAtPoint(at.x, at.y, event, at.win);
+  }
+
   #armRelease(session, hold_ms = 30000) {
     if (!session) throw new Error("An exact input session is required.");
     if (this.#heldOwner && this.#heldOwner !== session) throw new Error("Held input belongs to another session.");
@@ -42,9 +47,7 @@ export class InputDriver {
     this.env.clearTimeout(this.#releaseTimer);
     for (const [button, point] of this.#heldButtons) {
       try {
-        this.env
-          .eventUtils()
-          .synthesizeMouseAtPoint(point[0], point[1], { ...this.#heldModifiers(), type: "mouseup", button }, win);
+        this.#mouse(point[0], point[1], { ...this.#heldModifiers(), type: "mouseup", button });
       } catch {}
     }
     this.#heldButtons.clear();
@@ -65,14 +68,7 @@ export class InputDriver {
     for (const point of this.env.mousePath(from, [x, y], options)) {
       await scope.wait(point.delay, this.env);
       scope.check();
-      this.env
-        .eventUtils()
-        .synthesizeMouseAtPoint(
-          point.x,
-          point.y,
-          { ...this.#heldModifiers(), ...modifiers, type: "mousemove", buttons },
-          win,
-        );
+      this.#mouse(point.x, point.y, { ...this.#heldModifiers(), ...modifiers, type: "mousemove", buttons });
       this.#pointer = [point.x, point.y];
       for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
       await this.env.cursor.move(point.x, point.y, scope, true);
@@ -122,7 +118,7 @@ export class InputDriver {
       scope.check();
       this.#pointer = [px, py];
       for (const button of this.#heldButtons.keys()) this.#heldButtons.set(button, this.#pointer);
-      eu.synthesizeMouseAtPoint(px, py, { ...this.#heldModifiers(), ...modifiers, buttons, ...event }, win);
+      this.#mouse(px, py, { ...this.#heldModifiers(), ...modifiers, buttons, ...event });
     };
     switch (kind) {
       case "click": {
@@ -166,7 +162,7 @@ export class InputDriver {
           if (released) return;
           released = true;
           const point = movement && movement !== "instant" ? this.#pointer || last : last;
-          eu.synthesizeMouseAtPoint(...point, { ...this.#heldModifiers(), type: "mouseup" }, win);
+          this.#mouse(...point, { ...this.#heldModifiers(), type: "mouseup" });
           cursor.unpress();
         };
         const off = scope.onCancel(release);
@@ -207,7 +203,7 @@ export class InputDriver {
         const point = this.#heldButtons.get(button);
         if (point) {
           this.#heldButtons.delete(button);
-          eu.synthesizeMouseAtPoint(...point, { ...this.#heldModifiers(), type: "mouseup", button }, win);
+          this.#mouse(...point, { ...this.#heldModifiers(), type: "mouseup", button });
         }
         return this.state();
       }
@@ -272,9 +268,10 @@ export class InputDriver {
     const { scrollLeft, scrollTop } = scroller;
     const moved = () => scroller.scrollLeft !== scrollLeft || scroller.scrollTop !== scrollTop;
     const dpr = win.devicePixelRatio;
+    const at = this.env.processRoot(x, y);
     this.env
       .eventUtils()
-      .synthesizeWheelAtPoint(x, y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, win);
+      .synthesizeWheelAtPoint(at.x, at.y, { deltaX: (dx / mx) * dpr, deltaY: (dy / my) * dpr, deltaMode: 0 }, at.win);
     if (!moved()) {
       const target = scroller === doc.scrollingElement ? doc : scroller;
       const options = { mozSystemGroup: true };

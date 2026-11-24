@@ -253,6 +253,27 @@ test("iframe boundary hit test rejects a covering parent overlay", async () => {
   assert.match((await h.send("frame_hit", { bcId: 42, x: 70, y: 40 })).error, /Target iframe.*covered/);
 });
 
+test("points go into and out of a transformed iframe by the quad of its content", async () => {
+  const h = harness();
+  h.target.localName = "iframe";
+  h.target.browsingContext = { id: 42 };
+  h.actor.contentWindow.getComputedStyle = () => ({
+    boxSizing: "border-box",
+    width: "420px",
+    height: "120px",
+    paddingLeft: "10px",
+    paddingRight: "10px",
+    paddingTop: "10px",
+    paddingBottom: "10px",
+  });
+  const quad = { p1: { x: 300, y: 50 }, p2: { x: 300, y: 250 }, p4: { x: 250, y: 50 } };
+  h.target.getBoxQuads = () => [quad];
+  const out = await h.send("frame_point", { bcId: 42, point: [370, 80], scroll: false });
+  assert.deepEqual([out.x, out.y], [260, 235]);
+  for (const bcId of [42, undefined])
+    assert.deepEqual({ ...(await h.send("frame_at", { x: 260, y: 235, bcId })).value }, { bcId: 42, x: 370, y: 80 });
+});
+
 test("ref coordinates check every enclosing iframe; hover coordinates skip the click guard", async () => {
   const calls = [];
   const root = { id: 1 },
@@ -261,7 +282,11 @@ test("ref coordinates check every enclosing iframe; hover coordinates skip the c
   const context = bridgeContext({
     query: async (_, name, data, timeout, frame) => {
       calls.push({ name, data, frame: frame.id });
-      return name === "locate" ? { x: 10, y: 20 } : name === "frame_rect" ? { x: 100, y: 50 } : { value: true };
+      return name === "locate"
+        ? { x: 10, y: 20 }
+        : name === "frame_point"
+          ? { x: data.point[0] + 100, y: data.point[1] + 50 }
+          : { value: true };
     },
     frameOf: () => leaf,
     toPagePoint: (_, xy) => xy,
@@ -276,7 +301,7 @@ test("ref coordinates check every enclosing iframe; hover coordinates skip the c
     ],
   );
   assert.deepEqual(
-    calls.filter((c) => c.name === "frame_rect").map((c) => [c.frame, c.data.point]),
+    calls.filter((c) => c.name === "frame_point").map((c) => [c.frame, c.data.point]),
     [
       [2, [10, 20]],
       [1, [110, 70]],
@@ -367,13 +392,13 @@ test("an outline in an iframe is scrolled to in the pages around it, and a failu
   const context = bridgeContext({
     query: async (_, name) => {
       calls.push(name);
-      if (name === "frame_rect") throw new Error("gone");
+      if (name === "frame_point") throw new Error("gone");
       return { x: 10, y: 20 };
     },
     frameOf: () => frame,
   });
   await context.reveal({}, "ref_2b");
-  assert.deepEqual(calls, ["locate", "frame_rect"]);
+  assert.deepEqual(calls, ["locate", "frame_point"]);
   frame = root;
   await context.reveal({}, "ref_1b");
   await context.reveal({}, undefined);
