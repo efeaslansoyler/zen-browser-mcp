@@ -60,6 +60,28 @@ export class Watches {
     watch.timer = this.env.setTimeout(() => this.#tick(watch).catch(() => {}), delay);
   }
 
+  #lost({ tabId, session }) {
+    const browser = this.env.owned(tabId, session);
+    if (!browser) return "tab closed, or this session no longer works in it";
+    if (this.env.paused?.(tabId)) return null;
+    try {
+      this.env.assertSite(browser);
+    } catch (e) {
+      return e.message;
+    }
+    return null;
+  }
+
+  // why: The watch can end, and the session lose the page, while a read is running.
+  #outdated(watch, cuts) {
+    if (!this.list.has(watch.id)) return true;
+    const lost = this.#lost(watch);
+    if (lost) this.end(watch.id, lost);
+    else if (watch.cuts !== cuts) this.#schedule(watch, watch.interval);
+    else return false;
+    return true;
+  }
+
   async #tick(watch) {
     if (!this.list.has(watch.id)) return;
     if (watch.spec.hold) {
@@ -69,23 +91,19 @@ export class Watches {
       if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
       return this.#schedule(watch, watch.interval);
     }
-    const browser = this.env.owned(watch.tabId, watch.session);
-    if (!browser) return this.end(watch.id, "tab closed, or this session no longer works in it");
+    const lost = this.#lost(watch);
+    if (lost) return this.end(watch.id, lost);
     if (this.env.paused?.(watch.tabId)) {
       if (Date.now() >= watch.until) return this.end(watch.id, "timeout");
       return this.#schedule(watch, watch.interval);
     }
-    try {
-      this.env.assertSite(browser);
-    } catch (e) {
-      return this.end(watch.id, e.message);
-    }
+    const browser = this.env.owned(watch.tabId, watch.session);
     const { spec, cuts } = watch;
     const url = browser.currentURI?.spec;
     try {
       if (spec.change) {
         const value = await this.env.sample(browser, spec.selector);
-        if (watch.cuts !== cuts) return this.#schedule(watch, watch.interval);
+        if (this.#outdated(watch, cuts)) return;
         if (watch.last === undefined) watch.last = value;
         else if (value !== watch.last) {
           this.#write(watch, { event: "changed", url, value, previous: watch.last });
@@ -93,7 +111,7 @@ export class Watches {
         }
       } else {
         const found = await this.env.check(browser, { text: spec.text, selector: spec.selector });
-        if (watch.cuts !== cuts) return this.#schedule(watch, watch.interval);
+        if (this.#outdated(watch, cuts)) return;
         const ok = spec.gone ? !found : found;
         // why: Emit transitions so an unchanged match does not fill the events file.
         if (ok && !watch.matched) {
