@@ -308,7 +308,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const root = doc.querySelector("main, article, [role=main]") || doc.body;
     let text = root ? reader.pageText(root) : "";
     if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + "\n…(truncated)";
-    return { title: doc.title, url: doc.URL, text };
+    return { title: reader.clean(doc.title), url: doc.URL, text };
   }
 
   // why: Gecko's privileged reads can bypass content emulation overrides.

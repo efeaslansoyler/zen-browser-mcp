@@ -2,6 +2,7 @@ export class DialogOpen extends Error {}
 export class PageGone extends Error {}
 
 const MAX_DIALOG_TEXT = 2000;
+const MAX_FRAME_URL = 200;
 
 export function pageQueries(ctx) {
   let querySequence = 0;
@@ -237,6 +238,12 @@ export function pageQueries(ctx) {
     return null;
   }
 
+  // why: A page chooses its frames' URLs, and data: URLs keep spaces, quotes and brackets.
+  const frameLine = (url) => {
+    const safe = url.replace(/[\s"[\]]/g, encodeURIComponent);
+    return `[iframe ${safe.length > MAX_FRAME_URL ? safe.slice(0, MAX_FRAME_URL - 1) + "…" : safe}]`;
+  };
+
   const isLoading = (bc) => !!bc.webProgress?.isLoadingDocument;
 
   async function expandFrames(browser, value, opts, level = 0) {
@@ -272,7 +279,7 @@ export function pageQueries(ctx) {
             .map((line) => indent + line)
             .join("\n")
         : `${indent}(no visible elements)`;
-      parts.push(`${indent}[iframe ${wg.documentURI?.spec ?? ""}]\n${body}`);
+      parts.push(`${indent}${frameLine(wg.documentURI?.spec ?? "")}\n${body}`);
     }
     parts.push(value.slice(last));
     return parts.join("");
@@ -366,6 +373,7 @@ export function pageQueries(ctx) {
     acrossFrames,
     isLoading,
     expandFrames,
+    frameLine,
     waitForLoad,
     readContext,
     readOutput,
