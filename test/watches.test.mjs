@@ -128,6 +128,30 @@ test("a watch ends when its tab is lost, the site is blocked, on stop and per se
   assert.equal(s.lines.at(-1).reason, "stopped by the user");
 });
 
+test("a read that returns after the watch ended, or after the session lost the page, writes nothing of it", async () => {
+  const ways = {
+    stopped: (h, w) => h.watches.end(w.id, "stopped by the agent"),
+    reloaded: (h) => h.watches.endAll("bridge reloaded"),
+    lost: (h) => (h.page.owned = false),
+    blocked: (h) => (h.page.blocked = true),
+  };
+  for (const [name, happen] of Object.entries(ways))
+    for (const spec of [{ text: "x" }, { text: "x", repeat: true }, { selector: "p", change: true }]) {
+      const h = harness();
+      const w = h.watches.start("s", 1, h.browser, spec);
+      await h.tick();
+      h.page.found = true;
+      h.page.value = "secret";
+      const running = h.tick();
+      happen(h, w);
+      await running;
+      await h.tick();
+      assert.deepEqual(h.events(), ["started", "ended"], `${name} ${JSON.stringify(spec)}`);
+      assert.doesNotMatch(JSON.stringify(h.lines), /secret/);
+      assert.equal(h.watches.list.size, 0);
+    }
+});
+
 test("invalid specs and too many watches are refused", () => {
   const h = harness();
   assert.throws(() => h.watches.start("s", 1, h.browser, {}), /required/);
