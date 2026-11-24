@@ -477,7 +477,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     const refs = [];
     const controls = 'a[href],button,input,textarea,select,[role="button"],[tabindex]';
     for (const element of this.#reader.targets(controls)) {
-      if (!reader.isVisible(element) || !reader.inViewport(element, this.contentWindow)) continue;
+      if (!reader.isVisible(element) || !reader.isPartlyShown(element, this.contentWindow)) continue;
       const box = reader.clickRectOf(element);
       if (!box.width || !box.height) continue;
       const ref = this.#ref(element),
@@ -525,7 +525,7 @@ export class ZenMcpChild extends JSWindowActorChild {
       return [x + point[0], y + point[1]];
     };
     const shows = () => reader.hitAt(this.document, ...at()) === el;
-    const inView = () => reader.fullyInViewport(el, this.contentWindow) && reader.showsAt(el, ...at());
+    const inView = () => reader.fullyInViewport(el, this.contentWindow) && !reader.isScrolledAway(el, ...at());
     if (scroll && !shows() && !inView()) {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
       if (!shows()) reader.scrollPointIntoView(el, at);
@@ -658,7 +658,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     this.#highlights?.remove();
     this.#highlights = resolved.length ? highlight(this.#env, resolved) : null;
     const first = resolved[0]?.element;
-    if (first && !reader.isPartlyShown(first, this.contentWindow)) reader.scrollIntoView(first);
+    if (first && !reader.isInScrollView(first, this.contentWindow)) reader.scrollIntoView(first);
     return resolved.length;
   }
 

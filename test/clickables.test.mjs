@@ -253,14 +253,54 @@ test("find ranks controls and clickables above plain text, and full text above p
   assert.equal((await find("list things"))[0], 'text "List of things" [ref]');
 });
 
+test("what a scroller or a collapsed panel clips is off-screen and gets no label", async () => {
+  const below = { top: 50, bottom: 60 };
+  const clipped = (name, overflow, style = {}, around = {}) =>
+    h(
+      "div",
+      { style: { overflow }, box: { bottom: 40 } },
+      h("div", { style: around }, h("button", { style, box: below }, name)),
+    );
+  const nodes = [
+    clipped("auto", "auto"),
+    clipped("hidden", "hidden"),
+    clipped("clip", "clip"),
+    clipped("visible", "visible"),
+    clipped("fixed", "auto", { position: "fixed" }),
+    clipped("absolute", "hidden", { position: "absolute" }),
+    clipped("inner", "hidden", { position: "absolute" }, { position: "relative" }),
+    h("div", { style: { overflow: "auto" } }, h("button", {}, "inside")),
+  ];
+  const { send, read, actor } = page(...nodes);
+  const shown = (await read()).filter((line) => /button/.test(line) && !/off-screen/.test(line));
+  assert.deepEqual(
+    shown.map((line) => line.match(/"(\w+)"/)[1]),
+    ["visible", "fixed", "absolute", "inside"],
+  );
+  annotatable(actor);
+  assert.equal((await send("annotate", { enabled: true })).length, 4);
+});
+
+test("a hit test counts before the boxes around", async () => {
+  const button = h("button", { box: { top: 50, bottom: 60 } }, "Go");
+  const { read, actor } = page(h("div", { style: { overflow: "auto" } }, button));
+  assert.match((await read()).join(), /off-screen/);
+  actor.document.elementFromPoint = () => button;
+  assert.doesNotMatch((await read()).join(), /off-screen/);
+});
+
 test("annotated screenshots label clickables", async () => {
   const { actor, send } = page(h("div", pointer, "WLAN"), h("div", {}, "Plain"), h("button", {}, "Go"));
+  annotatable(actor);
+  assert.equal((await send("annotate", { enabled: true })).length, 2);
+});
+
+function annotatable(actor) {
   const shadow = { append() {} };
   actor.document.createElement = () => ({ style: {}, attachShadow: () => shadow, append() {}, remove() {} });
   actor.document.querySelectorAll = (selector) => actor.document.body.querySelectorAll(selector);
   actor.document.documentElement.append = () => {};
-  assert.equal((await send("annotate", { enabled: true })).length, 2);
-});
+}
 
 test("find keeps the space at the edge of an inline control", async () => {
   const inline = (tag, attrs, text) => h(tag, { style: { display: "inline" }, ...attrs }, text);

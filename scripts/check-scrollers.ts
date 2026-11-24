@@ -42,6 +42,9 @@ const reached = (): Record<string, string> => ({
   framedCross: box(frame(`${cross}/button`, 60)),
   framedTwice: box(frame("/listed", 200)),
 });
+const shown = (): Record<string, string> => ({
+  escaped: box(button.replace("<button", '<button style="position:absolute;top:300px"')),
+});
 const refused = (): Record<string, string> => ({
   covered: box(button).replace(gap(150), "") + `<div style="position:fixed;inset:0;background:red"></div>`,
   coveredBody: `<style>body{height:100px;overflow-x:hidden}</style>${gap(150)}${button}${gap(3000)}<div style="position:fixed;inset:0;background:red"></div>`,
@@ -50,7 +53,7 @@ const refused = (): Record<string, string> => ({
 });
 const server = http.createServer((request, response) => {
   const name = request.url!.slice(1);
-  const body = reached()[name] ?? refused()[name] ?? inner()[name] ?? "";
+  const body = reached()[name] ?? shown()[name] ?? refused()[name] ?? inner()[name] ?? "";
   response
     .setHeader("content-type", "text/html; charset=utf-8")
     .end(
@@ -115,6 +118,28 @@ try {
   assert.deepEqual(failed, []);
   console.log("✓ Elements clipped by a scroller are scrolled to, clicked, hovered, highlighted and asked about");
   console.log("✓ An element that shows already isn't scrolled");
+
+  for (const [name, clipped] of [
+    ...Object.keys(reached()).map((name) => [name, true] as const),
+    ["collapsed", true],
+    ["clip", true],
+    ["covered", false],
+    ["escaped", false],
+  ] as const) {
+    if (name.startsWith("framed")) continue;
+    const ref = await open(name);
+    const line = async () => (await command("find", { tabId, query: "pay now" })).split("\n")[0];
+    const labels = async () =>
+      (await command("computer", { tabId, action: "screenshot", annotate: true })).split("refs:")[1];
+    const inFrame = name.endsWith("Frame");
+    assert.equal((await line()).endsWith("(off-screen)"), clipped, name);
+    if (!inFrame) assert.equal(new RegExp(`\\b${ref}\\b`).test((await labels()) ?? ""), !clipped, `${name}: label`);
+    if (!clipped || name in refused()) continue;
+    await command("computer", { tabId, action: "scroll_to", ref });
+    assert(!(await line()).endsWith("(off-screen)"), `${name}: off-screen after scroll_to`);
+    if (!inFrame) assert.match(await labels(), new RegExp(`\\b${ref}\\b`), name);
+  }
+  console.log("✓ Clipped elements are marked off-screen and get no label, until they are scrolled to");
 
   for (const name of Object.keys(refused())) {
     const ref = await open(name);

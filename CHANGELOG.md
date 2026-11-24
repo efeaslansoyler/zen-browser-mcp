@@ -73,6 +73,8 @@ change tool names, parameters or results.
   the iframe was. `highlight`, `ask_user` and `hand_to_user` also scroll to elements in an iframe.
 - Elements scrolled out of sight in a list, sidebar or dialog that itself is on the screen are scrolled
   into view. Clicks on them were refused as covered, and `scroll_to` did nothing.
+- What a list, sidebar or collapsed panel clips gets no label in an annotated screenshot, where it stood
+  over something else, and is marked `(off-screen)` in `read_page` and `find`.
 - A watch writes nothing after its last event, and nothing it read after its session lost the tab.
 
 ### Security
