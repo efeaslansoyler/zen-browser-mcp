@@ -40,12 +40,19 @@ export function pageQueries(ctx) {
 
   async function toTop(browser, frame, x, y, forClick = false) {
     for (let bc = frame; bc.parent; bc = bc.parent) {
-      const o = await ctx.query(browser, "frame_rect", { bcId: bc.id, point: [x, y] }, 30000, bc.parent);
-      x += o.x;
-      y += o.y;
+      ({ x, y } = await ctx.query(browser, "frame_point", { bcId: bc.id, point: [x, y] }, 30000, bc.parent));
       if (forClick) await ctx.query(browser, "frame_hit", { bcId: bc.id, x, y }, 30000, bc.parent);
     }
     return [x, y];
+  }
+
+  async function toFrame(browser, frame, x, y) {
+    if (!frame.parent) return [x, y];
+    const at = await toFrame(browser, frame.parent, x, y);
+    const data = { bcId: frame.id, x: at[0], y: at[1] };
+    const { value } = await ctx.query(browser, "frame_at", data, 30000, frame.parent);
+    if (!value) throw new Error("iframe not found (the page may have changed).");
+    return [value.x, value.y];
   }
 
   async function deepest(browser, x, y) {
@@ -359,6 +366,7 @@ export function pageQueries(ctx) {
     queryRef,
     toPagePoint,
     toTop,
+    toFrame,
     reveal,
     deepest,
     focusedFrame,

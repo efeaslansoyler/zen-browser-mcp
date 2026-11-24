@@ -62,6 +62,7 @@ export class ZenMcpChild extends JSWindowActorChild {
     element: (ref) => this.#element(ref),
     ref: (el) => this.#ref(el),
     eventUtils: () => this.#eu(),
+    processRoot: (x, y) => this.#processRoot(x, y),
     contextTarget: () => this.#contextTarget?.deref(),
     unwrap: (value) => Cu.waiveXrays(value),
     inspector: () => inspectorUtils(),
@@ -217,10 +218,10 @@ export class ZenMcpChild extends JSWindowActorChild {
           return { value: this.#reader.readPage(data) };
         case "find":
           return { value: this.#reader.find(data.query) };
-        case "frame_rect":
-          return this.#frameRect(data.bcId, data.scroll !== false, data.point);
+        case "frame_point":
+          return this.#framePoint(data.bcId, data.point, data.scroll !== false);
         case "frame_at":
-          return { value: this.#frameAt(data.x, data.y) };
+          return { value: this.#frameAt(data.x, data.y, data.bcId) };
         case "active_frame":
           return { value: reader.frameIdOf(reader.deepActiveElement(this.document)) };
         case "check":
@@ -517,37 +518,54 @@ export class ZenMcpChild extends JSWindowActorChild {
   }
 
   // why: Recordings must not scroll the user's page to locate a frame.
-  #frameRect(bcId, scroll = true, point) {
+  #framePoint(bcId, point, scroll = true) {
     const el = this.#frameElement(bcId);
     if (!el) throw new Error("iframe not found (the page may have changed).");
-    const at = () => {
-      const { x, y } = this.#contentOrigin(el);
-      return [x + point[0], y + point[1]];
-    };
+    const at = () => this.#frameMap(el).outward(point);
     const shows = () => reader.hitAt(this.document, ...at()) === el;
     const inView = () => reader.fullyInViewport(el, this.contentWindow) && !reader.isScrolledAway(el, ...at());
     if (scroll && !shows() && !inView()) {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
       if (!shows()) reader.scrollPointIntoView(el, at);
     }
-    return this.#contentOrigin(el);
+    const [x, y] = at();
+    return { x, y };
   }
 
-  #contentOrigin(el) {
-    const r = el.getBoundingClientRect();
-    const s = this.contentWindow.getComputedStyle(el);
+  // why: Between the frame's own coordinates and this document's; transforms and zoom can lie between them.
+  #frameMap(el) {
+    const [{ p1, p2, p4 }] = el.getBoxQuads({ box: "content" });
+    const { width, height } = reader.contentSize(el);
+    const right = [(p2.x - p1.x) / width, (p2.y - p1.y) / width];
+    const down = [(p4.x - p1.x) / height, (p4.y - p1.y) / height];
     return {
-      x: r.left + el.clientLeft + parseFloat(s.paddingLeft),
-      y: r.top + el.clientTop + parseFloat(s.paddingTop),
+      outward: ([x, y]) => [p1.x + x * right[0] + y * down[0], p1.y + x * right[1] + y * down[1]],
+      inward([x, y]) {
+        const [dx, dy] = [x - p1.x, y - p1.y];
+        const area = right[0] * down[1] - right[1] * down[0];
+        return [(dx * down[1] - dy * down[0]) / area, (dy * right[0] - dx * right[1]) / area];
+      },
     };
   }
 
-  #frameAt(x, y) {
-    const el = reader.hitAt(this.document, x, y);
+  // why: Gecko places an event in a frame of the same process without the transforms around the frame.
+  #processRoot(x, y) {
+    let win = this.contentWindow;
+    for (let bc = this.browsingContext; bc?.parent; bc = bc.parent) {
+      const el = bc.embedderElement;
+      if (!el) break;
+      [x, y] = this.#frameMap(el).outward([x, y]);
+      win = el.ownerDocument.defaultView;
+    }
+    return { x, y, win };
+  }
+
+  #frameAt(x, y, frameId) {
+    const el = frameId ? this.#frameElement(frameId) : reader.hitAt(this.document, x, y);
     const bcId = reader.frameIdOf(el);
     if (!bcId) return null;
-    const o = this.#contentOrigin(el);
-    return { bcId, x: x - o.x, y: y - o.y };
+    const [innerX, innerY] = this.#frameMap(el).inward([x, y]);
+    return { bcId, x: innerX, y: innerY };
   }
 
   #locate(ref, forClick = false) {

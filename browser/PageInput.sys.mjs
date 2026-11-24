@@ -136,8 +136,7 @@ export function pageInput(ctx) {
       throw new Error(
         "Click blocked: target iframe is covered or changed. Refresh screenshot/read_page; no click was sent.",
       );
-    const [dx, dy] = [data.x - inner.x, data.y - inner.y];
-    const to = data.to && [data.to[0] - dx, data.to[1] - dy];
+    const to = data.to && (await ctx.toFrame(browser, inner.frame, ...data.to));
     const result = await ctx.query(browser, "input", { ...data, x: inner.x, y: inner.y, to }, 30000, inner.frame);
     if (data.kind === "mouse_down") ctx.rememberInputs(browser, inner.frame, result.value, data.hold_ms);
     return result;
