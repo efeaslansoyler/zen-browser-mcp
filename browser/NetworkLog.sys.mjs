@@ -77,6 +77,9 @@ export class NetworkLog {
     } catch {
       return;
     }
+    const ends = topic === "http-on-stop-request" || topic === "http-on-failed-opening-request";
+    // why: The tab can be closed by the time a request of it ends.
+    if (ends && this.unrecorded.delete(channel.channelId)) return;
     const bc = channel.loadInfo?.browsingContext;
     const browserId = bc?.browserId;
     if (!browserId || !this.env.tracked(browserId)) return;
@@ -113,12 +116,11 @@ export class NetworkLog {
       if (rule?.action === "block") channel.cancel(Cr.NS_ERROR_ABORT);
       if (rule?.action === "offline") channel.cancel(Cr.NS_ERROR_OFFLINE);
     }
-    const ends = topic === "http-on-stop-request" || topic === "http-on-failed-opening-request";
-    if (this.env.unrecorded?.(browserId)) this.unrecorded.add(channel.channelId);
-    if (this.unrecorded.has(channel.channelId)) {
-      if (ends) this.unrecorded.delete(channel.channelId);
+    if (this.env.unrecorded?.(browserId)) {
+      if (!ends) this.unrecorded.add(channel.channelId);
       return;
     }
+    if (this.unrecorded.has(channel.channelId)) return;
     this.env.capture?.(channel, browserId, type, topic);
     let log = this.logs.get(browserId);
     if (!log) this.logs.set(browserId, (log = { list: [], byChannel: new Map(), host: "", nextId: 1 }));
