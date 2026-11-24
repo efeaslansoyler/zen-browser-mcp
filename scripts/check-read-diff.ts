@@ -9,6 +9,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { pageEval } from "./support/fixture.ts";
 import { call } from "../src/zen.ts";
 import { reloadBridge } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 const text = (result: Record<string, unknown>) =>
   (result.content as { type: string; text?: string }[])
     .filter((c) => c.type === "text")

@@ -9,6 +9,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { LOG_FILE, RUNTIME_DIR } from "../src/paths.ts";
 import { call, subscribe } from "../src/zen.ts";
 import { assertBridgeRunsCheckout } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 
 const socketPath = process.env.ZEN_MCP_SOCKET;
 assert(

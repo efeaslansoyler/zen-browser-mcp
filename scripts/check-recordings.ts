@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
+import "./support/require-sandbox.ts";
 
 const text = (items: Content[]) => items.map((item) => (item.type === "text" ? item.text : "")).join("\n");
 const chrome = (code: string) => call("chrome_eval", { code }).then(text).then(JSON.parse);

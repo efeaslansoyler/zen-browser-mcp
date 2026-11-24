@@ -3,6 +3,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { approveWhile, pageEval } from "./support/fixture.ts";
 import { createServer } from "node:http";
 import { call, type Content } from "../src/zen.ts";
+import "./support/require-sandbox.ts";
 
 const text = (content: Content[]) =>
   content

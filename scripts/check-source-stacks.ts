@@ -1,5 +1,4 @@
 // why: Use sandbox profiles and local receipts so framework picks never reach a real agent session.
-import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -8,6 +7,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, subscribe, type Content } from "../src/zen.ts";
 import { withSourceStackServer } from "./support/source-stack-server.ts";
+import "./support/require-sandbox.ts";
 
 const work = path.resolve(process.argv[2] ?? path.join(os.homedir(), ".cache", "zen-mcp-stacks"));
 const only = process.argv.slice(3);
@@ -327,7 +327,6 @@ async function pick(url: string, name: string): Promise<string> {
 
 let failed = 0;
 try {
-  assert(process.env.ZEN_MCP_SOCKET, "Run inside a sandbox: node scripts/sandbox.ts up, then source its env file.");
   await until(() => chrome(`h.subscribers.has(${JSON.stringify(session)})`), "Local receipt fixture did not connect.");
   for (const [id, stack] of Object.entries(STACKS)) {
     if (only.length && !only.includes(id)) continue;

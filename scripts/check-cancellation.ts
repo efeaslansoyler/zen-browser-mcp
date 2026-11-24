@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
 import { call, type Content } from "../src/zen.ts";
 import { reloadBridge } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 const agent = { id: "codex", name: "Codex" };
 const text = (result: Content[]) =>
   result

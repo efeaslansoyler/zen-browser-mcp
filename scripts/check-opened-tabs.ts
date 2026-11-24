@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
+import "./support/require-sandbox.ts";
 
 const records = (items: Content[]) =>
   items.flatMap((item) => {

@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
 import { normalizeConfig } from "../browser/SiteRules.sys.mjs";
 import { reloadBridge } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 const text = (result: Content[]) =>
   result
     .filter((c) => c.type === "text")

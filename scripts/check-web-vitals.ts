@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call } from "../src/zen.ts";
+import "./support/require-sandbox.ts";
 
 const server = createServer(async (_request, response) => {
   await sleep(80);

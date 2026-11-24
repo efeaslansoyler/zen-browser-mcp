@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { call, type Content } from "../src/zen.ts";
 import { pageEval } from "./support/fixture.ts";
+import "./support/require-sandbox.ts";
 
 const json = (content: Content[]) => JSON.parse(content.find((item) => item.type === "text")!.text);
 let color = "white";

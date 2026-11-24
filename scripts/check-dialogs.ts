@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { call, type Content } from "../src/zen.ts";
 import { approveWhile, pageEval } from "./support/fixture.ts";
+import "./support/require-sandbox.ts";
 
 const agent = { id: "codex", name: "Codex" };
 const text = (content: Content[]) =>

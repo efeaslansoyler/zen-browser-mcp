@@ -6,6 +6,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { call } from "../src/zen.ts";
+import "./support/require-sandbox.ts";
 
 const text = (result: any) =>
   result.content

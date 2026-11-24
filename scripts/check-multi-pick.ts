@@ -9,6 +9,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { pageEval } from "./support/fixture.ts";
 import { call, subscribe, type Content } from "../src/zen.ts";
 import { reloadBridge } from "./support/bridge.ts";
+import "./support/require-sandbox.ts";
 const text = (result: Content[]) =>
   result
     .filter((c) => c.type === "text")

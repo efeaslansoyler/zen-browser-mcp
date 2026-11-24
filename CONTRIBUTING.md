@@ -67,7 +67,8 @@ temporal dead zone mistakes and missing wiring.
 Unit tests can't prove Gecko behavior. `scripts/check-*.ts` drive the real browser through a
 real MCP server, open and close only their own tabs, and restore anything they change. Run
 them in the sandbox described [below](#testing-without-touching-your-browser), not in the
-browser you use:
+browser you use. A check refuses to start unless `ZEN_MCP_SOCKET` is `zen-mcp.sock` in a runtime
+directory other than your own; import `./support/require-sandbox.ts` in a new one:
 
 | Script | Covers |
 |---|---|

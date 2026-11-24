@@ -9,6 +9,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { call } from "../src/zen.ts";
+import "./support/require-sandbox.ts";
 
 const text = (result: Record<string, unknown>) =>
   (result.content as { type: string; text?: string }[])
