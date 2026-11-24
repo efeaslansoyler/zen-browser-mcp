@@ -71,6 +71,8 @@ change tool names, parameters or results.
   could take the scale of one taken while it waited and click the wrong place.
 - Elements in an iframe larger than the viewport can be clicked and scrolled to; before, the middle of
   the iframe was. `highlight`, `ask_user` and `hand_to_user` also scroll to elements in an iframe.
+- Elements scrolled out of sight in a list, sidebar or dialog that itself is on the screen are scrolled
+  into view. Clicks on them were refused as covered, and `scroll_to` did nothing.
 
 ### Security
 

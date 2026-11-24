@@ -86,7 +86,12 @@ function harness() {
     },
     querySelectorAll: () => [...nodes.values()],
     getElementById: (id) => nodes.get(id),
-    documentElement: { append() {} },
+    documentElement: {
+      append() {},
+      get ownerDocument() {
+        return actor.document;
+      },
+    },
   };
   const send = (name, data = {}) => actor.receiveMessage({ name, data: { documentNumber: 1, ...data } });
   const refFor = async (el) => {
@@ -130,6 +135,30 @@ test("locate checks coverage only for clicks; hover and scroll-to can still loca
   h.hit(h.blocker);
   assert.match((await h.send("locate", { ref, forClick: true })).error, /Click blocked/);
   assert.equal((await h.send("locate", { ref })).x, 70);
+});
+
+test("only a target that a scroller clips is scrolled to, not a covered or collapsed one", async () => {
+  for (const [overflow, height, position, scrolled] of [
+    ["auto", 30, "static", true],
+    ["scroll", 30, "static", true],
+    ["hidden", 30, "static", undefined],
+    ["auto", 100, "static", undefined],
+    ["auto", 30, "fixed", undefined],
+  ]) {
+    const h = harness(),
+      ref = await h.refFor(h.target),
+      scroller = h.node("scroller");
+    h.target.parentNode = scroller;
+    scroller.rect = { left: 0, top: 0, right: 200, bottom: height, width: 200, height };
+    h.actor.contentWindow.getComputedStyle = (el) => ({
+      position: el === h.target ? position : "static",
+      overflowX: "hidden",
+      overflowY: el === scroller ? overflow : "visible",
+    });
+    h.hit(h.blocker);
+    await h.send("locate", { ref });
+    assert.equal(h.target.scrolled, scrolled, [overflow, height, position].join());
+  }
 });
 
 test("a child icon inside the target is hit-testable", async () => {
