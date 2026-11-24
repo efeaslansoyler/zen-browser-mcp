@@ -10,6 +10,7 @@ export function readTools(ctx) {
     assertSiteURL,
     browserFor,
     expandFrames,
+    frameLine,
     frameOf,
     framesOf,
     isLoading,
@@ -34,7 +35,7 @@ export function readTools(ctx) {
         if (out.length > MAX_PAGE_TEXT) break;
         try {
           const frame = await query(browser, "text", {}, 30000, bc);
-          if (frame.text.trim()) out += `\n\n[iframe ${frame.url}]\n${frame.text}`;
+          if (frame.text.trim()) out += `\n\n${frameLine(frame.url)}\n${frame.text}`;
         } catch (e) {
           if (e instanceof DialogOpen) throw e;
         }
@@ -55,7 +56,9 @@ export function readTools(ctx) {
         30000,
         frame,
       );
-      value = await expandFrames(browser, value, opts);
+      // why: A title can look like the marker of a frame.
+      const start = frame === browser.browsingContext ? value.indexOf("\n\n") + 2 : 0;
+      value = value.slice(0, start) + (await expandFrames(browser, value.slice(start), opts));
       if (value.length > max_chars) {
         const end = value.lastIndexOf("\n", max_chars);
         value =

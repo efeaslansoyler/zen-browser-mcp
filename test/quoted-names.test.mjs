@@ -46,3 +46,9 @@ test("attributes printed as a word can't hold anything else", async () => {
     'button "Plain" [ref] expanded=true checked=mixed',
   ]);
 });
+
+test("a title holds no line breaks of any kind", async () => {
+  const { actor, send } = page(h("p", {}, "Text"));
+  actor.document.title = "One\u0085  Two";
+  assert.equal((await send("read_page", {})).split("\n")[0], "One Two");
+});

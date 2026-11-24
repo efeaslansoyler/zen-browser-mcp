@@ -792,7 +792,7 @@ export class PageReader {
       );
     const tree = lines.join("\n") || (loading ? STILL_LOADING : "");
     if (bare) return tree;
-    return `${doc.title}\n${doc.URL}\n\n${tree || "(no visible elements)"}`;
+    return `${clean(doc.title)}\n${doc.URL}\n\n${tree || "(no visible elements)"}`;
   }
 
   #hasTargets(el) {

@@ -83,7 +83,9 @@ change tool names, parameters or results.
   (`\"`, `\n`), and roles and states are single words. Before, a page could write lines there that
   looked like those of other elements, refs included.
 - Page text in those results, in click results and in `form_input` results can't hold the Unicode line
-  breaks U+0085, U+2028 and U+2029 either.
+  breaks U+0085, U+2028 and U+2029 either, nor can a page's title.
+- The URL after `[iframe` in `read_page` and `get_page_text` has its spaces, quotes and brackets encoded
+  and is cut at 200 characters. Before, a frame's URL could look like the bridge's words.
 
 ## [0.3.0] - 2026-11-23
 
